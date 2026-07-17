@@ -119,6 +119,14 @@ const AIAssistant = () => {
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
         🤖 Yapay Zeka Asistanı
       </h1>
+      <Badge variant="warning">
+    Demo Sürümü • AI Özellikleri Devre Dışı
+  </Badge>
+  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+  <strong>ℹ️ Bilgilendirme:</strong> Bu demo sürümünde yapay zeka özellikleri
+  tanıtım amacıyla gösterilmektedir. Belge analizi, hukuki danışmanlık ve belge
+  oluşturma işlemleri aktif değildir.
+</div>
 
       <div className="flex gap-2 flex-wrap">
         {[
