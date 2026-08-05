@@ -436,6 +436,7 @@ class AIService {
           schema: legalResearchSchema,
           schemaDescription:
             'Avukat kontrolüne tabi hukuki ön değerlendirme.',
+            maxOutputTokens: 8000,
           metadata: {
             operation: ANALYSIS_TYPES.LEGAL_RESEARCH,
             analysisId: analysis.id,
