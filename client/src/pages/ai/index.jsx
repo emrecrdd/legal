@@ -716,7 +716,7 @@ const AIAssistant = () => {
         </div>
 
         <Badge variant="success">
-          GPT-5 mini aktif
+          Yapay Zekâ Aktif
         </Badge>
       </div>
 
