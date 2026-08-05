@@ -1,142 +1,588 @@
-import { useState, useRef } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import aiApi from '../../features/ai/ai.api.js';
-import Button from '../../components/ui/Button.jsx';
-import Input from '../../components/ui/Input.jsx';
-import Card from '../../components/ui/Card.jsx';
-import Badge from '../../components/ui/Badge.jsx';
+import { useMemo, useState } from 'react';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 
+import aiApi from '../../features/ai/ai.api.js';
+import documentApi from '../../features/documents/document.api.js';
+
+import Button from '../../components/ui/Button.jsx';
+import Card from '../../components/ui/Card.jsx';
+import Badge from '../../components/ui/Badge.jsx';
+
+const unwrapResponse = (response) => {
+  return response?.data?.data ?? response?.data ?? null;
+};
+
+const getDocumentsFromResponse = (response) => {
+  const payload = unwrapResponse(response);
+
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload?.data)) {
+    return payload.data;
+  }
+
+  return [];
+};
+
+const formatFileSize = (bytes) => {
+  const size = Number(bytes) || 0;
+
+  if (size < 1024) {
+    return `${size} B`;
+  }
+
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const ResultList = ({ items }) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    return (
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        Kayıt bulunamadı.
+      </p>
+    );
+  }
+
+  return (
+    <ul className="space-y-2">
+      {items.map((item, index) => (
+        <li
+          key={`${index}-${String(item).slice(0, 30)}`}
+          className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-700 dark:text-gray-200"
+        >
+          {typeof item === 'string'
+            ? item
+            : JSON.stringify(item)}
+        </li>
+      ))}
+    </ul>
+  );
+};
+
+const AnalysisResult = ({ analysis }) => {
+  if (!analysis) {
+    return null;
+  }
+
+  const result = analysis.result || analysis;
+
+  return (
+    <Card>
+      <Card.Header>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold text-gray-900 dark:text-white">
+            Analiz Sonucu
+          </h2>
+
+          <div className="flex flex-wrap gap-2">
+            {analysis.cached && (
+              <Badge variant="info">
+                Kayıtlı sonuç
+              </Badge>
+            )}
+
+            {analysis.model && (
+              <Badge variant="secondary">
+                {analysis.model}
+              </Badge>
+            )}
+
+            {result.overallRiskLevel && (
+              <Badge
+                variant={
+                  ['high', 'critical'].includes(
+                    result.overallRiskLevel
+                  )
+                    ? 'danger'
+                    : result.overallRiskLevel === 'medium'
+                      ? 'warning'
+                      : 'success'
+                }
+              >
+                Risk: {result.overallRiskLevel}
+              </Badge>
+            )}
+          </div>
+        </div>
+      </Card.Header>
+
+      <Card.Body className="space-y-6">
+        {result.documentType && (
+          <section>
+            <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
+              Belge Türü
+            </h3>
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              {result.documentType}
+            </p>
+          </section>
+        )}
+
+        {result.summary && (
+          <section>
+            <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
+              Özet
+            </h3>
+            <p className="whitespace-pre-wrap text-sm leading-6 text-gray-700 dark:text-gray-300">
+              {result.summary}
+            </p>
+          </section>
+        )}
+
+        {Array.isArray(result.parties) &&
+          result.parties.length > 0 && (
+            <section>
+              <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
+                Taraflar
+              </h3>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                {result.parties.map((party, index) => (
+                  <div
+                    key={`${party.name}-${index}`}
+                    className="rounded-lg border border-gray-200 p-3 dark:border-gray-700"
+                  >
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {party.name}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {party.role}
+                    </p>
+                    {party.description && (
+                      <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                        {party.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+        {Array.isArray(result.importantDates) &&
+          result.importantDates.length > 0 && (
+            <section>
+              <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
+                Önemli Tarihler
+              </h3>
+
+              <div className="space-y-2">
+                {result.importantDates.map((item, index) => (
+                  <div
+                    key={`${item.date}-${index}`}
+                    className="rounded-lg border border-gray-200 p-3 dark:border-gray-700"
+                  >
+                    <div className="flex flex-wrap justify-between gap-2">
+                      <span className="font-medium text-gray-900 dark:text-white">
+                        {item.label}
+                      </span>
+                      <span className="text-sm text-gray-500">
+                        {item.date}
+                      </span>
+                    </div>
+
+                    {item.explanation && (
+                      <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                        {item.explanation}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+        {Array.isArray(result.risks) &&
+          result.risks.length > 0 && (
+            <section>
+              <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
+                Riskler
+              </h3>
+
+              <div className="space-y-3">
+                {result.risks.map((risk, index) => (
+                  <div
+                    key={`${risk.title}-${index}`}
+                    className="rounded-lg border border-gray-200 p-4 dark:border-gray-700"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {risk.title}
+                      </p>
+                      <Badge
+                        variant={
+                          ['high', 'critical'].includes(risk.level)
+                            ? 'danger'
+                            : risk.level === 'medium'
+                              ? 'warning'
+                              : 'success'
+                        }
+                      >
+                        {risk.level}
+                      </Badge>
+                    </div>
+
+                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                      {risk.description}
+                    </p>
+
+                    {risk.recommendation && (
+                      <p className="mt-2 text-sm font-medium text-blue-700 dark:text-blue-300">
+                        Öneri: {risk.recommendation}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+        {Array.isArray(result.missingInformation) && (
+          <section>
+            <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
+              Eksik Bilgiler
+            </h3>
+            <ResultList items={result.missingInformation} />
+          </section>
+        )}
+
+        {Array.isArray(result.recommendedActions) && (
+          <section>
+            <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
+              Önerilen İşlemler
+            </h3>
+            <ResultList items={result.recommendedActions} />
+          </section>
+        )}
+
+        {result.draft && (
+          <section>
+            <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
+              Taslak
+            </h3>
+            <div className="whitespace-pre-wrap rounded-lg bg-gray-50 p-4 text-sm leading-6 text-gray-800 dark:bg-gray-700 dark:text-gray-100">
+              {result.draft}
+            </div>
+          </section>
+        )}
+
+        {result.shortAnswer && (
+          <section>
+            <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
+              Kısa Cevap
+            </h3>
+            <p className="text-sm leading-6 text-gray-700 dark:text-gray-300">
+              {result.shortAnswer}
+            </p>
+          </section>
+        )}
+
+        {result.analysis && (
+          <section>
+            <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
+              Hukuki Analiz
+            </h3>
+            <p className="whitespace-pre-wrap text-sm leading-6 text-gray-700 dark:text-gray-300">
+              {result.analysis}
+            </p>
+          </section>
+        )}
+
+        {result.disclaimer && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+            {result.disclaimer}
+          </div>
+        )}
+
+        <details>
+          <summary className="cursor-pointer text-sm font-medium text-gray-600 dark:text-gray-300">
+            Teknik JSON çıktısını göster
+          </summary>
+
+          <pre className="mt-3 max-h-[500px] overflow-auto whitespace-pre-wrap rounded-lg bg-gray-950 p-4 text-xs text-gray-100">
+            {JSON.stringify(analysis, null, 2)}
+          </pre>
+        </details>
+      </Card.Body>
+    </Card>
+  );
+};
+
 const AIAssistant = () => {
-  const [activeTab, setActiveTab] = useState('analyze');
-  const [file, setFile] = useState(null);
+  const queryClient = useQueryClient();
+
+  const [activeTab, setActiveTab] = useState('documents');
+  const [selectedDocumentId, setSelectedDocumentId] =
+    useState('');
   const [query, setQuery] = useState('');
   const [context, setContext] = useState('');
   const [draftType, setDraftType] = useState('petition');
   const [draftData, setDraftData] = useState('');
   const [result, setResult] = useState(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const fileInputRef = useRef();
 
-  const analyzeDocument = useMutation({
-    mutationFn: (data) => aiApi.analyzeDocument(data),
-    onSuccess: (response) => {
-      setResult(response.data);
-      toast.success('Belge analiz edildi');
-      setIsAnalyzing(false);
+  const documentsQuery = useQuery({
+    queryKey: ['documents', 'ai-workspace'],
+    queryFn: () =>
+      documentApi.getAll({
+        page: 1,
+        limit: 100,
+      }),
+  });
+
+  const documents = useMemo(
+    () => getDocumentsFromResponse(documentsQuery.data),
+    [documentsQuery.data]
+  );
+
+  const analysesQuery = useQuery({
+    queryKey: [
+      'ai-document-analyses',
+      selectedDocumentId,
+    ],
+    queryFn: () =>
+      aiApi.getDocumentAnalyses(selectedDocumentId),
+    enabled: Boolean(selectedDocumentId),
+  });
+
+  const analyses = useMemo(() => {
+    const payload = unwrapResponse(analysesQuery.data);
+    return Array.isArray(payload) ? payload : [];
+  }, [analysesQuery.data]);
+
+  const analyzeMutation = useMutation({
+    mutationFn: ({ documentId, force }) =>
+      aiApi.analyzeDocument(documentId, { force }),
+
+    onMutate: () => {
+      setResult(null);
     },
+
+    onSuccess: (response) => {
+      const data = unwrapResponse(response);
+      setResult(data);
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          'ai-document-analyses',
+          selectedDocumentId,
+        ],
+      });
+
+      toast.success(
+        data?.cached
+          ? 'Kayıtlı analiz getirildi'
+          : 'Belge analizi tamamlandı'
+      );
+    },
+
     onError: (error) => {
-      toast.error(error.response?.data?.message || 'Analiz başarısız');
-      setIsAnalyzing(false);
+      toast.error(
+        error.response?.data?.message ||
+          'Belge analizi başarısız'
+      );
     },
   });
 
-  const getLegalAdvice = useMutation({
-    mutationFn: (data) => aiApi.getLegalAdvice(data),
-    onSuccess: (response) => {
-      setResult(response.data);
-      toast.success('Hukuki danışmanlık oluşturuldu');
+  const classifyMutation = useMutation({
+    mutationFn: ({ documentId, force }) =>
+      aiApi.classifyDocument(documentId, { force }),
+
+    onMutate: () => {
+      setResult(null);
     },
+
+    onSuccess: (response) => {
+      const data = unwrapResponse(response);
+      setResult(data);
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          'ai-document-analyses',
+          selectedDocumentId,
+        ],
+      });
+
+      toast.success('Belge sınıflandırıldı');
+    },
+
     onError: (error) => {
-      toast.error(error.response?.data?.message || 'Danışmanlık oluşturulamadı');
+      toast.error(
+        error.response?.data?.message ||
+          'Belge sınıflandırılamadı'
+      );
     },
   });
 
-  const generateDraft = useMutation({
-    mutationFn: (data) => aiApi.generateDraft(data),
-    onSuccess: (response) => {
-      setResult(response.data);
-      toast.success('Belge Oluşturuldu');
+  const legalResearchMutation = useMutation({
+    mutationFn: (data) =>
+      aiApi.generateLegalResearch(data),
+
+    onMutate: () => {
+      setResult(null);
     },
+
+    onSuccess: (response) => {
+      setResult(unwrapResponse(response));
+      toast.success(
+        'Hukuki ön değerlendirme oluşturuldu'
+      );
+    },
+
     onError: (error) => {
-      toast.error(error.response?.data?.message || 'Belge Oluşturulamadı');
+      toast.error(
+        error.response?.data?.message ||
+          'Ön değerlendirme oluşturulamadı'
+      );
     },
   });
 
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      if (selectedFile.size > 5 * 1024 * 1024) {
-        toast.error('Dosya boyutu 5MB\'dan büyük olamaz');
-        return;
-      }
-      setFile(selectedFile);
-    }
-  };
+  const draftMutation = useMutation({
+    mutationFn: (data) =>
+      aiApi.generateDraft(data),
 
-  const handleAnalyze = () => {
-    if (!file) {
-      toast.error('Lütfen bir dosya seçin');
+    onMutate: () => {
+      setResult(null);
+    },
+
+    onSuccess: (response) => {
+      setResult(unwrapResponse(response));
+      toast.success('Hukuki taslak oluşturuldu');
+    },
+
+    onError: (error) => {
+      toast.error(
+        error.response?.data?.message ||
+          'Taslak oluşturulamadı'
+      );
+    },
+  });
+
+  const handleAnalyze = (force = false) => {
+    if (!selectedDocumentId) {
+      toast.error('Önce bir belge seçin');
       return;
     }
 
-    setIsAnalyzing(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    analyzeDocument.mutate(formData);
+    analyzeMutation.mutate({
+      documentId: selectedDocumentId,
+      force,
+    });
   };
 
-  const handleAdvice = () => {
-    if (!query) {
-      toast.error('Lütfen bir soru girin');
+  const handleClassify = () => {
+    if (!selectedDocumentId) {
+      toast.error('Önce bir belge seçin');
       return;
     }
-    getLegalAdvice.mutate({ query, context });
+
+    classifyMutation.mutate({
+      documentId: selectedDocumentId,
+      force: false,
+    });
+  };
+
+  const handleLegalResearch = () => {
+    if (!query.trim()) {
+      toast.error('Hukuki sorunuzu yazın');
+      return;
+    }
+
+    legalResearchMutation.mutate({
+      query: query.trim(),
+      context: context.trim(),
+    });
   };
 
   const handleDraft = () => {
-    if (!draftData) {
-      toast.error('Lütfen bilgileri girin');
+    if (!draftData.trim()) {
+      toast.error('Taslak bilgilerini girin');
       return;
     }
+
+    let parsedData;
+
     try {
-      const data = JSON.parse(draftData);
-      generateDraft.mutate({ type: draftType, data });
-    } catch (error) {
-      toast.error('Lütfen geçerli bir JSON formatı girin');
+      parsedData = JSON.parse(draftData);
+    } catch {
+      toast.error('Geçerli bir JSON formatı girin');
+      return;
     }
+
+    draftMutation.mutate({
+      type: draftType,
+      data: parsedData,
+    });
   };
 
-  const renderResult = () => {
-    if (!result) return null;
-
-    return (
-      <Card>
-        <Card.Header>
-          <h2 className="font-semibold text-gray-900 dark:text-white">📊 Sonuç</h2>
-        </Card.Header>
-        <Card.Body>
-          <pre className="whitespace-pre-wrap text-sm bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
-            {JSON.stringify(result, null, 2)}
-          </pre>
-        </Card.Body>
-      </Card>
-    );
+  const handleShowAnalysis = async (analysisId) => {
+    try {
+      const response = await aiApi.getAnalysis(analysisId);
+      setResult(unwrapResponse(response));
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'Analiz kaydı getirilemedi'
+      );
+    }
   };
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-        🤖 Yapay Zeka Asistanı
-      </h1>
-      <Badge variant="warning">
-    Demo Sürümü • AI Özellikleri Devre Dışı
-  </Badge>
-  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
-  <strong>ℹ️ Bilgilendirme:</strong> Bu demo sürümünde yapay zeka özellikleri
-  tanıtım amacıyla gösterilmektedir. Belge analizi, hukuki danışmanlık ve belge
-  oluşturma işlemleri aktif değildir.
-</div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Yapay Zekâ Çalışma Alanı
+          </h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Belge analizi, hukuki ön değerlendirme ve taslak
+            oluşturma işlemleri
+          </p>
+        </div>
 
-      <div className="flex gap-2 flex-wrap">
+        <Badge variant="success">
+          GPT-5 mini aktif
+        </Badge>
+      </div>
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+        Yapay zekâ çıktıları çalışma ve ön değerlendirme
+        amaçlıdır. Hukuki işlemden önce avukat tarafından
+        kontrol edilmelidir.
+      </div>
+
+      <div className="flex flex-wrap gap-2">
         {[
-          { id: 'analyze', label: '📄 Belge Analizi' },
-          { id: 'advice', label: '💡 Hukuki Danışmanlık' },
-          { id: 'draft', label: '📝 Belge Oluştur' },
+          {
+            id: 'documents',
+            label: 'Belge Analizi',
+          },
+          {
+            id: 'research',
+            label: 'Hukuki Ön Değerlendirme',
+          },
+          {
+            id: 'draft',
+            label: 'Taslak Oluştur',
+          },
         ].map((tab) => (
           <Button
             key={tab.id}
-            variant={activeTab === tab.id ? 'primary' : 'secondary'}
+            variant={
+              activeTab === tab.id
+                ? 'primary'
+                : 'secondary'
+            }
             onClick={() => {
               setActiveTab(tab.id);
               setResult(null);
@@ -147,161 +593,321 @@ const AIAssistant = () => {
         ))}
       </div>
 
-      {/* Document Analysis */}
-      {activeTab === 'analyze' && (
-        <Card>
-          <Card.Header>
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              📄 Belge Analizi
-            </h2>
-          </Card.Header>
-          <Card.Body className="space-y-4">
-            <div
-              className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {file ? (
-                <div>
-                  <div className="text-4xl mb-2">📎</div>
-                  <p className="text-gray-900 dark:text-white font-medium">{file.name}</p>
-                  <p className="text-sm text-gray-500">
-                    {(file.size / 1024).toFixed(1)} KB
+      {activeTab === 'documents' && (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <Card>
+            <Card.Header>
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Kayıtlı Belgeyi Analiz Et
+              </h2>
+            </Card.Header>
+
+            <Card.Body className="space-y-5">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Belge
+                </label>
+
+                <select
+                  value={selectedDocumentId}
+                  onChange={(event) => {
+                    setSelectedDocumentId(
+                      event.target.value
+                    );
+                    setResult(null);
+                  }}
+                  disabled={documentsQuery.isLoading}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">
+                    {documentsQuery.isLoading
+                      ? 'Belgeler yükleniyor...'
+                      : 'Bir belge seçin'}
+                  </option>
+
+                  {documents.map((document) => (
+                    <option
+                      key={document.id}
+                      value={document.id}
+                    >
+                      {document.name ||
+                        document.original_name}
+                    </option>
+                  ))}
+                </select>
+
+                {documentsQuery.isError && (
+                  <p className="mt-2 text-sm text-red-600">
+                    Belgeler yüklenemedi.
                   </p>
-                  <p className="text-sm text-blue-600 mt-2">Değiştirmek için tıkla</p>
-                </div>
-              ) : (
-                <div>
-                  <div className="text-4xl mb-2">📤</div>
-                  <p className="text-gray-600 dark:text-gray-400">
-                    Belge yükle (PDF, Word, TXT)
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">max 5MB</p>
+                )}
+              </div>
+
+              {selectedDocumentId && (
+                <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                  {(() => {
+                    const document = documents.find(
+                      (item) =>
+                        item.id === selectedDocumentId
+                    );
+
+                    if (!document) {
+                      return null;
+                    }
+
+                    return (
+                      <div className="space-y-1">
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          {document.name ||
+                            document.original_name}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {document.mime_type} ·{' '}
+                          {formatFileSize(
+                            document.file_size
+                          )}
+                        </p>
+                        {document.category && (
+                          <p className="text-sm text-gray-500">
+                            Kategori: {document.category}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={handleFileChange}
-                accept=".pdf,.doc,.docx,.txt"
-              />
-            </div>
 
-            <Button
-              onClick={handleAnalyze}
-              loading={isAnalyzing}
-              disabled={!file}
-              className="w-full"
-            >
-              {isAnalyzing ? 'Analiz Ediliyor...' : '🔍 Belgeyi Analiz Et'}
-            </Button>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Button
+                  onClick={() => handleAnalyze(false)}
+                  loading={analyzeMutation.isPending}
+                  disabled={
+                    !selectedDocumentId ||
+                    classifyMutation.isPending
+                  }
+                >
+                  Analiz Et
+                </Button>
 
-            {renderResult()}
-          </Card.Body>
-        </Card>
+                <Button
+                  variant="secondary"
+                  onClick={handleClassify}
+                  loading={classifyMutation.isPending}
+                  disabled={
+                    !selectedDocumentId ||
+                    analyzeMutation.isPending
+                  }
+                >
+                  Sınıflandır
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  onClick={() => handleAnalyze(true)}
+                  disabled={
+                    !selectedDocumentId ||
+                    analyzeMutation.isPending ||
+                    classifyMutation.isPending
+                  }
+                >
+                  Yeniden Analiz
+                </Button>
+              </div>
+
+              <AnalysisResult analysis={result} />
+            </Card.Body>
+          </Card>
+
+          <Card>
+            <Card.Header>
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Analiz Geçmişi
+              </h2>
+            </Card.Header>
+
+            <Card.Body>
+              {!selectedDocumentId ? (
+                <p className="text-sm text-gray-500">
+                  Geçmişi görmek için belge seçin.
+                </p>
+              ) : analysesQuery.isLoading ? (
+                <p className="text-sm text-gray-500">
+                  Analiz geçmişi yükleniyor...
+                </p>
+              ) : analyses.length === 0 ? (
+                <p className="text-sm text-gray-500">
+                  Bu belge için analiz bulunmuyor.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {analyses.map((analysis) => (
+                    <button
+                      key={analysis.id}
+                      type="button"
+                      onClick={() =>
+                        handleShowAnalysis(analysis.id)
+                      }
+                      className="w-full rounded-lg border border-gray-200 p-3 text-left transition hover:border-blue-500 dark:border-gray-700"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">
+                          {analysis.analysis_type}
+                        </span>
+
+                        <Badge
+                          variant={
+                            analysis.status === 'completed'
+                              ? 'success'
+                              : analysis.status === 'failed'
+                                ? 'danger'
+                                : 'warning'
+                          }
+                        >
+                          {analysis.status}
+                        </Badge>
+                      </div>
+
+                      <p className="mt-2 text-xs text-gray-500">
+                        {analysis.created_at
+                          ? new Date(
+                              analysis.created_at
+                            ).toLocaleString('tr-TR')
+                          : ''}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        </div>
       )}
 
-      {/* Legal Advice */}
-      {activeTab === 'advice' && (
+      {activeTab === 'research' && (
         <Card>
           <Card.Header>
             <h2 className="font-semibold text-gray-900 dark:text-white">
-              💡 Hukuki Danışmanlık
+              Hukuki Ön Değerlendirme
             </h2>
           </Card.Header>
+
           <Card.Body className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Sorunuz *
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Hukuki soru
               </label>
               <textarea
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                rows="4"
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Hukuki sorunuzu yazın..."
+                onChange={(event) =>
+                  setQuery(event.target.value)
+                }
+                rows={4}
+                maxLength={10000}
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                placeholder="İncelenmesini istediğiniz hukuki soruyu yazın..."
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Bağlam (Opsiyonel)
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Olay ve bağlam
               </label>
               <textarea
                 value={context}
-                onChange={(e) => setContext(e.target.value)}
-                rows="3"
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Ek bilgiler..."
+                onChange={(event) =>
+                  setContext(event.target.value)
+                }
+                rows={6}
+                maxLength={50000}
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                placeholder="Olayın ayrıntılarını, tarihleri ve tarafları yazın..."
               />
             </div>
 
             <Button
-              onClick={handleAdvice}
-              loading={getLegalAdvice.isPending}
-              disabled={!query}
+              onClick={handleLegalResearch}
+              loading={
+                legalResearchMutation.isPending
+              }
+              disabled={!query.trim()}
               className="w-full"
             >
-              {getLegalAdvice.isPending ? 'Oluşturuluyor...' : '💬 Danışmanlık Al'}
+              Ön Değerlendirme Oluştur
             </Button>
 
-            {renderResult()}
+            <AnalysisResult analysis={result} />
           </Card.Body>
         </Card>
       )}
 
-      {/* Draft Generation */}
       {activeTab === 'draft' && (
         <Card>
           <Card.Header>
             <h2 className="font-semibold text-gray-900 dark:text-white">
-              📝 Belge Oluştur
+              Hukuki Taslak Oluştur
             </h2>
           </Card.Header>
+
           <Card.Body className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Belge Türü
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Taslak türü
               </label>
+
               <select
                 value={draftType}
-                onChange={(e) => setDraftType(e.target.value)}
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(event) =>
+                  setDraftType(event.target.value)
+                }
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               >
-                <option value="petition">Dilekçe</option>
-                <option value="contract">Sözleşme</option>
-                <option value="notice">İhtarname</option>
+                <option value="petition">
+                  Dilekçe
+                </option>
+                <option value="contract">
+                  Sözleşme
+                </option>
+                <option value="notice">
+                  İhtarname
+                </option>
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Bilgiler (JSON formatında) *
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Taslak bilgileri
               </label>
+
               <textarea
                 value={draftData}
-                onChange={(e) => setDraftData(e.target.value)}
-                rows="6"
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                onChange={(event) =>
+                  setDraftData(event.target.value)
+                }
+                rows={12}
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 placeholder={`{
-  "court": "İstanbul 2. Asliye Hukuk Mahkemesi",
-  "plaintiff": "Ahmet Yılmaz",
-  "defendant": "ABC Şirketi",
-  "subject": "İş Davası"
+  "court": "İstanbul İş Mahkemesi",
+  "plaintiff": "Davacı bilgisi",
+  "defendant": "Davalı bilgisi",
+  "subject": "Dava konusu",
+  "facts": ["Olay 1", "Olay 2"],
+  "claims": ["Talep 1"],
+  "evidence": ["Delil 1"]
 }`}
               />
             </div>
 
             <Button
               onClick={handleDraft}
-              loading={generateDraft.isPending}
-              disabled={!draftData}
+              loading={draftMutation.isPending}
+              disabled={!draftData.trim()}
               className="w-full"
             >
-              {generateDraft.isPending ? 'Oluşturuluyor...' : '📝 Belge Oluştur'}
+              Taslak Oluştur
             </Button>
 
-            {renderResult()}
+            <AnalysisResult analysis={result} />
           </Card.Body>
         </Card>
       )}

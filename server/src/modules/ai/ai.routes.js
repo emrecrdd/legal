@@ -1,34 +1,134 @@
 import express from 'express';
+import {
+  rateLimit,
+  ipKeyGenerator,
+} from 'express-rate-limit';
+
 import { aiController } from './ai.controller.js';
-import { authenticate } from '../../middlewares/auth.middleware.js';
-import { authorize } from '../../middlewares/auth.middleware.js';
+import {
+  authenticate,
+  authorize,
+} from '../../middlewares/auth.middleware.js';
 import { ROLES } from '../../constants/roles.js';
-import multer from 'multer';
 
 const router = express.Router();
 
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+const allowedRoles = authorize(
+  ROLES.ADMIN,
+  ROLES.LAWYER
+);
+
+const createRateLimitKey = (req) => {
+  if (req.user?.id) {
+    return `user:${req.user.id}`;
+  }
+
+  return `ip:${ipKeyGenerator(req.ip)}`;
+};
+
+const aiRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  keyGenerator: createRateLimitKey,
+  message: {
+    success: false,
+    message:
+      'Çok fazla yapay zekâ isteği gönderildi. Lütfen daha sonra tekrar deneyin.',
+    code: 'AI_RATE_LIMIT_EXCEEDED',
+  },
 });
 
+const expensiveAiRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  keyGenerator: createRateLimitKey,
+  message: {
+    success: false,
+    message:
+      'Belge ve dava analiz limiti aşıldı. Lütfen daha sonra tekrar deneyin.',
+    code: 'AI_EXPENSIVE_RATE_LIMIT_EXCEEDED',
+  },
+});
+
+/*
+ * Önce kullanıcı doğrulanır.
+ * Böylece rate-limit anahtarı kullanıcı ID'si üzerinden üretilebilir.
+ */
 router.use(authenticate);
+router.use(allowedRoles);
+router.use(aiRateLimiter);
 
-// Document analysis
-router.post('/analyze-document', authorize(ROLES.ADMIN, ROLES.LAWYER), upload.single('file'), aiController.analyzeDocument);
-router.post('/classify-document', authorize(ROLES.ADMIN, ROLES.LAWYER), upload.single('file'), aiController.classifyDocument);
+/*
+ * Document AI
+ */
 
-// Case analysis
-router.get('/summarize-case/:caseId', authorize(ROLES.ADMIN, ROLES.LAWYER), aiController.summarizeCase);
-router.get('/case-recommendations/:caseId', authorize(ROLES.ADMIN, ROLES.LAWYER), aiController.getCaseRecommendations);
+router.post(
+  '/documents/:documentId/analyze',
+  expensiveAiRateLimiter,
+  aiController.analyzeDocument
+);
 
-// Text analysis
-router.post('/legal-advice', authorize(ROLES.ADMIN, ROLES.LAWYER), aiController.generateLegalAdvice);
-router.post('/extract-entities', authorize(ROLES.ADMIN, ROLES.LAWYER), aiController.extractEntities);
-router.post('/analyze-sentiment', authorize(ROLES.ADMIN, ROLES.LAWYER), aiController.analyzeSentiment);
+router.post(
+  '/documents/:documentId/classify',
+  expensiveAiRateLimiter,
+  aiController.classifyDocument
+);
 
-// Draft generation
-router.post('/generate-draft', authorize(ROLES.ADMIN, ROLES.LAWYER), aiController.generateDraft);
+router.get(
+  '/documents/:documentId/analyses',
+  aiController.getDocumentAnalyses
+);
+
+/*
+ * Case AI
+ */
+
+router.post(
+  '/cases/:caseId/summary',
+  expensiveAiRateLimiter,
+  aiController.summarizeCase
+);
+
+/*
+ * Legal research
+ */
+
+router.post(
+  '/legal-research',
+  aiController.generateLegalResearch
+);
+
+/*
+ * Text entity extraction
+ */
+
+router.post(
+  '/entities',
+  aiController.extractEntities
+);
+
+/*
+ * Draft generation
+ */
+
+router.post(
+  '/drafts',
+  aiController.generateDraft
+);
+
+/*
+ * AI history
+ */
+
+router.get(
+  '/analyses/:analysisId',
+  aiController.getAnalysisById
+);
 
 export { router as aiRoutes };
+
+export default router;
