@@ -13,6 +13,32 @@ import Button from '../../components/ui/Button.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
+const getInitialDraftForm = () => ({
+  court: '',
+  plaintiff: '',
+  defendant: '',
+  subject: '',
+  facts: '',
+  claims: '',
+  evidence: '',
+
+  contractTitle: '',
+  firstParty: '',
+  secondParty: '',
+  scope: '',
+  paymentTerms: '',
+  duration: '',
+  specialTerms: '',
+
+  recipient: '',
+  sender: '',
+  noticeSubject: '',
+  description: '',
+  requestedAction: '',
+  deadline: '',
+  consequences: '',
+});
+
 const unwrapResponse = (response) => {
   return response?.data?.data ?? response?.data ?? null;
 };
@@ -43,6 +69,13 @@ const formatFileSize = (bytes) => {
   }
 
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const splitLines = (value) => {
+  return String(value || '')
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
 };
 
 const ResultList = ({ items }) => {
@@ -82,7 +115,7 @@ const AnalysisResult = ({ analysis }) => {
       <Card.Header>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-semibold text-gray-900 dark:text-white">
-            Analiz Sonucu
+            Sonuç
           </h2>
 
           <div className="flex flex-wrap gap-2">
@@ -129,6 +162,17 @@ const AnalysisResult = ({ analysis }) => {
           </section>
         )}
 
+        {result.title && (
+          <section>
+            <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
+              Başlık
+            </h3>
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              {result.title}
+            </p>
+          </section>
+        )}
+
         {result.summary && (
           <section>
             <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
@@ -156,9 +200,13 @@ const AnalysisResult = ({ analysis }) => {
                     <p className="font-medium text-gray-900 dark:text-white">
                       {party.name}
                     </p>
-                    <p className="text-sm text-gray-500">
-                      {party.role}
-                    </p>
+
+                    {party.role && (
+                      <p className="text-sm text-gray-500">
+                        {party.role}
+                      </p>
+                    )}
+
                     {party.description && (
                       <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                         {party.description}
@@ -187,6 +235,7 @@ const AnalysisResult = ({ analysis }) => {
                       <span className="font-medium text-gray-900 dark:text-white">
                         {item.label}
                       </span>
+
                       <span className="text-sm text-gray-500">
                         {item.date}
                       </span>
@@ -220,6 +269,7 @@ const AnalysisResult = ({ analysis }) => {
                       <p className="font-medium text-gray-900 dark:text-white">
                         {risk.title}
                       </p>
+
                       <Badge
                         variant={
                           ['high', 'critical'].includes(risk.level)
@@ -253,6 +303,7 @@ const AnalysisResult = ({ analysis }) => {
             <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
               Eksik Bilgiler
             </h3>
+
             <ResultList items={result.missingInformation} />
           </section>
         )}
@@ -262,6 +313,7 @@ const AnalysisResult = ({ analysis }) => {
             <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
               Önerilen İşlemler
             </h3>
+
             <ResultList items={result.recommendedActions} />
           </section>
         )}
@@ -269,10 +321,23 @@ const AnalysisResult = ({ analysis }) => {
         {result.draft && (
           <section>
             <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
-              Taslak
+              Oluşturulan Taslak
             </h3>
+
             <div className="whitespace-pre-wrap rounded-lg bg-gray-50 p-4 text-sm leading-6 text-gray-800 dark:bg-gray-700 dark:text-gray-100">
               {result.draft}
+            </div>
+          </section>
+        )}
+
+        {result.content && (
+          <section>
+            <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
+              Oluşturulan Taslak
+            </h3>
+
+            <div className="whitespace-pre-wrap rounded-lg bg-gray-50 p-4 text-sm leading-6 text-gray-800 dark:bg-gray-700 dark:text-gray-100">
+              {result.content}
             </div>
           </section>
         )}
@@ -282,6 +347,7 @@ const AnalysisResult = ({ analysis }) => {
             <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
               Kısa Cevap
             </h3>
+
             <p className="text-sm leading-6 text-gray-700 dark:text-gray-300">
               {result.shortAnswer}
             </p>
@@ -293,6 +359,7 @@ const AnalysisResult = ({ analysis }) => {
             <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
               Hukuki Analiz
             </h3>
+
             <p className="whitespace-pre-wrap text-sm leading-6 text-gray-700 dark:text-gray-300">
               {result.analysis}
             </p>
@@ -328,7 +395,9 @@ const AIAssistant = () => {
   const [query, setQuery] = useState('');
   const [context, setContext] = useState('');
   const [draftType, setDraftType] = useState('petition');
-  const [draftData, setDraftData] = useState('');
+  const [draftForm, setDraftForm] = useState(
+    getInitialDraftForm()
+  );
   const [result, setResult] = useState(null);
 
   const documentsQuery = useQuery({
@@ -468,6 +537,17 @@ const AIAssistant = () => {
     },
   });
 
+  const updateDraftField = (field, value) => {
+    setDraftForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const resetDraftForm = () => {
+    setDraftForm(getInitialDraftForm());
+  };
+
   const handleAnalyze = (force = false) => {
     if (!selectedDocumentId) {
       toast.error('Önce bir belge seçin');
@@ -505,29 +585,113 @@ const AIAssistant = () => {
   };
 
   const handleDraft = () => {
-    if (!draftData.trim()) {
-      toast.error('Taslak bilgilerini girin');
-      return;
+    let data = null;
+
+    if (draftType === 'petition') {
+      if (!draftForm.subject.trim()) {
+        toast.error('Dava konusunu girin');
+        return;
+      }
+
+      if (!draftForm.facts.trim()) {
+        toast.error('Olayları ve açıklamaları girin');
+        return;
+      }
+
+      data = {
+        court: draftForm.court.trim(),
+        plaintiff: draftForm.plaintiff.trim(),
+        defendant: draftForm.defendant.trim(),
+        subject: draftForm.subject.trim(),
+        facts: splitLines(draftForm.facts),
+        claims: splitLines(draftForm.claims),
+        evidence: splitLines(draftForm.evidence),
+      };
     }
 
-    let parsedData;
+    if (draftType === 'contract') {
+      if (!draftForm.contractTitle.trim()) {
+        toast.error('Sözleşme adını girin');
+        return;
+      }
 
-    try {
-      parsedData = JSON.parse(draftData);
-    } catch {
-      toast.error('Geçerli bir JSON formatı girin');
+      if (!draftForm.firstParty.trim()) {
+        toast.error('Birinci tarafı girin');
+        return;
+      }
+
+      if (!draftForm.secondParty.trim()) {
+        toast.error('İkinci tarafı girin');
+        return;
+      }
+
+      if (!draftForm.scope.trim()) {
+        toast.error('Sözleşmenin konusunu girin');
+        return;
+      }
+
+      data = {
+        title: draftForm.contractTitle.trim(),
+        parties: [
+          draftForm.firstParty.trim(),
+          draftForm.secondParty.trim(),
+        ],
+        scope: draftForm.scope.trim(),
+        paymentTerms:
+          draftForm.paymentTerms.trim(),
+        duration: draftForm.duration.trim(),
+        specialTerms: splitLines(
+          draftForm.specialTerms
+        ),
+      };
+    }
+
+    if (draftType === 'notice') {
+      if (!draftForm.recipient.trim()) {
+        toast.error('Muhatap bilgisini girin');
+        return;
+      }
+
+      if (!draftForm.noticeSubject.trim()) {
+        toast.error('İhtar konusunu girin');
+        return;
+      }
+
+      if (!draftForm.description.trim()) {
+        toast.error('Olay ve açıklamaları girin');
+        return;
+      }
+
+      data = {
+        recipient: draftForm.recipient.trim(),
+        sender: draftForm.sender.trim(),
+        subject: draftForm.noticeSubject.trim(),
+        description:
+          draftForm.description.trim(),
+        requestedAction:
+          draftForm.requestedAction.trim(),
+        deadline: draftForm.deadline.trim(),
+        consequences:
+          draftForm.consequences.trim(),
+      };
+    }
+
+    if (!data) {
+      toast.error('Taslak bilgileri hazırlanamadı');
       return;
     }
 
     draftMutation.mutate({
       type: draftType,
-      data: parsedData,
+      data,
     });
   };
 
   const handleShowAnalysis = async (analysisId) => {
     try {
-      const response = await aiApi.getAnalysis(analysisId);
+      const response =
+        await aiApi.getAnalysis(analysisId);
+
       setResult(unwrapResponse(response));
     } catch (error) {
       toast.error(
@@ -544,9 +708,10 @@ const AIAssistant = () => {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             Yapay Zekâ Çalışma Alanı
           </h1>
+
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Belge analizi, hukuki ön değerlendirme ve taslak
-            oluşturma işlemleri
+            Belge analizi, hukuki ön değerlendirme ve
+            taslak oluşturma işlemleri
           </p>
         </div>
 
@@ -661,12 +826,14 @@ const AIAssistant = () => {
                           {document.name ||
                             document.original_name}
                         </p>
+
                         <p className="text-sm text-gray-500">
                           {document.mime_type} ·{' '}
                           {formatFileSize(
                             document.file_size
                           )}
                         </p>
+
                         {document.category && (
                           <p className="text-sm text-gray-500">
                             Kategori: {document.category}
@@ -797,6 +964,7 @@ const AIAssistant = () => {
               <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Hukuki soru
               </label>
+
               <textarea
                 value={query}
                 onChange={(event) =>
@@ -813,6 +981,7 @@ const AIAssistant = () => {
               <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Olay ve bağlam
               </label>
+
               <textarea
                 value={context}
                 onChange={(event) =>
@@ -844,22 +1013,32 @@ const AIAssistant = () => {
       {activeTab === 'draft' && (
         <Card>
           <Card.Header>
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              Hukuki Taslak Oluştur
-            </h2>
+            <div>
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Hukuki Taslak Oluştur
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Belge bilgilerini doldurun. Yapay zekâ,
+                avukat incelemesine hazır bir ilk taslak
+                oluştursun.
+              </p>
+            </div>
           </Card.Header>
 
-          <Card.Body className="space-y-4">
+          <Card.Body className="space-y-6">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Taslak türü
+                Belge türü
               </label>
 
               <select
                 value={draftType}
-                onChange={(event) =>
-                  setDraftType(event.target.value)
-                }
+                onChange={(event) => {
+                  setDraftType(event.target.value);
+                  resetDraftForm();
+                  setResult(null);
+                }}
                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               >
                 <option value="petition">
@@ -874,34 +1053,439 @@ const AIAssistant = () => {
               </select>
             </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Taslak bilgileri
-              </label>
+            {draftType === 'petition' && (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Mahkeme
+                    </label>
 
-              <textarea
-                value={draftData}
-                onChange={(event) =>
-                  setDraftData(event.target.value)
-                }
-                rows={12}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                placeholder={`{
-  "court": "İstanbul İş Mahkemesi",
-  "plaintiff": "Davacı bilgisi",
-  "defendant": "Davalı bilgisi",
-  "subject": "Dava konusu",
-  "facts": ["Olay 1", "Olay 2"],
-  "claims": ["Talep 1"],
-  "evidence": ["Delil 1"]
-}`}
-              />
+                    <input
+                      value={draftForm.court}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'court',
+                          event.target.value
+                        )
+                      }
+                      placeholder="İstanbul İş Mahkemesi"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Dava konusu *
+                    </label>
+
+                    <input
+                      value={draftForm.subject}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'subject',
+                          event.target.value
+                        )
+                      }
+                      placeholder="İşe iade ve işçilik alacakları"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Davacı
+                    </label>
+
+                    <input
+                      value={draftForm.plaintiff}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'plaintiff',
+                          event.target.value
+                        )
+                      }
+                      placeholder="Davacı adı ve bilgileri"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Davalı
+                    </label>
+
+                    <input
+                      value={draftForm.defendant}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'defendant',
+                          event.target.value
+                        )
+                      }
+                      placeholder="Davalı adı ve bilgileri"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Olaylar ve açıklamalar *
+                  </label>
+
+                  <textarea
+                    value={draftForm.facts}
+                    onChange={(event) =>
+                      updateDraftField(
+                        'facts',
+                        event.target.value
+                      )
+                    }
+                    rows={6}
+                    placeholder={`Her olayı ayrı satıra yazın:
+Müvekkil 6 yıldır davalı şirkette çalışmaktadır.
+İş sözleşmesi yazılı bildirim yapılmadan feshedilmiştir.
+Tazminat ödemesi yapılmamıştır.`}
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Talepler
+                    </label>
+
+                    <textarea
+                      value={draftForm.claims}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'claims',
+                          event.target.value
+                        )
+                      }
+                      rows={5}
+                      placeholder={`Her talebi ayrı satıra yazın:
+İşe iadeye karar verilmesi
+Kıdem tazminatının tahsili
+İhbar tazminatının tahsili`}
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Deliller
+                    </label>
+
+                    <textarea
+                      value={draftForm.evidence}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'evidence',
+                          event.target.value
+                        )
+                      }
+                      rows={5}
+                      placeholder={`Her delili ayrı satıra yazın:
+İş sözleşmesi
+SGK hizmet dökümü
+Maaş bordroları
+Tanık beyanları`}
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {draftType === 'contract' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Sözleşme adı *
+                  </label>
+
+                  <input
+                    value={draftForm.contractTitle}
+                    onChange={(event) =>
+                      updateDraftField(
+                        'contractTitle',
+                        event.target.value
+                      )
+                    }
+                    placeholder="Hizmet Sözleşmesi"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Birinci taraf *
+                    </label>
+
+                    <input
+                      value={draftForm.firstParty}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'firstParty',
+                          event.target.value
+                        )
+                      }
+                      placeholder="Birinci taraf bilgileri"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      İkinci taraf *
+                    </label>
+
+                    <input
+                      value={draftForm.secondParty}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'secondParty',
+                          event.target.value
+                        )
+                      }
+                      placeholder="İkinci taraf bilgileri"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Sözleşmenin konusu *
+                  </label>
+
+                  <textarea
+                    value={draftForm.scope}
+                    onChange={(event) =>
+                      updateDraftField(
+                        'scope',
+                        event.target.value
+                      )
+                    }
+                    rows={4}
+                    placeholder="Tarafların vereceği hizmeti ve sözleşmenin kapsamını açıklayın."
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Ücret ve ödeme
+                    </label>
+
+                    <textarea
+                      value={draftForm.paymentTerms}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'paymentTerms',
+                          event.target.value
+                        )
+                      }
+                      rows={4}
+                      placeholder="Ücret, ödeme tarihi ve ödeme biçimi"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Süre
+                    </label>
+
+                    <textarea
+                      value={draftForm.duration}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'duration',
+                          event.target.value
+                        )
+                      }
+                      rows={4}
+                      placeholder="Başlangıç, bitiş ve uzama şartları"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Özel şartlar
+                  </label>
+
+                  <textarea
+                    value={draftForm.specialTerms}
+                    onChange={(event) =>
+                      updateDraftField(
+                        'specialTerms',
+                        event.target.value
+                      )
+                    }
+                    rows={5}
+                    placeholder={`Her şartı ayrı satıra yazın:
+Gizlilik yükümlülüğü
+Rekabet yasağı
+Gecikme cezası`}
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+              </div>
+            )}
+
+            {draftType === 'notice' && (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Gönderen
+                    </label>
+
+                    <input
+                      value={draftForm.sender}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'sender',
+                          event.target.value
+                        )
+                      }
+                      placeholder="İhtar eden kişi veya şirket"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Muhatap *
+                    </label>
+
+                    <input
+                      value={draftForm.recipient}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'recipient',
+                          event.target.value
+                        )
+                      }
+                      placeholder="İhtar edilen kişi veya şirket"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    İhtar konusu *
+                  </label>
+
+                  <input
+                    value={draftForm.noticeSubject}
+                    onChange={(event) =>
+                      updateDraftField(
+                        'noticeSubject',
+                        event.target.value
+                      )
+                    }
+                    placeholder="Ödenmeyen kira bedellerinin tahsili"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Olay ve açıklamalar *
+                  </label>
+
+                  <textarea
+                    value={draftForm.description}
+                    onChange={(event) =>
+                      updateDraftField(
+                        'description',
+                        event.target.value
+                      )
+                    }
+                    rows={6}
+                    placeholder="İhtara neden olan olayları tarih sırasıyla açıklayın."
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      İstenen işlem
+                    </label>
+
+                    <textarea
+                      value={draftForm.requestedAction}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'requestedAction',
+                          event.target.value
+                        )
+                      }
+                      rows={4}
+                      placeholder="Muhatabın yapması gereken işlemi açıklayın."
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Süre
+                    </label>
+
+                    <input
+                      value={draftForm.deadline}
+                      onChange={(event) =>
+                        updateDraftField(
+                          'deadline',
+                          event.target.value
+                        )
+                      }
+                      placeholder="Örneğin: Tebliğden itibaren 7 gün"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Uyulmaması halinde sonuç
+                  </label>
+
+                  <textarea
+                    value={draftForm.consequences}
+                    onChange={(event) =>
+                      updateDraftField(
+                        'consequences',
+                        event.target.value
+                      )
+                    }
+                    rows={4}
+                    placeholder="İcra takibi veya dava açılması gibi sonuçları belirtin."
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
+              Oluşturulan taslak hukuki işlemden önce
+              avukat tarafından kontrol edilmelidir.
             </div>
 
             <Button
               onClick={handleDraft}
               loading={draftMutation.isPending}
-              disabled={!draftData.trim()}
               className="w-full"
             >
               Taslak Oluştur
