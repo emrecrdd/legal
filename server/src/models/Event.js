@@ -116,23 +116,7 @@ class Event extends Sequelize.Model {
           type: DataTypes.JSONB,
           defaultValue: {},
         },
-        // ✅ YENİ REMINDER ALANLARI (1 GÜN + 1 SAAT)
-        reminder_sent_1: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
-        },
-        reminder_sent_at_1: {
-          type: DataTypes.DATE,
-          allowNull: true,
-        },
-        reminder_sent_2: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
-        },
-        reminder_sent_at_2: {
-          type: DataTypes.DATE,
-          allowNull: true,
-        },
+        
       },
       {
         sequelize,

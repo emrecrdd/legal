@@ -109,11 +109,7 @@ export const meetingService = {
       await sequelize.transaction();
 
     try {
-      /*
-       * Yeni reminder sistemi kullanıldığı için
-       * reminder_sent_* alanlarını burada artık
-       * elle sıfırlamıyoruz.
-       */
+     
       const meeting =
         await Meeting.create(
           data,

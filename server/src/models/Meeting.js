@@ -82,24 +82,7 @@ class Meeting extends Sequelize.Model {
             key: 'id',
           },
         },
-        // ✅ 1. HATIRLATMA: 1 GÜN ÖNCE
-        reminder_sent_1: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
-        },
-        reminder_sent_at_1: {
-          type: DataTypes.DATE,
-          allowNull: true,
-        },
-        // ✅ 2. HATIRLATMA: 1 SAAT ÖNCE
-        reminder_sent_2: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
-        },
-        reminder_sent_at_2: {
-          type: DataTypes.DATE,
-          allowNull: true,
-        },
+        
       },
       {
         sequelize,

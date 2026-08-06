@@ -93,22 +93,7 @@ class Task extends Sequelize.Model {
           type: DataTypes.ARRAY(DataTypes.STRING),
           defaultValue: [],
         },
-        reminder_sent_1: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
-        },
-        reminder_sent_at_1: {
-          type: DataTypes.DATE,
-          allowNull: true,
-        },
-        reminder_sent_2: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
-        },
-        reminder_sent_at_2: {
-          type: DataTypes.DATE,
-          allowNull: true,
-        },
+        
 
         // ✅ YENİ ALANLAR (Süre Takibi + Onay)
         started_at: {
