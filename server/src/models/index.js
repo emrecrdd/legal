@@ -13,6 +13,7 @@ import { Notification } from './Notification.js';
 import { PowerOfAttorney } from './PowerOfAttorney.js';
 import { Template } from './Template.js';
 import { AIAnalysis } from './AIAnalysis.js';
+import { Reminder } from './Reminder.js';
 
 const initModels = (sequelize) => {
   // ============ MODEL INITIALIZATION ============
@@ -32,6 +33,7 @@ const initModels = (sequelize) => {
   PowerOfAttorney.initModel(sequelize);
   Template.initModel(sequelize);
   AIAnalysis.initModel(sequelize);
+  Reminder.initModel(sequelize);
 
   // ============ USER ASSOCIATIONS ============
 
@@ -83,6 +85,16 @@ const initModels = (sequelize) => {
   Task.belongsTo(User, {
     foreignKey: 'created_by',
     as: 'creator',
+  });
+
+  User.hasMany(Task, {
+    foreignKey: 'approved_by',
+    as: 'approvedTasks',
+  });
+
+  Task.belongsTo(User, {
+    foreignKey: 'approved_by',
+    as: 'approver',
   });
 
   User.hasMany(Note, {
@@ -441,6 +453,68 @@ const initModels = (sequelize) => {
     as: 'case',
   });
 
+  // ============ REMINDER ASSOCIATIONS ============
+
+  User.hasMany(Reminder, {
+    foreignKey: 'user_id',
+    as: 'reminders',
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE',
+  });
+
+  Reminder.belongsTo(User, {
+    foreignKey: 'user_id',
+    as: 'user',
+  });
+
+  User.hasMany(Reminder, {
+    foreignKey: 'created_by',
+    as: 'createdReminders',
+    onUpdate: 'CASCADE',
+    onDelete: 'RESTRICT',
+  });
+
+  Reminder.belongsTo(User, {
+    foreignKey: 'created_by',
+    as: 'creator',
+  });
+
+  Task.hasMany(Reminder, {
+    foreignKey: 'task_id',
+    as: 'reminders',
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE',
+  });
+
+  Reminder.belongsTo(Task, {
+    foreignKey: 'task_id',
+    as: 'task',
+  });
+
+  Event.hasMany(Reminder, {
+    foreignKey: 'event_id',
+    as: 'reminders',
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE',
+  });
+
+  Reminder.belongsTo(Event, {
+    foreignKey: 'event_id',
+    as: 'event',
+  });
+
+  Meeting.hasMany(Reminder, {
+    foreignKey: 'meeting_id',
+    as: 'reminders',
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE',
+  });
+
+  Reminder.belongsTo(Meeting, {
+    foreignKey: 'meeting_id',
+    as: 'meeting',
+  });
+
   return sequelize;
 };
 
@@ -461,4 +535,5 @@ export {
   PowerOfAttorney,
   Template,
   AIAnalysis,
+  Reminder,
 };

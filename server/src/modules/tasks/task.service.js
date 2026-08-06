@@ -1,86 +1,245 @@
+import { Op } from 'sequelize';
+
 import { Task } from '../../models/Task.js';
 import { Note } from '../../models/Note.js';
 import { User } from '../../models/User.js';
 import { Case } from '../../models/Case.js';
 import { Client } from '../../models/Client.js';
-import { Op } from 'sequelize';
-import { paginate, getPaginationData } from '../../utils/paginate.js';
-import { notificationService } from '../notifications/notification.service.js';
+
+import { sequelize } from '../../config/database.js';
+import { logger } from '../../config/logger.js';
+
+import {
+  paginate,
+  getPaginationData,
+} from '../../utils/paginate.js';
+
+import {
+  notificationService,
+} from '../notifications/notification.service.js';
+
+import {
+  reminderService,
+} from '../reminders/reminder.service.js';
+
+const TERMINAL_STATUSES = new Set([
+  'completed',
+  'cancelled',
+]);
+
+const shouldHaveReminders = (task) => {
+  return (
+    Boolean(task?.due_date) &&
+    Boolean(task?.assigned_to || task?.created_by) &&
+    !TERMINAL_STATUSES.has(task?.status)
+  );
+};
+
+const notifySafely = async (
+  operation,
+  callback,
+  metadata = {}
+) => {
+  try {
+    await callback();
+  } catch (error) {
+    /*
+     * Bildirim hatası ana CRUD işlemini geri almamalıdır.
+     * Notification altyapısı geçici olarak çalışmasa bile
+     * görev kaydı korunur.
+     */
+    logger.error(`Task notification failed: ${operation}`, {
+      ...metadata,
+      message: error.message,
+    });
+  }
+};
 
 export const taskService = {
   async create(data) {
-    const task = await Task.create(data);
+    const transaction = await sequelize.transaction();
 
+    let task;
+
+    try {
+      task = await Task.create(data, {
+        transaction,
+      });
+
+      if (shouldHaveReminders(task)) {
+        await reminderService.createTaskReminders(task, {
+          transaction,
+        });
+      }
+
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+
+    /*
+     * Kullanıcı bildirimi transaction sonrasında gönderilir.
+     * Harici bildirim hatası görev kaydını bozmamalıdır.
+     */
     if (task.assigned_to) {
-      const creator = await User.findByPk(data.created_by);
-      const creatorName = creator ? `${creator.first_name} ${creator.last_name}` : 'Sistem';
-      
-      await notificationService.notifyTaskAssigned(
-        task.assigned_to,
-        task.id,
-        task.title,
-        creatorName
+      await notifySafely(
+        'task-assigned-on-create',
+        async () => {
+          const creator = await User.findByPk(
+            task.created_by,
+            {
+              attributes: [
+                'id',
+                'first_name',
+                'last_name',
+              ],
+            }
+          );
+
+          const creatorName = creator
+            ? `${creator.first_name} ${creator.last_name}`.trim()
+            : 'Sistem';
+
+          await notificationService.notifyTaskAssigned(
+            task.assigned_to,
+            task.id,
+            task.title,
+            creatorName
+          );
+        },
+        {
+          taskId: task.id,
+          assignedTo: task.assigned_to,
+        }
       );
     }
 
     return task;
   },
 
-  async findAll({ page, limit, search, status, priority, assigned_to, case_id }) {
+  async findAll({
+    page,
+    limit,
+    search,
+    status,
+    priority,
+    assigned_to,
+    case_id,
+  }) {
     const where = {};
 
-    if (search && search.trim() !== '') {
+    if (search?.trim()) {
+      const normalizedSearch = search.trim();
+
       where[Op.or] = [
-        { title: { [Op.iLike]: `%${search}%` } },
-        { description: { [Op.iLike]: `%${search}%` } },
+        {
+          title: {
+            [Op.iLike]: `%${normalizedSearch}%`,
+          },
+        },
+        {
+          description: {
+            [Op.iLike]: `%${normalizedSearch}%`,
+          },
+        },
       ];
     }
 
-    if (status) where.status = status;
-    if (priority) where.priority = priority;
-    if (assigned_to) where.assigned_to = assigned_to;
-    if (case_id) where.case_id = case_id;
+    if (status) {
+      where.status = status;
+    }
 
-    const pageNum = parseInt(page) || 1;
-    const limitNum = parseInt(limit) || 10;
+    if (priority) {
+      where.priority = priority;
+    }
 
-    const query = paginate({ where }, pageNum, limitNum);
-    const { count, rows } = await Task.findAndCountAll({
-      ...query,
-      include: [
-        {
-          model: User,
-          as: 'assignee',
-          attributes: ['id', 'first_name', 'last_name', 'email'],
-        },
-        {
-          model: User,
-          as: 'creator',
-          attributes: ['id', 'first_name', 'last_name', 'email'],
-        },
-        {
-          model: Case,
-          as: 'case',
-          attributes: ['id', 'title'],
-        },
-        {
-          model: Client,
-          as: 'client',  // ✅ DÜZELTİLDİ: clients → client
-          attributes: ['id', 'name'],
-        },
-      ],
-      order: [
-        ['priority', 'DESC'],
-        ['due_date', 'ASC'],
-        ['created_at', 'DESC'],
-      ],
-    });
+    if (assigned_to) {
+      where.assigned_to = assigned_to;
+    }
 
-    const pagination = getPaginationData(count, pageNum, limitNum);
+    if (case_id) {
+      where.case_id = case_id;
+    }
+
+    const pageNum = Math.max(
+      Number.parseInt(page, 10) || 1,
+      1
+    );
+
+    const limitNum = Math.min(
+      Math.max(
+        Number.parseInt(limit, 10) || 10,
+        1
+      ),
+      100
+    );
+
+    const query = paginate(
+      { where },
+      pageNum,
+      limitNum
+    );
+
+    const { count, rows } =
+      await Task.findAndCountAll({
+        ...query,
+
+        include: [
+          {
+            model: User,
+            as: 'assignee',
+            attributes: [
+              'id',
+              'first_name',
+              'last_name',
+              'email',
+            ],
+          },
+          {
+            model: User,
+            as: 'creator',
+            attributes: [
+              'id',
+              'first_name',
+              'last_name',
+              'email',
+            ],
+          },
+          {
+            model: Case,
+            as: 'case',
+            attributes: [
+              'id',
+              'title',
+            ],
+          },
+          {
+            model: Client,
+            as: 'client',
+            attributes: [
+              'id',
+              'name',
+            ],
+          },
+        ],
+
+        distinct: true,
+
+        order: [
+          ['priority', 'DESC'],
+          ['due_date', 'ASC'],
+          ['created_at', 'DESC'],
+        ],
+      });
 
     return {
       data: rows,
-      pagination,
+      pagination: getPaginationData(
+        count,
+        pageNum,
+        limitNum
+      ),
     };
   },
 
@@ -90,33 +249,69 @@ export const taskService = {
         {
           model: User,
           as: 'assignee',
-          attributes: ['id', 'first_name', 'last_name', 'email'],
+          attributes: [
+            'id',
+            'first_name',
+            'last_name',
+            'email',
+          ],
         },
         {
           model: User,
           as: 'creator',
-          attributes: ['id', 'first_name', 'last_name', 'email'],
+          attributes: [
+            'id',
+            'first_name',
+            'last_name',
+            'email',
+          ],
+        },
+        {
+          model: User,
+          as: 'approver',
+          attributes: [
+            'id',
+            'first_name',
+            'last_name',
+            'email',
+          ],
         },
         {
           model: Case,
           as: 'case',
-          attributes: ['id', 'title'],
-          // ✅ Case içindeki Client KALDIRILDI (hata veriyordu)
+          attributes: [
+            'id',
+            'title',
+          ],
         },
         {
           model: Client,
-          as: 'client',  // ✅ DÜZELTİLDİ: clients → client
-          attributes: ['id', 'name'],
+          as: 'client',
+          attributes: [
+            'id',
+            'name',
+          ],
         },
         {
           model: Task,
           as: 'parentTask',
-          attributes: ['id', 'title', 'status'],
+          attributes: [
+            'id',
+            'title',
+            'status',
+          ],
         },
         {
           model: Task,
           as: 'subtasks',
-          attributes: ['id', 'title', 'status', 'due_date'],
+          attributes: [
+            'id',
+            'title',
+            'status',
+            'due_date',
+            'priority',
+            'progress',
+          ],
         },
         {
           model: Note,
@@ -125,11 +320,26 @@ export const taskService = {
             {
               model: User,
               as: 'creator',
-              attributes: ['id', 'first_name', 'last_name', 'email'],
+              attributes: [
+                'id',
+                'first_name',
+                'last_name',
+                'email',
+              ],
             },
           ],
-          order: [['created_at', 'ASC']],
         },
+      ],
+
+      order: [
+        [
+          {
+            model: Note,
+            as: 'taskNotes',
+          },
+          'created_at',
+          'ASC',
+        ],
       ],
     });
 
@@ -141,133 +351,499 @@ export const taskService = {
   },
 
   async update(id, data) {
-    const task = await Task.findByPk(id);
-    if (!task) {
-      throw new Error('Task not found');
+    const transaction = await sequelize.transaction();
+
+    let task;
+    let oldAssignee;
+    let shouldNotifyNewAssignee = false;
+
+    try {
+      task = await Task.findByPk(id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!task) {
+        throw new Error('Task not found');
+      }
+
+      oldAssignee = task.assigned_to;
+
+      const previousValues = {
+        dueDate: task.due_date
+          ? new Date(task.due_date).getTime()
+          : null,
+
+        assignedTo: task.assigned_to,
+        createdBy: task.created_by,
+        status: task.status,
+        title: task.title,
+      };
+
+      await task.update(data, {
+        transaction,
+      });
+
+      const currentValues = {
+        dueDate: task.due_date
+          ? new Date(task.due_date).getTime()
+          : null,
+
+        assignedTo: task.assigned_to,
+        createdBy: task.created_by,
+        status: task.status,
+        title: task.title,
+      };
+
+      const schedulingChanged =
+        previousValues.dueDate !== currentValues.dueDate ||
+        previousValues.assignedTo !== currentValues.assignedTo ||
+        previousValues.createdBy !== currentValues.createdBy ||
+        previousValues.status !== currentValues.status ||
+        previousValues.title !== currentValues.title;
+
+      if (TERMINAL_STATUSES.has(task.status)) {
+        await reminderService.cancelForSource({
+          sourceType: 'task',
+          sourceId: task.id,
+          transaction,
+        });
+      } else if (
+        schedulingChanged &&
+        shouldHaveReminders(task)
+      ) {
+        await reminderService.rescheduleTask(task, {
+          transaction,
+        });
+      } else if (
+        schedulingChanged &&
+        !shouldHaveReminders(task)
+      ) {
+        await reminderService.cancelForSource({
+          sourceType: 'task',
+          sourceId: task.id,
+          transaction,
+        });
+      }
+
+      shouldNotifyNewAssignee =
+        Boolean(task.assigned_to) &&
+        oldAssignee !== task.assigned_to;
+
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
     }
 
-    await task.update(data);
-    return task;
-  },
+    if (shouldNotifyNewAssignee) {
+      await notifySafely(
+        'task-reassigned-on-update',
+        async () => {
+          const creator = await User.findByPk(
+            task.created_by,
+            {
+              attributes: [
+                'id',
+                'first_name',
+                'last_name',
+              ],
+            }
+          );
 
-  async remove(id) {
-    const task = await Task.findByPk(id);
-    if (!task) {
-      throw new Error('Task not found');
-    }
+          const creatorName = creator
+            ? `${creator.first_name} ${creator.last_name}`.trim()
+            : 'Sistem';
 
-    await task.destroy();
-    return task;
-  },
-
-  async updateStatus(id, status) {
-    const task = await Task.findByPk(id);
-    if (!task) {
-      throw new Error('Task not found');
-    }
-
-    const updateData = { status };
-    if (status === 'completed') {
-      updateData.completed_at = new Date();
-    }
-
-    await task.update(updateData);
-    return task;
-  },
-
-  async assignTask(id, assigned_to, assignedBy = null) {
-    const task = await Task.findByPk(id);
-    if (!task) {
-      throw new Error('Task not found');
-    }
-
-    const user = await User.findByPk(assigned_to);
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    const oldAssignee = task.assigned_to;
-    await task.update({ assigned_to });
-
-    if (oldAssignee !== assigned_to) {
-      const assignerName = assignedBy || 'Sistem';
-      await notificationService.notifyTaskAssigned(
-        assigned_to,
-        task.id,
-        task.title,
-        assignerName
+          await notificationService.notifyTaskAssigned(
+            task.assigned_to,
+            task.id,
+            task.title,
+            creatorName
+          );
+        },
+        {
+          taskId: task.id,
+          previousAssignee: oldAssignee,
+          assignedTo: task.assigned_to,
+        }
       );
     }
 
     return task;
   },
 
-  async getMyTasks(userId, { page, limit, status }) {
+  async remove(id) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      const task = await Task.findByPk(id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!task) {
+        throw new Error('Task not found');
+      }
+
+      await reminderService.cancelForSource({
+        sourceType: 'task',
+        sourceId: task.id,
+        transaction,
+      });
+
+      await task.destroy({
+        transaction,
+      });
+
+      await transaction.commit();
+
+      return task;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  },
+
+  async updateStatus(id, status) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      const task = await Task.findByPk(id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!task) {
+        throw new Error('Task not found');
+      }
+
+      const updateData = {
+        status,
+      };
+
+      if (status === 'completed') {
+        updateData.completed_at = new Date();
+        updateData.progress = 100;
+      } else if (task.status === 'completed') {
+        /*
+         * Tamamlanan görev yeniden açılırsa kapanış bilgileri
+         * temizlenir.
+         */
+        updateData.completed_at = null;
+
+        if (task.progress === 100) {
+          updateData.progress = 0;
+        }
+      }
+
+      await task.update(updateData, {
+        transaction,
+      });
+
+      if (TERMINAL_STATUSES.has(status)) {
+        await reminderService.cancelForSource({
+          sourceType: 'task',
+          sourceId: task.id,
+          transaction,
+        });
+      } else if (shouldHaveReminders(task)) {
+        await reminderService.rescheduleTask(task, {
+          transaction,
+        });
+      }
+
+      await transaction.commit();
+
+      return task;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  },
+
+  async assignTask(
+    id,
+    assigned_to,
+    assignedBy = null
+  ) {
+    const transaction = await sequelize.transaction();
+
+    let task;
+    let oldAssignee;
+    let user;
+
+    try {
+      task = await Task.findByPk(id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!task) {
+        throw new Error('Task not found');
+      }
+
+      user = await User.findByPk(
+        assigned_to,
+        {
+          transaction,
+          attributes: [
+            'id',
+            'email',
+            'first_name',
+            'last_name',
+            'is_active',
+          ],
+        }
+      );
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      if (!user.is_active) {
+        throw new Error(
+          'Task cannot be assigned to an inactive user'
+        );
+      }
+
+      oldAssignee = task.assigned_to;
+
+      await task.update(
+        {
+          assigned_to,
+        },
+        {
+          transaction,
+        }
+      );
+
+      if (shouldHaveReminders(task)) {
+        await reminderService.rescheduleTask(task, {
+          transaction,
+        });
+      } else {
+        await reminderService.cancelForSource({
+          sourceType: 'task',
+          sourceId: task.id,
+          transaction,
+        });
+      }
+
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+
+    if (oldAssignee !== assigned_to) {
+      await notifySafely(
+        'task-assigned',
+        async () => {
+          let assignerName = 'Sistem';
+
+          if (
+            typeof assignedBy === 'string' &&
+            assignedBy.trim()
+          ) {
+            assignerName = assignedBy.trim();
+          }
+
+          await notificationService.notifyTaskAssigned(
+            assigned_to,
+            task.id,
+            task.title,
+            assignerName
+          );
+        },
+        {
+          taskId: task.id,
+          assignedTo: assigned_to,
+          previousAssignee: oldAssignee,
+        }
+      );
+    }
+
+    return task;
+  },
+
+  async getMyTasks(
+    userId,
+    {
+      page,
+      limit,
+      status,
+    }
+  ) {
     const where = {
       assigned_to: userId,
     };
 
-    if (status) where.status = status;
+    if (status) {
+      where.status = status;
+    }
 
-    const pageNum = parseInt(page) || 1;
-    const limitNum = parseInt(limit) || 10;
+    const pageNum = Math.max(
+      Number.parseInt(page, 10) || 1,
+      1
+    );
 
-    const query = paginate({ where }, pageNum, limitNum);
-    const { count, rows } = await Task.findAndCountAll({
-      ...query,
-      include: [
-        {
-          model: Case,
-          as: 'case',
-          attributes: ['id', 'title'],
-        },
-        {
-          model: Client,
-          as: 'client',  // ✅ DÜZELTİLDİ: clients → client
-          attributes: ['id', 'name'],
-        },
-        {
-          model: User,
-          as: 'creator',
-          attributes: ['id', 'first_name', 'last_name'],
-        },
-      ],
-      order: [
-        ['priority', 'DESC'],
-        ['due_date', 'ASC'],
-      ],
-    });
+    const limitNum = Math.min(
+      Math.max(
+        Number.parseInt(limit, 10) || 10,
+        1
+      ),
+      100
+    );
 
-    const pagination = getPaginationData(count, pageNum, limitNum);
+    const query = paginate(
+      { where },
+      pageNum,
+      limitNum
+    );
+
+    const { count, rows } =
+      await Task.findAndCountAll({
+        ...query,
+
+        include: [
+          {
+            model: Case,
+            as: 'case',
+            attributes: [
+              'id',
+              'title',
+            ],
+          },
+          {
+            model: Client,
+            as: 'client',
+            attributes: [
+              'id',
+              'name',
+            ],
+          },
+          {
+            model: User,
+            as: 'creator',
+            attributes: [
+              'id',
+              'first_name',
+              'last_name',
+            ],
+          },
+        ],
+
+        distinct: true,
+
+        order: [
+          ['priority', 'DESC'],
+          ['due_date', 'ASC'],
+          ['created_at', 'DESC'],
+        ],
+      });
 
     return {
       data: rows,
-      pagination,
+      pagination: getPaginationData(
+        count,
+        pageNum,
+        limitNum
+      ),
     };
   },
 
   async getStatistics(userId) {
-    const totalTasks = await Task.count();
-    const pendingTasks = await Task.count({ where: { status: 'pending' } });
-    const inProgressTasks = await Task.count({ where: { status: 'in_progress' } });
-    const completedTasks = await Task.count({ where: { status: 'completed' } });
-    const overdueTasks = await Task.count({
-      where: {
-        due_date: { [Op.lt]: new Date() },
-        status: { [Op.notIn]: ['completed', 'cancelled'] },
-      },
-    });
+    const now = new Date();
 
-    const myTasks = await Task.count({ where: { assigned_to: userId } });
-    const myPending = await Task.count({
-      where: { assigned_to: userId, status: 'pending' },
-    });
-    const myInProgress = await Task.count({
-      where: { assigned_to: userId, status: 'in_progress' },
-    });
-    const myCompleted = await Task.count({
-      where: { assigned_to: userId, status: 'completed' },
-    });
+    const [
+      totalTasks,
+      pendingTasks,
+      inProgressTasks,
+      completedTasks,
+      overdueTasks,
+      myTasks,
+      myPending,
+      myInProgress,
+      myCompleted,
+      myOverdue,
+    ] = await Promise.all([
+      Task.count(),
+
+      Task.count({
+        where: {
+          status: 'pending',
+        },
+      }),
+
+      Task.count({
+        where: {
+          status: 'in_progress',
+        },
+      }),
+
+      Task.count({
+        where: {
+          status: 'completed',
+        },
+      }),
+
+      Task.count({
+        where: {
+          due_date: {
+            [Op.lt]: now,
+          },
+          status: {
+            [Op.notIn]: [
+              'completed',
+              'cancelled',
+            ],
+          },
+        },
+      }),
+
+      Task.count({
+        where: {
+          assigned_to: userId,
+        },
+      }),
+
+      Task.count({
+        where: {
+          assigned_to: userId,
+          status: 'pending',
+        },
+      }),
+
+      Task.count({
+        where: {
+          assigned_to: userId,
+          status: 'in_progress',
+        },
+      }),
+
+      Task.count({
+        where: {
+          assigned_to: userId,
+          status: 'completed',
+        },
+      }),
+
+      Task.count({
+        where: {
+          assigned_to: userId,
+          due_date: {
+            [Op.lt]: now,
+          },
+          status: {
+            [Op.notIn]: [
+              'completed',
+              'cancelled',
+            ],
+          },
+        },
+      }),
+    ]);
 
     return {
       total: {
@@ -277,11 +853,13 @@ export const taskService = {
         completed: completedTasks,
         overdue: overdueTasks,
       },
+
       my: {
         total: myTasks,
         pending: myPending,
         inProgress: myInProgress,
         completed: myCompleted,
+        overdue: myOverdue,
       },
     };
   },
@@ -290,268 +868,571 @@ export const taskService = {
     return Task.findAll({
       where: {
         assigned_to: userId,
-        due_date: { [Op.lt]: new Date() },
-        status: { [Op.notIn]: ['completed', 'cancelled'] },
+
+        due_date: {
+          [Op.lt]: new Date(),
+        },
+
+        status: {
+          [Op.notIn]: [
+            'completed',
+            'cancelled',
+          ],
+        },
       },
+
       include: [
         {
           model: Case,
           as: 'case',
-          attributes: ['id', 'title'],
+          attributes: [
+            'id',
+            'title',
+          ],
         },
       ],
-      order: [['due_date', 'ASC']],
+
+      order: [
+        ['due_date', 'ASC'],
+      ],
     });
   },
 
   async getUpcoming(userId) {
     const now = new Date();
-    const weekLater = new Date(now);
-    weekLater.setDate(weekLater.getDate() + 7);
+
+    const weekLater = new Date(
+      now.getTime() +
+        7 * 24 * 60 * 60 * 1000
+    );
 
     return Task.findAll({
       where: {
         assigned_to: userId,
-        due_date: { [Op.between]: [now, weekLater] },
-        status: { [Op.notIn]: ['completed', 'cancelled'] },
+
+        due_date: {
+          [Op.between]: [
+            now,
+            weekLater,
+          ],
+        },
+
+        status: {
+          [Op.notIn]: [
+            'completed',
+            'cancelled',
+          ],
+        },
       },
+
       include: [
         {
           model: Case,
           as: 'case',
-          attributes: ['id', 'title'],
+          attributes: [
+            'id',
+            'title',
+          ],
         },
       ],
-      order: [['due_date', 'ASC']],
+
+      order: [
+        ['due_date', 'ASC'],
+      ],
     });
   },
 
-  // ✅ YENİ: Görevi Başlat
   async startTask(id, userId) {
-    const task = await Task.findByPk(id);
-    if (!task) {
-      throw new Error('Task not found');
+    const transaction = await sequelize.transaction();
+
+    try {
+      const task = await Task.findByPk(id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!task) {
+        throw new Error('Task not found');
+      }
+
+      if (task.assigned_to !== userId) {
+        throw new Error(
+          'You are not assigned to this task'
+        );
+      }
+
+      if (task.status === 'completed') {
+        throw new Error(
+          'Task already completed'
+        );
+      }
+
+      if (task.status === 'cancelled') {
+        throw new Error(
+          'Cancelled task cannot be started'
+        );
+      }
+
+      if (task.status === 'in_progress') {
+        throw new Error(
+          'Task already started'
+        );
+      }
+
+      await task.update(
+        {
+          status: 'in_progress',
+          started_at:
+            task.started_at || new Date(),
+        },
+        {
+          transaction,
+        }
+      );
+
+      await Note.create(
+        {
+          task_id: id,
+          created_by: userId,
+          content:
+            `Görev başlatıldı: ${task.title}`,
+          note_type: 'task',
+        },
+        {
+          transaction,
+        }
+      );
+
+      /*
+       * Başlatma işleminde tarih değişmez; mevcut reminderlar
+       * korunur. Reminder yoksa oluşturulur.
+       */
+      if (shouldHaveReminders(task)) {
+        await reminderService.createTaskReminders(task, {
+          transaction,
+        });
+      }
+
+      await transaction.commit();
+
+      return task;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
     }
-
-    if (task.assigned_to !== userId) {
-      throw new Error('You are not assigned to this task');
-    }
-
-    if (task.status === 'completed') {
-      throw new Error('Task already completed');
-    }
-
-    if (task.status === 'in_progress') {
-      throw new Error('Task already started');
-    }
-
-    await task.update({
-      status: 'in_progress',
-      started_at: new Date(),
-    });
-
-    // Otomatik not ekle
-    await Note.create({
-      task_id: id,
-      created_by: userId,
-      content: `Görev başlatıldı: ${task.title}`,
-      note_type: 'task',
-    });
-
-    return task;
   },
 
-  // ✅ YENİ: Görevi Tamamla (not zorunlu)
-  async completeTask(id, userId, { note, actual_hours }) {
-    const task = await Task.findByPk(id);
-    if (!task) {
-      throw new Error('Task not found');
+  async completeTask(
+    id,
+    userId,
+    {
+      note,
+      actual_hours,
+    }
+  ) {
+    const transaction = await sequelize.transaction();
+
+    let task;
+
+    try {
+      task = await Task.findByPk(id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!task) {
+        throw new Error('Task not found');
+      }
+
+      if (task.assigned_to !== userId) {
+        throw new Error(
+          'You are not assigned to this task'
+        );
+      }
+
+      if (task.status === 'completed') {
+        throw new Error(
+          'Task already completed'
+        );
+      }
+
+      if (task.status !== 'in_progress') {
+        throw new Error(
+          'Task must be started first'
+        );
+      }
+
+      if (!note?.trim()) {
+        throw new Error(
+          'Completion note is required'
+        );
+      }
+
+      let actualHours =
+        Number(actual_hours);
+
+      if (
+        !Number.isFinite(actualHours) ||
+        actualHours < 0
+      ) {
+        actualHours = null;
+      }
+
+      if (
+        actualHours === null &&
+        task.started_at
+      ) {
+        const diffMs =
+          Date.now() -
+          new Date(task.started_at).getTime();
+
+        actualHours = Number(
+          (
+            diffMs /
+            (1000 * 60 * 60)
+          ).toFixed(2)
+        );
+      }
+
+      await task.update(
+        {
+          status: 'completed',
+          completed_at: new Date(),
+          actual_hours: actualHours,
+          progress: 100,
+        },
+        {
+          transaction,
+        }
+      );
+
+      await Note.create(
+        {
+          task_id: id,
+          created_by: userId,
+          content: note.trim(),
+          note_type: 'task',
+        },
+        {
+          transaction,
+        }
+      );
+
+      await reminderService.cancelForSource({
+        sourceType: 'task',
+        sourceId: task.id,
+        transaction,
+      });
+
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
     }
 
-    if (task.assigned_to !== userId) {
-      throw new Error('You are not assigned to this task');
-    }
-
-    if (task.status === 'completed') {
-      throw new Error('Task already completed');
-    }
-
-    if (task.status !== 'in_progress') {
-      throw new Error('Task must be started first');
-    }
-
-    if (!note || note.trim() === '') {
-      throw new Error('Completion note is required');
-    }
-
-    let actualHours = actual_hours;
-    if (!actualHours && task.started_at) {
-      const diffMs = new Date() - new Date(task.started_at);
-      actualHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
-    }
-
-    await task.update({
-      status: 'completed',
-      completed_at: new Date(),
-      actual_hours: actualHours,
-      progress: 100,
-    });
-
-    await Note.create({
-      task_id: id,
-      created_by: userId,
-      content: note,
-      note_type: 'task',
-    });
-
-    // Admin'e bildirim gönder
     if (task.created_by) {
-      await notificationService.notifyTaskCompleted(
-        task.created_by,
-        task.id,
-        task.title,
-        userId
+      await notifySafely(
+        'task-completed',
+        async () => {
+          await notificationService.notifyTaskCompleted(
+            task.created_by,
+            task.id,
+            task.title,
+            userId
+          );
+        },
+        {
+          taskId: task.id,
+          completedBy: userId,
+        }
       );
     }
 
     return task;
   },
 
-  // ✅ YENİ: Görevi Onayla (sadece admin)
   async approveTask(id, userId) {
-    const task = await Task.findByPk(id);
-    if (!task) {
-      throw new Error('Task not found');
+    const transaction = await sequelize.transaction();
+
+    let task;
+    let approver;
+
+    try {
+      task = await Task.findByPk(id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!task) {
+        throw new Error('Task not found');
+      }
+
+      if (task.status !== 'completed') {
+        throw new Error(
+          'Only completed tasks can be approved'
+        );
+      }
+
+      if (task.approved_at) {
+        throw new Error(
+          'Task already approved'
+        );
+      }
+
+      approver = await User.findByPk(
+        userId,
+        {
+          transaction,
+          attributes: [
+            'id',
+            'first_name',
+            'last_name',
+          ],
+        }
+      );
+
+      if (!approver) {
+        throw new Error('User not found');
+      }
+
+      await task.update(
+        {
+          approved_by: userId,
+          approved_at: new Date(),
+        },
+        {
+          transaction,
+        }
+      );
+
+      await Note.create(
+        {
+          task_id: id,
+          created_by: userId,
+          content:
+            `Görev onaylandı: ${task.title}`,
+          note_type: 'task',
+        },
+        {
+          transaction,
+        }
+      );
+
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
     }
-
-    if (task.status !== 'completed') {
-      throw new Error('Only completed tasks can be approved');
-    }
-
-    if (task.approved_at) {
-      throw new Error('Task already approved');
-    }
-
-    await task.update({
-      approved_by: userId,
-      approved_at: new Date(),
-    });
-
-    const approver = await User.findByPk(userId);
-    await Note.create({
-      task_id: id,
-      created_by: userId,
-      content: `Görev onaylandı: ${task.title}`,
-      note_type: 'task',
-    });
 
     if (task.assigned_to) {
-      await notificationService.notifyTaskApproved(
-        task.assigned_to,
-        task.id,
-        task.title,
-        approver ? `${approver.first_name} ${approver.last_name}` : 'Admin'
+      await notifySafely(
+        'task-approved',
+        async () => {
+          const approverName =
+            `${approver.first_name} ${approver.last_name}`.trim();
+
+          await notificationService.notifyTaskApproved(
+            task.assigned_to,
+            task.id,
+            task.title,
+            approverName || 'Admin'
+          );
+        },
+        {
+          taskId: task.id,
+          approvedBy: userId,
+        }
       );
     }
 
     return task;
   },
 
-  // ✅ YENİ: Not Ekle (sadece atanan kişi)
-  async addNote(id, userId, { content }) {
+  async addNote(
+    id,
+    userId,
+    {
+      content,
+    }
+  ) {
     const task = await Task.findByPk(id);
+
     if (!task) {
       throw new Error('Task not found');
     }
 
     if (task.assigned_to !== userId) {
-      throw new Error('You are not assigned to this task');
+      throw new Error(
+        'You are not assigned to this task'
+      );
     }
 
-    if (!content || content.trim() === '') {
-      throw new Error('Note content is required');
+    if (!content?.trim()) {
+      throw new Error(
+        'Note content is required'
+      );
     }
 
     const note = await Note.create({
       task_id: id,
       created_by: userId,
-      content,
+      content: content.trim(),
       note_type: 'task',
     });
 
-    const noteWithUser = await Note.findByPk(note.id, {
+    return Note.findByPk(note.id, {
       include: [
         {
           model: User,
           as: 'creator',
-          attributes: ['id', 'first_name', 'last_name', 'email'],
+          attributes: [
+            'id',
+            'first_name',
+            'last_name',
+            'email',
+          ],
         },
       ],
     });
-
-    return noteWithUser;
   },
 
-  // ✅ YENİ: Notları Getir
   async getNotes(id, userId) {
     const task = await Task.findByPk(id);
+
     if (!task) {
       throw new Error('Task not found');
     }
 
-    const user = await User.findByPk(userId);
-    const isAdmin = user?.role === 'admin';
-    
-    if (!isAdmin && task.assigned_to !== userId) {
-      throw new Error('You do not have permission to view these notes');
+    const user = await User.findByPk(
+      userId,
+      {
+        attributes: [
+          'id',
+          'role',
+        ],
+      }
+    );
+
+    const isAdmin =
+      user?.role === 'admin';
+
+    if (
+      !isAdmin &&
+      task.assigned_to !== userId &&
+      task.created_by !== userId
+    ) {
+      throw new Error(
+        'You do not have permission to view these notes'
+      );
     }
 
-    const notes = await Note.findAll({
+    return Note.findAll({
       where: {
         task_id: id,
         note_type: 'task',
       },
+
       include: [
         {
           model: User,
           as: 'creator',
-          attributes: ['id', 'first_name', 'last_name', 'email', 'role'],
+          attributes: [
+            'id',
+            'first_name',
+            'last_name',
+            'email',
+            'role',
+          ],
         },
       ],
-      order: [['created_at', 'ASC']],
-    });
 
-    return notes;
+      order: [
+        ['created_at', 'ASC'],
+      ],
+    });
   },
 
-  // ✅ YENİ: İlerleme Güncelle
-  async updateProgress(id, userId, progress) {
-    const task = await Task.findByPk(id);
-    if (!task) {
-      throw new Error('Task not found');
-    }
+  async updateProgress(
+    id,
+    userId,
+    progress
+  ) {
+    const transaction = await sequelize.transaction();
 
-    if (task.assigned_to !== userId) {
-      throw new Error('You are not assigned to this task');
-    }
-
-    if (task.status === 'completed' || task.status === 'cancelled') {
-      throw new Error('Cannot update progress of completed/cancelled task');
-    }
-
-    const validatedProgress = Math.min(100, Math.max(0, parseInt(progress) || 0));
-    
-    await task.update({ progress: validatedProgress });
-
-    if (validatedProgress > 0 && validatedProgress % 25 === 0) {
-      await Note.create({
-        task_id: id,
-        created_by: userId,
-        content: `Görev ilerlemesi %${validatedProgress} oldu`,
-        note_type: 'task',
+    try {
+      const task = await Task.findByPk(id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
       });
-    }
 
-    return task;
+      if (!task) {
+        throw new Error('Task not found');
+      }
+
+      if (task.assigned_to !== userId) {
+        throw new Error(
+          'You are not assigned to this task'
+        );
+      }
+
+      if (
+        task.status === 'completed' ||
+        task.status === 'cancelled'
+      ) {
+        throw new Error(
+          'Cannot update progress of completed/cancelled task'
+        );
+      }
+
+      const parsedProgress =
+        Number.parseInt(progress, 10);
+
+      const validatedProgress =
+        Math.min(
+          99,
+          Math.max(
+            0,
+            Number.isFinite(parsedProgress)
+              ? parsedProgress
+              : 0
+          )
+        );
+
+      await task.update(
+        {
+          progress: validatedProgress,
+        },
+        {
+          transaction,
+        }
+      );
+
+      if (
+        validatedProgress > 0 &&
+        validatedProgress % 25 === 0
+      ) {
+        await Note.create(
+          {
+            task_id: id,
+            created_by: userId,
+            content:
+              `Görev ilerlemesi %${validatedProgress} oldu`,
+            note_type: 'task',
+          },
+          {
+            transaction,
+          }
+        );
+      }
+
+      await transaction.commit();
+
+      return task;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   },
 };
+
+export default taskService;
