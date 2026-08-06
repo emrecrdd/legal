@@ -1,21 +1,45 @@
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+} from '@tanstack/react-query';
+
+import {
+  Brain,
+  Edit2,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
+  CalendarDays,
+  ListTodo,
+  ShieldAlert,
+  Activity,
+} from 'lucide-react';
+
+import toast from 'react-hot-toast';
+
 import caseApi from '../../features/cases/case.api.js';
 import documentApi from '../../features/documents/document.api.js';
+import aiApi from '../../features/ai/ai.api.js';
+
 import Badge from '../../components/ui/Badge.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
-import { Edit2 } from 'lucide-react';
-import toast from 'react-hot-toast';
 
 // ======================================================
-// UTC format fonksiyonları (zaman dilimi çevirme YOK)
+// UTC format fonksiyonları
 // ======================================================
 
 const formatDateUTC = (date) => {
   if (!date) return '-';
+
   try {
     const d = new Date(date);
+
+    if (Number.isNaN(d.getTime())) {
+      return '-';
+    }
+
     return `${String(d.getUTCDate()).padStart(2, '0')}.${String(
       d.getUTCMonth() + 1
     ).padStart(2, '0')}.${d.getUTCFullYear()}`;
@@ -26,8 +50,14 @@ const formatDateUTC = (date) => {
 
 const formatDateTimeUTC = (date) => {
   if (!date) return '-';
+
   try {
     const d = new Date(date);
+
+    if (Number.isNaN(d.getTime())) {
+      return '-';
+    }
+
     return `${String(d.getUTCDate()).padStart(2, '0')}.${String(
       d.getUTCMonth() + 1
     ).padStart(2, '0')}.${d.getUTCFullYear()} ${String(
@@ -38,49 +68,707 @@ const formatDateTimeUTC = (date) => {
   }
 };
 
+const unwrapResponse = (response) => {
+  return response?.data?.data ?? response?.data ?? null;
+};
+
+// ======================================================
+// Label yardımcıları
+// ======================================================
+
+const PARTY_LABELS = {
+  davaci: 'Davacı',
+  davali: 'Davalı',
+  supheli: 'Şüpheli',
+  sanik: 'Sanık',
+  musteki: 'Müşteki',
+  katilan: 'Katılan',
+  alacakli: 'Alacaklı',
+  borclu: 'Borçlu',
+  ucuncu_kisi: 'Üçüncü Kişi',
+
+  // Eski kayıtlarla uyumluluk
+  plaintiff: 'Davacı',
+  defendant: 'Davalı',
+  intervener: 'Müdahil',
+  witness: 'Tanık',
+};
+
+const PRIORITY_LABELS = {
+  low: 'Düşük',
+  normal: 'Normal',
+  high: 'Yüksek',
+  critical: 'Kritik',
+};
+
+const RISK_LABELS = {
+  low: 'Düşük',
+  medium: 'Orta',
+  high: 'Yüksek',
+  critical: 'Kritik',
+  undetermined: 'Belirsiz',
+};
+
+const ACTION_PRIORITY_LABELS = {
+  low: 'Düşük',
+  normal: 'Normal',
+  high: 'Yüksek',
+  critical: 'Kritik',
+};
+
+const getRiskBadgeVariant = (level) => {
+  switch (level) {
+    case 'critical':
+    case 'high':
+      return 'danger';
+
+    case 'medium':
+      return 'warning';
+
+    case 'low':
+      return 'success';
+
+    default:
+      return 'default';
+  }
+};
+
+const getActionPriorityVariant = (priority) => {
+  switch (priority) {
+    case 'critical':
+      return 'danger';
+
+    case 'high':
+      return 'warning';
+
+    case 'normal':
+      return 'info';
+
+    case 'low':
+      return 'default';
+
+    default:
+      return 'default';
+  }
+};
+
+// ======================================================
+// AI PANEL
+// ======================================================
+
+const CaseAIAnalysis = ({
+  analysis,
+  onRefresh,
+  refreshing,
+}) => {
+  if (!analysis) {
+    return null;
+  }
+
+  const result =
+    analysis.result || analysis;
+
+  return (
+    <Card>
+      <Card.Header>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Brain className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                AI Dava Analizi
+              </h2>
+            </div>
+
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Dava kayıtları, görevler, duruşmalar, toplantılar,
+              belgeler ve notlar birlikte değerlendirildi.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {analysis.cached && (
+              <Badge variant="info">
+                Kayıtlı analiz
+              </Badge>
+            )}
+
+            {analysis.model && (
+              <Badge variant="default">
+                {analysis.model}
+              </Badge>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              loading={refreshing}
+              onClick={onRefresh}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Yeniden Analiz
+            </Button>
+          </div>
+        </div>
+      </Card.Header>
+
+      <Card.Body className="space-y-6">
+        {/* SKORLAR */}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Activity className="h-4 w-4" />
+              Dosya Sağlığı
+            </div>
+
+            <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
+              {Number.isInteger(result.caseHealthScore)
+                ? result.caseHealthScore
+                : '-'}
+              {Number.isInteger(result.caseHealthScore) && (
+                <span className="text-base font-normal text-gray-400">
+                  /100
+                </span>
+              )}
+            </p>
+
+            <p className="mt-1 text-xs text-gray-500">
+              Kazanma ihtimali değil; dosyanın hazırlık ve takip
+              seviyesidir.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <ShieldAlert className="h-4 w-4" />
+              Risk Skoru
+            </div>
+
+            <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
+              {Number.isInteger(result.riskScore)
+                ? result.riskScore
+                : '-'}
+              {Number.isInteger(result.riskScore) && (
+                <span className="text-base font-normal text-gray-400">
+                  /100
+                </span>
+              )}
+            </p>
+
+            <div className="mt-2">
+              <Badge
+                variant={getRiskBadgeVariant(
+                  result.overallRiskLevel
+                )}
+              >
+                {RISK_LABELS[result.overallRiskLevel] ||
+                  result.overallRiskLevel ||
+                  'Belirsiz'}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <ListTodo className="h-4 w-4" />
+              Açık Görev
+            </div>
+
+            <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
+              {result.workloadSummary?.openTaskCount ?? '-'}
+            </p>
+
+            <p className="mt-1 text-xs text-gray-500">
+              Geciken:{' '}
+              {result.workloadSummary?.overdueTaskCount ?? 0}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <CalendarDays className="h-4 w-4" />
+              Yaklaşan İşlem
+            </div>
+
+            <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
+              {(result.workloadSummary?.upcomingEventCount ?? 0) +
+                (result.workloadSummary?.upcomingMeetingCount ?? 0)}
+            </p>
+
+            <p className="mt-1 text-xs text-gray-500">
+              Duruşma/etkinlik:{' '}
+              {result.workloadSummary?.upcomingEventCount ?? 0}
+              {' · '}
+              Toplantı:{' '}
+              {result.workloadSummary?.upcomingMeetingCount ?? 0}
+            </p>
+          </div>
+        </div>
+
+        {/* GENEL ÖZET */}
+        {result.overview && (
+          <section>
+            <h3 className="mb-2 font-semibold text-gray-900 dark:text-white">
+              Genel Değerlendirme
+            </h3>
+
+            <p className="whitespace-pre-wrap text-sm leading-7 text-gray-700 dark:text-gray-300">
+              {result.overview}
+            </p>
+          </section>
+        )}
+
+        {/* MEVCUT DURUM */}
+        {result.currentStatus && (
+          <section>
+            <h3 className="mb-2 font-semibold text-gray-900 dark:text-white">
+              Mevcut Durum
+            </h3>
+
+            <div className="rounded-lg bg-gray-50 p-4 text-sm leading-6 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+              {result.currentStatus}
+            </div>
+          </section>
+        )}
+
+        {/* NEXT BEST ACTIONS */}
+        {Array.isArray(result.nextBestActions) &&
+          result.nextBestActions.length > 0 && (
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-blue-600" />
+
+                <h3 className="font-semibold text-gray-900 dark:text-white">
+                  Önerilen Sonraki İşlemler
+                </h3>
+              </div>
+
+              <div className="space-y-3">
+                {result.nextBestActions.map((action, index) => (
+                  <div
+                    key={`${action.title}-${index}`}
+                    className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {action.title}
+                      </p>
+
+                      <Badge
+                        variant={getActionPriorityVariant(
+                          action.priority
+                        )}
+                      >
+                        {ACTION_PRIORITY_LABELS[action.priority] ||
+                          action.priority}
+                      </Badge>
+                    </div>
+
+                    {action.description && (
+                      <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                        {action.description}
+                      </p>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-gray-500">
+                      {action.suggestedDueDate && (
+                        <span>
+                          Önerilen tarih:{' '}
+                          {formatDateUTC(action.suggestedDueDate)}
+                        </span>
+                      )}
+
+                      {action.canCreateTask && (
+                        <span className="font-medium text-blue-600 dark:text-blue-400">
+                          Göreve dönüştürülebilir
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+        {/* RİSKLER */}
+        {Array.isArray(result.risks) &&
+          result.risks.length > 0 && (
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+
+                <h3 className="font-semibold text-gray-900 dark:text-white">
+                  Riskler
+                </h3>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                {result.risks.map((risk, index) => (
+                  <div
+                    key={`${risk.title}-${index}`}
+                    className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {risk.title}
+                      </p>
+
+                      <Badge
+                        variant={getRiskBadgeVariant(risk.level)}
+                      >
+                        {RISK_LABELS[risk.level] || risk.level}
+                      </Badge>
+                    </div>
+
+                    <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                      {risk.description}
+                    </p>
+
+                    {risk.recommendation && (
+                      <p className="mt-3 text-sm font-medium text-blue-700 dark:text-blue-300">
+                        Öneri: {risk.recommendation}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+        {/* TARİHLER */}
+        {Array.isArray(result.upcomingDeadlines) &&
+          result.upcomingDeadlines.length > 0 && (
+            <section>
+              <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+                Yaklaşan Kritik Tarihler
+              </h3>
+
+              <div className="space-y-2">
+                {result.upcomingDeadlines.map((item, index) => (
+                  <div
+                    key={`${item.date}-${index}`}
+                    className="flex flex-wrap items-start justify-between gap-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {item.label}
+                      </p>
+
+                      {item.explanation && (
+                        <p className="mt-1 text-sm text-gray-500">
+                          {item.explanation}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {formatDateTimeUTC(item.date)}
+                      </p>
+
+                      <Badge
+                        variant={getRiskBadgeVariant(
+                          item.importance
+                        )}
+                      >
+                        {RISK_LABELS[item.importance] ||
+                          item.importance}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+        {/* EKSİK BİLGİ / DELİL */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {Array.isArray(result.missingInformation) &&
+            result.missingInformation.length > 0 && (
+              <section>
+                <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+                  Eksik Bilgiler
+                </h3>
+
+                <ul className="space-y-2">
+                  {result.missingInformation.map((item, index) => (
+                    <li
+                      key={`${item}-${index}`}
+                      className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+          {Array.isArray(result.missingEvidence) &&
+            result.missingEvidence.length > 0 && (
+              <section>
+                <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+                  Eksik Deliller
+                </h3>
+
+                <ul className="space-y-2">
+                  {result.missingEvidence.map((item, index) => (
+                    <li
+                      key={`${item}-${index}`}
+                      className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-900 dark:bg-red-900/20 dark:text-red-200"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+        </div>
+
+        {/* STRATEJİ */}
+        {Array.isArray(result.strategicConsiderations) &&
+          result.strategicConsiderations.length > 0 && (
+            <section>
+              <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+                Stratejik Değerlendirme
+              </h3>
+
+              <ul className="space-y-2">
+                {result.strategicConsiderations.map((item, index) => (
+                  <li
+                    key={`${item}-${index}`}
+                    className="rounded-lg bg-blue-50 px-3 py-2 text-sm leading-6 text-blue-900 dark:bg-blue-900/20 dark:text-blue-200"
+                  >
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+        {/* MÜVEKKİL İLETİŞİMİ */}
+        {Array.isArray(result.clientCommunicationNotes) &&
+          result.clientCommunicationNotes.length > 0 && (
+            <section>
+              <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+                Müvekkil ile Görüşülebilecek Konular
+              </h3>
+
+              <ul className="space-y-2">
+                {result.clientCommunicationNotes.map((item, index) => (
+                  <li
+                    key={`${item}-${index}`}
+                    className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  >
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+        {/* HUMAN REVIEW */}
+        {result.requiresHumanReview && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
+            <div className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
+              <AlertTriangle className="h-5 w-5" />
+              Avukat incelemesi gerekli
+            </div>
+
+            {Array.isArray(result.reviewReasons) &&
+              result.reviewReasons.length > 0 && (
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-amber-800 dark:text-amber-200">
+                  {result.reviewReasons.map((reason, index) => (
+                    <li key={`${reason}-${index}`}>
+                      {reason}
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </div>
+        )}
+
+        {Array.isArray(result.warnings) &&
+          result.warnings.length > 0 && (
+            <details>
+              <summary className="cursor-pointer text-sm font-medium text-gray-600 dark:text-gray-300">
+                AI uyarılarını göster
+              </summary>
+
+              <ul className="mt-3 space-y-2">
+                {result.warnings.map((warning, index) => (
+                  <li
+                    key={`${warning}-${index}`}
+                    className="text-sm text-gray-600 dark:text-gray-400"
+                  >
+                    • {warning}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+      </Card.Body>
+    </Card>
+  );
+};
+
+// ======================================================
+// CASE DETAIL
+// ======================================================
+
 const CaseDetail = () => {
   const { id } = useParams();
 
-  const { data, isLoading, error } = useQuery({
+  const {
+    data,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['case', id],
     queryFn: () => caseApi.getOne(id),
-    enabled: !!id,
+    enabled: Boolean(id),
   });
 
-  const caseItem = data?.data?.data;
+  const caseItem =
+    data?.data?.data;
 
-  const handleDownload = async (doc) => {
-    try {
-      const response = await documentApi.download(doc.id);
-      const blob = new Blob([response.data]);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = doc.original_name || doc.name;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success('Dosya indirildi');
-    } catch (error) {
-      console.error('Download error:', error);
-      toast.error('Dosya indirilemedi');
+  const aiSummaryMutation =
+    useMutation({
+      mutationFn: ({
+        force = false,
+      }) =>
+        aiApi.summarizeCase(
+          id,
+          {
+            force,
+          }
+        ),
+
+      onSuccess: (
+        response
+      ) => {
+        const result =
+          unwrapResponse(
+            response
+          );
+
+        toast.success(
+          result?.cached
+            ? 'Kayıtlı AI analizi getirildi'
+            : 'Dava AI analizi tamamlandı'
+        );
+      },
+
+      onError: (error) => {
+        console.error(
+          'Case AI error:',
+          error
+        );
+
+        toast.error(
+          error.response?.data
+            ?.message ||
+            'Dava AI analizi oluşturulamadı'
+        );
+      },
+    });
+
+  const aiAnalysis =
+    aiSummaryMutation.data
+      ? unwrapResponse(
+          aiSummaryMutation.data
+        )
+      : null;
+
+  const handleAIAnalysis = (
+    force = false
+  ) => {
+    if (!id) {
+      return;
     }
+
+    aiSummaryMutation.mutate({
+      force,
+    });
   };
+
+  const handleDownload =
+    async (doc) => {
+      try {
+        const response =
+          await documentApi.download(
+            doc.id
+          );
+
+        const blob =
+          new Blob([
+            response.data,
+          ]);
+
+        const url =
+          window.URL.createObjectURL(
+            blob
+          );
+
+        const link =
+          document.createElement(
+            'a'
+          );
+
+        link.href = url;
+
+        link.download =
+          doc.original_name ||
+          doc.name;
+
+        document.body.appendChild(
+          link
+        );
+
+        link.click();
+        link.remove();
+
+        window.URL.revokeObjectURL(
+          url
+        );
+
+        toast.success(
+          'Dosya indirildi'
+        );
+      } catch (error) {
+        console.error(
+          'Download error:',
+          error
+        );
+
+        toast.error(
+          'Dosya indirilemedi'
+        );
+      }
+    };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600" />
       </div>
     );
   }
 
-  if (error || !caseItem) {
+  if (
+    error ||
+    !caseItem
+  ) {
     return (
-      <div className="text-center py-12">
-        <p className="text-red-600">Dava bulunamadı</p>
-        <Link to="/cases" className="text-blue-600 hover:underline">
+      <div className="py-12 text-center">
+        <p className="text-red-600">
+          Dava bulunamadı
+        </p>
+
+        <Link
+          to="/cases"
+          className="text-blue-600 hover:underline"
+        >
           ← Davalara Dön
         </Link>
       </div>
@@ -88,329 +776,621 @@ const CaseDetail = () => {
   }
 
   const statuses = [
-    { value: 'preparation', label: 'Hazırlık' },
-    { value: 'active', label: 'Devam Ediyor' },
-    { value: 'hearing', label: 'Duruşmada' },
-    { value: 'appeal', label: 'İstinaf' },
-    { value: 'cassation', label: 'Temyiz' },
-    { value: 'concluded', label: 'Sonuçlandı' },
-    { value: 'archived', label: 'Arşivlendi' },
+    {
+      value: 'preparation',
+      label: 'Hazırlık',
+    },
+    {
+      value: 'active',
+      label: 'Devam Ediyor',
+    },
+    {
+      value: 'hearing',
+      label: 'Duruşmada',
+    },
+    {
+      value: 'appeal',
+      label: 'İstinaf',
+    },
+    {
+      value: 'cassation',
+      label: 'Temyiz',
+    },
+    {
+      value: 'concluded',
+      label: 'Sonuçlandı',
+    },
+    {
+      value: 'archived',
+      label: 'Arşivlendi',
+    },
   ];
 
-  const getStatusVariant = (status) => {
+  const getStatusVariant = (
+    status
+  ) => {
     switch (status) {
-      case 'preparation': return 'warning';
-      case 'active': return 'success';
-      case 'hearing': return 'info';
-      case 'appeal': return 'warning';
-      case 'cassation': return 'default';
-      case 'concluded': return 'default';
-      case 'archived': return 'danger';
-      default: return 'default';
+      case 'preparation':
+        return 'warning';
+
+      case 'active':
+        return 'success';
+
+      case 'hearing':
+        return 'info';
+
+      case 'appeal':
+        return 'warning';
+
+      case 'cassation':
+        return 'default';
+
+      case 'concluded':
+        return 'default';
+
+      case 'archived':
+        return 'danger';
+
+      default:
+        return 'default';
     }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* HEADER */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link to="/cases" className="text-blue-600 hover:underline">
+          <Link
+            to="/cases"
+            className="text-blue-600 hover:underline"
+          >
             ← Davalar
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-            {caseItem.title || caseItem.judiciary_type || 'Dava'}
+
+          <h1 className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
+            {caseItem.title ||
+              caseItem.judiciary_type ||
+              'Dava'}
           </h1>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className="text-sm text-gray-500">{caseItem.case_number || 'Esas no yok'}</span>
-            <Badge variant={getStatusVariant(caseItem.status)}>
-              {statuses.find(s => s.value === caseItem.status)?.label || caseItem.status}
+
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span className="text-sm text-gray-500">
+              {caseItem.case_number ||
+                'Esas no yok'}
+            </span>
+
+            <Badge
+              variant={getStatusVariant(
+                caseItem.status
+              )}
+            >
+              {statuses.find(
+                (status) =>
+                  status.value ===
+                  caseItem.status
+              )?.label ||
+                caseItem.status}
             </Badge>
+
             {caseItem.judiciary_type && (
-              <Badge variant="default">{caseItem.judiciary_type}</Badge>
+              <Badge variant="default">
+                {caseItem.judiciary_type}
+              </Badge>
             )}
+
             {caseItem.judiciary_unit && (
-              <Badge variant="default">{caseItem.judiciary_unit}</Badge>
+              <Badge variant="default">
+                {caseItem.judiciary_unit}
+              </Badge>
             )}
           </div>
         </div>
-        <div className="flex gap-2">
-          <Link to={`/cases/${caseItem.id}/edit`}>
-            <Button variant="outline" size="sm">
-              <Edit2 className="w-4 h-4 mr-2" />
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() =>
+              handleAIAnalysis(
+                false
+              )
+            }
+            loading={
+              aiSummaryMutation.isPending
+            }
+            disabled={
+              aiSummaryMutation.isPending
+            }
+          >
+            <Brain className="mr-2 h-4 w-4" />
+            AI Analiz Et
+          </Button>
+
+          <Link
+            to={`/cases/${caseItem.id}/edit`}
+          >
+            <Button
+              variant="outline"
+              size="sm"
+            >
+              <Edit2 className="mr-2 h-4 w-4" />
               Düzenle
             </Button>
           </Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Bilgiler Kartı */}
+      {/* AI ANALYSIS */}
+      <CaseAIAnalysis
+        analysis={aiAnalysis}
+        refreshing={
+          aiSummaryMutation.isPending
+        }
+        onRefresh={() =>
+          handleAIAnalysis(true)
+        }
+      />
+
+      {/* BİLGİLER + TARAFLAR */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Card>
           <Card.Header>
-            <h2 className="font-semibold text-gray-900 dark:text-white">📋 Bilgiler</h2>
+            <h2 className="font-semibold text-gray-900 dark:text-white">
+              📋 Bilgiler
+            </h2>
           </Card.Header>
+
           <Card.Body className="space-y-3">
             {caseItem.judiciary_type && (
               <div>
-                <p className="text-sm text-gray-500">Yargı Türü</p>
-                <p className="text-gray-900 dark:text-white">{caseItem.judiciary_type}</p>
+                <p className="text-sm text-gray-500">
+                  Yargı Türü
+                </p>
+
+                <p className="text-gray-900 dark:text-white">
+                  {caseItem.judiciary_type}
+                </p>
               </div>
             )}
+
             {caseItem.judiciary_unit && (
               <div>
-                <p className="text-sm text-gray-500">Yargı Birimi</p>
-                <p className="text-gray-900 dark:text-white">{caseItem.judiciary_unit}</p>
+                <p className="text-sm text-gray-500">
+                  Yargı Birimi
+                </p>
+
+                <p className="text-gray-900 dark:text-white">
+                  {caseItem.judiciary_unit}
+                </p>
               </div>
             )}
+
             <div>
-              <p className="text-sm text-gray-500">Mahkeme</p>
-              <p className="text-gray-900 dark:text-white">{caseItem.court_name || '-'}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Dosya No</p>
-              <p className="text-gray-900 dark:text-white">{caseItem.case_number || '-'}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Açılış Tarihi</p>
-              <p className="text-gray-900 dark:text-white">{formatDateUTC(caseItem.opening_date) || '-'}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Müvekkiller</p>
-              {caseItem.clients && caseItem.clients.length > 0 ? (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {caseItem.clients.map((client) => (
-                    <Link
-                      key={client.id}
-                      to={`/clients/${client.id}`}
-                      className="text-blue-600 hover:underline text-sm"
-                    >
-                      {client.name}
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-900 dark:text-white">-</p>
-              )}
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Atanan Avukat</p>
+              <p className="text-sm text-gray-500">
+                Mahkeme
+              </p>
+
               <p className="text-gray-900 dark:text-white">
-                {caseItem.assignee?.first_name} {caseItem.assignee?.last_name || 'Atanmadı'}
+                {caseItem.court_name ||
+                  '-'}
               </p>
             </div>
+
             <div>
-              <p className="text-sm text-gray-500">Öncelik</p>
+              <p className="text-sm text-gray-500">
+                Dosya No
+              </p>
+
+              <p className="text-gray-900 dark:text-white">
+                {caseItem.case_number ||
+                  '-'}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-gray-500">
+                Açılış Tarihi
+              </p>
+
+              <p className="text-gray-900 dark:text-white">
+                {formatDateUTC(
+                  caseItem.opening_date
+                )}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-gray-500">
+                Müvekkiller
+              </p>
+
+              {caseItem.clients?.length >
+              0 ? (
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {caseItem.clients.map(
+                    (client) => (
+                      <Link
+                        key={
+                          client.id
+                        }
+                        to={`/clients/${client.id}`}
+                        className="text-sm text-blue-600 hover:underline"
+                      >
+                        {client.name}
+                      </Link>
+                    )
+                  )}
+                </div>
+              ) : (
+                <p className="text-gray-900 dark:text-white">
+                  -
+                </p>
+              )}
+            </div>
+
+            <div>
+              <p className="text-sm text-gray-500">
+                Atanan Avukat
+              </p>
+
+              <p className="text-gray-900 dark:text-white">
+                {caseItem.assignee
+                  ? `${caseItem.assignee.first_name || ''} ${
+                      caseItem.assignee.last_name || ''
+                    }`.trim()
+                  : 'Atanmadı'}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-gray-500">
+                Öncelik
+              </p>
+
               <Badge
                 variant={
-                  caseItem.priority === 'critical'
+                  caseItem.priority ===
+                  'critical'
                     ? 'danger'
-                    : caseItem.priority === 'high'
-                    ? 'warning'
-                    : caseItem.priority === 'normal'
-                    ? 'default'
-                    : 'default'
+                    : caseItem.priority ===
+                        'high'
+                      ? 'warning'
+                      : 'default'
                 }
               >
-                {caseItem.priority || 'Normal'}
+                {PRIORITY_LABELS[
+                  caseItem.priority
+                ] ||
+                  caseItem.priority ||
+                  'Normal'}
               </Badge>
             </div>
+
             {caseItem.subject && (
               <div>
-                <p className="text-sm text-gray-500">Konu</p>
-                <p className="text-gray-900 dark:text-white">{caseItem.subject}</p>
+                <p className="text-sm text-gray-500">
+                  Konu
+                </p>
+
+                <p className="text-gray-900 dark:text-white">
+                  {caseItem.subject}
+                </p>
               </div>
             )}
           </Card.Body>
         </Card>
 
-        {/* Taraflar */}
+        {/* TARAFLAR */}
         <Card>
           <Card.Header className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900 dark:text-white">👥 Taraflar</h2>
-            <Link to={`/cases/${caseItem.id}/parties/create`}>
-              <Button size="sm">+ Taraf Ekle</Button>
+            <h2 className="font-semibold text-gray-900 dark:text-white">
+              👥 Taraflar
+            </h2>
+
+            <Link
+              to={`/cases/${caseItem.id}/parties/create`}
+            >
+              <Button size="sm">
+                + Taraf Ekle
+              </Button>
             </Link>
           </Card.Header>
+
           <Card.Body>
-            {caseItem.parties?.length === 0 ? (
-              <p className="text-gray-500">Henüz taraf eklenmemiş</p>
+            {!caseItem.parties ||
+            caseItem.parties.length ===
+              0 ? (
+              <p className="text-gray-500">
+                Henüz taraf eklenmemiş
+              </p>
             ) : (
               <div className="space-y-3">
-                {caseItem.parties?.map((party) => (
-                  <div
-                    key={party.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">
-                        {party.name}
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {party.party_type === 'plaintiff' ? 'Davacı' :
-                         party.party_type === 'defendant' ? 'Davalı' :
-                         party.party_type === 'intervener' ? 'Müdahil' : 'Tanık'}
-                      </p>
+                {caseItem.parties.map(
+                  (party) => (
+                    <div
+                      key={party.id}
+                      className="flex items-center justify-between rounded-lg bg-gray-50 p-3 dark:bg-gray-700"
+                    >
+                      <div>
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          {party.name}
+                        </p>
+
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {PARTY_LABELS[
+                            party.party_type
+                          ] ||
+                            party.party_type ||
+                            'Taraf'}
+                        </p>
+                      </div>
+
+                      {party.lawyer_name && (
+                        <span className="text-sm text-gray-500">
+                          Av.{' '}
+                          {
+                            party.lawyer_name
+                          }
+                        </span>
+                      )}
                     </div>
-                    {party.lawyer_name && (
-                      <span className="text-sm text-gray-500">
-                        Av. {party.lawyer_name}
-                      </span>
-                    )}
-                  </div>
-                ))}
+                  )
+                )}
               </div>
             )}
           </Card.Body>
         </Card>
       </div>
 
+      {/* AÇIKLAMA */}
       {caseItem.description && (
         <Card>
           <Card.Header>
-            <h2 className="font-semibold text-gray-900 dark:text-white">📝 Açıklama</h2>
+            <h2 className="font-semibold text-gray-900 dark:text-white">
+              📝 Açıklama
+            </h2>
           </Card.Header>
+
           <Card.Body>
-            <p className="text-gray-900 dark:text-white whitespace-pre-wrap">{caseItem.description}</p>
+            <p className="whitespace-pre-wrap text-gray-900 dark:text-white">
+              {caseItem.description}
+            </p>
           </Card.Body>
         </Card>
       )}
 
-      {/* Belgeler */}
+      {/* BELGELER */}
       <Card>
         <Card.Header className="flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900 dark:text-white">📄 Belgeler</h2>
-          <Link to={`/documents/upload?case=${caseItem.id}`}>
-            <Button size="sm">+ Belge Ekle</Button>
+          <h2 className="font-semibold text-gray-900 dark:text-white">
+            📄 Belgeler
+          </h2>
+
+          <Link
+            to={`/documents/upload?case=${caseItem.id}`}
+          >
+            <Button size="sm">
+              + Belge Ekle
+            </Button>
           </Link>
         </Card.Header>
+
         <Card.Body>
-          {caseItem.documents?.length === 0 ? (
-            <p className="text-gray-500">Henüz belge eklenmemiş</p>
+          {!caseItem.documents ||
+          caseItem.documents.length ===
+            0 ? (
+            <p className="text-gray-500">
+              Henüz belge eklenmemiş
+            </p>
           ) : (
             <div className="space-y-3">
-              {caseItem.documents?.map((doc) => (
-                <div
-                  key={doc.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                >
-                  <Link 
-                    to={`/documents/${doc.id}`}
-                    className="flex-1 hover:underline"
+              {caseItem.documents.map(
+                (doc) => (
+                  <div
+                    key={doc.id}
+                    className="flex items-center justify-between rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600"
                   >
-                    <p className="font-medium text-blue-600 dark:text-blue-400">
-                      {doc.name}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {formatDateUTC(doc.created_at)} - {(doc.file_size / 1024).toFixed(1)} KB
-                    </p>
+                    <Link
+                      to={`/documents/${doc.id}`}
+                      className="flex-1 hover:underline"
+                    >
+                      <p className="font-medium text-blue-600 dark:text-blue-400">
+                        {doc.name}
+                      </p>
+
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {formatDateUTC(
+                          doc.created_at
+                        )}
+                        {' - '}
+                        {(
+                          Number(
+                            doc.file_size ||
+                              0
+                          ) / 1024
+                        ).toFixed(1)}{' '}
+                        KB
+                      </p>
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleDownload(
+                          doc
+                        )
+                      }
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      ⬇️ İndir
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </Card.Body>
+      </Card>
+
+      {/* GÖREVLER */}
+      <Card>
+        <Card.Header className="flex items-center justify-between">
+          <h2 className="font-semibold text-gray-900 dark:text-white">
+            ✅ Görevler
+          </h2>
+
+          <Link
+            to={`/tasks/create?case=${caseItem.id}`}
+          >
+            <Button size="sm">
+              + Görev Ekle
+            </Button>
+          </Link>
+        </Card.Header>
+
+        <Card.Body>
+          {!caseItem.tasks ||
+          caseItem.tasks.length ===
+            0 ? (
+            <p className="text-gray-500">
+              Henüz görev eklenmemiş
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {caseItem.tasks.map(
+                (task) => (
+                  <Link
+                    key={task.id}
+                    to={`/tasks/${task.id}`}
+                    className="flex items-center justify-between rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600"
+                  >
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {task.title}
+                      </p>
+
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Atanan:{' '}
+                        {task.assignee
+                          ? `${task.assignee.first_name || ''} ${
+                              task.assignee.last_name || ''
+                            }`.trim()
+                          : 'Atanmadı'}
+                        {' - '}
+                        Son tarih:{' '}
+                        {formatDateUTC(
+                          task.due_date
+                        )}
+                      </p>
+                    </div>
+
+                    <Badge
+                      variant={
+                        task.status ===
+                        'completed'
+                          ? 'success'
+                          : task.status ===
+                              'in_progress'
+                            ? 'warning'
+                            : task.status ===
+                                'cancelled'
+                              ? 'danger'
+                              : 'default'
+                      }
+                    >
+                      {task.status ===
+                      'pending'
+                        ? 'Bekliyor'
+                        : task.status ===
+                            'in_progress'
+                          ? 'Devam Ediyor'
+                          : task.status ===
+                              'completed'
+                            ? 'Tamamlandı'
+                            : 'İptal'}
+                    </Badge>
                   </Link>
-                  <button
-                    onClick={() => handleDownload(doc)}
-                    className="text-blue-600 hover:underline text-sm"
-                  >
-                    ⬇️ İndir
-                  </button>
-                </div>
-              ))}
+                )
+              )}
             </div>
           )}
         </Card.Body>
       </Card>
 
-      {/* Görevler */}
+      {/* DURUŞMALAR */}
       <Card>
         <Card.Header className="flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900 dark:text-white">✅ Görevler</h2>
-          <Link to={`/tasks/create?case=${caseItem.id}`}>
-            <Button size="sm">+ Görev Ekle</Button>
-          </Link>
-        </Card.Header>
-        <Card.Body>
-          {caseItem.tasks?.length === 0 ? (
-            <p className="text-gray-500">Henüz görev eklenmemiş</p>
-          ) : (
-            <div className="space-y-3">
-              {caseItem.tasks?.map((task) => (
-                <Link
-                  key={task.id}
-                  to={`/tasks/${task.id}`}
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                >
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {task.title}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Atanan: {task.assignee?.first_name} {task.assignee?.last_name || 'Atanmadı'} - 
-                      Son tarih: {formatDateUTC(task.due_date)}
-                    </p>
-                  </div>
-                  <Badge
-                    variant={
-                      task.status === 'completed'
-                        ? 'success'
-                        : task.status === 'in_progress'
-                        ? 'warning'
-                        : task.status === 'cancelled'
-                        ? 'danger'
-                        : 'default'
-                    }
-                  >
-                    {task.status === 'pending' ? 'Bekliyor' :
-                     task.status === 'in_progress' ? 'Devam Ediyor' :
-                     task.status === 'completed' ? 'Tamamlandı' : 'İptal'}
-                  </Badge>
-                </Link>
-              ))}
-            </div>
-          )}
-        </Card.Body>
-      </Card>
+          <h2 className="font-semibold text-gray-900 dark:text-white">
+            📅 Duruşmalar
+          </h2>
 
-      {/* Duruşmalar */}
-      <Card>
-        <Card.Header className="flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900 dark:text-white">📅 Duruşmalar</h2>
-          <Link to={`/events/create?case=${caseItem.id}`}>
-            <Button size="sm">+ Duruşma Ekle</Button>
+          <Link
+            to={`/events/create?case=${caseItem.id}`}
+          >
+            <Button size="sm">
+              + Duruşma Ekle
+            </Button>
           </Link>
         </Card.Header>
+
         <Card.Body>
-          {caseItem.events?.length === 0 ? (
-            <p className="text-gray-500">Henüz duruşma eklenmemiş</p>
+          {!caseItem.events ||
+          caseItem.events.length ===
+            0 ? (
+            <p className="text-gray-500">
+              Henüz duruşma eklenmemiş
+            </p>
           ) : (
             <div className="space-y-3">
-              {caseItem.events?.map((event) => (
-                <Link
-                  key={event.id}
-                  to={`/events/${event.id}`}
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                >
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {event.title}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {formatDateTimeUTC(event.start_date)} - {event.location || 'Yer belirtilmemiş'}
-                    </p>
-                  </div>
-                  <Badge
-                    variant={
-                      event.status === 'completed'
-                        ? 'success'
-                        : event.status === 'ongoing'
-                        ? 'warning'
-                        : event.status === 'cancelled'
-                        ? 'danger'
-                        : 'default'
-                    }
+              {caseItem.events.map(
+                (event) => (
+                  <Link
+                    key={event.id}
+                    to={`/events/${event.id}`}
+                    className="flex items-center justify-between rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600"
                   >
-                    {event.status === 'scheduled' ? 'Planlandı' :
-                     event.status === 'ongoing' ? 'Devam Ediyor' :
-                     event.status === 'completed' ? 'Tamamlandı' : 'İptal'}
-                  </Badge>
-                </Link>
-              ))}
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {event.title}
+                      </p>
+
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {formatDateTimeUTC(
+                          event.start_date
+                        )}
+                        {' - '}
+                        {event.location ||
+                          'Yer belirtilmemiş'}
+                      </p>
+                    </div>
+
+                    <Badge
+                      variant={
+                        event.status ===
+                        'completed'
+                          ? 'success'
+                          : event.status ===
+                              'ongoing'
+                            ? 'warning'
+                            : event.status ===
+                                'cancelled'
+                              ? 'danger'
+                              : 'default'
+                      }
+                    >
+                      {event.status ===
+                      'scheduled'
+                        ? 'Planlandı'
+                        : event.status ===
+                            'ongoing'
+                          ? 'Devam Ediyor'
+                          : event.status ===
+                              'completed'
+                            ? 'Tamamlandı'
+                            : 'İptal'}
+                    </Badge>
+                  </Link>
+                )
+              )}
             </div>
           )}
         </Card.Body>
