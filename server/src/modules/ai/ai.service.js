@@ -362,20 +362,27 @@ class AIService {
 
     try {
       const providerResult =
-        await aiProvider.createStructuredResponse({
-          instructions: CASE_SUMMARY_PROMPT,
-          input,
-          schemaName: 'legal_case_summary',
-          schema: caseSummarySchema,
-          schemaDescription:
-            'Dava dosyasının yapılandırılmış hukuki özeti.',
-          metadata: {
-            operation: ANALYSIS_TYPES.CASE_SUMMARY,
-            analysisId: analysis.id,
-            caseId,
-            userId,
-          },
-        });
+  await aiProvider.createStructuredResponse({
+    instructions: CASE_SUMMARY_PROMPT,
+    input,
+
+    schemaName: 'legal_case_summary',
+    schema: caseSummarySchema,
+
+    schemaDescription:
+      'Dava dosyasının yapılandırılmış hukuki özeti.',
+
+    // Case AI çıktısı oldukça geniş olduğu için
+    // genel 4000 token limiti burada yetersiz kalıyor.
+    maxOutputTokens: 10_000,
+
+    metadata: {
+      operation: ANALYSIS_TYPES.CASE_SUMMARY,
+      analysisId: analysis.id,
+      caseId,
+      userId,
+    },
+  });
 
       await this.completeAnalysis({
         analysis,
