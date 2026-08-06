@@ -346,6 +346,7 @@ export const documentAnalysisSchema = {
 export const caseSummarySchema = {
   type: 'object',
   additionalProperties: false,
+
   properties: {
     title: {
       type: 'string',
@@ -353,12 +354,53 @@ export const caseSummarySchema = {
 
     overview: {
       type: 'string',
+      description:
+        'Dava dosyasının mevcut durumunu avukatın hızlıca anlayabileceği kısa ve tarafsız özet.',
     },
 
     caseType: nullableString,
 
     currentStatus: {
       type: 'string',
+      description:
+        'Dosyanın mevcut usuli ve operasyonel durumunun kısa açıklaması.',
+    },
+
+    /*
+     * 0 = çok problemli / eksik
+     * 100 = dosya organizasyonu ve hazırlığı güçlü
+     *
+     * Hukuki kazanma ihtimali değildir.
+     */
+    caseHealthScore: {
+      type: 'integer',
+      minimum: 0,
+      maximum: 100,
+      description:
+        'Dosyanın bilgi bütünlüğü, hazırlık seviyesi, yaklaşan işler ve operasyonel durumuna göre 0-100 arası sağlık skoru. Davanın kazanılma olasılığı değildir.',
+    },
+
+    /*
+     * 0 = düşük operasyonel/hukuki risk
+     * 100 = yüksek risk
+     */
+    riskScore: {
+      type: 'integer',
+      minimum: 0,
+      maximum: 100,
+      description:
+        'Mevcut kayıtlar ışığında süre, delil, usul ve diğer risklerin ağırlığını gösteren 0-100 arası risk skoru.',
+    },
+
+    overallRiskLevel: {
+      type: 'string',
+      enum: [
+        'low',
+        'medium',
+        'high',
+        'critical',
+        'undetermined',
+      ],
     },
 
     parties: {
@@ -376,16 +418,40 @@ export const caseSummarySchema = {
 
     evidenceSummary: stringArray,
 
+    /*
+     * Bilgi eksikliği ile delil eksikliğini ayırıyoruz.
+     */
+    missingInformation: stringArray,
+
+    missingEvidence: stringArray,
+
     proceduralHistory: {
       type: 'array',
+
       items: {
         type: 'object',
         additionalProperties: false,
+
         properties: {
           date: nullableString,
+
           event: {
             type: 'string',
           },
+
+          sourceType: {
+            type: 'string',
+            enum: [
+              'case',
+              'task',
+              'event',
+              'meeting',
+              'note',
+              'document',
+              'other',
+            ],
+          },
+
           importance: {
             type: 'string',
             enum: [
@@ -396,40 +462,344 @@ export const caseSummarySchema = {
             ],
           },
         },
+
         required: [
           'date',
           'event',
+          'sourceType',
           'importance',
+        ],
+      },
+    },
+
+    /*
+     * Burada document schema'daki sourceReferenceSchema'yı
+     * kullanmıyoruz. Çünkü Case AI kaynağı tek bir PDF değil;
+     * task/event/meeting gibi veritabanı kayıtları olabilir.
+     */
+    importantDates: {
+      type: 'array',
+
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          date: {
+            type: 'string',
+          },
+
+          label: {
+            type: 'string',
+          },
+
+          importance: {
+            type: 'string',
+            enum: [
+              'low',
+              'medium',
+              'high',
+              'critical',
+            ],
+          },
+
+          deadline: {
+            type: 'boolean',
+          },
+
+          sourceType: {
+            type: 'string',
+            enum: [
+              'case',
+              'task',
+              'event',
+              'meeting',
+              'document',
+              'other',
+            ],
+          },
+
+          sourceId: nullableString,
+
+          explanation: nullableString,
+        },
+
+        required: [
+          'date',
+          'label',
+          'importance',
+          'deadline',
+          'sourceType',
+          'sourceId',
+          'explanation',
         ],
       },
     },
 
     upcomingDeadlines: {
       type: 'array',
-      items: dateSchema,
+
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          date: {
+            type: 'string',
+          },
+
+          label: {
+            type: 'string',
+          },
+
+          importance: {
+            type: 'string',
+            enum: [
+              'low',
+              'medium',
+              'high',
+              'critical',
+            ],
+          },
+
+          sourceType: {
+            type: 'string',
+            enum: [
+              'task',
+              'event',
+              'meeting',
+              'case',
+              'other',
+            ],
+          },
+
+          sourceId: nullableString,
+
+          explanation: nullableString,
+        },
+
+        required: [
+          'date',
+          'label',
+          'importance',
+          'sourceType',
+          'sourceId',
+          'explanation',
+        ],
+      },
     },
 
+    /*
+     * Case AI risk'lerinde PDF sayfası gibi bir source yok.
+     * Bu yüzden ayrı risk yapısı kullanıyoruz.
+     */
     risks: {
       type: 'array',
-      items: riskSchema,
+
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          title: {
+            type: 'string',
+          },
+
+          level: {
+            type: 'string',
+            enum: [
+              'low',
+              'medium',
+              'high',
+              'critical',
+            ],
+          },
+
+          category: {
+            type: 'string',
+            enum: [
+              'procedural',
+              'financial',
+              'contractual',
+              'evidentiary',
+              'deadline',
+              'compliance',
+              'privacy',
+              'enforcement',
+              'operational',
+              'other',
+            ],
+          },
+
+          description: {
+            type: 'string',
+          },
+
+          recommendation: {
+            type: 'string',
+          },
+
+          sourceType: {
+            type: 'string',
+            enum: [
+              'case',
+              'task',
+              'event',
+              'meeting',
+              'note',
+              'document',
+              'multiple',
+              'other',
+            ],
+          },
+
+          sourceId: nullableString,
+        },
+
+        required: [
+          'title',
+          'level',
+          'category',
+          'description',
+          'recommendation',
+          'sourceType',
+          'sourceId',
+        ],
+      },
     },
 
-    missingEvidence: stringArray,
-
+    /*
+     * Genel öneriler.
+     */
     recommendedActions: stringArray,
+
+    /*
+     * UI'da direkt "Önerilen Sonraki İşler" olarak gösterilecek.
+     */
+    nextBestActions: {
+      type: 'array',
+
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          title: {
+            type: 'string',
+          },
+
+          description: nullableString,
+
+          priority: {
+            type: 'string',
+            enum: [
+              'low',
+              'normal',
+              'high',
+              'critical',
+            ],
+          },
+
+          suggestedDueDate: nullableString,
+
+          relatedSourceType: {
+            anyOf: [
+              {
+                type: 'string',
+                enum: [
+                  'case',
+                  'task',
+                  'event',
+                  'meeting',
+                  'document',
+                  'note',
+                ],
+              },
+              {
+                type: 'null',
+              },
+            ],
+          },
+
+          relatedSourceId: nullableString,
+
+          canCreateTask: {
+            type: 'boolean',
+          },
+        },
+
+        required: [
+          'title',
+          'description',
+          'priority',
+          'suggestedDueDate',
+          'relatedSourceType',
+          'relatedSourceId',
+          'canCreateTask',
+        ],
+      },
+    },
 
     strategicConsiderations: stringArray,
 
-    overallRiskLevel: {
-      type: 'string',
-      enum: [
-        'low',
-        'medium',
-        'high',
-        'critical',
-        'undetermined',
+    /*
+     * Dosyanın operasyonel iş yükü.
+     */
+    workloadSummary: {
+      type: 'object',
+      additionalProperties: false,
+
+      properties: {
+        openTaskCount: {
+          type: 'integer',
+          minimum: 0,
+        },
+
+        overdueTaskCount: {
+          type: 'integer',
+          minimum: 0,
+        },
+
+        upcomingEventCount: {
+          type: 'integer',
+          minimum: 0,
+        },
+
+        upcomingMeetingCount: {
+          type: 'integer',
+          minimum: 0,
+        },
+
+        urgency: {
+          type: 'string',
+          enum: [
+            'low',
+            'normal',
+            'high',
+            'critical',
+          ],
+        },
+
+        summary: {
+          type: 'string',
+        },
+      },
+
+      required: [
+        'openTaskCount',
+        'overdueTaskCount',
+        'upcomingEventCount',
+        'upcomingMeetingCount',
+        'urgency',
+        'summary',
       ],
     },
+
+    /*
+     * Müvekkile verilebilecek operasyonel iletişim başlıkları.
+     * Hukuki tavsiye olarak değil, iletişim önerisi olarak düşün.
+     */
+    clientCommunicationNotes: stringArray,
 
     confidence: {
       type: 'number',
@@ -441,6 +811,8 @@ export const caseSummarySchema = {
       type: 'boolean',
     },
 
+    reviewReasons: stringArray,
+
     warnings: stringArray,
   },
 
@@ -449,21 +821,29 @@ export const caseSummarySchema = {
     'overview',
     'caseType',
     'currentStatus',
+    'caseHealthScore',
+    'riskScore',
+    'overallRiskLevel',
     'parties',
     'keyFacts',
     'legalIssues',
     'claims',
     'defenses',
     'evidenceSummary',
+    'missingInformation',
+    'missingEvidence',
     'proceduralHistory',
+    'importantDates',
     'upcomingDeadlines',
     'risks',
-    'missingEvidence',
     'recommendedActions',
+    'nextBestActions',
     'strategicConsiderations',
-    'overallRiskLevel',
+    'workloadSummary',
+    'clientCommunicationNotes',
     'confidence',
     'requiresHumanReview',
+    'reviewReasons',
     'warnings',
   ],
 };

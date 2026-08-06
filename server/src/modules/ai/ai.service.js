@@ -756,25 +756,28 @@ class AIService {
           ],
         },
         {
-          model: Task,
-          as: 'tasks',
-          required: false,
-        },
+  model: Task,
+  as: 'tasks',
+  required: false,
+  order: [['due_date', 'ASC']],
+},
         {
-          model: Event,
-          as: 'events',
-          required: false,
-        },
+  model: Event,
+  as: 'events',
+  required: false,
+  order: [['start_date', 'ASC']],
+},
         {
           model: Note,
           as: 'notes',
           required: false,
         },
         {
-          model: Meeting,
-          as: 'meetings',
-          required: false,
-        },
+  model: Meeting,
+  as: 'meetings',
+  required: false,
+  order: [['start_date', 'ASC']],
+},
       ],
     });
 
@@ -789,49 +792,158 @@ class AIService {
   }
 
   prepareCasePayload(caseRecord) {
-    const rawData = caseRecord.toJSON();
-    const sanitized = this.removeSensitiveFields(rawData);
+  const raw = caseRecord.toJSON();
+  const data = this.removeSensitiveFields(raw);
 
-    /*
-     * AI'ye gereksiz teknik Sequelize alanlarını göndermiyoruz.
-     * Dava metadatası içinde hassas alanlar varsa onları da
-     * removeSensitiveFields temizler.
-     */
-    return {
-      id: sanitized.id,
-      title: sanitized.title || null,
-      caseNumber:
-        sanitized.case_number ||
-        sanitized.caseNumber ||
-        null,
-      caseType:
-        sanitized.case_type ||
-        sanitized.caseType ||
-        null,
-      status: sanitized.status || null,
-      description: sanitized.description || null,
-      court: sanitized.court || null,
-      opposingParty:
-        sanitized.opposing_party ||
-        sanitized.opposingParty ||
-        null,
-      filingDate:
-        sanitized.filing_date ||
-        sanitized.filingDate ||
-        null,
-      hearingDate:
-        sanitized.hearing_date ||
-        sanitized.hearingDate ||
-        null,
-      clients: sanitized.clients || [],
-      parties: sanitized.parties || [],
-      documents: sanitized.documents || [],
-      tasks: sanitized.tasks || [],
-      events: sanitized.events || [],
-      notes: sanitized.notes || [],
-      meetings: sanitized.meetings || [],
-    };
-  }
+  return {
+    id: data.id,
+
+    title: data.title,
+
+    caseNumber:
+      data.case_number ??
+      data.caseNumber ??
+      null,
+
+    subject: data.subject ?? null,
+
+    description:
+      data.description ?? null,
+
+    status: data.status ?? null,
+
+    court:
+      data.court_name ??
+      data.court ??
+      null,
+
+    judiciaryType:
+      data.judiciary_type ??
+      null,
+
+    judiciaryUnit:
+      data.judiciary_unit ??
+      null,
+
+    filingDate:
+      data.filing_date ??
+      null,
+
+    hearingDate:
+      data.hearing_date ??
+      null,
+
+    estimatedValue:
+      data.estimated_value ??
+      null,
+
+    clients:
+      (data.clients ?? []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        email: c.email,
+      })),
+
+    parties:
+      (data.parties ?? []).map((p) => ({
+        name: p.name,
+        partyType: p.party_type,
+        role: p.role,
+        identificationNumber:
+          p.identification_number,
+      })),
+
+    documents:
+      (data.documents ?? []).map((d) => ({
+        id: d.id,
+        title:
+          d.original_name ??
+          d.name,
+
+        category: d.category,
+
+        type:
+          d.file_type,
+
+        description:
+          d.description,
+
+        createdAt:
+          d.created_at,
+      })),
+
+    tasks:
+      (data.tasks ?? []).map((t) => ({
+        id: t.id,
+
+        title: t.title,
+
+        status: t.status,
+
+        priority: t.priority,
+
+        dueDate:
+          t.due_date,
+
+        completed:
+          t.status ===
+          'completed',
+      })),
+
+    events:
+      (data.events ?? []).map((e) => ({
+        id: e.id,
+
+        title: e.title,
+
+        startDate:
+          e.start_date,
+
+        endDate:
+          e.end_date,
+
+        location:
+          e.location,
+
+        status:
+          e.status,
+      })),
+
+    meetings:
+      (data.meetings ?? []).map((m) => ({
+        id: m.id,
+
+        title: m.title,
+
+        startDate:
+          m.start_date,
+
+        endDate:
+          m.end_date,
+
+        location:
+          m.location,
+
+        status:
+          m.status,
+      })),
+
+    notes:
+      (data.notes ?? []).map((n) => ({
+        id: n.id,
+
+        title:
+          n.title,
+
+        content:
+          n.content,
+
+        createdAt:
+          n.created_at,
+      })),
+  };
+}
 
   async readDocumentFile(document) {
     if (!document.file_path) {

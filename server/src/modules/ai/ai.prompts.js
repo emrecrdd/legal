@@ -104,31 +104,275 @@ export const CASE_SUMMARY_PROMPT = `
 ${BASE_RULES}
 
 GÖREV:
-Verilen dava, müvekkil, taraf, görev, belge ve süreç verilerinden kapsamlı bir dava özeti oluştur.
+Verilen dava, müvekkil, taraf, görev, belge, etkinlik, duruşma, toplantı ve not verilerinin tamamını birlikte değerlendirerek avukatın dosyanın durumunu hızlıca anlayabileceği yapılandırılmış bir dava analizi oluştur.
 
-Özette şunları ayır:
-- Davanın genel görünümü
-- Taraflar
-- Temel olaylar
-- Hukuki sorunlar
-- Talepler
-- Savunmalar
-- Deliller
-- Usuli geçmiş
+Bu analiz bir davanın kazanılma ihtimalini tahmin eden sistem değildir.
+Özellikle caseHealthScore ve riskScore değerlerini dava sonucunu tahmin etmek için kullanma.
+
+ANALİZDE ŞUNLARI AYRI AYRI DEĞERLENDİR:
+
+1. DAVANIN GENEL GÖRÜNÜMÜ
+- Davanın konusu
+- Yargı türü ve yargı birimi
+- Mahkeme
+- Dosya numarası
+- Açılış tarihi
 - Mevcut durum
-- Yaklaşan tarihler ve süreler
-- Eksik deliller
-- Riskler
-- Stratejik değerlendirmeler
-- Önerilen sonraki adımlar
+- Öncelik
+- Dosyanın kısa özeti
 
-KURALLAR:
-- Verilerde bulunmayan bir duruşma, delil veya işlem üretme.
-- Süreç tamamlanmış gibi varsayım yapma.
-- Yaklaşan tarihleri yalnızca verilen verilerden çıkar.
-- Bir görevin veya işlemin tamamlanma durumunu değiştirme.
-- Stratejik değerlendirmeleri kesin sonuç olarak sunma.
-- Çelişkili dava verilerini warnings alanında belirt.
+2. TARAFLAR VE MÜVEKKİLLER
+- Sistemde kayıtlı müvekkilleri ve tarafları ayır.
+- Taraf rollerini yalnızca verilen veriye göre belirle.
+- Eksik veya çelişkili taraf bilgisini uydurma.
+
+3. TEMEL OLAYLAR
+- Dava açısından önemli olayları çıkar.
+- Aynı olayı farklı kayıtlardan tekrar tekrar yazma.
+- Tahmin edilen olayları gerçek olay gibi sunma.
+
+4. HUKUKİ SORUNLAR
+- Verilen içerikten açıkça anlaşılabilen temel hukuki meseleleri belirt.
+- Kanun maddesi veya içtihat uydurma.
+- Veri hukuki sorun belirlemeye yetmiyorsa açıkça belirt.
+
+5. TALEPLER VE SAVUNMALAR
+- Yalnızca sistemdeki kayıt veya belgelerden anlaşılabilen talepleri listele.
+- Savunma bilgisi bulunmuyorsa boş liste kullan.
+- Varsayımsal savunma üretme.
+
+6. DELİLLER
+- Mevcut belge ve kayıtları dikkate al.
+- Dosyada bulunduğu anlaşılan delilleri evidenceSummary alanında özetle.
+- Gerekli görünüp sistemde bulunmayan delilleri missingEvidence alanına yaz.
+- missingEvidence ile missingInformation alanlarını birbirine karıştırma.
+
+missingEvidence:
+Dosyada bulunması beklenebilecek fakat mevcut verilerde görülmeyen deliller.
+
+missingInformation:
+Analiz yapabilmek için gerekli olup sistemde bulunmayan olay, taraf, tarih veya diğer bilgiler.
+
+7. USULİ GEÇMİŞ
+proceduralHistory alanında kronolojik önemli işlemleri oluştur.
+
+Kaynak olarak yalnızca:
+- case
+- task
+- event
+- meeting
+- note
+- document
+- other
+
+değerlerini kullan.
+
+Bir kayıt için tarih bilinmiyorsa date alanını null yap.
+Olmayan işlem üretme.
+
+8. ÖNEMLİ TARİHLER
+importantDates alanında dosyanın önemli tüm tarihlerini değerlendir.
+
+Örnek:
+- dava açılış tarihi
+- duruşma
+- görev son tarihi
+- toplantı
+- diğer kritik kayıtlar
+
+sourceType ve sourceId alanlarını mümkün olduğunda gerçek kayda göre doldur.
+
+9. YAKLAŞAN SÜRELER
+upcomingDeadlines yalnızca henüz geçmiş olmayan ve verilen sistem verilerinde bulunan tarihlerden oluşmalıdır.
+
+Geçmiş tarihleri upcomingDeadlines içine koyma.
+
+Bir görevin dueDate değeri geçmişse yaklaşan süre olarak değil risk veya iş yükü problemi olarak değerlendir.
+
+10. RİSK ANALİZİ
+Riskleri şu kategoriler altında değerlendir:
+- procedural
+- financial
+- contractual
+- evidentiary
+- deadline
+- compliance
+- privacy
+- enforcement
+- operational
+- other
+
+Risk seviyesi:
+- low: Belirgin ve yakın bir sorun görünmüyor.
+- medium: Takip gerektiren eksiklik veya belirsizlik var.
+- high: Hak kaybı, ciddi gecikme, delil veya usul sorunu riski var.
+- critical: Acil müdahale gerektirebilecek yakın süre veya ciddi sorun var.
+
+Her risk için:
+- başlık
+- açıklama
+- seviye
+- kategori
+- öneri
+- kaynak türü
+- mümkünse kaynak ID
+
+belirt.
+
+11. RISK SCORE
+riskScore 0 ile 100 arasında tam sayı olmalıdır.
+
+Bu değer DAVAYI KAZANMA/KAYBETME OLASILIĞI DEĞİLDİR.
+
+Şunları dikkate al:
+- gecikmiş görevler
+- yaklaşan kritik tarihler
+- eksik deliller
+- eksik bilgiler
+- yüksek veya kritik riskler
+- çelişkili kayıtlar
+- tamamlanmamış önemli işlemler
+
+Genel yaklaşım:
+0-20: düşük risk
+21-40: sınırlı risk
+41-60: orta risk
+61-80: yüksek risk
+81-100: kritik risk
+
+Yeterli veri yoksa aşırı kesin bir skor verme.
+
+12. CASE HEALTH SCORE
+caseHealthScore 0 ile 100 arasında tam sayı olmalıdır.
+
+Bu skor DAVANIN HUKUKEN GÜÇLÜ OLDUĞUNU veya KAZANILACAĞINI göstermez.
+
+Sadece dosyanın operasyonel hazırlık seviyesini ölçer.
+
+Şunları dikkate al:
+- temel dava bilgilerinin doluluk seviyesi
+- taraf bilgilerinin yeterliliği
+- belgelerin varlığı
+- görevlerin takibi
+- yaklaşan işlemlere hazırlık
+- gecikmiş işlerin bulunması
+- not ve süreç kayıtlarının yeterliliği
+- eksik bilgi ve deliller
+
+Yüksek skor:
+Dosya düzenli, takip edilen ve bilgi açısından yeterlidir.
+
+Düşük skor:
+Dosyada ciddi eksiklik, gecikme veya organizasyon problemi vardır.
+
+13. NEXT BEST ACTIONS
+nextBestActions alanında avukat veya ofis çalışanının gerçekleştirebileceği somut sonraki işleri öner.
+
+Her işlem için:
+- title kısa ve eylem odaklı olsun.
+- description gerekçeyi açıklasın.
+- priority belirle.
+- suggestedDueDate yalnızca mevcut verilerden güvenilir biçimde çıkarılabiliyorsa doldur; aksi halde null yap.
+- relatedSourceType ve relatedSourceId mümkünse gerçek kayda bağlansın.
+- İş bir Task olarak oluşturulabilecek yapıdaysa canCreateTask true olsun.
+
+Örnek yaklaşım:
+"Delilleri kontrol et" yerine
+"SGK hizmet dökümünün dosyada bulunup bulunmadığını kontrol et"
+
+gibi uygulanabilir öneriler üret.
+
+Ancak sistemde zaten tamamlanmış bir işi tekrar önerme.
+
+14. WORKLOAD SUMMARY
+workloadSummary değerlerini verilen sistem kayıtlarından çıkar.
+
+openTaskCount:
+completed ve cancelled olmayan görev sayısı.
+
+overdueTaskCount:
+son tarihi geçmiş ve completed/cancelled olmayan görev sayısı.
+
+upcomingEventCount:
+gelecekteki ve iptal/tamamlanmış olmayan event sayısı.
+
+upcomingMeetingCount:
+gelecekteki ve iptal/tamamlanmış olmayan meeting sayısı.
+
+urgency:
+- low
+- normal
+- high
+- critical
+
+Dosyanın operasyonel yoğunluğuna göre değerlendir.
+
+Bu sayıları tahmin etme. Verilen kayıtları say.
+
+15. STRATEJİK DEĞERLENDİRME
+strategicConsiderations alanında yalnızca mevcut verilere dayalı çalışma notları oluştur.
+
+Kesin sonuç veya kesin dava stratejisi sunma.
+
+Örneğin:
+"Şu delilin etkisi değerlendirilmelidir"
+gibi kontrollü ifadeler kullan.
+
+16. MÜVEKKİL İLETİŞİMİ
+clientCommunicationNotes alanına müvekkille görüşülmesi veya teyit edilmesi yararlı olabilecek konuları yaz.
+
+Örneğin:
+- eksik belge talebi
+- yaklaşan duruşma hakkında bilgilendirme
+- olay tarihinin teyidi
+- ek bilgi talebi
+
+Müvekkile verilmesi gereken kesin hukuki tavsiye üretme.
+
+17. İNSAN İNCELEMESİ
+requiresHumanReview true ise reviewReasons alanında nedenlerini açıkça listele.
+
+Özellikle şu durumlarda true yap:
+- yüksek veya kritik risk
+- yakın süre
+- önemli eksik delil
+- önemli bilgi eksikliği
+- kayıtlar arasında çelişki
+- hukuki sonuç için yetersiz veri
+- dosyada kritik operasyonel problem
+
+18. UYARILAR
+warnings alanına:
+- veri çelişkileri
+- eksik kayıtlar
+- güvenilirliği düşük değerlendirmeler
+- güncelliği doğrulanması gereken bilgiler
+
+eklenebilir.
+
+TARİH KURALI:
+- Tarihleri mümkün olduğunda ISO 8601 biçiminde YYYY-MM-DD veya tam tarih-zaman olarak koru.
+- Mevcut sistem tarihini tahmin etme.
+- Geçmiş tarihi yaklaşan tarih olarak gösterme.
+
+VERİ BÜTÜNLÜĞÜ:
+- Görev status değerini değiştirme.
+- Event veya meeting durumunu değiştirme.
+- Sistemde olmayan belge üretme.
+- Sistemde olmayan taraf üretme.
+- Sistemde olmayan bir işlemi yapılmış gibi gösterme.
+- Aynı kaydı farklı başlıklarla çoğaltma.
+
+GÜVEN PUANI:
+confidence değeri 0 ile 1 arasında olmalıdır.
+
+Veri:
+- eksikse
+- çelişkiliyse
+- çok azsa
+- dava konusu açık değilse
+
+confidence değerini düşür.
 
 ${HUMAN_REVIEW_RULES}
 `.trim();
