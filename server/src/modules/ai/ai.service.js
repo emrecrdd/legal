@@ -735,220 +735,460 @@ class AIService {
     return document;
   }
 
-  async getCaseWithContext(caseId) {
-    const caseRecord = await Case.findByPk(caseId, {
-      include: [
-        {
-          model: Client,
-          as: 'clients',
-          required: false,
+ async getCaseWithContext(caseId) {
+  const caseRecord = await Case.findByPk(caseId, {
+    include: [
+      {
+        model: Client,
+        as: 'clients',
+        required: false,
+        through: {
+          attributes: [],
         },
-        {
-          model: CaseParty,
-          as: 'parties',
-          required: false,
-        },
-        {
-          model: Document,
-          as: 'documents',
-          required: false,
-          attributes: [
-            'id',
-            'name',
-            'original_name',
-            'file_type',
-            'category',
-            'description',
-            'created_at',
-          ],
-        },
-        {
-  model: Task,
-  as: 'tasks',
-  required: false,
-  order: [['due_date', 'ASC']],
-},
-        {
-  model: Event,
-  as: 'events',
-  required: false,
-  order: [['start_date', 'ASC']],
-},
-        {
-          model: Note,
-          as: 'notes',
-          required: false,
-        },
-        {
-  model: Meeting,
-  as: 'meetings',
-  required: false,
-  order: [['start_date', 'ASC']],
-},
-      ],
+        attributes: [
+          'id',
+          'name',
+          'identification_number',
+          'email',
+          'phone',
+          'address',
+          'city',
+          'district',
+          'client_type',
+          'status',
+        ],
+      },
+
+      {
+        model: CaseParty,
+        as: 'parties',
+        required: false,
+        attributes: [
+          'id',
+          'party_type',
+          'name',
+          'tc_number',
+          'phone',
+          'email',
+          'address',
+          'lawyer_name',
+          'lawyer_phone',
+          'lawyer_registry_number',
+          'notes',
+        ],
+      },
+
+      {
+        model: Document,
+        as: 'documents',
+        required: false,
+        attributes: [
+          'id',
+          'name',
+          'original_name',
+          'file_type',
+          'mime_type',
+          'category',
+          'description',
+          'tags',
+          'created_at',
+        ],
+        include: [
+          {
+            model: AIAnalysis,
+            as: 'aiAnalyses',
+            required: false,
+            where: {
+              status: 'completed',
+              analysis_type: ANALYSIS_TYPES.DOCUMENT_ANALYSIS,
+            },
+            attributes: [
+              'id',
+              'analysis_type',
+              'status',
+              'result',
+              'confidence',
+              'model',
+              'prompt_version',
+              'created_at',
+            ],
+            separate: true,
+            limit: 1,
+            order: [['created_at', 'DESC']],
+          },
+        ],
+      },
+
+      {
+        model: Task,
+        as: 'tasks',
+        required: false,
+        attributes: [
+          'id',
+          'title',
+          'description',
+          'status',
+          'priority',
+          'due_date',
+          'completed_at',
+          'assigned_to',
+          'created_by',
+          'progress',
+          'started_at',
+          'estimated_hours',
+          'actual_hours',
+          'approved_by',
+          'approved_at',
+          'tags',
+          'created_at',
+        ],
+      },
+
+      {
+        model: Event,
+        as: 'events',
+        required: false,
+        attributes: [
+          'id',
+          'title',
+          'description',
+          'event_type',
+          'hearing_type',
+          'last_hearing_result',
+          'todo_items',
+          'opposing_counsel',
+          'expense_status',
+          'start_date',
+          'end_date',
+          'location',
+          'court_room',
+          'judge_name',
+          'status',
+          'is_all_day',
+          'created_at',
+        ],
+      },
+
+      {
+        model: Note,
+        as: 'notes',
+        required: false,
+        attributes: [
+          'id',
+          'content',
+          'note_type',
+          'is_private',
+          'is_pinned',
+          'tags',
+          'created_at',
+        ],
+      },
+
+      {
+        model: Meeting,
+        as: 'meetings',
+        required: false,
+        attributes: [
+          'id',
+          'title',
+          'description',
+          'start_date',
+          'end_date',
+          'location',
+          'meeting_type',
+          'status',
+          'attendees',
+          'meeting_link',
+          'notes',
+          'client_id',
+          'assigned_to',
+          'created_at',
+        ],
+      },
+    ],
+
+    order: [
+      [{ model: Task, as: 'tasks' }, 'due_date', 'ASC'],
+      [{ model: Event, as: 'events' }, 'start_date', 'ASC'],
+      [{ model: Meeting, as: 'meetings' }, 'start_date', 'ASC'],
+      [{ model: Note, as: 'notes' }, 'created_at', 'DESC'],
+      [{ model: Document, as: 'documents' }, 'created_at', 'DESC'],
+    ],
+  });
+
+  if (!caseRecord) {
+    throw new AIServiceError('Dava bulunamadı.', {
+      code: 'CASE_NOT_FOUND',
+      statusCode: 404,
     });
-
-    if (!caseRecord) {
-      throw new AIServiceError('Dava bulunamadı.', {
-        code: 'CASE_NOT_FOUND',
-        statusCode: 404,
-      });
-    }
-
-    return caseRecord;
   }
 
-  prepareCasePayload(caseRecord) {
-  const raw = caseRecord.toJSON();
-  const data = this.removeSensitiveFields(raw);
+  return caseRecord;
+}
+
+prepareCasePayload(caseRecord) {
+  const rawData =
+    typeof caseRecord.toJSON === 'function'
+      ? caseRecord.toJSON()
+      : caseRecord;
+
+  const data = this.removeSensitiveFields(rawData);
+
+  const now = Date.now();
+
+  const tasks = (data.tasks ?? []).map((task) => {
+    const dueTime = task.due_date
+      ? new Date(task.due_date).getTime()
+      : null;
+
+    const isOpen = ![
+      'completed',
+      'cancelled',
+    ].includes(task.status);
+
+    return {
+      id: task.id,
+      title: task.title ?? null,
+      description: task.description ?? null,
+      status: task.status ?? null,
+      priority: task.priority ?? null,
+      dueDate: task.due_date ?? null,
+      completedAt: task.completed_at ?? null,
+      progress: Number(task.progress ?? 0),
+      startedAt: task.started_at ?? null,
+      estimatedHours: task.estimated_hours ?? null,
+      actualHours: task.actual_hours ?? null,
+      assignedTo: task.assigned_to ?? null,
+      createdBy: task.created_by ?? null,
+      approvedBy: task.approved_by ?? null,
+      approvedAt: task.approved_at ?? null,
+      tags: task.tags ?? [],
+      isOpen,
+      isOverdue: Boolean(
+        isOpen &&
+          dueTime &&
+          Number.isFinite(dueTime) &&
+          dueTime < now
+      ),
+      createdAt: task.created_at ?? null,
+    };
+  });
+
+  const events = (data.events ?? []).map((event) => {
+    const startTime = event.start_date
+      ? new Date(event.start_date).getTime()
+      : null;
+
+    return {
+      id: event.id,
+      title: event.title ?? null,
+      description: event.description ?? null,
+      eventType: event.event_type ?? null,
+      hearingType: event.hearing_type ?? null,
+      lastHearingResult: event.last_hearing_result ?? null,
+      todoItems: event.todo_items ?? [],
+      opposingCounsel: event.opposing_counsel ?? null,
+      expenseStatus: event.expense_status ?? null,
+      startDate: event.start_date ?? null,
+      endDate: event.end_date ?? null,
+      location: event.location ?? null,
+      courtRoom: event.court_room ?? null,
+      judgeName: event.judge_name ?? null,
+      status: event.status ?? null,
+      isAllDay: Boolean(event.is_all_day),
+      isUpcoming: Boolean(
+        startTime &&
+          Number.isFinite(startTime) &&
+          startTime > now &&
+          !['completed', 'cancelled'].includes(event.status)
+      ),
+      createdAt: event.created_at ?? null,
+    };
+  });
+
+  const meetings = (data.meetings ?? []).map((meeting) => {
+    const startTime = meeting.start_date
+      ? new Date(meeting.start_date).getTime()
+      : null;
+
+    return {
+      id: meeting.id,
+      title: meeting.title ?? null,
+      description: meeting.description ?? null,
+      meetingType: meeting.meeting_type ?? null,
+      startDate: meeting.start_date ?? null,
+      endDate: meeting.end_date ?? null,
+      location: meeting.location ?? null,
+      status: meeting.status ?? null,
+      attendees: meeting.attendees ?? [],
+      meetingLink: meeting.meeting_link ?? null,
+      notes: meeting.notes ?? null,
+      clientId: meeting.client_id ?? null,
+      assignedTo: meeting.assigned_to ?? null,
+      isUpcoming: Boolean(
+        startTime &&
+          Number.isFinite(startTime) &&
+          startTime > now &&
+          !['completed', 'cancelled'].includes(meeting.status)
+      ),
+      createdAt: meeting.created_at ?? null,
+    };
+  });
+
+  const documents = (data.documents ?? []).map((document) => {
+    const analyses = Array.isArray(document.aiAnalyses)
+      ? document.aiAnalyses
+      : [];
+
+    const latestAnalysis = analyses[0] ?? null;
+
+    const aiResult =
+      latestAnalysis?.result &&
+      typeof latestAnalysis.result === 'object'
+        ? latestAnalysis.result
+        : null;
+
+    return {
+      id: document.id,
+      name: document.name ?? null,
+      originalName: document.original_name ?? null,
+      fileType: document.file_type ?? null,
+      mimeType: document.mime_type ?? null,
+      category: document.category ?? null,
+      description: document.description ?? null,
+      tags: document.tags ?? [],
+      createdAt: document.created_at ?? null,
+
+      hasAiAnalysis: Boolean(aiResult),
+
+      aiAnalysis: aiResult
+        ? {
+            analysisId: latestAnalysis.id,
+            model: latestAnalysis.model ?? null,
+            promptVersion: latestAnalysis.prompt_version ?? null,
+            confidence:
+              latestAnalysis.confidence ??
+              aiResult.confidence ??
+              null,
+            analyzedAt: latestAnalysis.created_at ?? null,
+
+            documentType: aiResult.documentType ?? null,
+            title: aiResult.title ?? null,
+            language: aiResult.language ?? null,
+            summary: aiResult.summary ?? null,
+            caseType: aiResult.caseType ?? null,
+            jurisdiction: aiResult.jurisdiction ?? null,
+            court: aiResult.court ?? null,
+            caseNumber: aiResult.caseNumber ?? null,
+            decisionNumber: aiResult.decisionNumber ?? null,
+            parties: aiResult.parties ?? [],
+            importantDates: aiResult.importantDates ?? [],
+            amounts: aiResult.amounts ?? [],
+            claims: aiResult.claims ?? [],
+            defenses: aiResult.defenses ?? [],
+            obligations: aiResult.obligations ?? [],
+            evidence: aiResult.evidence ?? [],
+            legalIssues: aiResult.legalIssues ?? [],
+            referencedLaws: aiResult.referencedLaws ?? [],
+            risks: aiResult.risks ?? [],
+            missingInformation: aiResult.missingInformation ?? [],
+            recommendedActions: aiResult.recommendedActions ?? [],
+            overallRiskLevel: aiResult.overallRiskLevel ?? null,
+            requiresHumanReview:
+              aiResult.requiresHumanReview ?? false,
+            reviewReasons: aiResult.reviewReasons ?? [],
+            warnings: aiResult.warnings ?? [],
+          }
+        : null,
+    };
+  });
+
+  const notes = (data.notes ?? []).map((note) => ({
+    id: note.id,
+    content: note.content ?? null,
+    noteType: note.note_type ?? null,
+    isPrivate: Boolean(note.is_private),
+    isPinned: Boolean(note.is_pinned),
+    tags: note.tags ?? [],
+    createdAt: note.created_at ?? null,
+  }));
+
+  const workload = {
+    openTaskCount: tasks.filter((task) => task.isOpen).length,
+    overdueTaskCount: tasks.filter((task) => task.isOverdue).length,
+    upcomingEventCount: events.filter((event) => event.isUpcoming).length,
+    upcomingMeetingCount: meetings.filter(
+      (meeting) => meeting.isUpcoming
+    ).length,
+  };
 
   return {
     id: data.id,
-
-    title: data.title,
-
-    caseNumber:
-      data.case_number ??
-      data.caseNumber ??
-      null,
-
+    title: data.title ?? null,
     subject: data.subject ?? null,
-
-    description:
-      data.description ?? null,
-
+    description: data.description ?? null,
     status: data.status ?? null,
+    priority: data.priority ?? null,
 
-    court:
-      data.court_name ??
-      data.court ??
-      null,
+    judiciaryType: data.judiciary_type ?? null,
+    judiciaryUnit: data.judiciary_unit ?? null,
+    courtName: data.court_name ?? null,
+    caseNumber: data.case_number ?? null,
+    openingDate: data.opening_date ?? null,
 
-    judiciaryType:
-      data.judiciary_type ??
-      null,
+    createdBy: data.created_by ?? null,
+    assignedTo: data.assigned_to ?? null,
+    createdAt: data.created_at ?? null,
+    updatedAt: data.updated_at ?? null,
 
-    judiciaryUnit:
-      data.judiciary_unit ??
-      null,
+    clients: (data.clients ?? []).map((client) => ({
+      id: client.id,
+      name: client.name ?? null,
+      identificationNumber:
+        client.identification_number ?? null,
+      email: client.email ?? null,
+      phone: client.phone ?? null,
+      address: client.address ?? null,
+      city: client.city ?? null,
+      district: client.district ?? null,
+      clientType: client.client_type ?? null,
+      status: client.status ?? null,
+    })),
 
-    filingDate:
-      data.filing_date ??
-      null,
+    parties: (data.parties ?? []).map((party) => ({
+      id: party.id,
+      name: party.name ?? null,
+      partyType: party.party_type ?? null,
+      identifier: party.tc_number ?? null,
+      phone: party.phone ?? null,
+      email: party.email ?? null,
+      address: party.address ?? null,
+      lawyerName: party.lawyer_name ?? null,
+      lawyerPhone: party.lawyer_phone ?? null,
+      lawyerRegistryNumber:
+        party.lawyer_registry_number ?? null,
+      notes: party.notes ?? null,
+    })),
 
-    hearingDate:
-      data.hearing_date ??
-      null,
+    documents,
+    tasks,
+    events,
+    meetings,
+    notes,
 
-    estimatedValue:
-      data.estimated_value ??
-      null,
+    workload,
 
-    clients:
-      (data.clients ?? []).map((c) => ({
-        id: c.id,
-        name: c.name,
-        phone: c.phone,
-        email: c.email,
-      })),
+    documentContext: {
+      totalDocuments: documents.length,
 
-    parties:
-      (data.parties ?? []).map((p) => ({
-        name: p.name,
-        partyType: p.party_type,
-        role: p.role,
-        identificationNumber:
-          p.identification_number,
-      })),
+      analyzedDocuments: documents.filter(
+        (document) => document.hasAiAnalysis
+      ).length,
 
-    documents:
-      (data.documents ?? []).map((d) => ({
-        id: d.id,
-        title:
-          d.original_name ??
-          d.name,
-
-        category: d.category,
-
-        type:
-          d.file_type,
-
-        description:
-          d.description,
-
-        createdAt:
-          d.created_at,
-      })),
-
-    tasks:
-      (data.tasks ?? []).map((t) => ({
-        id: t.id,
-
-        title: t.title,
-
-        status: t.status,
-
-        priority: t.priority,
-
-        dueDate:
-          t.due_date,
-
-        completed:
-          t.status ===
-          'completed',
-      })),
-
-    events:
-      (data.events ?? []).map((e) => ({
-        id: e.id,
-
-        title: e.title,
-
-        startDate:
-          e.start_date,
-
-        endDate:
-          e.end_date,
-
-        location:
-          e.location,
-
-        status:
-          e.status,
-      })),
-
-    meetings:
-      (data.meetings ?? []).map((m) => ({
-        id: m.id,
-
-        title: m.title,
-
-        startDate:
-          m.start_date,
-
-        endDate:
-          m.end_date,
-
-        location:
-          m.location,
-
-        status:
-          m.status,
-      })),
-
-    notes:
-      (data.notes ?? []).map((n) => ({
-        id: n.id,
-
-        title:
-          n.title,
-
-        content:
-          n.content,
-
-        createdAt:
-          n.created_at,
-      })),
+      unanalyzedDocuments: documents.filter(
+        (document) => !document.hasAiAnalysis
+      ).length,
+    },
   };
 }
 

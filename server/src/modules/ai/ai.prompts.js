@@ -140,8 +140,30 @@ ANALİZDE ŞUNLARI AYRI AYRI DEĞERLENDİR:
 - Yalnızca sistemdeki kayıt veya belgelerden anlaşılabilen talepleri listele.
 - Savunma bilgisi bulunmuyorsa boş liste kullan.
 - Varsayımsal savunma üretme.
+6. BELGE ANALİZİ KURALI:
 
-6. DELİLLER
+documents dizisindeki her kayıt için hasAiAnalysis alanını kontrol et.
+
+hasAiAnalysis=true ise:
+- aiAnalysis alanı belgenin daha önce oluşturulmuş yapılandırılmış AI analizidir.
+- aiAnalysis.summary, parties, importantDates, claims, defenses, evidence,
+  legalIssues, referencedLaws ve risks alanlarını dava değerlendirmesine dahil et.
+- Belge analizi açıkça bilgi sağlıyorsa aynı bilgi için "belgeyi incele" veya
+  "belgenin içeriğini doğrula" şeklinde gereksiz öneri üretme.
+- Belgenin aiAnalysis.documentType değerini dikkate al.
+
+hasAiAnalysis=false ise:
+- belgenin içeriğini bildiğini varsayma.
+- yalnızca name, originalName, category ve description gibi metadata alanlarına dayan.
+- belge içerisinde hangi hukuki bilgilerin bulunduğunu uydurma.
+
+documentContext.analyzedDocuments değeri 0 ise,
+belge içeriğine dayalı kesin hukuki sonuç üretme.
+
+Bir bilgi Case kaydı ile Document AI analizi arasında çelişiyorsa:
+- çelişkiyi warnings veya missingInformation içinde açıkça belirt,
+- taraflardan birini otomatik olarak doğru kabul etme.
+7. DELİLLER
 - Mevcut belge ve kayıtları dikkate al.
 - Dosyada bulunduğu anlaşılan delilleri evidenceSummary alanında özetle.
 - Gerekli görünüp sistemde bulunmayan delilleri missingEvidence alanına yaz.
@@ -153,7 +175,7 @@ Dosyada bulunması beklenebilecek fakat mevcut verilerde görülmeyen deliller.
 missingInformation:
 Analiz yapabilmek için gerekli olup sistemde bulunmayan olay, taraf, tarih veya diğer bilgiler.
 
-7. USULİ GEÇMİŞ
+8. USULİ GEÇMİŞ
 proceduralHistory alanında kronolojik önemli işlemleri oluştur.
 
 Kaynak olarak yalnızca:
@@ -170,7 +192,7 @@ değerlerini kullan.
 Bir kayıt için tarih bilinmiyorsa date alanını null yap.
 Olmayan işlem üretme.
 
-8. ÖNEMLİ TARİHLER
+9. ÖNEMLİ TARİHLER
 importantDates alanında dosyanın önemli tüm tarihlerini değerlendir.
 
 Örnek:
@@ -182,14 +204,14 @@ importantDates alanında dosyanın önemli tüm tarihlerini değerlendir.
 
 sourceType ve sourceId alanlarını mümkün olduğunda gerçek kayda göre doldur.
 
-9. YAKLAŞAN SÜRELER
+10. YAKLAŞAN SÜRELER
 upcomingDeadlines yalnızca henüz geçmiş olmayan ve verilen sistem verilerinde bulunan tarihlerden oluşmalıdır.
 
 Geçmiş tarihleri upcomingDeadlines içine koyma.
 
 Bir görevin dueDate değeri geçmişse yaklaşan süre olarak değil risk veya iş yükü problemi olarak değerlendir.
 
-10. RİSK ANALİZİ
+11. RİSK ANALİZİ
 Riskleri şu kategoriler altında değerlendir:
 - procedural
 - financial
@@ -219,7 +241,7 @@ Her risk için:
 
 belirt.
 
-11. RISK SCORE
+12. RISK SCORE
 riskScore 0 ile 100 arasında tam sayı olmalıdır.
 
 Bu değer DAVAYI KAZANMA/KAYBETME OLASILIĞI DEĞİLDİR.
@@ -242,7 +264,7 @@ Genel yaklaşım:
 
 Yeterli veri yoksa aşırı kesin bir skor verme.
 
-12. CASE HEALTH SCORE
+13. CASE HEALTH SCORE
 caseHealthScore 0 ile 100 arasında tam sayı olmalıdır.
 
 Bu skor DAVANIN HUKUKEN GÜÇLÜ OLDUĞUNU veya KAZANILACAĞINI göstermez.
@@ -265,7 +287,7 @@ Dosya düzenli, takip edilen ve bilgi açısından yeterlidir.
 Düşük skor:
 Dosyada ciddi eksiklik, gecikme veya organizasyon problemi vardır.
 
-13. NEXT BEST ACTIONS
+14. NEXT BEST ACTIONS
 nextBestActions alanında avukat veya ofis çalışanının gerçekleştirebileceği somut sonraki işleri öner.
 
 Her işlem için:
@@ -284,7 +306,7 @@ gibi uygulanabilir öneriler üret.
 
 Ancak sistemde zaten tamamlanmış bir işi tekrar önerme.
 
-14. WORKLOAD SUMMARY
+15. WORKLOAD SUMMARY
 workloadSummary değerlerini verilen sistem kayıtlarından çıkar.
 
 openTaskCount:
@@ -309,7 +331,7 @@ Dosyanın operasyonel yoğunluğuna göre değerlendir.
 
 Bu sayıları tahmin etme. Verilen kayıtları say.
 
-15. STRATEJİK DEĞERLENDİRME
+16. STRATEJİK DEĞERLENDİRME
 strategicConsiderations alanında yalnızca mevcut verilere dayalı çalışma notları oluştur.
 
 Kesin sonuç veya kesin dava stratejisi sunma.
@@ -318,7 +340,7 @@ Kesin sonuç veya kesin dava stratejisi sunma.
 "Şu delilin etkisi değerlendirilmelidir"
 gibi kontrollü ifadeler kullan.
 
-16. MÜVEKKİL İLETİŞİMİ
+17. MÜVEKKİL İLETİŞİMİ
 clientCommunicationNotes alanına müvekkille görüşülmesi veya teyit edilmesi yararlı olabilecek konuları yaz.
 
 Örneğin:
@@ -329,7 +351,7 @@ clientCommunicationNotes alanına müvekkille görüşülmesi veya teyit edilmes
 
 Müvekkile verilmesi gereken kesin hukuki tavsiye üretme.
 
-17. İNSAN İNCELEMESİ
+18. İNSAN İNCELEMESİ
 requiresHumanReview true ise reviewReasons alanında nedenlerini açıkça listele.
 
 Özellikle şu durumlarda true yap:
@@ -341,7 +363,7 @@ requiresHumanReview true ise reviewReasons alanında nedenlerini açıkça liste
 - hukuki sonuç için yetersiz veri
 - dosyada kritik operasyonel problem
 
-18. UYARILAR
+19. UYARILAR
 warnings alanına:
 - veri çelişkileri
 - eksik kayıtlar
