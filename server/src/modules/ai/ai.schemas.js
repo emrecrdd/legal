@@ -61,41 +61,76 @@ const sourceReferenceSchema = {
 const partySchema = {
   type: 'object',
   additionalProperties: false,
+
   properties: {
     name: {
       type: 'string',
     },
-    role: {
+
+    entityType: {
       type: 'string',
       enum: [
-        'davacı',
-        'davalı',
-        'başvurucu',
-        'karşı_taraf',
-        'müşteki',
-        'sanık',
-        'şüpheli',
-        'tanık',
-        'bilirkişi',
-        'vekil',
+        'kişi',
         'kurum',
+        'şirket',
+        'kamu_kurumu',
+        'baro',
         'diğer',
         'belirsiz',
       ],
     },
+
+    role: {
+      type: 'string',
+      enum: [
+        // Hukuk
+        'davacı',
+        'davalı',
+        'başvurucu',
+        'karşı_taraf',
+
+        // Ceza
+        'müşteki',
+        'şikayetçi',
+        'mağdur',
+        'maktul',
+        'katılan',
+        'sanık',
+        'şüpheli',
+        'hükümlü',
+
+        // Temsil
+        'vekil',
+        'müdafi',
+        'katılan_vekili',
+        'müşteki_vekili',
+        'sanık_müdafii',
+
+        // Diğer
+        'tanık',
+        'bilirkişi',
+
+        'diğer',
+        'belirsiz',
+      ],
+    },
+
     identifier: nullableString,
+
     representative: nullableString,
+
     description: nullableString,
   },
+
   required: [
     'name',
+    'entityType',
     'role',
     'identifier',
     'representative',
     'description',
   ],
 };
-
 const dateSchema = {
   type: 'object',
   additionalProperties: false,
@@ -207,27 +242,45 @@ export const documentAnalysisSchema = {
   additionalProperties: false,
   properties: {
     documentType: {
-      type: 'string',
-      enum: [
-        'dava_dilekçesi',
-        'cevap_dilekçesi',
-        'mahkeme_kararı',
-        'ara_karar',
-        'bilirkişi_raporu',
-        'sözleşme',
-        'ihtarname',
-        'tebligat',
-        'tutanak',
-        'vekaletname',
-        'delil',
-        'yazışma',
-        'icra_belgesi',
-        'ceza_dosyası_belgesi',
-        'idari_belge',
-        'diğer',
-        'belirsiz',
-      ],
-    },
+  type: 'string',
+  enum: [
+    'dava_dilekçesi',
+    'cevap_dilekçesi',
+    'savunma_dilekçesi',
+
+    'istinaf_dilekçesi',
+    'temyiz_dilekçesi',
+    'itiraz_dilekçesi',
+
+    'iddianame',
+    'esas_hakkında_mütalaa',
+
+    'mahkeme_kararı',
+    'gerekçeli_karar',
+    'ara_karar',
+    'tensip_zaptı',
+    'duruşma_tutanağı',
+
+    'bilirkişi_raporu',
+    'adli_tıp_raporu',
+    'kriminal_rapor',
+
+    'sözleşme',
+    'ihtarname',
+    'tebligat',
+    'tutanak',
+    'vekaletname',
+    'delil',
+    'yazışma',
+
+    'icra_belgesi',
+    'ceza_dosyası_belgesi',
+    'idari_belge',
+
+    'diğer',
+    'belirsiz',
+  ],
+},
 
     title: nullableString,
 

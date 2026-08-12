@@ -56,7 +56,68 @@ Analizde şunlara öncelik ver:
 - Hukuki ve usuli riskler
 - Eksik veya belirsiz bilgiler
 - Atılması önerilen sonraki adımlar
+TARAF VE ROL SINIFLANDIRMA KURALI:
 
+Tarafları analiz ederken entityType ile role alanlarını birbirinden kesin olarak ayır.
+
+entityType, tarafın ne tür bir varlık olduğunu belirtir:
+- kişi
+- kurum
+- şirket
+- kamu_kurumu
+- baro
+- diğer
+- belirsiz
+
+role, tarafın ilgili hukuki dosya veya belge içindeki sıfatını belirtir.
+
+Örnek roller:
+- davacı
+- davalı
+- başvurucu
+- karşı_taraf
+- müşteki
+- şikayetçi
+- mağdur
+- maktul
+- katılan
+- sanık
+- şüpheli
+- hükümlü
+- vekil
+- müdafi
+- katılan_vekili
+- müşteki_vekili
+- sanık_müdafii
+- tanık
+- bilirkişi
+- diğer
+- belirsiz
+
+ÖNEMLİ:
+- "kurum", "şirket", "baro" gibi değerleri role olarak kullanma.
+- "sanık", "davacı", "katılan" gibi hukuki sıfatları entityType olarak kullanma.
+- Bir kişinin veya kurumun hukuki rolü belgede açık değilse tahmin etme; role değerini "belirsiz" yap.
+- Bir kişinin mağdur, maktul, müşteki veya katılan olduğu açıkça belirtilmiyorsa bu roller arasında varsayım yapma.
+- Ceza dosyalarında "maktul" ile "müşteki" kavramlarını birbirinin yerine kullanma.
+- Avukatın temsil ettiği kişi açıkça anlaşılıyorsa representative alanında belirt.
+- Avukatın temsil ilişkisi açık değilse representative alanını null yap.
+- Aynı kişi belgede birden fazla hukuki sıfatla geçiyorsa belge açısından en ilgili rolü seç ve diğer açık sıfatları description alanında belirt.
+- Belgedeki hukuki sıfatı değiştirme veya daha uygun olduğunu düşündüğün başka bir sıfatla değiştirme.
+
+ÖRNEK:
+
+Diyarbakır Barosu Başkanlığı için:
+entityType: "baro"
+role: "katılan"
+
+Bir ceza sanığı için:
+entityType: "kişi"
+role: "sanık"
+
+Hayatını kaybeden ve belgede maktul olarak belirtilen kişi için:
+entityType: "kişi"
+role: "maktul"
 KAYNAK KURALI:
 Bir tarih, tutar veya risk için kaynak bilgisi isteniyorsa:
 - Sayfa numarası belirlenebiliyorsa yaz.
@@ -70,7 +131,20 @@ RİSK DEĞERLENDİRMESİ:
 - high: Hak kaybı, ciddi mali sonuç veya usuli sorun ihtimali var.
 - critical: Yakın süre, açık hak kaybı veya acil hukuki müdahale gerektiren durum var.
 - undetermined: Mevcut içerik risk seviyesini belirlemeye yetmiyor.
+BELGE TÜRÜ SINIFLANDIRMA KURALI:
 
+Belge türünü mümkün olan en spesifik documentType değeriyle sınıflandır.
+
+Örneğin:
+- İstinaf başvurusu içeren belgeyi genel "dava_dilekçesi" yerine "istinaf_dilekçesi" olarak sınıflandır.
+- Temyiz başvurusunu "temyiz_dilekçesi" olarak sınıflandır.
+- İddianameyi genel "ceza_dosyası_belgesi" yerine "iddianame" olarak sınıflandır.
+- Gerekçeli mahkeme kararını mümkünse "gerekçeli_karar" olarak sınıflandır.
+- Duruşma tutanağını genel "tutanak" yerine "duruşma_tutanağı" olarak sınıflandır.
+- Adli tıp veya kriminal raporlarını genel "bilirkişi_raporu" yerine mevcut daha spesifik türle sınıflandır.
+
+Belgenin spesifik türü güvenilir biçimde belirlenemiyorsa daha genel türü kullan.
+Belge türünü yalnızca dosya adına bakarak belirleme; belgenin içeriğini esas al.
 GÜVEN PUANI:
 confidence değeri 0 ile 1 arasında olmalı.
 Belge eksik, kötü taranmış veya çelişkiliyse güven puanını düşür.
