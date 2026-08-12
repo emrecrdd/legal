@@ -1163,10 +1163,278 @@ export const draftGenerationSchema = {
     'requiresLawyerReview',
   ],
 };
+export const caseCompletionSchema = {
+  type: 'object',
+  additionalProperties: false,
 
+  properties: {
+    missingParties: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          name: {
+            type: 'string',
+          },
+
+          entityType: {
+            type: 'string',
+            enum: [
+              'kişi',
+              'kurum',
+              'şirket',
+              'kamu_kurumu',
+              'baro',
+              'diğer',
+              'belirsiz',
+            ],
+          },
+
+          role: {
+            type: 'string',
+            enum: [
+              'davacı',
+              'davalı',
+              'başvurucu',
+              'karşı_taraf',
+
+              'müşteki',
+              'şikayetçi',
+              'mağdur',
+              'maktul',
+              'katılan',
+              'sanık',
+              'şüpheli',
+              'hükümlü',
+
+              'vekil',
+              'müdafi',
+              'katılan_vekili',
+              'müşteki_vekili',
+              'sanık_müdafii',
+
+              'tanık',
+              'bilirkişi',
+
+              'diğer',
+              'belirsiz',
+            ],
+          },
+
+          identifier: nullableString,
+          representative: nullableString,
+          description: nullableString,
+
+          sourceDocumentId: nullableString,
+
+          confidence: {
+            type: 'number',
+            minimum: 0,
+            maximum: 1,
+          },
+        },
+
+        required: [
+          'name',
+          'entityType',
+          'role',
+          'identifier',
+          'representative',
+          'description',
+          'sourceDocumentId',
+          'confidence',
+        ],
+      },
+    },
+
+    partyConflicts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          partyName: {
+            type: 'string',
+          },
+
+          field: {
+            type: 'string',
+            enum: [
+              'name',
+              'entityType',
+              'role',
+              'identifier',
+              'representative',
+              'other',
+            ],
+          },
+
+          currentValue: nullableString,
+          suggestedValue: nullableString,
+
+          explanation: {
+            type: 'string',
+          },
+
+          sourceDocumentId: nullableString,
+
+          confidence: {
+            type: 'number',
+            minimum: 0,
+            maximum: 1,
+          },
+        },
+
+        required: [
+          'partyName',
+          'field',
+          'currentValue',
+          'suggestedValue',
+          'explanation',
+          'sourceDocumentId',
+          'confidence',
+        ],
+      },
+    },
+
+    suggestedCaseUpdates: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          field: {
+            type: 'string',
+            enum: [
+              'title',
+              'case_type',
+              'jurisdiction',
+              'court',
+              'case_number',
+              'decision_number',
+              'filing_date',
+              'description',
+              'other',
+            ],
+          },
+
+          currentValue: nullableString,
+          suggestedValue: nullableString,
+
+          reason: {
+            type: 'string',
+          },
+
+          sourceDocumentId: nullableString,
+
+          confidence: {
+            type: 'number',
+            minimum: 0,
+            maximum: 1,
+          },
+
+          requiresHumanConfirmation: {
+            type: 'boolean',
+          },
+        },
+
+        required: [
+          'field',
+          'currentValue',
+          'suggestedValue',
+          'reason',
+          'sourceDocumentId',
+          'confidence',
+          'requiresHumanConfirmation',
+        ],
+      },
+    },
+
+    importantDateSuggestions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          date: {
+            type: 'string',
+          },
+
+          label: {
+            type: 'string',
+          },
+
+          importance: {
+            type: 'string',
+            enum: [
+              'low',
+              'medium',
+              'high',
+              'critical',
+            ],
+          },
+
+          deadline: {
+            type: 'boolean',
+          },
+
+          explanation: nullableString,
+
+          sourceDocumentId: nullableString,
+
+          confidence: {
+            type: 'number',
+            minimum: 0,
+            maximum: 1,
+          },
+        },
+
+        required: [
+          'date',
+          'label',
+          'importance',
+          'deadline',
+          'explanation',
+          'sourceDocumentId',
+          'confidence',
+        ],
+      },
+    },
+
+    warnings: stringArray,
+
+    confidence: {
+      type: 'number',
+      minimum: 0,
+      maximum: 1,
+    },
+
+    requiresHumanReview: {
+      type: 'boolean',
+    },
+
+    reviewReasons: stringArray,
+  },
+
+  required: [
+    'missingParties',
+    'partyConflicts',
+    'suggestedCaseUpdates',
+    'importantDateSuggestions',
+    'warnings',
+    'confidence',
+    'requiresHumanReview',
+    'reviewReasons',
+  ],
+};
 export const AI_SCHEMAS = Object.freeze({
   documentAnalysis: documentAnalysisSchema,
   caseSummary: caseSummarySchema,
+  caseCompletion: caseCompletionSchema,
   entityExtraction: entityExtractionSchema,
   legalResearch: legalResearchSchema,
   documentClassification: documentClassificationSchema,

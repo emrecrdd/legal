@@ -472,7 +472,270 @@ confidence değerini düşür.
 
 ${HUMAN_REVIEW_RULES}
 `.trim();
+export const CASE_COMPLETION_PROMPT = `
+${BASE_RULES}
 
+GÖREV:
+Hukuk bürosu yönetim sistemindeki mevcut dava kaydı ile bu davaya bağlı ve daha önce analiz edilmiş belgelerin yapılandırılmış AI analizlerini karşılaştır.
+
+Amaç:
+- Davada kayıtlı olmayan fakat belgelerde açıkça bulunan tarafları tespit etmek
+- Mevcut taraf kayıtları ile belge analizleri arasındaki çelişkileri tespit etmek
+- Dava kaydında eksik veya hatalı olabilecek temel alanları belirlemek
+- Belgelerde bulunan önemli tarihleri dava kaydıyla karşılaştırmak
+- Kullanıcıya uygulanabilir veri tamamlama önerileri sunmak
+
+Bu işlem dava kaydını DEĞİŞTİRMEZ.
+
+Yalnızca öneri üretir.
+Her değişiklik kullanıcı veya avukat onayından sonra uygulanmalıdır.
+
+1. EKSİK TARAFLAR
+
+missingParties alanına yalnızca:
+
+- analiz edilmiş belgelerde açıkça bulunan
+- fakat mevcut case.parties kayıtlarında bulunmayan
+
+tarafları ekle.
+
+Taraf eşleştirmesinde yalnızca isim benzerliğine güvenme.
+Aynı kişinin farklı yazımları olabileceğini dikkate al ancak emin değilsen yeni taraf üretmek yerine warnings alanına yaz.
+
+Her taraf için:
+
+- name
+- entityType
+- role
+- identifier
+- representative
+- description
+- sourceDocumentId
+- confidence
+
+alanlarını doldur.
+
+entityType tarafın varlık türüdür.
+
+Geçerli değerler:
+- kişi
+- kurum
+- şirket
+- kamu_kurumu
+- baro
+- diğer
+- belirsiz
+
+role tarafın hukuki sıfatıdır.
+
+Geçerli değerler:
+- davacı
+- davalı
+- başvurucu
+- karşı_taraf
+- müşteki
+- şikayetçi
+- mağdur
+- maktul
+- katılan
+- sanık
+- şüpheli
+- hükümlü
+- vekil
+- müdafi
+- katılan_vekili
+- müşteki_vekili
+- sanık_müdafii
+- tanık
+- bilirkişi
+- diğer
+- belirsiz
+
+Kurum, şirket veya baro gibi entityType değerlerini role olarak kullanma.
+
+Sanık, katılan, davacı gibi hukuki sıfatları entityType olarak kullanma.
+
+Belgede rol açık değilse role değerini "belirsiz" yap.
+
+2. TARAF ÇELİŞKİLERİ
+
+partyConflicts alanında mevcut dava tarafları ile belge analizleri arasındaki açık çelişkileri göster.
+
+Örneğin:
+
+Case:
+Salim Güran — sanık
+
+Document AI:
+Salim Güran — sanık
+
+Bu bir çelişki DEĞİLDİR.
+
+Ancak:
+
+Case:
+Bir kişi — müşteki
+
+Document AI:
+Aynı kişi — sanık
+
+ise bu bir çelişki olabilir.
+
+Çelişki kesin değilse otomatik düzeltme önerme.
+Açıklamada doğrulama gerektiğini belirt.
+
+3. DAVA ALANI ÖNERİLERİ
+
+suggestedCaseUpdates alanında dava kaydındaki temel alanlarla belge analizlerini karşılaştır.
+
+Değerlendirilebilecek alanlar:
+
+- title
+- case_type
+- jurisdiction
+- court
+- case_number
+- decision_number
+- filing_date
+- description
+- other
+
+ÖNEMLİ TARİH KURALI:
+
+Belgedeki her tarihi dava açılış tarihi olarak yorumlama.
+
+Örneğin:
+
+- karar tarihi filing_date değildir
+- istinaf dilekçesi tarihi filing_date değildir
+- tebliğ tarihi filing_date değildir
+- olay tarihi filing_date değildir
+
+Bir alanın anlamı ile belgedeki bilginin anlamı aynı değilse değişiklik önerme.
+
+Mevcut dava kaydı ile belge arasında gerçek bir çelişki olduğundan emin değilsen:
+
+requiresHumanConfirmation: true
+
+yap.
+
+Mevcut değer yanlış görünse bile otomatik değiştirme.
+
+4. ÖNEMLİ TARİHLER
+
+importantDateSuggestions alanında analiz edilmiş belgelerde açıkça bulunan ve dava takibi açısından anlamlı tarihleri göster.
+
+Örneğin:
+
+- karar tarihi
+- dilekçe tarihi
+- tebliğ tarihi
+- duruşma tarihi
+- bilirkişi raporu tarihi
+- başvuru tarihi
+- açıkça belirtilmiş son tarihler
+
+Ancak belge tarihinden kendiliğinden hukuki süre hesaplama.
+
+Bir tarihin deadline olduğu açıkça anlaşılmıyorsa deadline=false yap.
+
+5. BELGE ANALİZİ KULLANIMI
+
+Yalnızca hasAiAnalysis=true olan belgelerin aiAnalysis alanını içerik kaynağı olarak kullan.
+
+hasAiAnalysis=false olan belgelerin içeriğini bildiğini varsayma.
+
+Bu belgelerde yalnızca metadata bilgileri kullanılabilir.
+
+Belgenin aiAnalysis alanındaki:
+
+- documentType
+- title
+- parties
+- importantDates
+- court
+- caseNumber
+- decisionNumber
+- caseType
+- summary
+
+alanlarını karşılaştırmada kullanabilirsin.
+
+6. KAYNAK TAKİBİ
+
+Bir öneri analiz edilmiş bir belgeden geliyorsa sourceDocumentId alanına gerçek document.id değerini yaz.
+
+Kaynak belge kesin olarak belirlenemiyorsa null kullan.
+
+Olmayan belge ID'si üretme.
+
+7. GÜVEN PUANI
+
+Her öneri için confidence 0 ile 1 arasında olmalıdır.
+
+Yüksek confidence yalnızca:
+
+- bilgi belgede açıkça bulunuyorsa
+- hangi belgeden geldiği belliyse
+- dava kaydıyla karşılaştırma güvenilir şekilde yapılabiliyorsa
+
+kullanılmalıdır.
+
+Belirsiz veya yoruma açık eşleştirmelerde confidence değerini düşür.
+
+8. OTOMATİK DEĞİŞİKLİK YASAĞI
+
+Bu analiz hiçbir veritabanı kaydını değiştirmez.
+
+Özellikle:
+
+- taraf ekleme
+- taraf silme
+- taraf rolü değiştirme
+- mahkeme değiştirme
+- dava numarası değiştirme
+- tarih değiştirme
+- müvekkil değiştirme
+
+işlemlerini yapılmış gibi gösterme.
+
+Sadece öneri oluştur.
+
+9. İNSAN İNCELEMESİ
+
+Aşağıdaki durumlarda requiresHumanReview=true yap:
+
+- dava kaydı ile belge arasında önemli çelişki varsa
+- taraf rolünde çelişki varsa
+- kritik tarih uyuşmazlığı varsa
+- bir önerinin uygulanması hukuki/usuli sonucu etkileyebilecekse
+- aynı bilgi farklı belgelerde farklı biçimde bulunuyorsa
+- kaynak belgeler yetersizse
+
+reviewReasons alanında nedenlerini açıkça belirt.
+
+10. UYARILAR
+
+warnings alanında özellikle:
+
+- muhtemel mükerrer taraf
+- isim yazım farklılığı
+- çelişkili roller
+- çelişkili tarihler
+- farklı dosya numaraları
+- farklı mahkeme bilgileri
+- düşük güvenli eşleştirmeler
+
+gösterilebilir.
+
+SON KURAL:
+
+Amaç dava hakkında yeni hukuki görüş üretmek değildir.
+
+Amaç mevcut dava kaydının, analiz edilmiş belgelerdeki doğrulanabilir bilgiler kullanılarak daha eksiksiz ve tutarlı hale getirilmesine yardımcı olmaktır.
+
+${HUMAN_REVIEW_RULES}
+`.trim();
 export const ENTITY_EXTRACTION_PROMPT = `
 ${BASE_RULES}
 
@@ -645,7 +908,17 @@ Aşağıdaki JSON, hukuk bürosu yönetim sistemindeki dava verisidir.
 ${JSON.stringify(caseData, null, 2)}
 </case_data>
 `.trim();
+export const buildCaseCompletionInput = (caseData) => `
+Aşağıdaki JSON hukuk bürosu yönetim sistemindeki mevcut dava kaydını,
+davaya bağlı belgeleri ve mevcut belge AI analizlerini içermektedir.
 
+Görevin mevcut dava kaydı ile analiz edilmiş belge verilerini karşılaştırarak
+eksik veya çelişkili alanlar için yapılandırılmış öneriler oluşturmaktır.
+
+<case_completion_data>
+${JSON.stringify(caseData, null, 2)}
+</case_completion_data>
+`.trim();
 export const buildEntityExtractionInput = (text) => `
 Aşağıdaki hukuki metindeki varlıkları çıkar.
 
@@ -696,6 +969,7 @@ export const AI_PROMPTS = Object.freeze({
   documentAnalysis: DOCUMENT_ANALYSIS_PROMPT,
   documentClassification: DOCUMENT_CLASSIFICATION_PROMPT,
   caseSummary: CASE_SUMMARY_PROMPT,
+  caseCompletion: CASE_COMPLETION_PROMPT,
   entityExtraction: ENTITY_EXTRACTION_PROMPT,
   legalResearch: LEGAL_RESEARCH_PROMPT,
   draftGeneration: DRAFT_GENERATION_PROMPTS,

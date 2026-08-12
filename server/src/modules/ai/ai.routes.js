@@ -92,7 +92,11 @@ router.post(
   expensiveAiRateLimiter,
   aiController.summarizeCase
 );
-
+router.post(
+  '/cases/:caseId/completion',
+  expensiveAiRateLimiter,
+  aiController.analyzeCaseCompletion
+);
 /*
  * Legal research
  */

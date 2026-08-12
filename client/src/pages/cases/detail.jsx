@@ -1,22 +1,9 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-  useMutation,
   useQuery,
+  useMutation,
 } from '@tanstack/react-query';
-
-import {
-  Brain,
-  Edit2,
-  RefreshCw,
-  AlertTriangle,
-  CheckCircle2,
-  CalendarDays,
-  ListTodo,
-  ShieldAlert,
-  Activity,
-} from 'lucide-react';
-
-import toast from 'react-hot-toast';
 
 import caseApi from '../../features/cases/case.api.js';
 import documentApi from '../../features/documents/document.api.js';
@@ -26,6 +13,20 @@ import Badge from '../../components/ui/Badge.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 
+import {
+  Activity,
+  AlertTriangle,
+  Brain,
+  CalendarDays,
+  CheckCircle2,
+  Edit2,
+  ListTodo,
+  RefreshCw,
+  ShieldAlert,
+  Sparkles,
+} from 'lucide-react';
+
+import toast from 'react-hot-toast';
 // ======================================================
 // UTC format fonksiyonları
 // ======================================================
@@ -612,6 +613,359 @@ const CaseAIAnalysis = ({
   );
 };
 
+
+// ======================================================
+// AI DOSYA TAMAMLAMA PANELİ
+// ======================================================
+
+const CaseCompletionAnalysis = ({
+  analysis,
+  onRefresh,
+  refreshing,
+}) => {
+  if (!analysis) {
+    return null;
+  }
+
+  const result = analysis.result || analysis;
+
+  const missingParties = Array.isArray(result.missingParties)
+    ? result.missingParties
+    : [];
+
+  const partyConflicts = Array.isArray(result.partyConflicts)
+    ? result.partyConflicts
+    : [];
+
+  const suggestedCaseUpdates = Array.isArray(result.suggestedCaseUpdates)
+    ? result.suggestedCaseUpdates
+    : [];
+
+  const importantDateSuggestions = Array.isArray(
+    result.importantDateSuggestions
+  )
+    ? result.importantDateSuggestions
+    : [];
+
+  const warnings = Array.isArray(result.warnings)
+    ? result.warnings
+    : [];
+
+  const reviewReasons = Array.isArray(result.reviewReasons)
+    ? result.reviewReasons
+    : [];
+
+  const hasSuggestions =
+    missingParties.length > 0 ||
+    partyConflicts.length > 0 ||
+    suggestedCaseUpdates.length > 0 ||
+    importantDateSuggestions.length > 0 ||
+    warnings.length > 0;
+
+  return (
+    <Card>
+      <Card.Header>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                AI ile Dosyayı Tamamla
+              </h2>
+            </div>
+
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Dava kaydı ile analiz edilmiş belgeler karşılaştırıldı.
+              Öneriler otomatik uygulanmaz.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {analysis.cached && (
+              <Badge variant="info">
+                Kayıtlı analiz
+              </Badge>
+            )}
+
+            {typeof result.confidence === 'number' && (
+              <Badge variant="default">
+                Güven %{Math.round(result.confidence * 100)}
+              </Badge>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              loading={refreshing}
+              disabled={refreshing}
+              onClick={onRefresh}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Yeniden Tara
+            </Button>
+          </div>
+        </div>
+      </Card.Header>
+
+      <Card.Body className="space-y-6">
+        {!hasSuggestions && (
+          <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200">
+            Analiz edilmiş belgeler ile mevcut dava kaydı arasında
+            belirgin bir eksik veya çelişki bulunmadı.
+          </div>
+        )}
+
+        {missingParties.length > 0 && (
+          <section>
+            <div className="mb-3 flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-violet-600" />
+              <h3 className="font-semibold text-gray-900 dark:text-white">
+                Belgelerde Bulunan Eksik Taraflar
+              </h3>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {missingParties.map((party, index) => (
+                <div
+                  key={`${party.name}-${party.sourceDocumentId || index}`}
+                  className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {party.name}
+                      </p>
+
+                      <p className="mt-1 text-sm text-gray-500">
+                        {party.entityType || 'belirsiz'}
+                        {' · '}
+                        {party.role || 'belirsiz'}
+                      </p>
+                    </div>
+
+                    {typeof party.confidence === 'number' && (
+                      <Badge variant="default">
+                        %{Math.round(party.confidence * 100)}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {party.description && (
+                    <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                      {party.description}
+                    </p>
+                  )}
+
+                  {party.representative && (
+                    <p className="mt-2 text-sm text-gray-500">
+                      Temsilci: {party.representative}
+                    </p>
+                  )}
+
+                  <p className="mt-3 text-xs font-medium text-violet-600 dark:text-violet-400">
+                    Şimdilik yalnızca öneri — otomatik eklenmez
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {partyConflicts.length > 0 && (
+          <section>
+            <div className="mb-3 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              <h3 className="font-semibold text-gray-900 dark:text-white">
+                Taraf Çelişkileri
+              </h3>
+            </div>
+
+            <div className="space-y-3">
+              {partyConflicts.map((conflict, index) => (
+                <div
+                  key={`${conflict.partyName}-${conflict.field}-${index}`}
+                  className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-amber-950 dark:text-amber-100">
+                      {conflict.partyName}
+                    </p>
+
+                    <Badge variant="warning">
+                      {conflict.field}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                        Sistemde
+                      </p>
+                      <p className="mt-1 text-sm text-amber-900 dark:text-amber-100">
+                        {conflict.currentValue ?? '-'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                        Belgede önerilen
+                      </p>
+                      <p className="mt-1 text-sm text-amber-900 dark:text-amber-100">
+                        {conflict.suggestedValue ?? '-'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {conflict.explanation && (
+                    <p className="mt-3 text-sm leading-6 text-amber-900 dark:text-amber-100">
+                      {conflict.explanation}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {suggestedCaseUpdates.length > 0 && (
+          <section>
+            <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+              Önerilen Dava Bilgisi Güncellemeleri
+            </h3>
+
+            <div className="space-y-3">
+              {suggestedCaseUpdates.map((item, index) => (
+                <div
+                  key={`${item.field}-${index}`}
+                  className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {item.field}
+                    </p>
+
+                    {item.requiresHumanConfirmation && (
+                      <Badge variant="warning">
+                        Onay gerekli
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        Mevcut
+                      </p>
+                      <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
+                        {item.currentValue ?? '-'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        Önerilen
+                      </p>
+                      <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
+                        {item.suggestedValue ?? '-'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {item.reason && (
+                    <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                      {item.reason}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {importantDateSuggestions.length > 0 && (
+          <section>
+            <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+              Belgelerden Tespit Edilen Önemli Tarihler
+            </h3>
+
+            <div className="space-y-2">
+              {importantDateSuggestions.map((item, index) => (
+                <div
+                  key={`${item.date}-${item.label}-${index}`}
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800"
+                >
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {item.label}
+                    </p>
+
+                    {item.explanation && (
+                      <p className="mt-1 text-sm text-gray-500">
+                        {item.explanation}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {formatDateTimeUTC(item.date)}
+                    </p>
+
+                    <Badge variant={getRiskBadgeVariant(item.importance)}>
+                      {RISK_LABELS[item.importance] ||
+                        item.importance ||
+                        'Belirsiz'}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {result.requiresHumanReview && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
+            <div className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
+              <AlertTriangle className="h-5 w-5" />
+              Avukat onayı gerekli
+            </div>
+
+            {reviewReasons.length > 0 && (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-amber-800 dark:text-amber-200">
+                {reviewReasons.map((reason, index) => (
+                  <li key={`${reason}-${index}`}>
+                    {reason}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {warnings.length > 0 && (
+          <details>
+            <summary className="cursor-pointer text-sm font-medium text-gray-600 dark:text-gray-300">
+              Dosya tamamlama uyarılarını göster
+            </summary>
+
+            <ul className="mt-3 space-y-2">
+              {warnings.map((warning, index) => (
+                <li
+                  key={`${warning}-${index}`}
+                  className="text-sm text-gray-600 dark:text-gray-400"
+                >
+                  • {warning}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </Card.Body>
+    </Card>
+  );
+};
+
 // ======================================================
 // CASE DETAIL
 // ======================================================
@@ -619,6 +973,8 @@ const CaseAIAnalysis = ({
 const CaseDetail = () => {
   const { id } = useParams();
 
+  const [caseCompletion, setCaseCompletion] =
+    useState(null);
   const {
     data,
     isLoading,
@@ -673,6 +1029,50 @@ const CaseDetail = () => {
       },
     });
 
+
+  const caseCompletionMutation =
+    useMutation({
+      mutationFn: ({
+        force = false,
+      } = {}) =>
+        aiApi.analyzeCaseCompletion(
+          id,
+          {
+            force,
+          }
+        ),
+
+      onSuccess: (response) => {
+        const result =
+          unwrapResponse(
+            response
+          );
+
+        setCaseCompletion(
+          result
+        );
+
+        toast.success(
+          result?.cached
+            ? 'Kayıtlı dosya tamamlama analizi getirildi'
+            : 'AI dosya tamamlama analizi tamamlandı'
+        );
+      },
+
+      onError: (error) => {
+        console.error(
+          'Case completion error:',
+          error
+        );
+
+        toast.error(
+          error.response?.data
+            ?.message ||
+            'Dosya tamamlama analizi oluşturulamadı'
+        );
+      },
+    });
+
   const aiAnalysis =
     aiSummaryMutation.data
       ? unwrapResponse(
@@ -688,6 +1088,19 @@ const CaseDetail = () => {
     }
 
     aiSummaryMutation.mutate({
+      force,
+    });
+  };
+
+
+  const handleCaseCompletion = (
+    force = false
+  ) => {
+    if (!id) {
+      return;
+    }
+
+    caseCompletionMutation.mutate({
       force,
     });
   };
@@ -905,6 +1318,26 @@ const CaseDetail = () => {
             AI Analiz Et
           </Button>
 
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              handleCaseCompletion(
+                false
+              )
+            }
+            loading={
+              caseCompletionMutation.isPending
+            }
+            disabled={
+              caseCompletionMutation.isPending
+            }
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
+            AI ile Dosyayı Tamamla
+          </Button>
+
           <Link
             to={`/cases/${caseItem.id}/edit`}
           >
@@ -927,6 +1360,18 @@ const CaseDetail = () => {
         }
         onRefresh={() =>
           handleAIAnalysis(true)
+        }
+      />
+
+      <CaseCompletionAnalysis
+        analysis={
+          caseCompletion
+        }
+        refreshing={
+          caseCompletionMutation.isPending
+        }
+        onRefresh={() =>
+          handleCaseCompletion(true)
         }
       />
 

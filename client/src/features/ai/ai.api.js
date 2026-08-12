@@ -7,7 +7,15 @@ const aiApi = {
       data
     );
   },
-
+analyzeCaseCompletion(
+  caseId,
+  data = {}
+) {
+  return axios.post(
+    `/ai/cases/${caseId}/completion`,
+    data
+  );
+},
   classifyDocument(documentId, data = {}) {
     return axios.post(
       `/ai/documents/${documentId}/classify`,

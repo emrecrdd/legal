@@ -19,6 +19,7 @@ import { Note } from '../../models/Note.js';
 import { Task } from '../../models/Task.js';
 
 import {
+  caseCompletionSchema,
   caseSummarySchema,
   documentAnalysisSchema,
   documentClassificationSchema,
@@ -28,11 +29,13 @@ import {
 } from './ai.schemas.js';
 
 import {
+  CASE_COMPLETION_PROMPT,
   CASE_SUMMARY_PROMPT,
   DOCUMENT_ANALYSIS_PROMPT,
   DOCUMENT_CLASSIFICATION_PROMPT,
   ENTITY_EXTRACTION_PROMPT,
   LEGAL_RESEARCH_PROMPT,
+  buildCaseCompletionInput,
   buildCaseSummaryInput,
   buildDraftInput,
   buildEntityExtractionInput,
@@ -52,6 +55,7 @@ const ANALYSIS_TYPES = Object.freeze({
   DOCUMENT_CLASSIFICATION: 'document_classification',
   ENTITY_EXTRACTION: 'entity_extraction',
   CASE_SUMMARY: 'case_summary',
+  CASE_COMPLETION: 'case_completion',
   LEGAL_RESEARCH: 'legal_research',
   DRAFT_GENERATION: 'draft_generation',
 });
@@ -401,7 +405,188 @@ class AIService {
       );
     }
   }
+async analyzeCaseCompletion({
+  caseId,
+  userId,
+  force = false,
+}) {
+  this.validateUuidLike(caseId, 'caseId');
+  this.validateUuidLike(userId, 'userId');
 
+  const caseRecord =
+    await this.getCaseWithContext(caseId);
+
+  const casePayload =
+    this.prepareCasePayload(caseRecord);
+
+  /*
+   * Case Completion yalnızca analiz edilmiş belgelerden
+   * anlamlı öneriler çıkarabilir.
+   *
+   * Hiç analiz edilmiş belge yoksa kullanıcıya anlamsız
+   * AI çağrısı yaptırmıyoruz.
+   */
+  const analyzedDocumentCount =
+    casePayload.documentContext
+      ?.analyzedDocuments || 0;
+
+  if (analyzedDocumentCount === 0) {
+    throw new AIServiceError(
+      'Dosya tamamlama analizi için önce davaya bağlı en az bir belgeyi AI ile analiz edin.',
+      {
+        code: 'CASE_COMPLETION_NO_ANALYZED_DOCUMENT',
+        statusCode: 422,
+      }
+    );
+  }
+
+  const input =
+    buildCaseCompletionInput(
+      casePayload
+    );
+
+  const inputHash =
+    this.createInputHash({
+      text: input,
+      operation:
+        ANALYSIS_TYPES.CASE_COMPLETION,
+      promptVersion:
+        PROMPT_VERSION,
+    });
+
+  if (!force) {
+    const cached =
+      await this.findCachedAnalysis({
+        analysisType:
+          ANALYSIS_TYPES.CASE_COMPLETION,
+        caseId,
+        inputHash,
+      });
+
+    if (cached) {
+      return this.formatAnalysisResponse(
+        cached,
+        true
+      );
+    }
+  }
+
+  const analysis =
+    await this.createPendingAnalysis({
+      analysisType:
+        ANALYSIS_TYPES.CASE_COMPLETION,
+
+      caseId,
+      userId,
+      inputHash,
+
+      metadata: {
+        caseTitle:
+          caseRecord.title ||
+          caseRecord.case_number ||
+          null,
+
+        documentCount:
+          casePayload.documents
+            ?.length || 0,
+
+        analyzedDocumentCount,
+      },
+    });
+
+  try {
+    const providerResult =
+      await aiProvider.createStructuredResponse({
+        instructions:
+          CASE_COMPLETION_PROMPT,
+
+        input,
+
+        schemaName:
+          'legal_case_completion',
+
+        schema:
+          caseCompletionSchema,
+
+        schemaDescription:
+          'Mevcut dava kaydı ile analiz edilmiş belge verilerini karşılaştırarak eksik ve çelişkili alanlar için yapılandırılmış öneriler.',
+
+        maxOutputTokens:
+          6000,
+
+        metadata: {
+          operation:
+            ANALYSIS_TYPES.CASE_COMPLETION,
+
+          analysisId:
+            analysis.id,
+
+          caseId,
+          userId,
+
+          analyzedDocumentCount,
+        },
+      });
+
+    await this.completeAnalysis({
+      analysis,
+      providerResult,
+
+      confidence:
+        providerResult.output
+          .confidence,
+    });
+
+    logger.info(
+      'AI dava tamamlama analizi tamamlandı',
+      {
+        analysisId:
+          analysis.id,
+
+        caseId,
+        userId,
+
+        model:
+          providerResult.model,
+
+        analyzedDocumentCount,
+
+        missingPartyCount:
+          providerResult.output
+            ?.missingParties
+            ?.length || 0,
+
+        conflictCount:
+          providerResult.output
+            ?.partyConflicts
+            ?.length || 0,
+
+        suggestedUpdateCount:
+          providerResult.output
+            ?.suggestedCaseUpdates
+            ?.length || 0,
+
+        durationMs:
+          providerResult.durationMs,
+      }
+    );
+
+    return this.formatAnalysisResponse(
+      analysis,
+      false
+    );
+  } catch (error) {
+    await this.failAnalysis(
+      analysis,
+      error
+    );
+
+    throw this.normalizeServiceError(
+      error,
+      'Dava tamamlama analizi oluşturulamadı.'
+    );
+  }
+}
   /**
    * Hukuki soru hakkında kaynak doğrulaması gerektiren
    * bir ön değerlendirme oluşturur.

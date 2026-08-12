@@ -227,7 +227,73 @@ export const aiController = {
       );
     }
   },
+async analyzeCaseCompletion(req, res) {
+  try {
+    const { caseId } = req.params;
 
+    const force =
+      parseBoolean(
+        req.body?.force,
+        false
+      );
+
+    const result =
+      await aiService.analyzeCaseCompletion({
+        caseId,
+        userId:
+          req.user.id,
+        force,
+      });
+
+    await createAuditLogSafely({
+      req,
+      action: 'create',
+      entityType: 'ai_analysis',
+      entityId: result.id,
+      description:
+        'AI dava tamamlama analizi oluşturuldu',
+
+      metadata: {
+        analysisType:
+          result.type,
+
+        caseId,
+
+        cached:
+          result.cached,
+
+        model:
+          result.model,
+
+        totalTokens:
+          result.usage
+            ?.totalTokens || 0,
+
+        durationMs:
+          result.durationMs || null,
+      },
+    });
+
+    return successResponse(
+      res,
+      result,
+
+      result.cached
+        ? 'Kayıtlı dava tamamlama analizi getirildi'
+        : 'Dava tamamlama analizi oluşturuldu',
+
+      result.cached
+        ? 200
+        : 201
+    );
+  } catch (error) {
+    return handleControllerError(
+      res,
+      error,
+      'analyzeCaseCompletion'
+    );
+  }
+},
   /**
    * Sistemde kayıtlı belgeyi
    * sınıflandırır.
