@@ -173,6 +173,7 @@ class AIService {
           schema: documentAnalysisSchema,
           schemaDescription:
             'Hukuki belgenin yapılandırılmış analiz sonucu.',
+             maxOutputTokens: 10_000,
           metadata: {
             operation: ANALYSIS_TYPES.DOCUMENT_ANALYSIS,
             analysisId: analysis.id,
