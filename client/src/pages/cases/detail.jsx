@@ -1248,7 +1248,22 @@ const addMissingPartiesMutation =
   });
   const applyCaseUpdatesMutation = useMutation({
   mutationFn: async (updates) => {
-    const payload = {};
+    const payload = {
+      title: caseItem.title,
+      subject: caseItem.subject,
+      description: caseItem.description,
+      judiciary_type: caseItem.judiciary_type,
+      judiciary_unit: caseItem.judiciary_unit,
+      opening_date: caseItem.opening_date,
+      court_name: caseItem.court_name,
+      case_number: caseItem.case_number,
+      status: caseItem.status,
+      priority: caseItem.priority,
+      assigned_to:
+        caseItem.assigned_to ||
+        caseItem.assignee?.id ||
+        null,
+    };
 
     for (const item of updates) {
       payload[item.field] = item.suggestedValue;
