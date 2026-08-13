@@ -13,8 +13,15 @@ const caseApi = {
     return axios.post('/cases', data);
   },
 
+  // Normal tam güncelleme
   update: (id, data) => {
     return axios.put(`/cases/${id}`, data);
+  },
+
+  // AI önerilerinde sadece seçilen alanları güncelle
+  // Diğer dava alanlarına dokunmaz
+  patch: (id, data) => {
+    return axios.patch(`/cases/${id}`, data);
   },
 
   delete: (id) => {
