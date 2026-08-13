@@ -586,34 +586,102 @@ Açıklamada doğrulama gerektiğini belirt.
 
 3. DAVA ALANI ÖNERİLERİ
 
-suggestedCaseUpdates alanında dava kaydındaki temel alanlarla belge analizlerini karşılaştır.
+suggestedCaseUpdates alanında yalnızca mevcut Case modelinde gerçekten bulunan ve güvenli biçimde güncellenebilecek alanlar için öneri oluştur.
 
-Değerlendirilebilecek alanlar:
+İzin verilen alanlar yalnızca şunlardır:
 
 - title
+- judiciary_type
+- judiciary_unit
+- opening_date
+- court_name
+- case_number
+- subject
+- description
+- status
+- priority
+- other
+
+Bu liste dışında alan önerme.
+
+Özellikle aşağıdaki alanları suggestedCaseUpdates içinde kullanma:
+
 - case_type
 - jurisdiction
 - court
-- case_number
 - decision_number
 - filing_date
-- description
-- other
 
-ÖNEMLİ TARİH KURALI:
-
-Belgedeki her tarihi dava açılış tarihi olarak yorumlama.
+Belgede bu alanlara karşılık gelen önemli bilgiler bulunabilir; ancak Case modelinde birebir alan yoksa bunları zorla başka bir alana eşleme.
 
 Örneğin:
 
-- karar tarihi filing_date değildir
-- istinaf dilekçesi tarihi filing_date değildir
-- tebliğ tarihi filing_date değildir
-- olay tarihi filing_date değildir
+- Karar numarası decision_number alanı olmadığı için case_number içine yazılmaz.
+- İstinaf mercii court_name alanına yazılmaz; court_name mevcut dava kaydındaki mahkemeyi ifade eder.
+- İstinaf dilekçesi tarihi opening_date olarak yazılmaz.
+- Karar tarihi opening_date olarak yazılmaz.
+- Tebliğ tarihi opening_date olarak yazılmaz.
+- Olay tarihi opening_date olarak yazılmaz.
+- Soruşturma tarihi opening_date olarak yazılmaz.
 
-Bir alanın anlamı ile belgedeki bilginin anlamı aynı değilse değişiklik önerme.
+Case modelinde karşılığı olmayan ancak önemli görülen bilgiler:
 
-Mevcut dava kaydı ile belge arasında gerçek bir çelişki olduğundan emin değilsen:
+- importantDateSuggestions
+- warnings
+- reviewReasons
+
+alanlarında belirtilebilir.
+
+OPENING_DATE KURALI:
+
+opening_date yalnızca mevcut dava kaydının açılış tarihidir.
+
+Belgede bir tarihin açıkça dava açılış tarihi olduğu anlaşılmıyorsa opening_date için öneri oluşturma.
+
+Belgedeki:
+
+- istinaf başvuru tarihi
+- karar tarihi
+- tebliğ tarihi
+- olay tarihi
+- iddianame tarihi
+- ifade tarihi
+- duruşma tarihi
+
+opening_date değildir.
+
+CASE_NUMBER KURALI:
+
+case_number yalnızca esas/dosya numarası için kullanılır.
+
+"2024/396" ile "2024/396 Esas" gibi yalnızca biçim farkı bulunan değerleri gerçek bir veri değişikliği olarak önerme.
+
+COURT_NAME KURALI:
+
+court_name mevcut dava kaydının bağlı olduğu mahkemeyi ifade eder.
+
+Belgede istinaf veya temyiz mercisi geçmesi, mevcut court_name alanının değiştirilmesi gerektiği anlamına gelmez.
+
+Örneğin mevcut kayıt:
+"Diyarbakır 8. Ağır Ceza Mahkemesi"
+
+ve belgede:
+"Diyarbakır Bölge Adliye Mahkemesi 1. Ceza Dairesi"
+
+geçiyorsa, bunları doğrudan çelişki kabul etme.
+Biri ilk derece mahkemesi, diğeri kanun yolu mercii olabilir.
+
+STATUS VE PRIORITY KURALI:
+
+status veya priority alanları yalnızca belge içeriğinden açık ve güvenilir biçimde çıkarılabiliyorsa önerilebilir.
+
+Belgede açık bilgi yoksa mevcut status veya priority değerini değiştirmeyi önerme.
+
+GENEL KURAL:
+
+Mevcut dava kaydı ile belge arasında gerçek bir veri farkı olduğundan emin değilsen suggestedCaseUpdates oluşturma.
+
+Bir öneri yine de insan doğrulaması gerektiriyorsa:
 
 requiresHumanConfirmation: true
 
@@ -727,7 +795,22 @@ warnings alanında özellikle:
 - düşük güvenli eşleştirmeler
 
 gösterilebilir.
+ÇIKTI UZUNLUĞU KURALI:
 
+Bu görev hukuki analiz veya dava stratejisi üretme görevi değildir.
+
+Açıklamaları kısa ve veri odaklı tut.
+
+- missingParties description: en fazla 2 kısa cümle
+- partyConflicts explanation: en fazla 2 kısa cümle
+- suggestedCaseUpdates reason: en fazla 2 kısa cümle
+- importantDateSuggestions explanation: en fazla 1 kısa cümle
+- warnings: kısa ve tekrar etmeyen maddeler
+- reviewReasons: kısa ve tekrar etmeyen maddeler
+
+Aynı bilgiyi birden fazla alanda tekrar etme.
+
+Belgedeki olay örgüsünü, delilleri veya hukuki tartışmayı yeniden özetleme.
 SON KURAL:
 
 Amaç dava hakkında yeni hukuki görüş üretmek değildir.

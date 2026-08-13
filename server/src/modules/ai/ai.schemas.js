@@ -1307,18 +1307,20 @@ export const caseCompletionSchema = {
 
         properties: {
           field: {
-            type: 'string',
-            enum: [
-              'title',
-              'case_type',
-              'jurisdiction',
-              'court',
-              'case_number',
-              'decision_number',
-              'filing_date',
-              'description',
-              'other',
-            ],
+  type: 'string',
+  enum: [
+    'title',
+    'judiciary_type',
+    'judiciary_unit',
+    'opening_date',
+    'court_name',
+    'case_number',
+    'subject',
+    'description',
+    'status',
+    'priority',
+    'other',
+  ],
           },
 
           currentValue: nullableString,

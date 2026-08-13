@@ -511,7 +511,7 @@ async analyzeCaseCompletion({
         schemaDescription:
           'Mevcut dava kaydı ile analiz edilmiş belge verilerini karşılaştırarak eksik ve çelişkili alanlar için yapılandırılmış öneriler.',
 
-        maxOutputTokens: 12_000,
+        maxOutputTokens: 20_000,
 
         metadata: {
           operation:
