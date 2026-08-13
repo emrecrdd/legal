@@ -19,19 +19,21 @@ class CaseParty extends Sequelize.Model {
         },
         // ✅ GÜNCELLENMİŞ TARAF TÜRLERİ
         party_type: {
-          type: DataTypes.ENUM(
-            'davali',
-            'davaci',
-            'supheli',
-            'sanik',
-            'musteki',
-            'katilan',
-            'alacakli',
-            'borclu',
-            'ucuncu_kisi'
-          ),
-          allowNull: false,
-        },
+  type: DataTypes.ENUM(
+    'davali',
+    'davaci',
+    'supheli',
+    'sanik',
+    'musteki',
+    'katilan',
+    'magdur',
+    'maktul',
+    'alacakli',
+    'borclu',
+    'ucuncu_kisi'
+  ),
+  allowNull: false,
+},
         name: {
           type: DataTypes.STRING,
           allowNull: false,

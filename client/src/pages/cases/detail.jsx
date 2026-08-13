@@ -1190,15 +1190,18 @@ const addMissingPartiesMutation =
 
           party_type: (() => {
             const roleMap = {
-              sanık: 'sanik',
-              şüpheli: 'supheli',
-              müşteki: 'musteki',
-              şikayetçi: 'musteki',
-              katılan: 'katilan',
-              davacı: 'davaci',
-              davalı: 'davali',
-              tanık: 'witness',
-            };
+  sanık: 'sanik',
+  şüpheli: 'supheli',
+  müşteki: 'musteki',
+  şikayetçi: 'musteki',
+  katılan: 'katilan',
+  davacı: 'davaci',
+  davalı: 'davali',
+  mağdur: 'magdur',
+  magdur: 'magdur',
+  maktul: 'maktul',
+  tanık: 'ucuncu_kisi',
+};
 
             return roleMap[party.role] || 'other';
           })(),
