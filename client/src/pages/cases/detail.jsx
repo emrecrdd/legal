@@ -627,6 +627,10 @@ const CaseCompletionAnalysis = ({
   onToggleMissingParty,
   onAddSelectedMissingParties,
   addingMissingParties,
+  selectedCaseUpdates,
+  onToggleCaseUpdate,
+  onApplySelectedCaseUpdates,
+  applyingCaseUpdates,
 }) => {
   if (!analysis) {
     return null;
@@ -881,50 +885,94 @@ const CaseCompletionAnalysis = ({
             </h3>
 
             <div className="space-y-3">
-              {suggestedCaseUpdates.map((item, index) => (
-                <div
-                  key={`${item.field}-${index}`}
-                  className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
+              {suggestedCaseUpdates.map((item, index) => {
+  const checked =
+    selectedCaseUpdates.includes(item.field);
+
+  return (
+    <label
+      key={`${item.field}-${index}`}
+      className={`block cursor-pointer rounded-xl border p-4 transition ${
+        checked
+          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+          : 'border-gray-200 dark:border-gray-700'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={() =>
+            onToggleCaseUpdate(item)
+          }
+          className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600"
+        />
+
+        <div className="flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-medium text-gray-900 dark:text-white">
+              {item.field}
+            </p>
+
+            {item.requiresHumanConfirmation && (
+              <Badge variant="warning">
+                Onay gerekli
+              </Badge>
+            )}
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Mevcut
+              </p>
+
+              <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
+                {item.currentValue ?? '-'}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Önerilen
+              </p>
+
+              <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
+                {item.suggestedValue ?? '-'}
+              </p>
+            </div>
+          </div>
+
+          {item.reason && (
+            <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
+              {item.reason}
+            </p>
+          )}
+        </div>
+      </div>
+    </label>
+  );
+})}
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  disabled={
+                    selectedCaseUpdates.length === 0 ||
+                    applyingCaseUpdates
+                  }
+                  loading={applyingCaseUpdates}
+                  onClick={onApplySelectedCaseUpdates}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {item.field}
-                    </p>
+                  Seçilen Güncellemeleri Uygula
+                </Button>
 
-                    {item.requiresHumanConfirmation && (
-                      <Badge variant="warning">
-                        Onay gerekli
-                      </Badge>
-                    )}
-                  </div>
-
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                        Mevcut
-                      </p>
-                      <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
-                        {item.currentValue ?? '-'}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                        Önerilen
-                      </p>
-                      <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
-                        {item.suggestedValue ?? '-'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {item.reason && (
-                    <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
-                      {item.reason}
-                    </p>
-                  )}
-                </div>
-              ))}
+                {selectedCaseUpdates.length > 0 && (
+                  <span className="text-sm text-gray-500">
+                    {selectedCaseUpdates.length} güncelleme seçildi
+                  </span>
+                )}
+              </div>
             </div>
           </section>
         )}
@@ -1028,6 +1076,10 @@ const CaseDetail = () => {
     selectedMissingParties,
     setSelectedMissingParties,
   ] = useState([]);
+  const [
+  selectedCaseUpdates,
+  setSelectedCaseUpdates,
+] = useState([]);
   const {
     data,
     isLoading,
@@ -1104,6 +1156,8 @@ const CaseDetail = () => {
         setCaseCompletion(
           result
         );
+        setSelectedMissingParties([]);
+        setSelectedCaseUpdates([]);
 
         toast.success(
           result?.cached
@@ -1134,14 +1188,20 @@ const addMissingPartiesMutation =
         const payload = {
           name: party.name,
 
-          party_type:
-            party.role === 'sanık'
-              ? 'sanik'
-              : party.role === 'katılan'
-                ? 'katilan'
-                : party.role === 'müşteki'
-                  ? 'musteki'
-                  : 'other',
+          party_type: (() => {
+            const roleMap = {
+              sanık: 'sanik',
+              şüpheli: 'supheli',
+              müşteki: 'musteki',
+              şikayetçi: 'musteki',
+              katılan: 'katilan',
+              davacı: 'davaci',
+              davalı: 'davali',
+              tanık: 'witness',
+            };
+
+            return roleMap[party.role] || 'other';
+          })(),
 
           lawyer_name:
             party.representative || null,
@@ -1186,6 +1246,42 @@ const addMissingPartiesMutation =
       );
     },
   });
+  const applyCaseUpdatesMutation = useMutation({
+  mutationFn: async (updates) => {
+    const payload = {};
+
+    for (const item of updates) {
+      payload[item.field] = item.suggestedValue;
+    }
+
+    return caseApi.update(id, payload);
+  },
+
+  onSuccess: async () => {
+    await queryClient.invalidateQueries({
+      queryKey: ['case', id],
+    });
+
+    setSelectedCaseUpdates([]);
+
+    toast.success(
+      'Seçilen dava bilgileri güncellendi'
+    );
+  },
+
+  onError: (error) => {
+    console.error(
+      'Dava güncelleme hatası:',
+      error
+    );
+
+    toast.error(
+      error.response?.data?.message ||
+        'Dava bilgileri güncellenemedi'
+    );
+  },
+});
+
   const toggleMissingParty = (party) => {
   const key = `${party.name}-${party.role}`;
 
@@ -1193,6 +1289,22 @@ const addMissingPartiesMutation =
     if (current.includes(key)) {
       return current.filter(
         (item) => item !== key
+      );
+    }
+
+    return [
+      ...current,
+      key,
+    ];
+  });
+};
+const toggleCaseUpdate = (item) => {
+  const key = item.field;
+
+  setSelectedCaseUpdates((current) => {
+    if (current.includes(key)) {
+      return current.filter(
+        (value) => value !== key
       );
     }
 
@@ -1230,6 +1342,25 @@ const handleAddSelectedMissingParties = () => {
     selected
   );
 };
+const handleApplySelectedCaseUpdates = () => {
+  const suggestedCaseUpdates =
+    caseCompletion?.result?.suggestedCaseUpdates ||
+    caseCompletion?.suggestedCaseUpdates ||
+    [];
+
+  const selected =
+    suggestedCaseUpdates.filter((item) =>
+      selectedCaseUpdates.includes(item.field)
+    );
+
+  if (selected.length === 0) {
+    toast.error('En az bir dava bilgisi seçin');
+    return;
+  }
+
+  applyCaseUpdatesMutation.mutate(selected);
+};
+
   const aiAnalysis =
     aiSummaryMutation.data
       ? unwrapResponse(
@@ -1539,6 +1670,18 @@ const handleAddSelectedMissingParties = () => {
   }
   addingMissingParties={
     addMissingPartiesMutation.isPending
+  }
+  selectedCaseUpdates={
+    selectedCaseUpdates
+  }
+  onToggleCaseUpdate={
+    toggleCaseUpdate
+  }
+  onApplySelectedCaseUpdates={
+    handleApplySelectedCaseUpdates
+  }
+  applyingCaseUpdates={
+    applyCaseUpdatesMutation.isPending
   }
 />
 
