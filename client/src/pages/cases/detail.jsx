@@ -3,12 +3,13 @@ import { useParams, Link } from 'react-router-dom';
 import {
   useQuery,
   useMutation,
+  useQueryClient,
 } from '@tanstack/react-query';
 
 import caseApi from '../../features/cases/case.api.js';
 import documentApi from '../../features/documents/document.api.js';
 import aiApi from '../../features/ai/ai.api.js';
-
+import casePartyApi from '../../features/case-parties/case-party.api.js';
 import Badge from '../../components/ui/Badge.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -622,6 +623,10 @@ const CaseCompletionAnalysis = ({
   analysis,
   onRefresh,
   refreshing,
+  selectedMissingParties,
+  onToggleMissingParty,
+  onAddSelectedMissingParties,
+  addingMissingParties,
 }) => {
   if (!analysis) {
     return null;
@@ -726,49 +731,90 @@ const CaseCompletionAnalysis = ({
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              {missingParties.map((party, index) => (
-                <div
-                  key={`${party.name}-${party.sourceDocumentId || index}`}
-                  className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">
-                        {party.name}
-                      </p>
+  {missingParties.map((party, index) => {
+    const key = `${party.name}-${party.role}`;
 
-                      <p className="mt-1 text-sm text-gray-500">
-                        {party.entityType || 'belirsiz'}
-                        {' · '}
-                        {party.role || 'belirsiz'}
-                      </p>
-                    </div>
+    const checked =
+      selectedMissingParties.includes(key);
 
-                    {typeof party.confidence === 'number' && (
-                      <Badge variant="default">
-                        %{Math.round(party.confidence * 100)}
-                      </Badge>
-                    )}
-                  </div>
+    return (
+      <label
+        key={`${party.name}-${party.sourceDocumentId || index}`}
+        className={`block cursor-pointer rounded-xl border p-4 transition ${
+          checked
+            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+            : 'border-gray-200 dark:border-gray-700'
+        }`}
+      >
+        <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={() =>
+              onToggleMissingParty(party)
+            }
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600"
+          />
 
-                  {party.description && (
-                    <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
-                      {party.description}
-                    </p>
-                  )}
+          <div className="flex-1">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">
+                  {party.name}
+                </p>
 
-                  {party.representative && (
-                    <p className="mt-2 text-sm text-gray-500">
-                      Temsilci: {party.representative}
-                    </p>
-                  )}
+                <p className="mt-1 text-sm text-gray-500">
+                  {party.entityType || 'belirsiz'}
+                  {' · '}
+                  {party.role || 'belirsiz'}
+                </p>
+              </div>
 
-                  <p className="mt-3 text-xs font-medium text-violet-600 dark:text-violet-400">
-                    Şimdilik yalnızca öneri — otomatik eklenmez
-                  </p>
-                </div>
-              ))}
+              {typeof party.confidence === 'number' && (
+                <Badge variant="default">
+                  %{Math.round(party.confidence * 100)}
+                </Badge>
+              )}
             </div>
+
+            {party.description && (
+              <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                {party.description}
+              </p>
+            )}
+
+            {party.representative && (
+              <p className="mt-2 text-sm text-gray-500">
+                Temsilci: {party.representative}
+              </p>
+            )}
+          </div>
+        </div>
+      </label>
+    );
+  })}
+</div>
+
+<div className="mt-4 flex flex-wrap items-center gap-3">
+  <Button
+    type="button"
+    disabled={
+      selectedMissingParties.length === 0 ||
+      addingMissingParties
+    }
+    loading={addingMissingParties}
+    onClick={onAddSelectedMissingParties}
+  >
+    Seçilen Tarafları Davaya Ekle
+  </Button>
+
+  {selectedMissingParties.length > 0 && (
+    <span className="text-sm text-gray-500">
+      {selectedMissingParties.length} taraf seçildi
+    </span>
+  )}
+</div>
+            
           </section>
         )}
 
@@ -973,8 +1019,15 @@ const CaseCompletionAnalysis = ({
 const CaseDetail = () => {
   const { id } = useParams();
 
+  const queryClient = useQueryClient();
+
   const [caseCompletion, setCaseCompletion] =
     useState(null);
+
+  const [
+    selectedMissingParties,
+    setSelectedMissingParties,
+  ] = useState([]);
   const {
     data,
     isLoading,
@@ -1072,7 +1125,111 @@ const CaseDetail = () => {
         );
       },
     });
+const addMissingPartiesMutation =
+  useMutation({
+    mutationFn: async (parties) => {
+      const results = [];
 
+      for (const party of parties) {
+        const payload = {
+          name: party.name,
+
+          party_type:
+            party.role === 'sanık'
+              ? 'sanik'
+              : party.role === 'katılan'
+                ? 'katilan'
+                : party.role === 'müşteki'
+                  ? 'musteki'
+                  : 'other',
+
+          lawyer_name:
+            party.representative || null,
+
+          notes:
+            party.description || null,
+        };
+
+        const response =
+          await casePartyApi.create(
+            id,
+            payload
+          );
+
+        results.push(response);
+      }
+
+      return results;
+    },
+
+    onSuccess: async (_, parties) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['case', id],
+      });
+
+      setSelectedMissingParties([]);
+
+      toast.success(
+        `${parties.length} taraf davaya eklendi`
+      );
+    },
+
+    onError: (error) => {
+      console.error(
+        'Taraf ekleme hatası:',
+        error
+      );
+
+      toast.error(
+        error.response?.data?.message ||
+        'Taraflar eklenemedi'
+      );
+    },
+  });
+  const toggleMissingParty = (party) => {
+  const key = `${party.name}-${party.role}`;
+
+  setSelectedMissingParties((current) => {
+    if (current.includes(key)) {
+      return current.filter(
+        (item) => item !== key
+      );
+    }
+
+    return [
+      ...current,
+      key,
+    ];
+  });
+};
+
+const handleAddSelectedMissingParties = () => {
+  const missingParties =
+    caseCompletion?.result
+      ?.missingParties ||
+    caseCompletion?.missingParties ||
+    [];
+
+  const selected =
+    missingParties.filter(
+      (party) =>
+        selectedMissingParties.includes(
+          `${party.name}-${party.role}`
+        )
+    );
+
+  if (selected.length === 0) {
+    toast.error(
+      'En az bir taraf seçin'
+    );
+
+    return;
+  }
+
+  addMissingPartiesMutation.mutate(
+    selected
+  );
+};
   const aiAnalysis =
     aiSummaryMutation.data
       ? unwrapResponse(
@@ -1364,16 +1521,26 @@ const CaseDetail = () => {
       />
 
       <CaseCompletionAnalysis
-        analysis={
-          caseCompletion
-        }
-        refreshing={
-          caseCompletionMutation.isPending
-        }
-        onRefresh={() =>
-          handleCaseCompletion(true)
-        }
-      />
+  analysis={caseCompletion}
+  refreshing={
+    caseCompletionMutation.isPending
+  }
+  onRefresh={() =>
+    handleCaseCompletion(true)
+  }
+  selectedMissingParties={
+    selectedMissingParties
+  }
+  onToggleMissingParty={
+    toggleMissingParty
+  }
+  onAddSelectedMissingParties={
+    handleAddSelectedMissingParties
+  }
+  addingMissingParties={
+    addMissingPartiesMutation.isPending
+  }
+/>
 
       {/* BİLGİLER + TARAFLAR */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
