@@ -85,6 +85,8 @@ const PARTY_LABELS = {
   sanik: 'Sanık',
   musteki: 'Müşteki',
   katilan: 'Katılan',
+  magdur: 'Mağdur',
+  maktul: 'Maktul',
   alacakli: 'Alacaklı',
   borclu: 'Borçlu',
   ucuncu_kisi: 'Üçüncü Kişi',
@@ -162,6 +164,7 @@ const CaseAIAnalysis = ({
   analysis,
   onRefresh,
   refreshing,
+  caseId,
 }) => {
   if (!analysis) {
     return null;
@@ -382,10 +385,27 @@ const CaseAIAnalysis = ({
                       )}
 
                       {action.canCreateTask && (
-                        <span className="font-medium text-blue-600 dark:text-blue-400">
-                          Göreve dönüştürülebilir
-                        </span>
-                      )}
+  <Link
+    to={`/tasks/create?${new URLSearchParams({
+      source: 'ai',
+      case_id: caseId || '',
+      title: action.title || '',
+      description: action.description || '',
+      priority: action.priority || 'normal',
+      due_date: action.suggestedDueDate || '',
+      note: 'AI dava analizi önerisinden oluşturuldu.',
+    }).toString()}`}
+  >
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+    >
+      <Sparkles className="mr-2 h-4 w-4" />
+      Görev Oluştur
+    </Button>
+  </Link>
+)}
                     </div>
                   </div>
                 ))}
@@ -1645,14 +1665,11 @@ const handleApplySelectedCaseUpdates = () => {
 
       {/* AI ANALYSIS */}
       <CaseAIAnalysis
-        analysis={aiAnalysis}
-        refreshing={
-          aiSummaryMutation.isPending
-        }
-        onRefresh={() =>
-          handleAIAnalysis(true)
-        }
-      />
+  analysis={aiAnalysis}
+  onRefresh={() => handleAIAnalysis(true)}
+  refreshing={aiSummaryMutation.isPending}
+  caseId={caseItem.id}
+/>
 
       <CaseCompletionAnalysis
   analysis={caseCompletion}
