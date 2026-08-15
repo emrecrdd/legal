@@ -1,240 +1,1135 @@
+import { Op, Sequelize } from 'sequelize';
+
+import fs from 'fs';
+import fsPromises from 'fs/promises';
+import path from 'path';
+import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+
 import { Document } from '../../models/Document.js';
 import { User } from '../../models/User.js';
 import { Case } from '../../models/Case.js';
 import { Client } from '../../models/Client.js';
-import { PowerOfAttorney } from '../../models/PowerOfAttorney.js';  // ✅ EKLENDI
-import { Op, Sequelize } from 'sequelize';
-import { paginate, getPaginationData } from '../../utils/paginate.js';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { PowerOfAttorney } from '../../models/PowerOfAttorney.js';
+
+import { sequelize } from '../../config/database.js';
+
+import {
+  paginate,
+  getPaginationData,
+} from '../../utils/paginate.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const UPLOAD_DIR = path.join(__dirname, '../../../uploads');
+const UPLOAD_DIR = path.resolve(
+  __dirname,
+  '../../../uploads'
+);
 
-// Ensure upload directory exists
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
+await fsPromises.mkdir(UPLOAD_DIR, {
+  recursive: true,
+});
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const normalizeOriginalName = (originalName = '') => {
+  try {
+    const decoded = Buffer
+      .from(originalName, 'latin1')
+      .toString('utf8');
+
+    return decoded || originalName;
+  } catch {
+    return originalName;
+  }
+};
+
+const normalizeTags = (tags) => {
+  if (Array.isArray(tags)) {
+    return [
+      ...new Set(
+        tags
+          .map((tag) => String(tag).trim())
+          .filter(Boolean)
+      ),
+    ];
+  }
+
+  if (typeof tags === 'string') {
+    return [
+      ...new Set(
+        tags
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+      ),
+    ];
+  }
+
+  return [];
+};
+
+const normalizeBoolean = (value, fallback = false) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    if (value.toLowerCase() === 'true') {
+      return true;
+    }
+
+    if (value.toLowerCase() === 'false') {
+      return false;
+    }
+  }
+
+  if (value === 1 || value === '1') {
+    return true;
+  }
+
+  if (value === 0 || value === '0') {
+    return false;
+  }
+
+  return fallback;
+};
+
+const normalizeMetadata = (metadata) => {
+  if (!metadata) {
+    return {};
+  }
+
+  if (
+    typeof metadata === 'object' &&
+    !Array.isArray(metadata)
+  ) {
+    return metadata;
+  }
+
+  if (typeof metadata === 'string') {
+    try {
+      const parsed = JSON.parse(metadata);
+
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed)
+      ) {
+        return parsed;
+      }
+    } catch {
+      return {};
+    }
+  }
+
+  return {};
+};
+
+const detectFileType = (mimeType = '') => {
+  if (mimeType === 'application/pdf') {
+    return 'pdf';
+  }
+
+  if (
+    mimeType.includes('word') ||
+    mimeType.includes('document')
+  ) {
+    return 'word';
+  }
+
+  if (
+    mimeType.includes('excel') ||
+    mimeType.includes('sheet')
+  ) {
+    return 'excel';
+  }
+
+  if (mimeType.startsWith('image/')) {
+    return 'image';
+  }
+
+  // Document modelinde henüz video ENUM'u yok.
+  if (mimeType.startsWith('video/')) {
+    return 'other';
+  }
+
+  return 'other';
+};
+
+const createStoredFilename = (originalName) => {
+  const extension = path
+    .extname(originalName || '')
+    .toLowerCase();
+
+  return `${crypto.randomUUID()}${extension}`;
+};
+
+const resolveStoredFilePath = (storedFilename) => {
+  if (!storedFilename) {
+    throw new Error('Document file path is missing');
+  }
+
+  /*
+   * DB tarafında yalnız dosya adı tutulmalı.
+   * "../" gibi path traversal değerlerini reddediyoruz.
+   */
+  if (path.basename(storedFilename) !== storedFilename) {
+    throw new Error('Invalid document file path');
+  }
+
+  const resolved = path.resolve(
+    UPLOAD_DIR,
+    storedFilename
+  );
+
+  const relative = path.relative(
+    UPLOAD_DIR,
+    resolved
+  );
+
+  if (
+    relative.startsWith('..') ||
+    path.isAbsolute(relative)
+  ) {
+    throw new Error('Invalid document file path');
+  }
+
+  return resolved;
+};
+
+const documentIncludes = [
+  {
+    model: User,
+    as: 'uploader',
+    attributes: [
+      'id',
+      'first_name',
+      'last_name',
+    ],
+  },
+  {
+    model: Case,
+    as: 'case',
+    attributes: [
+      'id',
+      'title',
+    ],
+  },
+  {
+    model: Client,
+    as: 'client',
+    attributes: [
+      'id',
+      'name',
+    ],
+  },
+  {
+    model: PowerOfAttorney,
+    as: 'powerOfAttorney',
+    attributes: [
+      'id',
+      'title',
+    ],
+  },
+];
+
+// ======================================================
+// SERVICE
+// ======================================================
 
 export const documentService = {
+
+  // ====================================================
+  // UPLOAD
+  // ====================================================
+
   async upload(data) {
-    const { file, ...documentData } = data;
-    
-    // ✅ TAGS'İ DÜZELT - string'den array'e çevir
-    let tags = documentData.tags;
-    if (typeof tags === 'string') {
-      tags = tags.split(',').map(t => t.trim()).filter(Boolean);
-    } else if (!Array.isArray(tags)) {
-      tags = [];
+    const {
+      file,
+      ...documentData
+    } = data;
+
+    if (!file?.buffer) {
+      throw new Error('File is required');
     }
-    
-    // ✅ ORİJİNAL ADI KORU (Türkçe karakter sorununu çöz)
-    let originalName = file.originalname;
+
+    const originalName =
+      normalizeOriginalName(
+        file.originalname
+      );
+
+    const storedFilename =
+      createStoredFilename(
+        originalName
+      );
+
+    const storedPath =
+      resolveStoredFilePath(
+        storedFilename
+      );
+
+    const transaction =
+      await sequelize.transaction();
+
+    let fileWritten = false;
+
     try {
-      originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-    } catch (e) {
-      originalName = file.originalname;
+      await fsPromises.writeFile(
+        storedPath,
+        file.buffer,
+        {
+          flag: 'wx',
+        }
+      );
+
+      fileWritten = true;
+
+      const document =
+        await Document.create(
+          {
+            name:
+              documentData.name?.trim() ||
+              originalName,
+
+            original_name:
+              originalName,
+
+            file_path:
+              storedFilename,
+
+            file_size:
+              file.size,
+
+            mime_type:
+              file.mimetype,
+
+            file_type:
+              detectFileType(
+                file.mimetype
+              ),
+
+            category:
+              documentData.category?.trim() ||
+              'general',
+
+            tags:
+              normalizeTags(
+                documentData.tags
+              ),
+
+            description:
+              documentData.description?.trim() ||
+              null,
+
+            case_id:
+              documentData.case_id ||
+              null,
+
+            client_id:
+              documentData.client_id ||
+              null,
+
+            power_of_attorney_id:
+              documentData.power_of_attorney_id ||
+              null,
+
+            uploaded_by:
+              documentData.uploaded_by,
+
+            is_public:
+              normalizeBoolean(
+                documentData.is_public,
+                false
+              ),
+
+            is_archived: false,
+
+            metadata:
+              normalizeMetadata(
+                documentData.metadata
+              ),
+
+            version: 1,
+
+            parent_id: null,
+          },
+          {
+            transaction,
+          }
+        );
+
+      await transaction.commit();
+
+      return document;
+    } catch (error) {
+      await transaction.rollback();
+
+      if (fileWritten) {
+        await fsPromises
+          .unlink(storedPath)
+          .catch(() => {});
+      }
+
+      throw error;
     }
-    
-    // Generate unique filename
-    const ext = path.extname(originalName);
-    const filename = `${Date.now()}-${Math.random().toString(36).substring(7)}${ext}`;
-    const filePath = path.join(UPLOAD_DIR, filename);
-
-    // Save file
-    fs.writeFileSync(filePath, file.buffer);
-
-    // Determine file type
-    const mimeType = file.mimetype;
-    let fileType = 'other';
-    if (mimeType.includes('pdf')) fileType = 'pdf';
-    else if (mimeType.includes('word') || mimeType.includes('document')) fileType = 'word';
-    else if (mimeType.includes('excel') || mimeType.includes('sheet')) fileType = 'excel';
-    else if (mimeType.includes('image')) fileType = 'image';
-
-    // Create document record
-    const document = await Document.create({
-      name: documentData.name || originalName,
-      original_name: originalName,
-      file_path: filename,
-      file_size: file.size,
-      mime_type: mimeType,
-      file_type: fileType,
-      category: documentData.category || 'general',
-      tags: tags,
-      description: documentData.description,
-      case_id: documentData.case_id || null,
-      client_id: documentData.client_id || null,
-      power_of_attorney_id: documentData.power_of_attorney_id || null,  // ✅ EKLENDI
-      uploaded_by: documentData.uploaded_by,
-      is_public: documentData.is_public || false,
-      metadata: documentData.metadata || {},
-      version: 1,
-    });
-
-    return document;
   },
 
-  // ✅ findAll - power_of_attorney_id filtresi eklendi
-  async findAll({ page, limit, search, category, case_id, client_id, power_of_attorney_id }) {
+  // ====================================================
+  // VERSION UPLOAD
+  // ====================================================
+
+  async uploadVersion(documentId, data) {
+    const {
+      file,
+      ...versionData
+    } = data;
+
+    if (!file?.buffer) {
+      throw new Error(
+        'New version file is required'
+      );
+    }
+
+    const existing =
+      await Document.findByPk(
+        documentId
+      );
+
+    if (!existing) {
+      throw new Error(
+        'Document not found'
+      );
+    }
+
+    /*
+     * Her versiyon doğrudan ana/root belgeye bağlanır.
+     */
+    const rootId =
+      existing.parent_id ||
+      existing.id;
+
+    const rootDocument =
+      existing.parent_id
+        ? await Document.findByPk(
+            rootId
+          )
+        : existing;
+
+    if (!rootDocument) {
+      throw new Error(
+        'Root document not found'
+      );
+    }
+
+    const maxChildVersion =
+      await Document.max(
+        'version',
+        {
+          where: {
+            [Op.or]: [
+              {
+                id: rootId,
+              },
+              {
+                parent_id:
+                  rootId,
+              },
+            ],
+          },
+        }
+      );
+
+    const nextVersion =
+      Math.max(
+        Number(maxChildVersion) ||
+          1,
+        1
+      ) + 1;
+
+    const originalName =
+      normalizeOriginalName(
+        file.originalname
+      );
+
+    const storedFilename =
+      createStoredFilename(
+        originalName
+      );
+
+    const storedPath =
+      resolveStoredFilePath(
+        storedFilename
+      );
+
+    const transaction =
+      await sequelize.transaction();
+
+    let fileWritten = false;
+
+    try {
+      await fsPromises.writeFile(
+        storedPath,
+        file.buffer,
+        {
+          flag: 'wx',
+        }
+      );
+
+      fileWritten = true;
+
+      const document =
+        await Document.create(
+          {
+            name:
+              versionData.name?.trim() ||
+              rootDocument.name,
+
+            original_name:
+              originalName,
+
+            file_path:
+              storedFilename,
+
+            file_size:
+              file.size,
+
+            mime_type:
+              file.mimetype,
+
+            file_type:
+              detectFileType(
+                file.mimetype
+              ),
+
+            category:
+              versionData.category?.trim() ||
+              rootDocument.category ||
+              'general',
+
+            tags:
+              versionData.tags !==
+              undefined
+                ? normalizeTags(
+                    versionData.tags
+                  )
+                : rootDocument.tags ||
+                  [],
+
+            description:
+              versionData.description !==
+              undefined
+                ? versionData.description?.trim() ||
+                  null
+                : rootDocument.description,
+
+            case_id:
+              versionData.case_id !==
+              undefined
+                ? versionData.case_id ||
+                  null
+                : rootDocument.case_id,
+
+            client_id:
+              versionData.client_id !==
+              undefined
+                ? versionData.client_id ||
+                  null
+                : rootDocument.client_id,
+
+            power_of_attorney_id:
+              versionData.power_of_attorney_id !==
+              undefined
+                ? versionData.power_of_attorney_id ||
+                  null
+                : rootDocument.power_of_attorney_id,
+
+            uploaded_by:
+              versionData.uploaded_by,
+
+            is_public:
+              versionData.is_public !==
+              undefined
+                ? normalizeBoolean(
+                    versionData.is_public
+                  )
+                : rootDocument.is_public,
+
+            is_archived:
+              false,
+
+            metadata:
+              versionData.metadata !==
+              undefined
+                ? normalizeMetadata(
+                    versionData.metadata
+                  )
+                : rootDocument.metadata ||
+                  {},
+
+            version:
+              nextVersion,
+
+            parent_id:
+              rootId,
+          },
+          {
+            transaction,
+          }
+        );
+
+      await transaction.commit();
+
+      return document;
+    } catch (error) {
+      await transaction.rollback();
+
+      if (fileWritten) {
+        await fsPromises
+          .unlink(storedPath)
+          .catch(() => {});
+      }
+
+      throw error;
+    }
+  },
+
+  // ====================================================
+  // FIND ALL
+  // ====================================================
+
+  async findAll({
+    page,
+    limit,
+    search,
+    category,
+    case_id,
+    client_id,
+    power_of_attorney_id,
+    include_archived = false,
+  }) {
     const where = {};
 
-    if (search) {
+    if (
+      !normalizeBoolean(
+        include_archived,
+        false
+      )
+    ) {
+      where.is_archived =
+        false;
+    }
+
+    if (search?.trim()) {
+      const normalizedSearch =
+        search.trim();
+
       where[Op.or] = [
-        { name: { [Op.iLike]: `%${search}%` } },
-        { original_name: { [Op.iLike]: `%${search}%` } },
-        { description: { [Op.iLike]: `%${search}%` } },
+        {
+          name: {
+            [Op.iLike]:
+              `%${normalizedSearch}%`,
+          },
+        },
+        {
+          original_name: {
+            [Op.iLike]:
+              `%${normalizedSearch}%`,
+          },
+        },
+        {
+          description: {
+            [Op.iLike]:
+              `%${normalizedSearch}%`,
+          },
+        },
       ];
     }
 
-    if (category) where.category = category;
-    if (case_id) where.case_id = case_id;
-    if (client_id) where.client_id = client_id;
-    if (power_of_attorney_id) where.power_of_attorney_id = power_of_attorney_id;  // ✅ EKLENDI
+    if (category) {
+      where.category =
+        category;
+    }
 
-    const query = paginate({ where, order: [['created_at', 'DESC']] }, page, limit);
-    const { count, rows } = await Document.findAndCountAll({
-      ...query,
-      include: [
-        {
-          model: User,
-          as: 'uploader',
-          attributes: ['id', 'first_name', 'last_name'],
-        },
-        {
-          model: Case,
-          as: 'case',
-          attributes: ['id', 'title'],
-        },
-        {
-          model: Client,
-          as: 'client',
-          attributes: ['id', 'name'],
-        },
-        {
-          model: PowerOfAttorney,  // ✅ EKLENDI
-          as: 'powerOfAttorney',
-          attributes: ['id', 'title'],
-        },
-      ],
-    });
+    if (case_id) {
+      where.case_id =
+        case_id;
+    }
 
-    const pagination = getPaginationData(count, page, limit);
+    if (client_id) {
+      where.client_id =
+        client_id;
+    }
+
+    if (
+      power_of_attorney_id
+    ) {
+      where.power_of_attorney_id =
+        power_of_attorney_id;
+    }
+
+    const pageNum =
+      Math.max(
+        Number.parseInt(
+          page,
+          10
+        ) || 1,
+        1
+      );
+
+    const limitNum =
+      Math.min(
+        Math.max(
+          Number.parseInt(
+            limit,
+            10
+          ) || 10,
+          1
+        ),
+        100
+      );
+
+    const query =
+      paginate(
+        {
+          where,
+          order: [
+            [
+              'created_at',
+              'DESC',
+            ],
+          ],
+        },
+        pageNum,
+        limitNum
+      );
+
+    const {
+      count,
+      rows,
+    } =
+      await Document.findAndCountAll(
+        {
+          ...query,
+
+          include:
+            documentIncludes,
+
+          distinct: true,
+        }
+      );
 
     return {
       data: rows,
-      pagination,
+
+      pagination:
+        getPaginationData(
+          count,
+          pageNum,
+          limitNum
+        ),
     };
   },
 
-  // ✅ findOne - PowerOfAttorney ilişkisi eklendi
+  // ====================================================
+  // FIND ONE
+  // ====================================================
+
   async findOne(id) {
-    const document = await Document.findByPk(id, {
+    const document =
+      await Document.findByPk(
+        id,
+        {
+          include:
+            documentIncludes,
+        }
+      );
+
+    if (!document) {
+      throw new Error(
+        'Document not found'
+      );
+    }
+
+    return document;
+  },
+
+  // ====================================================
+  // UPDATE METADATA ONLY
+  // ====================================================
+
+  async update(id, data) {
+    const document =
+      await Document.findByPk(
+        id
+      );
+
+    if (!document) {
+      throw new Error(
+        'Document not found'
+      );
+    }
+
+    /*
+     * file_path, uploaded_by, version, parent_id,
+     * mime_type vb. metadata update endpoint'inden
+     * değiştirilemez.
+     */
+    const allowedFields = [
+      'name',
+      'description',
+      'category',
+      'case_id',
+      'client_id',
+      'power_of_attorney_id',
+      'tags',
+      'is_public',
+      'is_archived',
+      'metadata',
+    ];
+
+    const updateData = {};
+
+    for (
+      const field of
+      allowedFields
+    ) {
+      if (
+        Object.prototype.hasOwnProperty.call(
+          data,
+          field
+        )
+      ) {
+        updateData[field] =
+          data[field];
+      }
+    }
+
+    if (
+      updateData.name !==
+      undefined
+    ) {
+      const name =
+        String(
+          updateData.name
+        ).trim();
+
+      if (!name) {
+        throw new Error(
+          'Document name cannot be empty'
+        );
+      }
+
+      updateData.name =
+        name;
+    }
+
+    if (
+      updateData.description !==
+      undefined
+    ) {
+      updateData.description =
+        updateData.description
+          ? String(
+              updateData.description
+            ).trim()
+          : null;
+    }
+
+    if (
+      updateData.category !==
+      undefined
+    ) {
+      updateData.category =
+        updateData.category
+          ? String(
+              updateData.category
+            ).trim()
+          : 'general';
+    }
+
+    if (
+      updateData.tags !==
+      undefined
+    ) {
+      updateData.tags =
+        normalizeTags(
+          updateData.tags
+        );
+    }
+
+    if (
+      updateData.is_public !==
+      undefined
+    ) {
+      updateData.is_public =
+        normalizeBoolean(
+          updateData.is_public,
+          document.is_public
+        );
+    }
+
+    if (
+      updateData.is_archived !==
+      undefined
+    ) {
+      updateData.is_archived =
+        normalizeBoolean(
+          updateData.is_archived,
+          document.is_archived
+        );
+    }
+
+    if (
+      updateData.metadata !==
+      undefined
+    ) {
+      updateData.metadata =
+        normalizeMetadata(
+          updateData.metadata
+        );
+    }
+
+    await document.update(
+      updateData
+    );
+
+    return this.findOne(id);
+  },
+
+  // ====================================================
+  // SOFT DELETE
+  // ====================================================
+
+  async remove(id) {
+    const document =
+      await Document.findByPk(
+        id
+      );
+
+    if (!document) {
+      throw new Error(
+        'Document not found'
+      );
+    }
+
+    /*
+     * Fiziksel dosya burada SİLİNMİYOR.
+     *
+     * Model paranoid olduğu için yalnız deleted_at yazılır.
+     * Hukuk bürosu sisteminde yanlışlıkla silinen belge
+     * fiziksel olarak geri alınabilir durumda kalır.
+     */
+    await document.destroy();
+
+    return document;
+  },
+
+  // ====================================================
+  // DOWNLOAD / PREVIEW
+  // ====================================================
+
+  async getFilePath(document) {
+    const filePath =
+      resolveStoredFilePath(
+        document.file_path
+      );
+
+    try {
+      await fsPromises.access(
+        filePath
+      );
+    } catch {
+      throw new Error(
+        'File not found'
+      );
+    }
+
+    return filePath;
+  },
+
+  async download(document) {
+    const filePath =
+      await this.getFilePath(
+        document
+      );
+
+    return fs.createReadStream(
+      filePath
+    );
+  },
+
+  // ====================================================
+  // VERSIONS
+  // ====================================================
+
+  async getVersions(documentId) {
+    const document =
+      await Document.findByPk(
+        documentId
+      );
+
+    if (!document) {
+      throw new Error(
+        'Document not found'
+      );
+    }
+
+    const rootId =
+      document.parent_id ||
+      document.id;
+
+    return Document.findAll({
+      where: {
+        [Op.or]: [
+          {
+            id: rootId,
+          },
+          {
+            parent_id:
+              rootId,
+          },
+        ],
+      },
+
       include: [
         {
           model: User,
           as: 'uploader',
-          attributes: ['id', 'first_name', 'last_name'],
-        },
-        {
-          model: Case,
-          as: 'case',
-          attributes: ['id', 'title'],
-        },
-        {
-          model: Client,
-          as: 'client',
-          attributes: ['id', 'name'],
-        },
-        {
-          model: PowerOfAttorney,  // ✅ EKLENDI
-          as: 'powerOfAttorney',
-          attributes: ['id', 'title'],
+          attributes: [
+            'id',
+            'first_name',
+            'last_name',
+          ],
         },
       ],
-    });
 
-    if (!document) {
-      throw new Error('Document not found');
-    }
-
-    return document;
-  },
-
-  async update(id, data) {
-    const document = await Document.findByPk(id);
-    if (!document) {
-      throw new Error('Document not found');
-    }
-
-    await document.update(data);
-    return document;
-  },
-
-  async remove(id) {
-    const document = await Document.findByPk(id);
-    if (!document) {
-      throw new Error('Document not found');
-    }
-
-    const filePath = path.join(UPLOAD_DIR, document.file_path);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-
-    await document.destroy();
-    return document;
-  },
-
-  async download(document) {
-    const filePath = path.join(UPLOAD_DIR, document.file_path);
-    if (!fs.existsSync(filePath)) {
-      throw new Error('File not found');
-    }
-
-    return fs.createReadStream(filePath);
-  },
-
-  async getVersions(documentId) {
-    const parentDoc = await Document.findByPk(documentId);
-    if (!parentDoc) {
-      throw new Error('Document not found');
-    }
-
-    return Document.findAll({
-      where: {
-        parent_id: parentDoc.id,
-      },
-      order: [['version', 'DESC']],
+      order: [
+        [
+          'version',
+          'DESC',
+        ],
+      ],
     });
   },
+
+  // ====================================================
+  // CATEGORIES
+  // ====================================================
 
   async getCategories() {
-    const documents = await Document.findAll({
-      attributes: ['category'],
-      group: ['category'],
-    });
-    return documents.map(d => d.category).filter(Boolean);
+    const documents =
+      await Document.findAll({
+        where: {
+          is_archived:
+            false,
+        },
+
+        attributes: [
+          'category',
+        ],
+
+        group: [
+          'category',
+        ],
+
+        order: [
+          [
+            'category',
+            'ASC',
+          ],
+        ],
+      });
+
+    return documents
+      .map(
+        (document) =>
+          document.category
+      )
+      .filter(Boolean);
   },
 
-  async getStatistics(userId) {
-    const totalDocuments = await Document.count();
-    const totalSize = await Document.sum('file_size');
-    const totalSizeMB = totalSize ? (totalSize / (1024 * 1024)).toFixed(2) : 0;
+  // ====================================================
+  // STATISTICS
+  // ====================================================
 
-    const categories = await Document.findAll({
-      attributes: ['category', [Sequelize.fn('COUNT', Sequelize.col('category')), 'count']],
-      group: ['category'],
-      raw: true,
-    });
+  async getStatistics() {
+    const baseWhere = {
+      is_archived: false,
+    };
+
+    const [
+      totalDocuments,
+      totalSize,
+      archivedDocuments,
+      categories,
+    ] =
+      await Promise.all([
+        Document.count({
+          where:
+            baseWhere,
+        }),
+
+        Document.sum(
+          'file_size',
+          {
+            where:
+              baseWhere,
+          }
+        ),
+
+        Document.count({
+          where: {
+            is_archived:
+              true,
+          },
+        }),
+
+        Document.findAll({
+          where:
+            baseWhere,
+
+          attributes: [
+            'category',
+            [
+              Sequelize.fn(
+                'COUNT',
+                Sequelize.col(
+                  'category'
+                )
+              ),
+              'count',
+            ],
+          ],
+
+          group: [
+            'category',
+          ],
+
+          raw: true,
+        }),
+      ]);
+
+    const totalSizeMB =
+      Number(
+        (
+          Number(
+            totalSize
+          ) /
+          (1024 * 1024)
+        ).toFixed(2)
+      ) || 0;
 
     return {
       totalDocuments,
+      archivedDocuments,
       totalSizeMB,
       categories,
     };
   },
 };
+
+export default documentService;

@@ -1,113 +1,230 @@
 import express from 'express';
-import { documentController } from './document.controller.js';
-import { authenticate } from '../../middlewares/auth.middleware.js';
-import { authorize } from '../../middlewares/auth.middleware.js';
-import { ROLES } from '../../constants/roles.js';
-import multer from 'multer';
 
-const router = express.Router();
+import {
+  documentController,
+} from './document.controller.js';
 
-// Configure multer for memory storage
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'image/jpeg',
-      'image/png',
-      'image/gif',
-      'image/webp',
-      'video/mp4',
-      'video/webm',
-    ];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type'));
-    }
-  },
-});
+import {
+  documentUpload,
+} from './document.upload.js';
 
-router.use(authenticate);
+import {
+  authenticate,
+  authorize,
+} from '../../middlewares/auth.middleware.js';
 
-// ✅ Upload single file
+import {
+  ROLES,
+} from '../../constants/roles.js';
+
+const router =
+  express.Router();
+
+router.use(
+  authenticate
+);
+
+// ======================================================
+// UPLOADS
+// ======================================================
+
 router.post(
   '/upload',
-  authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.SECRETARY),
-  upload.single('file'),
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.SECRETARY
+  ),
+
+  documentUpload.single(
+    'file'
+  ),
+
   documentController.upload
 );
 
-// ✅ Upload multiple files (max 10)
 router.post(
   '/upload-multiple',
-  authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.SECRETARY),
-  upload.array('files', 10),
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.SECRETARY
+  ),
+
+  documentUpload.array(
+    'files',
+    10
+  ),
+
   documentController.uploadMultiple
 );
 
-// List and filters
+// ======================================================
+// LIST / META
+// Bunlar /:id route'undan ÖNCE olmalı.
+// ======================================================
+
 router.get(
   '/',
-  authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.INTERN, ROLES.SECRETARY),
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.INTERN,
+    ROLES.SECRETARY
+  ),
+
   documentController.findAll
 );
 
 router.get(
   '/categories',
-  authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.INTERN, ROLES.SECRETARY),
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.INTERN,
+    ROLES.SECRETARY
+  ),
+
   documentController.getCategories
 );
 
 router.get(
   '/statistics',
-  authorize(ROLES.ADMIN, ROLES.LAWYER),
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER
+  ),
+
   documentController.getStatistics
 );
 
-// Single document operations
-router.get(
-  '/:id',
-  authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.INTERN, ROLES.SECRETARY),
-  documentController.findOne
-);
+// ======================================================
+// DOCUMENT OPERATIONS
+// ======================================================
 
 router.get(
   '/:id/download',
-  authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.INTERN, ROLES.SECRETARY),
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.INTERN,
+    ROLES.SECRETARY
+  ),
+
   documentController.download
 );
 
 router.get(
   '/:id/preview',
-  authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.INTERN, ROLES.SECRETARY),
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.INTERN,
+    ROLES.SECRETARY
+  ),
+
   documentController.preview
 );
 
+// ======================================================
+// VERSIONS
+// ======================================================
+
 router.get(
   '/:id/versions',
-  authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.INTERN, ROLES.SECRETARY),
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.INTERN,
+    ROLES.SECRETARY
+  ),
+
   documentController.getVersions
 );
 
+router.post(
+  '/:id/versions',
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.SECRETARY
+  ),
+
+  documentUpload.single(
+    'file'
+  ),
+
+  documentController.uploadVersion
+);
+
+// ======================================================
+// SINGLE DOCUMENT
+// ======================================================
+
+router.get(
+  '/:id',
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.INTERN,
+    ROLES.SECRETARY
+  ),
+
+  documentController.findOne
+);
+
+/*
+ * Metadata update için PATCH esas endpoint.
+ */
+router.patch(
+  '/:id',
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.SECRETARY
+  ),
+
+  documentController.update
+);
+
+/*
+ * Eski frontend bozulmasın diye PUT'u şimdilik
+ * backward compatibility olarak tutuyoruz.
+ */
 router.put(
   '/:id',
-  authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.SECRETARY),
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.SECRETARY
+  ),
+
   documentController.update
 );
 
 router.delete(
   '/:id',
-  authorize(ROLES.ADMIN, ROLES.LAWYER),
+
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER
+  ),
+
   documentController.remove
 );
 
-export { router as documentRoutes };
+export {
+  router as documentRoutes,
+};
