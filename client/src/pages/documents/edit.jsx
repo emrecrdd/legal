@@ -1,279 +1,1106 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import documentApi from '../../features/documents/document.api.js';
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
+import {
+  Link,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
+
+import {
+  useQuery,
+} from '@tanstack/react-query';
+
+import {
+  useDocument,
+  useUpdateDocument,
+} from '../../features/documents/document.query.js';
+
 import caseApi from '../../features/cases/case.api.js';
 import clientApi from '../../features/clients/client.api.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
+import Badge from '../../components/ui/Badge.jsx';
+
+import {
+  AlertTriangle,
+  ArrowLeft,
+  LockKeyhole,
+  Save,
+  ShieldCheck,
+} from 'lucide-react';
+
 import toast from 'react-hot-toast';
 
+// ======================================================
+// CONSTANTS
+// ======================================================
+
+const INITIAL_FORM = {
+  name: '',
+  description: '',
+  category: 'general',
+  tags: '',
+  case_id: '',
+  client_id: '',
+  is_public: false,
+};
+
+const CATEGORY_OPTIONS = [
+  {
+    value: 'general',
+    label: 'Genel',
+    icon: '📁',
+  },
+  {
+    value: 'petition',
+    label: 'Dilekçe',
+    icon: '📝',
+  },
+  {
+    value: 'expert_report',
+    label: 'Bilirkişi Raporu',
+    icon: '📊',
+  },
+  {
+    value: 'court_decision',
+    label: 'Mahkeme Kararı',
+    icon: '⚖️',
+  },
+  {
+    value: 'notification',
+    label: 'Tebligat',
+    icon: '📨',
+  },
+  {
+    value: 'evidence',
+    label: 'Delil',
+    icon: '🔍',
+  },
+  {
+    value: 'correspondence',
+    label: 'Yazışma',
+    icon: '✉️',
+  },
+  {
+    value: 'other',
+    label: 'Diğer',
+    icon: '📌',
+  },
+];
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const getCategoryVariant = (
+  category
+) => {
+  switch (category) {
+    case 'petition':
+      return 'info';
+
+    case 'court_decision':
+      return 'success';
+
+    case 'notification':
+      return 'warning';
+
+    case 'evidence':
+      return 'danger';
+
+    default:
+      return 'default';
+  }
+};
+
+const getFileIcon = (
+  fileType
+) => {
+  switch (fileType) {
+    case 'pdf':
+      return '📄';
+
+    case 'word':
+      return '📝';
+
+    case 'excel':
+      return '📊';
+
+    case 'image':
+      return '🖼️';
+
+    default:
+      return '📎';
+  }
+};
+
+const formatFileSize = (
+  bytes
+) => {
+  const size =
+    Number(bytes) || 0;
+
+  if (size <= 0) {
+    return '0 B';
+  }
+
+  const units = [
+    'B',
+    'KB',
+    'MB',
+    'GB',
+  ];
+
+  const index = Math.min(
+    Math.floor(
+      Math.log(size) /
+        Math.log(1024)
+    ),
+    units.length - 1
+  );
+
+  const value =
+    size /
+    1024 ** index;
+
+  return `${Number(
+    value.toFixed(2)
+  )} ${units[index]}`;
+};
+
+const normalizeTags = (
+  value
+) => {
+  if (!value) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map((tag) =>
+          tag.trim()
+        )
+        .filter(Boolean)
+    ),
+  ];
+};
+
+// ======================================================
+// COMPONENT
+// ======================================================
+
 const DocumentEdit = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const { id } =
+    useParams();
 
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    category: 'general',
-    tags: '',
-    case_id: '',
-    client_id: '',
-    is_public: false,
+  const navigate =
+    useNavigate();
+
+  const [
+    formData,
+    setFormData,
+  ] = useState(
+    INITIAL_FORM
+  );
+
+  const [
+    errors,
+    setErrors,
+  ] = useState({});
+
+  const [
+    initializedDocumentId,
+    setInitializedDocumentId,
+  ] = useState(null);
+
+  // ======================================================
+  // DOCUMENT
+  // ======================================================
+
+  const {
+    data:
+      documentData,
+    isLoading:
+      documentLoading,
+    error:
+      documentError,
+  } = useDocument(id);
+
+  const updateMutation =
+    useUpdateDocument();
+
+  // ======================================================
+  // CASES
+  // ======================================================
+
+  const {
+    data: casesData,
+    isLoading:
+      casesLoading,
+    error:
+      casesError,
+  } = useQuery({
+    queryKey: [
+      'cases',
+      {
+        limit: 100,
+      },
+    ],
+
+    queryFn: () =>
+      caseApi.getAll({
+        limit: 100,
+      }),
+
+    staleTime:
+      5 * 60 * 1000,
   });
-  const [errors, setErrors] = useState({});
 
-  const { data: documentData, isLoading: documentLoading } = useQuery({
-    queryKey: ['document', id],
-    queryFn: () => documentApi.getOne(id),
-    enabled: !!id,
+  // ======================================================
+  // CLIENTS
+  // ======================================================
+
+  const {
+    data: clientsData,
+    isLoading:
+      clientsLoading,
+    error:
+      clientsError,
+  } = useQuery({
+    queryKey: [
+      'clients',
+      {
+        limit: 100,
+      },
+    ],
+
+    queryFn: () =>
+      clientApi.getAll({
+        limit: 100,
+      }),
+
+    staleTime:
+      5 * 60 * 1000,
   });
 
-  const { data: casesData } = useQuery({
-    queryKey: ['cases', { limit: 100 }],
-    queryFn: () => caseApi.getAll({ limit: 100 }),
-  });
+  // ======================================================
+  // DATA
+  // ======================================================
 
-  const { data: clientsData } = useQuery({
-    queryKey: ['clients', { limit: 100 }],
-    queryFn: () => clientApi.getAll({ limit: 100 }),
-  });
+  const documentItem =
+    documentData?.data
+      ?.data ??
+    documentData?.data ??
+    null;
 
-  const document = documentData?.data;
-  const cases = casesData?.data?.data || [];
-  const clients = clientsData?.data?.data || [];
+  const cases =
+    casesData?.data
+      ?.data ??
+    [];
+
+  const clients =
+    clientsData?.data
+      ?.data ??
+    [];
+
+  // ======================================================
+  // FORM INITIALIZATION
+  //
+  // Query refetch olduğunda kullanıcının yazdığı alanların
+  // tekrar ezilmesini engelliyoruz.
+  // ======================================================
 
   useEffect(() => {
-    if (document) {
-      setFormData({
-        name: document.name || '',
-        description: document.description || '',
-        category: document.category || 'general',
-        tags: Array.isArray(document.tags) ? document.tags.join(', ') : '',
-        case_id: document.case_id || '',
-        client_id: document.client_id || '',
-        is_public: document.is_public || false,
-      });
-    }
-  }, [document]);
-
-  const updateMutation = useMutation({
-    mutationFn: (data) => documentApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['documents'] });
-      queryClient.invalidateQueries({ queryKey: ['document', id] });
-      toast.success('Belge başarıyla güncellendi');
-      navigate('/documents');
-    },
-    onError: (error) => {
-      console.error('Güncelleme hatası:', error);
-      toast.error(error.response?.data?.message || 'Belge güncellenemedi');
-    },
-  });
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: '' }));
-    }
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
-    if (!formData.name.trim()) {
-      setErrors({ name: 'Belge adı gereklidir' });
-      toast.error('Lütfen belge adını girin');
+    if (
+      !documentItem ||
+      initializedDocumentId ===
+        documentItem.id
+    ) {
       return;
     }
 
-    const tags = formData.tags.split(',').map(t => t.trim()).filter(Boolean);
+    setFormData({
+      name:
+        documentItem.name ||
+        '',
+
+      description:
+        documentItem.description ||
+        '',
+
+      category:
+        documentItem.category ||
+        'general',
+
+      tags:
+        Array.isArray(
+          documentItem.tags
+        )
+          ? documentItem.tags.join(
+              ', '
+            )
+          : '',
+
+      case_id:
+        documentItem.case_id ||
+        documentItem.case?.id ||
+        '',
+
+      client_id:
+        documentItem.client_id ||
+        documentItem.client?.id ||
+        '',
+
+      is_public:
+        Boolean(
+          documentItem.is_public
+        ),
+    });
+
+    setInitializedDocumentId(
+      documentItem.id
+    );
+  }, [
+    documentItem,
+    initializedDocumentId,
+  ]);
+
+  // ======================================================
+  // DERIVED
+  // ======================================================
+
+  const selectedCategory =
+    useMemo(() => {
+      return (
+        CATEGORY_OPTIONS.find(
+          (item) =>
+            item.value ===
+            formData.category
+        ) ||
+        CATEGORY_OPTIONS[0]
+      );
+    }, [
+      formData.category,
+    ]);
+
+  const tagsPreview =
+    useMemo(() => {
+      return normalizeTags(
+        formData.tags
+      );
+    }, [
+      formData.tags,
+    ]);
+
+  const hasRelationLoadError =
+    Boolean(
+      casesError ||
+        clientsError
+    );
+
+  // ======================================================
+  // HANDLERS
+  // ======================================================
+
+  const handleChange = (
+    event
+  ) => {
+    const {
+      name,
+      value,
+      type,
+      checked,
+    } = event.target;
+
+    setFormData(
+      (current) => ({
+        ...current,
+
+        [name]:
+          type ===
+          'checkbox'
+            ? checked
+            : value,
+      })
+    );
+
+    if (errors[name]) {
+      setErrors(
+        (current) => ({
+          ...current,
+          [name]: '',
+        })
+      );
+    }
+  };
+
+  const validateForm =
+    () => {
+      const nextErrors =
+        {};
+
+      const name =
+        formData.name.trim();
+
+      if (!name) {
+        nextErrors.name =
+          'Belge adı gereklidir';
+      }
+
+      if (
+        name.length > 255
+      ) {
+        nextErrors.name =
+          'Belge adı en fazla 255 karakter olabilir';
+      }
+
+      setErrors(
+        nextErrors
+      );
+
+      return (
+        Object.keys(
+          nextErrors
+        ).length === 0
+      );
+    };
+
+  const handleSubmit = (
+    event
+  ) => {
+    event.preventDefault();
+
+    if (
+      updateMutation.isPending
+    ) {
+      return;
+    }
+
+    if (
+      !validateForm()
+    ) {
+      toast.error(
+        'Formdaki eksik veya hatalı alanları kontrol edin'
+      );
+
+      return;
+    }
 
     const updateData = {
-      name: formData.name.trim(),
-      description: formData.description,
-      category: formData.category,
-      tags: tags,
-      case_id: formData.case_id || null,
-      client_id: formData.client_id || null,
-      is_public: formData.is_public,
+      /*
+       * Yalnızca belge ailesinin metadata alanlarını gönderiyoruz.
+       * Fiziksel dosya/version alanlarına bu ekran dokunmuyor.
+       */
+
+      name:
+        formData.name.trim(),
+
+      description:
+        formData.description
+          .trim() ||
+        null,
+
+      category:
+        formData.category,
+
+      tags:
+        normalizeTags(
+          formData.tags
+        ),
+
+      case_id:
+        formData.case_id ||
+        null,
+
+      client_id:
+        formData.client_id ||
+        null,
+
+      is_public:
+        Boolean(
+          formData.is_public
+        ),
     };
 
-    updateMutation.mutate(updateData);
+    updateMutation.mutate(
+      {
+        id,
+        data:
+          updateData,
+      },
+      {
+        onSuccess: () => {
+          navigate(
+            `/documents/${id}`
+          );
+        },
+      }
+    );
   };
 
-  const getCategoryColor = (category) => {
-    const colors = {
-      general: 'bg-gray-100 text-gray-800',
-      petition: 'bg-blue-100 text-blue-800',
-      expert_report: 'bg-purple-100 text-purple-800',
-      court_decision: 'bg-green-100 text-green-800',
-      notification: 'bg-yellow-100 text-yellow-800',
-      evidence: 'bg-red-100 text-red-800',
-      correspondence: 'bg-indigo-100 text-indigo-800',
-      other: 'bg-gray-100 text-gray-800',
-    };
-    return colors[category] || colors.general;
-  };
+  // ======================================================
+  // LOADING
+  // ======================================================
 
-  if (documentLoading) {
+  if (
+    documentLoading
+  ) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+      <div className="flex h-64 items-center justify-center">
+
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600" />
+
       </div>
     );
   }
 
-  if (!document) {
+  // ======================================================
+  // ERROR
+  // ======================================================
+
+  if (
+    documentError ||
+    !documentItem
+  ) {
     return (
-      <div className="text-center py-12">
-        <div className="text-6xl mb-4">📄</div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Belge Bulunamadı</h2>
-        <Link to="/documents" className="text-blue-600 hover:underline mt-4 inline-block">← Belgeler Listesine Dön</Link>
+      <div className="py-12 text-center">
+
+        <div className="mb-4 text-6xl">
+          📄
+        </div>
+
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+          Belge Bulunamadı
+        </h2>
+
+        <p className="mt-2 text-gray-500">
+          {documentError
+            ?.response?.data
+            ?.message ||
+            documentError
+              ?.message ||
+            'Belge detayları yüklenemedi'}
+        </p>
+
+        <Link
+          to="/documents"
+          className="mt-4 inline-block text-blue-600 hover:underline"
+        >
+          ← Belgeler Listesine Dön
+        </Link>
+
       </div>
     );
   }
+
+  // ======================================================
+  // RENDER
+  // ======================================================
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link to="/documents" className="text-blue-600 hover:underline">← Belgeler</Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">✏️ Belge Düzenle</h1>
-          <p className="text-sm text-gray-500">{document.original_name} dosyasının bilgilerini güncelle</p>
-        </div>
+    <div className="mx-auto max-w-3xl space-y-6">
+
+      {/* HEADER */}
+
+      <div>
+
+        <Link
+          to={`/documents/${id}`}
+          className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+        >
+          <ArrowLeft className="h-4 w-4" />
+
+          Belge Detayı
+        </Link>
+
+        <h1 className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
+          Belge Bilgilerini Düzenle
+        </h1>
+
+        <p className="mt-1 text-sm text-gray-500">
+          Belge ailesinin kayıt, sınıflandırma ve ilişki bilgilerini güncelleyin.
+        </p>
+
       </div>
 
-      <Card>
-        <form onSubmit={handleSubmit} className="space-y-5 p-6">
-          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">
-                {document.file_type === 'pdf' ? '📄' :
-                 document.file_type === 'word' ? '📝' :
-                 document.file_type === 'excel' ? '📊' :
-                 document.file_type === 'image' ? '🖼️' : '📎'}
-              </span>
-              <div>
-                <p className="font-medium text-gray-900 dark:text-white">{document.original_name}</p>
-                <p className="text-sm text-gray-500">
-                  {document.file_size ? (document.file_size / 1024).toFixed(1) : 0} KB • {document.mime_type || 'Bilinmiyor'}
-                </p>
-              </div>
-            </div>
+      {/* IMPORTANT INFO */}
+
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+
+        <div className="flex items-start gap-3">
+
+          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+
+          <div>
+
+            <p className="font-medium text-blue-900 dark:text-blue-200">
+              Dosya içeriği bu ekrandan değiştirilmez
+            </p>
+
+            <p className="mt-1 text-sm leading-6 text-blue-800 dark:text-blue-300">
+              Düzeltilmiş veya yeni bir dosya yüklemek için belge detayındaki
+              <strong> Yeni Versiyon </strong>
+              işlemini kullanın. Böylece önceki sürümler korunur ve belge geçmişi bozulmaz.
+            </p>
+
           </div>
+
+        </div>
+
+      </div>
+
+      {/* RELATION LOAD WARNING */}
+
+      {hasRelationLoadError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+
+          <div className="flex items-start gap-3">
+
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+
+            <div>
+
+              <p className="font-medium text-amber-900 dark:text-amber-200">
+                Bazı ilişkili kayıtlar yüklenemedi
+              </p>
+
+              <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                Dava veya müvekkil listesi eksik görünebilir. Mevcut belge bilgilerini değiştirmeden kaydedebilirsiniz.
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* FORM */}
+
+      <Card>
+
+        <form
+          onSubmit={
+            handleSubmit
+          }
+          className="space-y-6 p-6"
+        >
+
+          {/* FILE READ ONLY */}
+
+          <div className="rounded-xl bg-gray-50 p-4 dark:bg-gray-800/50">
+
+            <div className="flex items-start gap-4">
+
+              <span className="text-4xl">
+                {getFileIcon(
+                  documentItem.file_type
+                )}
+              </span>
+
+              <div className="min-w-0 flex-1">
+
+                <div className="flex flex-wrap items-center gap-2">
+
+                  <p className="break-all font-medium text-gray-900 dark:text-white">
+                    {
+                      documentItem.original_name
+                    }
+                  </p>
+
+                  <Badge variant="info">
+                    v
+                    {documentItem.version ||
+                      1}
+                  </Badge>
+
+                </div>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  {formatFileSize(
+                    documentItem.file_size
+                  )}
+                  {' · '}
+                  {documentItem.mime_type ||
+                    'Bilinmiyor'}
+                </p>
+
+                <p className="mt-2 text-xs text-gray-500">
+                  Fiziksel dosya, MIME türü ve versiyon bilgileri salt okunurdur.
+                </p>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* NAME */}
 
           <Input
             label="Belge Adı *"
             name="name"
-            value={formData.name}
-            onChange={handleChange}
-            error={errors.name}
+            value={
+              formData.name
+            }
+            onChange={
+              handleChange
+            }
+            error={
+              errors.name
+            }
             placeholder="Belge adını girin"
+            disabled={
+              updateMutation.isPending
+            }
           />
 
+          {/* CATEGORY */}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kategori</label>
+
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Kategori
+            </label>
+
             <select
               name="category"
-              value={formData.category}
-              onChange={handleChange}
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={
+                formData.category
+              }
+              onChange={
+                handleChange
+              }
+              disabled={
+                updateMutation.isPending
+              }
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             >
-              <option value="general">📁 Genel</option>
-              <option value="petition">📝 Dilekçe</option>
-              <option value="expert_report">📊 Bilirkişi Raporu</option>
-              <option value="court_decision">⚖️ Mahkeme Kararı</option>
-              <option value="notification">📨 Tebligat</option>
-              <option value="evidence">🔍 Delil</option>
-              <option value="correspondence">✉️ Yazışma</option>
-              <option value="other">📌 Diğer</option>
+              {CATEGORY_OPTIONS.map(
+                (category) => (
+                  <option
+                    key={
+                      category.value
+                    }
+                    value={
+                      category.value
+                    }
+                  >
+                    {
+                      category.icon
+                    }{' '}
+                    {
+                      category.label
+                    }
+                  </option>
+                )
+              )}
             </select>
-            {formData.category && (
-              <span className={`inline-block mt-2 text-xs px-2 py-1 rounded ${getCategoryColor(formData.category)}`}>
-                {formData.category}
-              </span>
-            )}
+
+            <div className="mt-2">
+
+              <Badge
+                variant={getCategoryVariant(
+                  selectedCategory.value
+                )}
+              >
+                {
+                  selectedCategory.label
+                }
+              </Badge>
+
+            </div>
+
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* RELATED RECORDS */}
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">İlişkili Dava</label>
+
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                📁 İlişkili Dava
+              </label>
+
               <select
                 name="case_id"
-                value={formData.case_id}
-                onChange={handleChange}
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={
+                  formData.case_id
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  casesLoading ||
+                  updateMutation.isPending
+                }
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-wait disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               >
-                <option value="">Dava seçin</option>
-                {cases.map((caseItem) => (
-                  <option key={caseItem.id} value={caseItem.id}>
-                    {caseItem.title}
-                  </option>
-                ))}
+
+                <option value="">
+                  İlişki yok
+                </option>
+
+                {cases.map(
+                  (caseItem) => (
+                    <option
+                      key={
+                        caseItem.id
+                      }
+                      value={
+                        caseItem.id
+                      }
+                    >
+                      {
+                        caseItem.title
+                      }
+                    </option>
+                  )
+                )}
+
               </select>
+
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">İlişkili Müvekkil</label>
+
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                👤 İlişkili Müvekkil
+              </label>
+
               <select
                 name="client_id"
-                value={formData.client_id}
-                onChange={handleChange}
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={
+                  formData.client_id
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  clientsLoading ||
+                  updateMutation.isPending
+                }
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-wait disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               >
-                <option value="">Müvekkil seçin</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}  {/* ✅ DÜZELTİLDİ */}
-                  </option>
-                ))}
+
+                <option value="">
+                  İlişki yok
+                </option>
+
+                {clients.map(
+                  (client) => (
+                    <option
+                      key={
+                        client.id
+                      }
+                      value={
+                        client.id
+                      }
+                    >
+                      {
+                        client.name
+                      }
+
+                      {client.company_name &&
+                        ` (${client.company_name})`}
+                    </option>
+                  )
+                )}
+
               </select>
+
             </div>
+
           </div>
 
-          <Input
-            label="Etiketler (virgülle ayır)"
-            name="tags"
-            value={formData.tags}
-            onChange={handleChange}
-            placeholder="acil, icra, ceza, önemli"
-          />
+          {/* TAGS */}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Açıklama</label>
+
+            <Input
+              label="Etiketler"
+              name="tags"
+              value={
+                formData.tags
+              }
+              onChange={
+                handleChange
+              }
+              placeholder="acil, ceza, bilirkişi, önemli"
+              disabled={
+                updateMutation.isPending
+              }
+            />
+
+            <p className="mt-1 text-xs text-gray-500">
+              Birden fazla etiketi virgülle ayırın. Tekrarlanan etiketler otomatik temizlenir.
+            </p>
+
+            {tagsPreview.length >
+              0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+
+                {tagsPreview.map(
+                  (tag) => (
+                    <Badge
+                      key={
+                        tag
+                      }
+                      variant="default"
+                      className="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                    >
+                      #{tag}
+                    </Badge>
+                  )
+                )}
+
+              </div>
+            )}
+
+          </div>
+
+          {/* DESCRIPTION */}
+
+          <div>
+
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Açıklama
+            </label>
+
             <textarea
               name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows="4"
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Belge hakkında notlar..."
+              value={
+                formData.description
+              }
+              onChange={
+                handleChange
+              }
+              disabled={
+                updateMutation.isPending
+              }
+              rows="5"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              placeholder="Belgenin içeriği, amacı veya dosyadaki önemi hakkında not..."
             />
+
           </div>
 
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              name="is_public"
-              checked={formData.is_public}
-              onChange={handleChange}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">🌐 Herkese açık (tüm kullanıcılar görebilir)</label>
+          {/* ACCESS */}
+
+          <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+
+            <div className="flex items-start gap-3">
+
+              {formData.is_public ? (
+                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+              ) : (
+                <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-gray-500" />
+              )}
+
+              <div className="flex-1">
+
+                <div className="flex items-center gap-2">
+
+                  <input
+                    id="document-general-access"
+                    type="checkbox"
+                    name="is_public"
+                    checked={
+                      formData.is_public
+                    }
+                    onChange={
+                      handleChange
+                    }
+                    disabled={
+                      updateMutation.isPending
+                    }
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                  />
+
+                  <label
+                    htmlFor="document-general-access"
+                    className="font-medium text-gray-900 dark:text-white"
+                  >
+                    Büro içi genel erişim
+                  </label>
+
+                </div>
+
+                <p className="mt-2 text-sm leading-6 text-gray-500">
+                  Açıldığında belge, sistemde belge görüntüleme yetkisi bulunan kullanıcılar için genel erişilebilir olarak işaretlenir.
+                  Bu ayar belgenin internet üzerinde herkese açık olduğu anlamına gelmez.
+                </p>
+
+              </div>
+
+            </div>
+
           </div>
 
-          <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <Button type="submit" loading={updateMutation.isPending}>💾 Güncelle</Button>
-            <Button type="button" variant="secondary" onClick={() => navigate('/documents')}>İptal</Button>
+          {/* WARNING */}
+
+          <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+
+            <div className="flex items-start gap-2">
+
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+
+              <p>
+                Dava veya müvekkil ilişkisini değiştirmeniz belgenin dosyadaki bağlamını etkiler. Kaydetmeden önce seçilen kayıtları kontrol edin.
+              </p>
+
+            </div>
+
           </div>
+
+          {/* ACTIONS */}
+
+          <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
+
+            <Button
+              type="submit"
+              loading={
+                updateMutation.isPending
+              }
+              disabled={
+                updateMutation.isPending
+              }
+            >
+              <Save className="mr-2 h-4 w-4" />
+
+              Değişiklikleri Kaydet
+            </Button>
+
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                navigate(
+                  `/documents/${id}`
+                )
+              }
+              disabled={
+                updateMutation.isPending
+              }
+            >
+              Vazgeç
+            </Button>
+
+          </div>
+
         </form>
+
       </Card>
+
     </div>
   );
 };

@@ -11,25 +11,25 @@ import {
 } from 'react-router-dom';
 
 import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+  useDocument,
+  useDocumentVersions,
+  useUploadDocumentVersion,
+} from '../../features/documents/document.query.js';
 
 import documentApi from '../../features/documents/document.api.js';
 
-import { useAuth } from '../../app/providers/auth.provider.jsx';
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
 
 import Button from '../../components/ui/Button.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
-  Archive,
   Download,
   Eye,
   FileClock,
-  FileText,
   History,
   Pencil,
   UploadCloud,
@@ -266,9 +266,6 @@ const DocumentDetail = () => {
   const navigate =
     useNavigate();
 
-  const queryClient =
-    useQueryClient();
-
   const { user } =
     useAuth();
 
@@ -294,14 +291,13 @@ const DocumentDetail = () => {
   // PERMISSIONS
   // ======================================================
 
-  const canEdit =
-    [
-      'admin',
-      'lawyer',
-      'secretary',
-    ].includes(
-      user?.role
-    );
+  const canEdit = [
+    'admin',
+    'lawyer',
+    'secretary',
+  ].includes(
+    user?.role
+  );
 
   const canUploadVersion =
     canEdit;
@@ -314,23 +310,12 @@ const DocumentDetail = () => {
     data,
     isLoading,
     error,
-  } = useQuery({
-    queryKey: [
-      'document',
-      id,
-    ],
-
-    queryFn: () =>
-      documentApi.getOne(
-        id
-      ),
-
-    enabled:
-      Boolean(id),
-  });
+  } = useDocument(id);
 
   const documentItem =
-    data?.data?.data;
+    data?.data?.data ??
+    data?.data ??
+    null;
 
   // ======================================================
   // VERSIONS QUERY
@@ -340,31 +325,34 @@ const DocumentDetail = () => {
     data: versionsData,
     isLoading:
       versionsLoading,
-  } = useQuery({
-    queryKey: [
-      'documentVersions',
-      id,
-    ],
-
-    queryFn: () =>
-      documentApi.getVersions(
-        id
-      ),
-
-    enabled:
-      Boolean(id),
-  });
+  } =
+    useDocumentVersions(
+      id
+    );
 
   const versions =
     versionsData?.data
-      ?.data || [];
+      ?.data ??
+    versionsData?.data ??
+    [];
 
   // ======================================================
-  // CURRENT VERSION
+  // VERSION UPLOAD MUTATION
   // ======================================================
 
-  const latestVersion =
+  const uploadVersionMutation =
+    useUploadDocumentVersion();
+
+  // ======================================================
+  // CURRENT / LATEST VERSION
+  // ======================================================
+
+  const currentDocument =
     useMemo(() => {
+      if (!documentItem) {
+        return null;
+      }
+
       if (
         !Array.isArray(
           versions
@@ -372,108 +360,68 @@ const DocumentDetail = () => {
         versions.length ===
           0
       ) {
-        return (
-          documentItem
-            ?.version || 1
-        );
+        return documentItem;
       }
 
-      return Math.max(
-        ...versions.map(
-          (item) =>
+      return versions.reduce(
+        (
+          currentLatest,
+          item
+        ) => {
+          const currentVersion =
             Number(
-              item.version
-            ) || 1
-        )
+              currentLatest
+                ?.version
+            ) || 1;
+
+          const itemVersion =
+            Number(
+              item?.version
+            ) || 1;
+
+          return itemVersion >
+            currentVersion
+            ? item
+            : currentLatest;
+        },
+        documentItem
       );
     }, [
-      versions,
       documentItem,
+      versions,
     ]);
 
-  // ======================================================
-  // UPLOAD VERSION MUTATION
-  // ======================================================
+  const latestVersion =
+    Number(
+      currentDocument?.version
+    ) || 1;
 
-  const uploadVersionMutation =
-    useMutation({
-      mutationFn:
-        ({ documentId, formData }) =>
-          documentApi.uploadVersion(
-            documentId,
-            formData
-          ),
-
-      onSuccess: async () => {
-        toast.success(
-          'Yeni belge versiyonu yüklendi'
-        );
-
-        setShowVersionModal(
-          false
-        );
-
-        setVersionFile(
-          null
-        );
-
-        setVersionDescription(
-          ''
-        );
-
-        if (
-          fileInputRef.current
-        ) {
-          fileInputRef.current.value =
-            '';
-        }
-
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: [
-              'document',
-              id,
-            ],
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey: [
-              'documentVersions',
-              id,
-            ],
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey: [
-              'documents',
-            ],
-          }),
-        ]);
-      },
-
-      onError: (error) => {
-        const message =
-          error?.response
-            ?.data?.message ||
-          error?.message ||
-          'Yeni versiyon yüklenemedi';
-
-        toast.error(
-          message
-        );
-      },
-    });
+  const hasNewerVersion =
+    Boolean(
+      documentItem &&
+        currentDocument &&
+        currentDocument.id !==
+          documentItem.id
+    );
 
   // ======================================================
   // DOWNLOAD
   // ======================================================
 
   const handleDownload = async (
-    targetDocument = documentItem
+    targetDocument =
+      currentDocument
   ) => {
-    if (!targetDocument) {
+    if (!targetDocument?.id) {
+      toast.error(
+        'İndirilecek belge bulunamadı'
+      );
+
       return;
     }
+
+    let objectUrl = null;
+    let anchor = null;
 
     try {
       const response =
@@ -481,36 +429,39 @@ const DocumentDetail = () => {
           targetDocument.id
         );
 
-      const blob = new Blob(
-        [response.data],
-        {
-          type:
-            targetDocument.mime_type ||
-            'application/octet-stream',
-        }
-      );
+      const blob =
+        new Blob(
+          [response.data],
+          {
+            type:
+              targetDocument.mime_type ||
+              response.headers?.[
+                'content-type'
+              ] ||
+              'application/octet-stream',
+          }
+        );
 
-      const url =
+      objectUrl =
         window.URL.createObjectURL(
           blob
         );
 
-      /*
-       * window.document kullanıyoruz.
-       * documentItem ile browser document'i çakışmıyor.
-       */
-      const anchor =
+      anchor =
         window.document.createElement(
           'a'
         );
 
       anchor.href =
-        url;
+        objectUrl;
 
       anchor.download =
         targetDocument.original_name ||
         targetDocument.name ||
         'document';
+
+      anchor.style.display =
+        'none';
 
       window.document.body.appendChild(
         anchor
@@ -518,14 +469,8 @@ const DocumentDetail = () => {
 
       anchor.click();
 
-      anchor.remove();
-
-      window.URL.revokeObjectURL(
-        url
-      );
-
       toast.success(
-        'Dosya indirildi'
+        `v${targetDocument.version || 1} indirildi`
       );
     } catch (downloadError) {
       console.error(
@@ -534,8 +479,24 @@ const DocumentDetail = () => {
       );
 
       toast.error(
-        'Dosya indirilemedi'
+        downloadError?.response
+          ?.data?.message ||
+          'Dosya indirilemedi'
       );
+    } finally {
+      if (
+        anchor?.parentNode
+      ) {
+        anchor.parentNode.removeChild(
+          anchor
+        );
+      }
+
+      if (objectUrl) {
+        window.URL.revokeObjectURL(
+          objectUrl
+        );
+      }
     }
   };
 
@@ -544,42 +505,65 @@ const DocumentDetail = () => {
   // ======================================================
 
   const handlePreview = async (
-    targetDocument = documentItem
+    targetDocument =
+      currentDocument
   ) => {
-    if (!targetDocument) {
+    if (!targetDocument?.id) {
+      toast.error(
+        'Önizlenecek belge bulunamadı'
+      );
+
       return;
     }
 
     try {
+      /*
+       * Popup engelleyicilerin daha az sorun çıkarması için
+       * pencereyi kullanıcı tıklaması sırasında açıyoruz.
+       */
+      const previewWindow =
+        window.open(
+          '',
+          '_blank'
+        );
+
       const response =
         await documentApi.preview(
           targetDocument.id
         );
 
-      const blob = new Blob(
-        [response.data],
-        {
-          type:
-            targetDocument.mime_type ||
-            'application/octet-stream',
-        }
-      );
+      const blob =
+        new Blob(
+          [response.data],
+          {
+            type:
+              targetDocument.mime_type ||
+              response.headers?.[
+                'content-type'
+              ] ||
+              'application/octet-stream',
+          }
+        );
 
       const url =
         window.URL.createObjectURL(
           blob
         );
 
-      window.open(
-        url,
-        '_blank',
-        'noopener,noreferrer'
-      );
+      if (previewWindow) {
+        previewWindow.opener =
+          null;
 
-      /*
-       * Yeni tab'ın blob'u okuyabilmesi için
-       * hemen revoke etmiyoruz.
-       */
+        previewWindow.location.href =
+          url;
+      } else {
+        window.open(
+          url,
+          '_blank',
+          'noopener,noreferrer'
+        );
+      }
+
       window.setTimeout(
         () => {
           window.URL.revokeObjectURL(
@@ -595,7 +579,9 @@ const DocumentDetail = () => {
       );
 
       toast.error(
-        'Belge önizlenemedi'
+        previewError?.response
+          ?.data?.message ||
+          'Belge önizlenemedi'
       );
     }
   };
@@ -665,6 +651,10 @@ const DocumentDetail = () => {
     );
   };
 
+  // ======================================================
+  // UPLOAD VERSION
+  // ======================================================
+
   const handleUploadVersion =
     () => {
       if (!versionFile) {
@@ -683,9 +673,6 @@ const DocumentDetail = () => {
         versionFile
       );
 
-      /*
-       * Belge adı root belgeden miras alınacak.
-       */
       if (
         versionDescription.trim()
       ) {
@@ -695,10 +682,66 @@ const DocumentDetail = () => {
         );
       }
 
-      uploadVersionMutation.mutate({
-        documentId: id,
-        formData,
-      });
+      uploadVersionMutation.mutate(
+        {
+          documentId: id,
+          formData,
+        },
+        {
+          onSuccess: () => {
+            setShowVersionModal(
+              false
+            );
+
+            setVersionFile(
+              null
+            );
+
+            setVersionDescription(
+              ''
+            );
+
+            if (
+              fileInputRef.current
+            ) {
+              fileInputRef.current.value =
+                '';
+            }
+          },
+        }
+      );
+    };
+
+  // ======================================================
+  // CLOSE VERSION MODAL
+  // ======================================================
+
+  const handleCloseVersionModal =
+    () => {
+      if (
+        uploadVersionMutation.isPending
+      ) {
+        return;
+      }
+
+      setShowVersionModal(
+        false
+      );
+
+      setVersionFile(
+        null
+      );
+
+      setVersionDescription(
+        ''
+      );
+
+      if (
+        fileInputRef.current
+      ) {
+        fileInputRef.current.value =
+          '';
+      }
     };
 
   // ======================================================
@@ -759,9 +802,7 @@ const DocumentDetail = () => {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
 
-      {/* ==================================================
-          HEADER
-      ================================================== */}
+      {/* HEADER */}
 
       <div className="flex flex-wrap items-start justify-between gap-4">
 
@@ -780,10 +821,9 @@ const DocumentDetail = () => {
               {documentItem.name}
             </h1>
 
-            <Badge variant="default">
-              v
-              {documentItem.version ||
-                1}
+            <Badge variant="info">
+              Güncel v
+              {latestVersion}
             </Badge>
 
             {documentItem.is_archived && (
@@ -795,9 +835,15 @@ const DocumentDetail = () => {
           </div>
 
           <p className="mt-1 text-sm text-gray-500">
-            {
-              documentItem.original_name
-            }
+            Belge ailesi ·{' '}
+            {Array.isArray(
+              versions
+            ) &&
+            versions.length >
+              0
+              ? versions.length
+              : 1}{' '}
+            versiyon
           </p>
 
         </div>
@@ -811,7 +857,8 @@ const DocumentDetail = () => {
             }
           >
             <Eye className="mr-2 h-4 w-4" />
-            Önizle
+
+            Günceli Önizle
           </Button>
 
           <Button
@@ -821,7 +868,8 @@ const DocumentDetail = () => {
             }
           >
             <Download className="mr-2 h-4 w-4" />
-            İndir
+
+            Günceli İndir
           </Button>
 
           {canUploadVersion && (
@@ -834,6 +882,7 @@ const DocumentDetail = () => {
               }
             >
               <UploadCloud className="mr-2 h-4 w-4" />
+
               Yeni Versiyon
             </Button>
           )}
@@ -848,16 +897,34 @@ const DocumentDetail = () => {
               }
             >
               <Pencil className="mr-2 h-4 w-4" />
+
               Düzenle
             </Button>
           )}
 
         </div>
+
       </div>
 
-      {/* ==================================================
-          FILE SUMMARY
-      ================================================== */}
+      {/* NEWER VERSION INFO */}
+
+      {hasNewerVersion && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+
+          <p className="font-medium text-blue-900 dark:text-blue-200">
+            Güncel belge sürümü v
+            {latestVersion}
+          </p>
+
+          <p className="mt-1 text-sm text-blue-800 dark:text-blue-300">
+            Bu belge ailesinin daha yeni bir sürümü bulunuyor.
+            Önizleme ve indirme işlemleri varsayılan olarak en güncel versiyon üzerinden yapılır.
+          </p>
+
+        </div>
+      )}
+
+      {/* FILE SUMMARY */}
 
       <Card>
 
@@ -867,19 +934,29 @@ const DocumentDetail = () => {
 
             <span className="text-5xl">
               {getFileIcon(
-                documentItem.file_type
+                currentDocument?.file_type
               )}
             </span>
 
             <div className="min-w-0 flex-1">
 
-              <p className="text-sm text-gray-500">
-                Orijinal Dosya Adı
-              </p>
+              <div className="flex flex-wrap items-center gap-2">
 
-              <p className="break-all font-medium text-gray-900 dark:text-white">
+                <p className="text-sm text-gray-500">
+                  Güncel Dosya
+                </p>
+
+                <Badge variant="success">
+                  v
+                  {currentDocument?.version ||
+                    1}
+                </Badge>
+
+              </div>
+
+              <p className="mt-1 break-all font-medium text-gray-900 dark:text-white">
                 {
-                  documentItem.original_name
+                  currentDocument?.original_name
                 }
               </p>
 
@@ -887,36 +964,38 @@ const DocumentDetail = () => {
 
                 <Badge variant="default">
                   {formatFileSize(
-                    documentItem.file_size
+                    currentDocument?.file_size
                   )}
                 </Badge>
 
                 <Badge variant="default">
-                  {documentItem.mime_type ||
+                  {currentDocument?.mime_type ||
                     'Bilinmiyor'}
                 </Badge>
 
-                {documentItem.file_type && (
+                {currentDocument?.file_type && (
                   <Badge variant="default">
-                    {documentItem.file_type.toUpperCase()}
+                    {currentDocument.file_type.toUpperCase()}
                   </Badge>
                 )}
 
-                <Badge variant="info">
-                  v
-                  {documentItem.version ||
-                    1}
-                </Badge>
-
               </div>
+
+              {currentDocument?.created_at && (
+                <p className="mt-3 text-xs text-gray-500">
+                  Bu sürüm{' '}
+                  {formatDateTime(
+                    currentDocument.created_at
+                  )}{' '}
+                  tarihinde yüklendi.
+                </p>
+              )}
 
             </div>
 
           </div>
 
-          {/* ==================================================
-              INFO GRID
-          ================================================== */}
+          {/* LOGICAL DOCUMENT INFO */}
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
 
@@ -941,7 +1020,7 @@ const DocumentDetail = () => {
             <div>
 
               <p className="text-sm text-gray-500">
-                Yükleyen
+                İlk Yükleyen
               </p>
 
               <p className="mt-1 font-medium text-gray-900 dark:text-white">
@@ -955,7 +1034,7 @@ const DocumentDetail = () => {
             <div>
 
               <p className="text-sm text-gray-500">
-                Yüklenme Tarihi
+                İlk Yüklenme Tarihi
               </p>
 
               <p className="mt-1 font-medium text-gray-900 dark:text-white">
@@ -969,12 +1048,12 @@ const DocumentDetail = () => {
             <div>
 
               <p className="text-sm text-gray-500">
-                Son Güncelleme
+                Güncel Versiyon Tarihi
               </p>
 
               <p className="mt-1 font-medium text-gray-900 dark:text-white">
                 {formatDateTime(
-                  documentItem.updated_at
+                  currentDocument?.created_at
                 )}
               </p>
 
@@ -1060,7 +1139,7 @@ const DocumentDetail = () => {
                 }
               >
                 {documentItem.is_public
-                  ? '🌐 Paylaşıma Açık'
+                  ? '🌐 Büro içi genel erişim'
                   : '🔒 Kısıtlı'}
               </Badge>
 
@@ -1068,9 +1147,7 @@ const DocumentDetail = () => {
 
           </div>
 
-          {/* ==================================================
-              TAGS
-          ================================================== */}
+          {/* TAGS */}
 
           {Array.isArray(
             documentItem.tags
@@ -1102,15 +1179,13 @@ const DocumentDetail = () => {
               </div>
             )}
 
-          {/* ==================================================
-              DESCRIPTION
-          ================================================== */}
+          {/* DESCRIPTION */}
 
           {documentItem.description && (
             <div>
 
               <p className="mb-2 text-sm text-gray-500">
-                Açıklama
+                Belge Açıklaması
               </p>
 
               <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-800/50">
@@ -1126,13 +1201,34 @@ const DocumentDetail = () => {
             </div>
           )}
 
+          {hasNewerVersion &&
+            currentDocument?.description &&
+            currentDocument.description !==
+              documentItem.description && (
+              <div>
+
+                <p className="mb-2 text-sm text-gray-500">
+                  Güncel Versiyon Notu
+                </p>
+
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+
+                  <p className="whitespace-pre-wrap leading-7 text-blue-900 dark:text-blue-200">
+                    {
+                      currentDocument.description
+                    }
+                  </p>
+
+                </div>
+
+              </div>
+            )}
+
         </div>
 
       </Card>
 
-      {/* ==================================================
-          VERSION HISTORY
-      ================================================== */}
+      {/* VERSION HISTORY */}
 
       <Card>
 
@@ -1151,7 +1247,7 @@ const DocumentDetail = () => {
                 </h2>
 
                 <p className="text-xs text-gray-500">
-                  Belgenin önceki ve güncel sürümleri
+                  Belgenin tüm kayıtlı sürümleri
                 </p>
 
               </div>
@@ -1173,8 +1269,11 @@ const DocumentDetail = () => {
             <div className="py-8 text-center text-sm text-gray-500">
               Versiyonlar yükleniyor...
             </div>
-          ) : versions.length ===
-            0 ? (
+          ) : !Array.isArray(
+              versions
+            ) ||
+            versions.length ===
+              0 ? (
             <div className="py-8 text-center">
 
               <FileClock className="mx-auto h-8 w-8 text-gray-400" />
@@ -1195,9 +1294,15 @@ const DocumentDetail = () => {
                     ) ===
                     latestVersion;
 
+                  const isRoot =
+                    version.id ===
+                    documentItem.id;
+
                   return (
                     <div
-                      key={version.id}
+                      key={
+                        version.id
+                      }
                       className="flex flex-col gap-3 rounded-xl border border-gray-200 p-4 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between"
                     >
 
@@ -1207,12 +1312,20 @@ const DocumentDetail = () => {
 
                           <p className="font-medium text-gray-900 dark:text-white">
                             v
-                            {version.version}
+                            {
+                              version.version
+                            }
                           </p>
 
                           {isLatest && (
                             <Badge variant="success">
                               Güncel
+                            </Badge>
+                          )}
+
+                          {isRoot && (
+                            <Badge variant="default">
+                              İlk Sürüm
                             </Badge>
                           )}
 
@@ -1238,6 +1351,14 @@ const DocumentDetail = () => {
                           )}
                         </p>
 
+                        {version.description && (
+                          <p className="mt-2 text-xs text-gray-500">
+                            {
+                              version.description
+                            }
+                          </p>
+                        )}
+
                       </div>
 
                       <div className="flex shrink-0 gap-2">
@@ -1252,6 +1373,7 @@ const DocumentDetail = () => {
                           }
                         >
                           <Eye className="mr-1 h-4 w-4" />
+
                           Aç
                         </Button>
 
@@ -1265,6 +1387,7 @@ const DocumentDetail = () => {
                           }
                         >
                           <Download className="mr-1 h-4 w-4" />
+
                           İndir
                         </Button>
 
@@ -1282,9 +1405,7 @@ const DocumentDetail = () => {
 
       </Card>
 
-      {/* ==================================================
-          VERSION MODAL
-      ================================================== */}
+      {/* VERSION MODAL */}
 
       {showVersionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1300,25 +1421,23 @@ const DocumentDetail = () => {
                 </h3>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Mevcut belge korunacak ve yeni dosya bir sonraki versiyon olarak kaydedilecektir.
+                  Mevcut sürümler korunur. Yeni dosya v
+                  {latestVersion + 1}{' '}
+                  olarak kaydedilecektir.
                 </p>
 
               </div>
 
               <button
                 type="button"
-                onClick={() => {
-                  if (
-                    uploadVersionMutation.isPending
-                  ) {
-                    return;
-                  }
-
-                  setShowVersionModal(
-                    false
-                  );
-                }}
-                className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700"
+                onClick={
+                  handleCloseVersionModal
+                }
+                disabled={
+                  uploadVersionMutation.isPending
+                }
+                className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-gray-700"
+                aria-label="Pencereyi kapat"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1334,7 +1453,9 @@ const DocumentDetail = () => {
                 </label>
 
                 <input
-                  ref={fileInputRef}
+                  ref={
+                    fileInputRef
+                  }
                   type="file"
                   onChange={
                     handleVersionFileChange
@@ -1342,7 +1463,10 @@ const DocumentDetail = () => {
                   accept={ALLOWED_EXTENSIONS.join(
                     ','
                   )}
-                  className="block w-full rounded-md border border-gray-300 bg-white p-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  disabled={
+                    uploadVersionMutation.isPending
+                  }
+                  className="block w-full rounded-md border border-gray-300 bg-white p-2 text-sm text-gray-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 />
 
                 <p className="mt-1 text-xs text-gray-500">
@@ -1372,13 +1496,16 @@ const DocumentDetail = () => {
               <div>
 
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Versiyon Açıklaması
+                  Versiyon Notu
                 </label>
 
                 <textarea
                   rows="3"
                   value={
                     versionDescription
+                  }
+                  disabled={
+                    uploadVersionMutation.isPending
                   }
                   onChange={(event) =>
                     setVersionDescription(
@@ -1387,7 +1514,7 @@ const DocumentDetail = () => {
                     )
                   }
                   placeholder="Bu versiyonda ne değişti?"
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 />
 
               </div>
@@ -1410,7 +1537,10 @@ const DocumentDetail = () => {
                 className="flex-1"
               >
                 <UploadCloud className="mr-2 h-4 w-4" />
-                Yeni Versiyonu Yükle
+
+                v
+                {latestVersion + 1}{' '}
+                Yükle
               </Button>
 
               <Button
@@ -1418,19 +1548,9 @@ const DocumentDetail = () => {
                 disabled={
                   uploadVersionMutation.isPending
                 }
-                onClick={() => {
-                  setShowVersionModal(
-                    false
-                  );
-
-                  setVersionFile(
-                    null
-                  );
-
-                  setVersionDescription(
-                    ''
-                  );
-                }}
+                onClick={
+                  handleCloseVersionModal
+                }
               >
                 Vazgeç
               </Button>
