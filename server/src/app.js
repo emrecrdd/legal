@@ -7,6 +7,7 @@ import cookieParser from 'cookie-parser';
 
 import { config } from './config/env.js';
 import { logger } from './config/logger.js';
+
 import {
   checkDatabaseHealth,
 } from './config/database.js';
@@ -15,57 +16,85 @@ import {
   errorHandler,
 } from './middlewares/error.middleware.js';
 
+// ======================================================
+// ROUTES
+// ======================================================
+
 import {
   authRoutes,
 } from './modules/auth/auth.routes.js';
+
 import {
   clientRoutes,
 } from './modules/clients/client.routes.js';
+
 import {
   caseRoutes,
 } from './modules/cases/case.routes.js';
+
 import {
   casePartyRoutes,
 } from './modules/case-parties/case-party.routes.js';
+
 import {
   documentRoutes,
 } from './modules/documents/document.routes.js';
+
 import {
   taskRoutes,
 } from './modules/tasks/task.routes.js';
+
 import {
   financeRoutes,
 } from './modules/finance/finance.routes.js';
+
+import {
+  paymentRoutes,
+} from './modules/payments/payment.routes.js';
+
 import {
   searchRoutes,
 } from './modules/search/search.routes.js';
+
 import {
   aiRoutes,
 } from './modules/ai/ai.routes.js';
+
 import {
   userRoutes,
 } from './modules/users/user.routes.js';
+
 import {
   eventRoutes,
 } from './modules/events/event.routes.js';
+
 import {
   dashboardRoutes,
 } from './modules/dashboard/dashboard.routes.js';
+
 import {
   meetingRoutes,
 } from './modules/meetings/meeting.routes.js';
+
 import {
   notificationRoutes,
 } from './modules/notifications/notification.routes.js';
+
 import {
   auditLogRoutes,
 } from './modules/audit-logs/audit-log.routes.js';
+
 import {
   powerOfAttorneyRoutes,
 } from './modules/power-of-attorney/powerOfAttorney.routes.js';
+
 import {
   templateRoutes,
 } from './modules/templates/template.routes.js';
+
+// ======================================================
+// APP
+// ======================================================
 
 const app = express();
 
@@ -98,27 +127,37 @@ app.use(
   })
 );
 
-app.use(cookieParser());
-
-/*
- * CORS
- */
-const allowedOrigins = new Set(
-  [
-    ...config.CORS_ORIGINS,
-    config.CLIENT_URL,
-
-    ...(isProduction
-      ? []
-      : [
-          'http://localhost:5173',
-          'http://localhost:3000',
-        ]),
-  ].filter(Boolean)
+app.use(
+  cookieParser()
 );
 
+// ======================================================
+// CORS
+// ======================================================
+
+const allowedOrigins =
+  new Set(
+    [
+      ...config.CORS_ORIGINS,
+
+      config.CLIENT_URL,
+
+      ...(isProduction
+        ? []
+        : [
+            'http://localhost:5173',
+            'http://localhost:3000',
+          ]),
+    ].filter(
+      Boolean
+    )
+  );
+
 const corsOptions = {
-  origin(origin, callback) {
+  origin(
+    origin,
+    callback
+  ) {
     /*
      * Origin olmayan istekler:
      * - curl
@@ -127,11 +166,21 @@ const corsOptions = {
      * - sunucudan sunucuya istekler
      */
     if (!origin) {
-      return callback(null, true);
+      return callback(
+        null,
+        true
+      );
     }
 
-    if (allowedOrigins.has(origin)) {
-      return callback(null, true);
+    if (
+      allowedOrigins.has(
+        origin
+      )
+    ) {
+      return callback(
+        null,
+        true
+      );
     }
 
     logger.warn(
@@ -141,18 +190,24 @@ const corsOptions = {
       }
     );
 
-    const error = new Error(
-      'Bu kaynaktan gelen isteğe izin verilmiyor.'
-    );
+    const error =
+      new Error(
+        'Bu kaynaktan gelen isteğe izin verilmiyor.'
+      );
 
-    error.statusCode = 403;
+    error.statusCode =
+      403;
+
     error.code =
       'CORS_ORIGIN_DENIED';
 
-    return callback(error);
+    return callback(
+      error
+    );
   },
 
-  credentials: true,
+  credentials:
+    true,
 
   methods: [
     'GET',
@@ -179,10 +234,19 @@ const corsOptions = {
     'RateLimit-Reset',
   ],
 
-  maxAge: 86_400,
+  maxAge:
+    86_400,
 };
 
-app.use(cors(corsOptions));
+app.use(
+  cors(
+    corsOptions
+  )
+);
+
+// ======================================================
+// REQUEST BODY
+// ======================================================
 
 /*
  * Request body limitleri.
@@ -205,37 +269,52 @@ app.use(
   })
 );
 
-/*
- * HTTP logları.
- */
+// ======================================================
+// HTTP LOGGING
+// ======================================================
+
 if (
-  config.NODE_ENV === 'development'
+  config.NODE_ENV ===
+  'development'
 ) {
-  app.use(morgan('dev'));
+  app.use(
+    morgan('dev')
+  );
 } else {
   app.use(
-    morgan('combined', {
-      stream: {
-        write(message) {
-          logger.info(
-            message.trim()
+    morgan(
+      'combined',
+      {
+        stream: {
+          write(
+            message
+          ) {
+            logger.info(
+              message.trim()
+            );
+          },
+        },
+
+        /*
+         * Render gibi platformların sık çağırdığı
+         * health endpointlerini production logundan çıkarır.
+         */
+        skip(req) {
+          return (
+            req.path ===
+              '/health' ||
+            req.path ===
+              '/health/ready'
           );
         },
-      },
-
-      /*
-       * Render gibi platformların sık çağırdığı
-       * health endpointlerini production logundan çıkarır.
-       */
-      skip(req) {
-        return (
-          req.path === '/health' ||
-          req.path === '/health/ready'
-        );
-      },
-    })
+      }
+    )
   );
 }
+
+// ======================================================
+// RATE LIMIT
+// ======================================================
 
 /*
  * Genel API rate limit.
@@ -243,40 +322,50 @@ if (
  * AI route'larında ayrıca daha sıkı
  * endpoint bazlı limit bulunabilir.
  */
-const apiRateLimiter = rateLimit({
-  windowMs:
-    15 * 60 * 1000,
+const apiRateLimiter =
+  rateLimit({
+    windowMs:
+      15 *
+      60 *
+      1000,
 
-  limit: 300,
+    limit:
+      300,
 
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
+    standardHeaders:
+      'draft-8',
 
-  /*
-   * Bu middleware yalnızca /api altında çalıştığı
-   * için normalde health endpointlerine uygulanmaz.
-   * Ek güvenlik amacıyla kontrol korunmuştur.
-   */
-  skip(req) {
-    return (
-      req.path === '/health' ||
-      req.path === '/health/ready'
-    );
-  },
+    legacyHeaders:
+      false,
 
-  message: {
-    success: false,
-    message:
-      'Çok fazla istek gönderildi. Lütfen daha sonra tekrar deneyin.',
-    code:
-      'API_RATE_LIMIT_EXCEEDED',
-  },
-});
+    skip(req) {
+      return (
+        req.path ===
+          '/health' ||
+        req.path ===
+          '/health/ready'
+      );
+    },
+
+    message: {
+      success: false,
+
+      message:
+        'Çok fazla istek gönderildi. Lütfen daha sonra tekrar deneyin.',
+
+      code:
+        'API_RATE_LIMIT_EXCEEDED',
+    },
+  });
 
 app.use(
   '/api',
   apiRateLimiter
 );
+
+// ======================================================
+// HEALTH
+// ======================================================
 
 /*
  * Liveness kontrolü.
@@ -284,15 +373,30 @@ app.use(
  * Yalnızca Node uygulamasının ayakta olup
  * olmadığını gösterir.
  */
-app.get('/health', (req, res) => {
-  return res.status(200).json({
-    status: 'ok',
-    service: 'legal-system-api',
-    environment: config.NODE_ENV,
-    timestamp:
-      new Date().toISOString(),
-  });
-});
+app.get(
+  '/health',
+  (
+    req,
+    res
+  ) => {
+    return res
+      .status(200)
+      .json({
+        status:
+          'ok',
+
+        service:
+          'legal-system-api',
+
+        environment:
+          config.NODE_ENV,
+
+        timestamp:
+          new Date()
+            .toISOString(),
+      });
+  }
+);
 
 /*
  * Readiness kontrolü.
@@ -302,20 +406,30 @@ app.get('/health', (req, res) => {
  */
 app.get(
   '/health/ready',
-  async (req, res, next) => {
+  async (
+    req,
+    res,
+    next
+  ) => {
     try {
       const database =
         await checkDatabaseHealth();
 
       const healthy =
-        database.healthy === true;
+        database.healthy ===
+        true;
 
       return res
-        .status(healthy ? 200 : 503)
+        .status(
+          healthy
+            ? 200
+            : 503
+        )
         .json({
-          status: healthy
-            ? 'ready'
-            : 'not_ready',
+          status:
+            healthy
+              ? 'ready'
+              : 'not_ready',
 
           service:
             'legal-system-api',
@@ -325,17 +439,23 @@ app.get(
           },
 
           timestamp:
-            new Date().toISOString(),
+            new Date()
+              .toISOString(),
         });
-    } catch (error) {
-      return next(error);
+    } catch (
+      error
+    ) {
+      return next(
+        error
+      );
     }
   }
 );
 
-/*
- * API Routes
- */
+// ======================================================
+// API ROUTES
+// ======================================================
+
 app.use(
   '/api/auth',
   authRoutes
@@ -366,9 +486,23 @@ app.use(
   taskRoutes
 );
 
+/*
+ * Eski finance modülü.
+ *
+ * Yeni payments sistemi tamamen doğrulanana kadar
+ * kaldırmıyoruz.
+ */
 app.use(
   '/api/finance',
   financeRoutes
+);
+
+/*
+ * Yeni profesyonel ödeme / finans altyapısı.
+ */
+app.use(
+  '/api/payments',
+  paymentRoutes
 );
 
 app.use(
@@ -421,25 +555,47 @@ app.use(
   templateRoutes
 );
 
-/*
- * 404 handler.
- */
-app.use((req, res) => {
-  return res.status(404).json({
-    success: false,
-    message:
-      'İstenen API endpoint’i bulunamadı.',
-    code: 'ROUTE_NOT_FOUND',
-    path: req.originalUrl,
-  });
-});
+// ======================================================
+// 404
+// ======================================================
+
+app.use(
+  (
+    req,
+    res
+  ) => {
+    return res
+      .status(404)
+      .json({
+        success:
+          false,
+
+        message:
+          'İstenen API endpoint’i bulunamadı.',
+
+        code:
+          'ROUTE_NOT_FOUND',
+
+        path:
+          req.originalUrl,
+      });
+  }
+);
+
+// ======================================================
+// GLOBAL ERROR HANDLER
+// ======================================================
 
 /*
  * Global error handler her zaman
  * middleware zincirinin sonunda olmalıdır.
  */
-app.use(errorHandler);
+app.use(
+  errorHandler
+);
 
-export { app };
+export {
+  app,
+};
 
 export default app;

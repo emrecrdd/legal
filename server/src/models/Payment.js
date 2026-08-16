@@ -22,7 +22,7 @@ class Payment extends Sequelize.Model {
           allowNull: false,
 
           validate: {
-            min: 0,
+            min: 0.01,
           },
         },
 
@@ -42,10 +42,10 @@ class Payment extends Sequelize.Model {
 
         payment_type: {
           type: DataTypes.ENUM(
-            'agreed',
             'received',
             'refund',
-            'expense'
+            'expense',
+            'adjustment'
           ),
 
           allowNull: false,
@@ -69,13 +69,16 @@ class Payment extends Sequelize.Model {
           type: DataTypes.ENUM(
             'pending',
             'completed',
-            'cancelled',
-            'refund'
+            'cancelled'
           ),
 
           allowNull: false,
-          defaultValue: 'pending',
+          defaultValue: 'completed',
         },
+
+        // ==================================================
+        // DATES
+        // ==================================================
 
         payment_date: {
           type: DataTypes.DATE,
@@ -83,10 +86,9 @@ class Payment extends Sequelize.Model {
           defaultValue: DataTypes.NOW,
         },
 
-        due_date: {
-          type: DataTypes.DATE,
-          allowNull: true,
-        },
+        // ==================================================
+        // EXTERNAL / ACCOUNTING REFERENCES
+        // ==================================================
 
         transaction_id: {
           type: DataTypes.STRING(255),
@@ -140,9 +142,72 @@ class Payment extends Sequelize.Model {
           },
         },
 
+        payment_plan_id: {
+          type: DataTypes.UUID,
+          allowNull: true,
+
+          references: {
+            model: 'payment_plans',
+            key: 'id',
+          },
+        },
+
+        installment_id: {
+          type: DataTypes.UUID,
+          allowNull: true,
+
+          references: {
+            model: 'payment_installments',
+            key: 'id',
+          },
+        },
+
         created_by: {
           type: DataTypes.UUID,
           allowNull: false,
+
+          references: {
+            model: 'users',
+            key: 'id',
+          },
+        },
+
+        // ==================================================
+        // REVERSAL / CORRECTION
+        // ==================================================
+
+        reversed_payment_id: {
+          type: DataTypes.UUID,
+          allowNull: true,
+
+          references: {
+            model: 'payments',
+            key: 'id',
+          },
+        },
+
+        reversal_reason: {
+          type: DataTypes.STRING(500),
+          allowNull: true,
+
+          set(value) {
+            this.setDataValue(
+              'reversal_reason',
+              value
+                ? String(value).trim()
+                : null
+            );
+          },
+        },
+
+        reversed_at: {
+          type: DataTypes.DATE,
+          allowNull: true,
+        },
+
+        reversed_by: {
+          type: DataTypes.UUID,
+          allowNull: true,
 
           references: {
             model: 'users',
@@ -157,6 +222,15 @@ class Payment extends Sequelize.Model {
         notes: {
           type: DataTypes.TEXT,
           allowNull: true,
+
+          set(value) {
+            this.setDataValue(
+              'notes',
+              value
+                ? String(value).trim()
+                : null
+            );
+          },
         },
       },
       {
@@ -178,6 +252,14 @@ class Payment extends Sequelize.Model {
           },
 
           {
+            fields: ['payment_plan_id'],
+          },
+
+          {
+            fields: ['installment_id'],
+          },
+
+          {
             fields: ['created_by'],
           },
 
@@ -194,14 +276,9 @@ class Payment extends Sequelize.Model {
           },
 
           {
-            fields: ['due_date'],
-          },
-
-          {
             fields: [
               'client_id',
               'status',
-              'payment_type',
             ],
           },
 
@@ -209,6 +286,41 @@ class Payment extends Sequelize.Model {
             fields: [
               'client_id',
               'payment_date',
+            ],
+          },
+
+          {
+            fields: [
+              'payment_plan_id',
+              'status',
+            ],
+          },
+
+          {
+            fields: [
+              'installment_id',
+              'status',
+            ],
+          },
+
+          {
+            fields: [
+              'case_id',
+              'payment_date',
+            ],
+          },
+
+          {
+            fields: [
+              'payment_type',
+              'status',
+              'payment_date',
+            ],
+          },
+
+          {
+            fields: [
+              'reversed_payment_id',
             ],
           },
         ],
@@ -224,24 +336,88 @@ class Payment extends Sequelize.Model {
     Payment.belongsTo(
       models.Client,
       {
-        foreignKey: 'client_id',
-        as: 'client',
+        foreignKey:
+          'client_id',
+
+        as:
+          'client',
       }
     );
 
     Payment.belongsTo(
       models.Case,
       {
-        foreignKey: 'case_id',
-        as: 'case',
+        foreignKey:
+          'case_id',
+
+        as:
+          'case',
+      }
+    );
+
+    Payment.belongsTo(
+      models.PaymentPlan,
+      {
+        foreignKey:
+          'payment_plan_id',
+
+        as:
+          'paymentPlan',
+      }
+    );
+
+    Payment.belongsTo(
+      models.PaymentInstallment,
+      {
+        foreignKey:
+          'installment_id',
+
+        as:
+          'installment',
       }
     );
 
     Payment.belongsTo(
       models.User,
       {
-        foreignKey: 'created_by',
-        as: 'creator',
+        foreignKey:
+          'created_by',
+
+        as:
+          'creator',
+      }
+    );
+
+    Payment.belongsTo(
+      models.User,
+      {
+        foreignKey:
+          'reversed_by',
+
+        as:
+          'reverser',
+      }
+    );
+
+    Payment.belongsTo(
+      models.Payment,
+      {
+        foreignKey:
+          'reversed_payment_id',
+
+        as:
+          'reversedPayment',
+      }
+    );
+
+    Payment.hasMany(
+      models.Payment,
+      {
+        foreignKey:
+          'reversed_payment_id',
+
+        as:
+          'reversals',
       }
     );
   }

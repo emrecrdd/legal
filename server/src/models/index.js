@@ -7,6 +7,8 @@ import { Task } from './Task.js';
 import { Event } from './Event.js';
 import { Meeting } from './Meeting.js';
 import { Payment } from './Payment.js';
+import { PaymentPlan } from './PaymentPlan.js';
+import { PaymentInstallment } from './PaymentInstallment.js';
 import { Note } from './Note.js';
 import { AuditLog } from './AuditLog.js';
 import { Notification } from './Notification.js';
@@ -16,7 +18,9 @@ import { AIAnalysis } from './AIAnalysis.js';
 import { Reminder } from './Reminder.js';
 
 const initModels = (sequelize) => {
-  // ============ MODEL INITIALIZATION ============
+  // ======================================================
+  // MODEL INITIALIZATION
+  // ======================================================
 
   User.initModel(sequelize);
   Client.initModel(sequelize);
@@ -26,7 +30,11 @@ const initModels = (sequelize) => {
   Task.initModel(sequelize);
   Event.initModel(sequelize);
   Meeting.initModel(sequelize);
+
+  PaymentPlan.initModel(sequelize);
+  PaymentInstallment.initModel(sequelize);
   Payment.initModel(sequelize);
+
   Note.initModel(sequelize);
   AuditLog.initModel(sequelize);
   Notification.initModel(sequelize);
@@ -35,7 +43,9 @@ const initModels = (sequelize) => {
   AIAnalysis.initModel(sequelize);
   Reminder.initModel(sequelize);
 
-  // ============ USER ASSOCIATIONS ============
+  // ======================================================
+  // USER ASSOCIATIONS
+  // ======================================================
 
   User.hasMany(Client, {
     foreignKey: 'created_by',
@@ -167,6 +177,10 @@ const initModels = (sequelize) => {
     as: 'assignee',
   });
 
+  // ======================================================
+  // PAYMENT USER ASSOCIATIONS
+  // ======================================================
+
   User.hasMany(Payment, {
     foreignKey: 'created_by',
     as: 'payments',
@@ -175,6 +189,40 @@ const initModels = (sequelize) => {
   Payment.belongsTo(User, {
     foreignKey: 'created_by',
     as: 'creator',
+  });
+
+  User.hasMany(Payment, {
+    foreignKey: 'reversed_by',
+    as: 'reversedPayments',
+  });
+
+  Payment.belongsTo(User, {
+    foreignKey: 'reversed_by',
+    as: 'reverser',
+  });
+
+  // ======================================================
+  // PAYMENT PLAN USER ASSOCIATIONS
+  // ======================================================
+
+  User.hasMany(PaymentPlan, {
+    foreignKey: 'created_by',
+    as: 'createdPaymentPlans',
+  });
+
+  PaymentPlan.belongsTo(User, {
+    foreignKey: 'created_by',
+    as: 'creator',
+  });
+
+  User.hasMany(PaymentPlan, {
+    foreignKey: 'updated_by',
+    as: 'updatedPaymentPlans',
+  });
+
+  PaymentPlan.belongsTo(User, {
+    foreignKey: 'updated_by',
+    as: 'updater',
   });
 
   User.hasMany(Notification, {
@@ -197,7 +245,9 @@ const initModels = (sequelize) => {
     as: 'creator',
   });
 
-  // ============ TEMPLATE - USER ASSOCIATIONS ============
+  // ======================================================
+  // TEMPLATE - USER ASSOCIATIONS
+  // ======================================================
 
   User.hasMany(Template, {
     foreignKey: 'created_by',
@@ -219,7 +269,9 @@ const initModels = (sequelize) => {
     as: 'updater',
   });
 
-  // ============ CLIENT ASSOCIATIONS ============
+  // ======================================================
+  // CLIENT ASSOCIATIONS
+  // ======================================================
 
   Client.belongsToMany(Case, {
     through: 'case_clients',
@@ -244,6 +296,16 @@ const initModels = (sequelize) => {
   });
 
   Payment.belongsTo(Client, {
+    foreignKey: 'client_id',
+    as: 'client',
+  });
+
+  Client.hasMany(PaymentPlan, {
+    foreignKey: 'client_id',
+    as: 'paymentPlans',
+  });
+
+  PaymentPlan.belongsTo(Client, {
     foreignKey: 'client_id',
     as: 'client',
   });
@@ -288,7 +350,9 @@ const initModels = (sequelize) => {
     as: 'client',
   });
 
-  // ============ CASE ASSOCIATIONS ============
+  // ======================================================
+  // CASE ASSOCIATIONS
+  // ======================================================
 
   Case.belongsToMany(Client, {
     through: 'case_clients',
@@ -357,6 +421,16 @@ const initModels = (sequelize) => {
     as: 'case',
   });
 
+  Case.hasMany(PaymentPlan, {
+    foreignKey: 'case_id',
+    as: 'paymentPlans',
+  });
+
+  PaymentPlan.belongsTo(Case, {
+    foreignKey: 'case_id',
+    as: 'case',
+  });
+
   Case.hasMany(Meeting, {
     foreignKey: 'case_id',
     as: 'meetings',
@@ -377,7 +451,70 @@ const initModels = (sequelize) => {
     as: 'case',
   });
 
-  // ============ DOCUMENT ASSOCIATIONS ============
+  // ======================================================
+  // PAYMENT PLAN ASSOCIATIONS
+  // ======================================================
+
+  PaymentPlan.hasMany(PaymentInstallment, {
+    foreignKey: 'payment_plan_id',
+    as: 'installments',
+
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE',
+  });
+
+  PaymentInstallment.belongsTo(PaymentPlan, {
+    foreignKey: 'payment_plan_id',
+    as: 'paymentPlan',
+  });
+
+  PaymentPlan.hasMany(Payment, {
+    foreignKey: 'payment_plan_id',
+    as: 'payments',
+
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
+  });
+
+  Payment.belongsTo(PaymentPlan, {
+    foreignKey: 'payment_plan_id',
+    as: 'paymentPlan',
+  });
+
+  // ======================================================
+  // PAYMENT INSTALLMENT ASSOCIATIONS
+  // ======================================================
+
+  PaymentInstallment.hasMany(Payment, {
+    foreignKey: 'installment_id',
+    as: 'payments',
+
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
+  });
+
+  Payment.belongsTo(PaymentInstallment, {
+    foreignKey: 'installment_id',
+    as: 'installment',
+  });
+
+  // ======================================================
+  // PAYMENT REVERSAL ASSOCIATIONS
+  // ======================================================
+
+  Payment.belongsTo(Payment, {
+    foreignKey: 'reversed_payment_id',
+    as: 'reversedPayment',
+  });
+
+  Payment.hasMany(Payment, {
+    foreignKey: 'reversed_payment_id',
+    as: 'reversals',
+  });
+
+  // ======================================================
+  // DOCUMENT ASSOCIATIONS
+  // ======================================================
 
   Document.hasMany(Document, {
     foreignKey: 'parent_id',
@@ -399,7 +536,9 @@ const initModels = (sequelize) => {
     as: 'powerOfAttorney',
   });
 
-  // ============ TASK ASSOCIATIONS ============
+  // ======================================================
+  // TASK ASSOCIATIONS
+  // ======================================================
 
   Task.hasMany(Task, {
     foreignKey: 'parent_task_id',
@@ -421,7 +560,9 @@ const initModels = (sequelize) => {
     as: 'task',
   });
 
-  // ============ AI ANALYSIS ASSOCIATIONS ============
+  // ======================================================
+  // AI ANALYSIS ASSOCIATIONS
+  // ======================================================
 
   User.hasMany(AIAnalysis, {
     foreignKey: 'user_id',
@@ -453,7 +594,9 @@ const initModels = (sequelize) => {
     as: 'case',
   });
 
-  // ============ REMINDER ASSOCIATIONS ============
+  // ======================================================
+  // REMINDER ASSOCIATIONS
+  // ======================================================
 
   User.hasMany(Reminder, {
     foreignKey: 'user_id',
@@ -520,6 +663,7 @@ const initModels = (sequelize) => {
 
 export {
   initModels,
+
   User,
   Client,
   Case,
@@ -528,7 +672,11 @@ export {
   Task,
   Event,
   Meeting,
+
   Payment,
+  PaymentPlan,
+  PaymentInstallment,
+
   Note,
   AuditLog,
   Notification,
