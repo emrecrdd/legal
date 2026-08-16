@@ -59,9 +59,7 @@ const INITIAL_FORM = {
 // HELPERS
 // ======================================================
 
-const normalizeTags = (
-  value
-) => {
+const normalizeTags = (value) => {
   if (!value) {
     return [];
   }
@@ -78,9 +76,7 @@ const normalizeTags = (
   ];
 };
 
-const normalizePhone = (
-  value
-) => {
+const normalizePhone = (value) => {
   return String(
     value || ''
   )
@@ -88,23 +84,16 @@ const normalizePhone = (
     .trim();
 };
 
-const normalizeNullable = (
-  value
-) => {
+const normalizeNullable = (value) => {
   const normalized =
     String(
       value ?? ''
     ).trim();
 
-  return (
-    normalized ||
-    null
-  );
+  return normalized || null;
 };
 
-const validateEmail = (
-  value
-) => {
+const validateEmail = (value) => {
   if (!value) {
     return true;
   }
@@ -114,25 +103,153 @@ const validateEmail = (
   );
 };
 
+const formFromClient = (client) => ({
+  name:
+    client?.name || '',
+
+  identification_number:
+    client?.identification_number || '',
+
+  email:
+    client?.email || '',
+
+  phone:
+    client?.phone || '',
+
+  address:
+    client?.address || '',
+
+  city:
+    client?.city || '',
+
+  district:
+    client?.district || '',
+
+  postal_code:
+    client?.postal_code || '',
+
+  notes:
+    client?.notes || '',
+
+  tags:
+    Array.isArray(
+      client?.tags
+    )
+      ? client.tags.join(
+          ', '
+        )
+      : '',
+
+  client_type:
+    client?.client_type ||
+    'individual',
+
+  status:
+    client?.status ||
+    'active',
+});
+
+const normalizeFormForComparison = (
+  form
+) => ({
+  name:
+    form.name.trim(),
+
+  identification_number:
+    normalizeNullable(
+      String(
+        form.identification_number ||
+        ''
+      ).replace(
+        /\s+/g,
+        ''
+      )
+    ),
+
+  email:
+    normalizeNullable(
+      String(
+        form.email ||
+        ''
+      )
+        .trim()
+        .toLowerCase()
+    ),
+
+  phone:
+    normalizeNullable(
+      normalizePhone(
+        form.phone
+      )
+    ),
+
+  address:
+    normalizeNullable(
+      form.address
+    ),
+
+  city:
+    normalizeNullable(
+      form.city
+    ),
+
+  district:
+    normalizeNullable(
+      form.district
+    ),
+
+  postal_code:
+    normalizeNullable(
+      form.postal_code
+    ),
+
+  notes:
+    normalizeNullable(
+      form.notes
+    ),
+
+  tags:
+    normalizeTags(
+      form.tags
+    ),
+
+  client_type:
+    form.client_type,
+
+  status:
+    form.status,
+});
+
 // ======================================================
 // COMPONENT
 // ======================================================
 
 const ClientEdit = () => {
-  const { id } =
+  const {
+    id,
+  } =
     useParams();
 
   const navigate =
     useNavigate();
 
-  const { user } =
+  const {
+    user,
+  } =
     useAuth();
+
+  // ======================================================
+  // QUERIES
+  // ======================================================
 
   const {
     data,
     isLoading,
     error,
-  } = useClient(id);
+  } =
+    useClient(
+      id
+    );
 
   const updateMutation =
     useUpdateClient();
@@ -140,9 +257,20 @@ const ClientEdit = () => {
   const deleteMutation =
     useDeleteClient();
 
+  // ======================================================
+  // STATE
+  // ======================================================
+
   const [
     formData,
     setFormData,
+  ] = useState(
+    INITIAL_FORM
+  );
+
+  const [
+    initialFormData,
+    setInitialFormData,
   ] = useState(
     INITIAL_FORM
   );
@@ -165,6 +293,14 @@ const ClientEdit = () => {
   // PERMISSIONS
   // ======================================================
 
+  const canEdit = [
+    'admin',
+    'lawyer',
+    'secretary',
+  ].includes(
+    user?.role
+  );
+
   const canDelete =
     user?.role ===
     'admin';
@@ -182,60 +318,20 @@ const ClientEdit = () => {
       return;
     }
 
-    setFormData({
-      name:
-        client.name ||
-        '',
+    const nextForm =
+      formFromClient(
+        client
+      );
 
-      identification_number:
-        client.identification_number ||
-        '',
+    setFormData(
+      nextForm
+    );
 
-      email:
-        client.email ||
-        '',
+    setInitialFormData(
+      nextForm
+    );
 
-      phone:
-        client.phone ||
-        '',
-
-      address:
-        client.address ||
-        '',
-
-      city:
-        client.city ||
-        '',
-
-      district:
-        client.district ||
-        '',
-
-      postal_code:
-        client.postal_code ||
-        '',
-
-      notes:
-        client.notes ||
-        '',
-
-      tags:
-        Array.isArray(
-          client.tags
-        )
-          ? client.tags.join(
-              ', '
-            )
-          : '',
-
-      client_type:
-        client.client_type ||
-        'individual',
-
-      status:
-        client.status ||
-        'active',
-    });
+    setErrors({});
   }, [
     client,
   ]);
@@ -257,6 +353,39 @@ const ClientEdit = () => {
       formData.tags,
     ]);
 
+  const normalizedPayload =
+    useMemo(() => {
+      return normalizeFormForComparison(
+        formData
+      );
+    }, [
+      formData,
+    ]);
+
+  const initialNormalizedPayload =
+    useMemo(() => {
+      return normalizeFormForComparison(
+        initialFormData
+      );
+    }, [
+      initialFormData,
+    ]);
+
+  const isDirty =
+    useMemo(() => {
+      return (
+        JSON.stringify(
+          normalizedPayload
+        ) !==
+        JSON.stringify(
+          initialNormalizedPayload
+        )
+      );
+    }, [
+      normalizedPayload,
+      initialNormalizedPayload,
+    ]);
+
   // ======================================================
   // CHANGE
   // ======================================================
@@ -267,12 +396,12 @@ const ClientEdit = () => {
     const {
       name,
       value,
-    } = event.target;
+    } =
+      event.target;
 
     setFormData(
       (current) => ({
         ...current,
-
         [name]:
           value,
       })
@@ -284,52 +413,44 @@ const ClientEdit = () => {
       setErrors(
         (current) => ({
           ...current,
-          [name]: '',
+          [name]:
+            '',
         })
       );
     }
   };
 
   // ======================================================
-  // CLIENT TYPE CHANGE
+  // CLIENT TYPE
   // ======================================================
 
-  const handleClientTypeChange = (
-    type
-  ) => {
-    if (isPending) {
-      return;
-    }
+  const handleClientTypeChange =
+    (type) => {
+      if (
+        isPending ||
+        !canEdit
+      ) {
+        return;
+      }
 
-    setFormData(
-      (current) => ({
-        ...current,
+      setFormData(
+        (current) => ({
+          ...current,
+          client_type:
+            type,
+        })
+      );
 
-        client_type:
-          type,
-
-        /*
-         * Tür değişince mevcut TCKNO/VKN değerini
-         * otomatik silmiyoruz.
-         *
-         * Kullanıcı karar versin; validation yanlış
-         * uzunluğu zaten yakalayacak.
-         */
-      })
-    );
-
-    setErrors(
-      (current) => ({
-        ...current,
-
-        client_type:
-          '',
-
-        identification_number:
-          '',
-      })
-    );
-  };
+      setErrors(
+        (current) => ({
+          ...current,
+          client_type:
+            '',
+          identification_number:
+            '',
+        })
+      );
+    };
 
   // ======================================================
   // VALIDATION
@@ -348,11 +469,17 @@ const ClientEdit = () => {
           formData.identification_number ||
           ''
         )
-          .replace(/\s+/g, '')
+          .replace(
+            /\s+/g,
+            ''
+          )
           .trim();
 
       const email =
-        formData.email
+        String(
+          formData.email ||
+          ''
+        )
           .trim()
           .toLowerCase();
 
@@ -366,6 +493,12 @@ const ClientEdit = () => {
           isCorporate
             ? 'Şirket / kurum unvanı gereklidir'
             : 'Ad Soyad gereklidir';
+      } else if (
+        name.length <
+        2
+      ) {
+        nextErrors.name =
+          'Müvekkil adı en az 2 karakter olmalıdır';
       } else if (
         name.length >
         255
@@ -401,9 +534,7 @@ const ClientEdit = () => {
         }
       }
 
-      if (
-        phone
-      ) {
+      if (phone) {
         const digits =
           phone.replace(
             /\D/g,
@@ -431,6 +562,15 @@ const ClientEdit = () => {
           'Geçerli bir e-posta adresi giriniz';
       }
 
+      if (
+        formData.postal_code &&
+        formData.postal_code.trim().length >
+          20
+      ) {
+        nextErrors.postal_code =
+          'Posta kodu en fazla 20 karakter olabilir';
+      }
+
       setErrors(
         nextErrors
       );
@@ -438,9 +578,71 @@ const ClientEdit = () => {
       return (
         Object.keys(
           nextErrors
-        ).length ===
-        0
+        ).length === 0
       );
+    };
+
+  // ======================================================
+  // BACKEND ERROR MAPPING
+  // ======================================================
+
+  const mapBackendError =
+    (mutationError) => {
+      const message =
+        mutationError?.response
+          ?.data?.message ||
+        mutationError?.message ||
+        '';
+
+      const nextErrors =
+        {};
+
+      if (
+        /TCKNO|VKN|identification_number/i.test(
+          message
+        )
+      ) {
+        nextErrors.identification_number =
+          message;
+      }
+
+      if (
+        /email|e-posta/i.test(
+          message
+        )
+      ) {
+        nextErrors.email =
+          message;
+      }
+
+      if (
+        /phone|telefon/i.test(
+          message
+        )
+      ) {
+        nextErrors.phone =
+          message;
+      }
+
+      if (
+        /name|ad soyad|unvan/i.test(
+          message
+        )
+      ) {
+        nextErrors.name =
+          message;
+      }
+
+      if (
+        Object.keys(
+          nextErrors
+        ).length >
+        0
+      ) {
+        setErrors(
+          nextErrors
+        );
+      }
     };
 
   // ======================================================
@@ -451,6 +653,16 @@ const ClientEdit = () => {
     event
   ) => {
     event.preventDefault();
+
+    if (
+      !canEdit
+    ) {
+      toast.error(
+        'Müvekkil düzenleme yetkiniz bulunmuyor'
+      );
+
+      return;
+    }
 
     if (
       updateMutation.isPending
@@ -468,74 +680,21 @@ const ClientEdit = () => {
       return;
     }
 
-    const payload = {
-      name:
-        formData.name.trim(),
+    if (
+      !isDirty
+    ) {
+      toast(
+        'Kaydedilecek bir değişiklik bulunmuyor'
+      );
 
-      identification_number:
-        normalizeNullable(
-          formData.identification_number.replace(
-            /\s+/g,
-            ''
-          )
-        ),
-
-      email:
-        normalizeNullable(
-          formData.email
-            .trim()
-            .toLowerCase()
-        ),
-
-      phone:
-        normalizeNullable(
-          normalizePhone(
-            formData.phone
-          )
-        ),
-
-      address:
-        normalizeNullable(
-          formData.address
-        ),
-
-      city:
-        normalizeNullable(
-          formData.city
-        ),
-
-      district:
-        normalizeNullable(
-          formData.district
-        ),
-
-      postal_code:
-        normalizeNullable(
-          formData.postal_code
-        ),
-
-      notes:
-        normalizeNullable(
-          formData.notes
-        ),
-
-      tags:
-        normalizeTags(
-          formData.tags
-        ),
-
-      client_type:
-        formData.client_type,
-
-      status:
-        formData.status,
-    };
+      return;
+    }
 
     updateMutation.mutate(
       {
         id,
         data:
-          payload,
+          normalizedPayload,
       },
       {
         onSuccess: () => {
@@ -547,52 +706,45 @@ const ClientEdit = () => {
         onError: (
           mutationError
         ) => {
-          const message =
-            mutationError?.response
-              ?.data?.message ||
-            mutationError?.message ||
-            '';
-
-          const nextErrors =
-            {};
-
-          if (
-            /TCKNO|VKN|identification_number/i.test(
-              message
-            )
-          ) {
-            nextErrors.identification_number =
-              message;
-          } else if (
-            /email|e-posta/i.test(
-              message
-            )
-          ) {
-            nextErrors.email =
-              message;
-          } else if (
-            /phone|telefon/i.test(
-              message
-            )
-          ) {
-            nextErrors.phone =
-              message;
-          }
-
-          if (
-            Object.keys(
-              nextErrors
-            ).length >
-            0
-          ) {
-            setErrors(
-              nextErrors
-            );
-          }
+          mapBackendError(
+            mutationError
+          );
         },
       }
     );
   };
+
+  // ======================================================
+  // CANCEL
+  // ======================================================
+
+  const handleCancel =
+    () => {
+      if (
+        isPending
+      ) {
+        return;
+      }
+
+      if (
+        isDirty
+      ) {
+        const confirmed =
+          window.confirm(
+            'Kaydedilmemiş değişiklikleriniz var. Sayfadan ayrılmak istediğinize emin misiniz?'
+          );
+
+        if (
+          !confirmed
+        ) {
+          return;
+        }
+      }
+
+      navigate(
+        `/clients/${id}`
+      );
+    };
 
   // ======================================================
   // DELETE
@@ -618,21 +770,24 @@ const ClientEdit = () => {
 
       const confirmed =
         window.confirm(
-          `"${client?.name}" müvekkil kaydını kaldırmak istediğinize emin misiniz?\n\nKayıt soft-delete olarak kaldırılacaktır.`
+          `"${client?.name}" müvekkil kaydını kaldırmak istediğinize emin misiniz?\n\nKayıt soft-delete olarak kaldırılacaktır. İlişkili kayıtlar ayrıca silinmez.`
         );
 
-      if (!confirmed) {
+      if (
+        !confirmed
+      ) {
         return;
       }
 
       deleteMutation.mutate(
         id,
         {
-          onSuccess: () => {
-            navigate(
-              '/clients'
-            );
-          },
+          onSuccess:
+            () => {
+              navigate(
+                '/clients'
+              );
+            },
         }
       );
     };
@@ -641,7 +796,9 @@ const ClientEdit = () => {
   // LOADING
   // ======================================================
 
-  if (isLoading) {
+  if (
+    isLoading
+  ) {
     return (
       <div className="flex h-64 items-center justify-center">
 
@@ -699,6 +856,45 @@ const ClientEdit = () => {
   }
 
   // ======================================================
+  // PERMISSION ERROR
+  // ======================================================
+
+  if (
+    !canEdit
+  ) {
+    return (
+      <div className="mx-auto max-w-3xl py-12">
+
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center dark:border-amber-900/50 dark:bg-amber-900/10">
+
+          <AlertTriangle className="mx-auto h-10 w-10 text-amber-600" />
+
+          <h2 className="mt-3 text-lg font-semibold text-gray-900 dark:text-white">
+            Düzenleme yetkiniz bulunmuyor
+          </h2>
+
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            Bu müvekkilin bilgilerini görüntüleyebilirsiniz ancak değiştiremezsiniz.
+          </p>
+
+          <Link
+            to={`/clients/${id}`}
+          >
+            <Button
+              className="mt-4"
+              variant="secondary"
+            >
+              Müvekkil Detayına Dön
+            </Button>
+          </Link>
+
+        </div>
+
+      </div>
+    );
+  }
+
+  // ======================================================
   // RENDER
   // ======================================================
 
@@ -718,12 +914,24 @@ const ClientEdit = () => {
           Müvekkil Detayı
         </Link>
 
-        <h1 className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
-          Müvekkil Bilgilerini Düzenle
-        </h1>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Müvekkil Bilgilerini Düzenle
+          </h1>
+
+          {isDirty && (
+            <Badge
+              variant="warning"
+            >
+              Kaydedilmemiş değişiklik
+            </Badge>
+          )}
+
+        </div>
 
         <p className="mt-1 text-sm text-gray-500">
-          Kimlik, iletişim, adres ve müvekkil sınıflandırma bilgilerini güncelleyin.
+          Kimlik, iletişim, adres ve sınıflandırma bilgilerini güncelleyin.
         </p>
 
       </div>
@@ -737,7 +945,7 @@ const ClientEdit = () => {
           className="space-y-6 p-6"
         >
 
-          {/* TYPE */}
+          {/* CLIENT TYPE */}
 
           <div>
 
@@ -763,11 +971,9 @@ const ClientEdit = () => {
                     : 'border-gray-200 hover:border-gray-300 dark:border-gray-700'
                 }`}
               >
-
                 <UserRound className="h-5 w-5 text-blue-600" />
 
                 <div>
-
                   <p className="font-medium text-gray-900 dark:text-white">
                     Bireysel
                   </p>
@@ -775,7 +981,6 @@ const ClientEdit = () => {
                   <p className="mt-1 text-xs text-gray-500">
                     Gerçek kişi müvekkil
                   </p>
-
                 </div>
 
               </button>
@@ -796,11 +1001,9 @@ const ClientEdit = () => {
                     : 'border-gray-200 hover:border-gray-300 dark:border-gray-700'
                 }`}
               >
-
                 <Building2 className="h-5 w-5 text-blue-600" />
 
                 <div>
-
                   <p className="font-medium text-gray-900 dark:text-white">
                     Kurumsal
                   </p>
@@ -808,7 +1011,6 @@ const ClientEdit = () => {
                   <p className="mt-1 text-xs text-gray-500">
                     Şirket veya kurum
                   </p>
-
                 </div>
 
               </button>
@@ -816,8 +1018,6 @@ const ClientEdit = () => {
             </div>
 
           </div>
-
-          {/* NAME */}
 
           <Input
             label={
@@ -838,14 +1038,13 @@ const ClientEdit = () => {
             disabled={
               isPending
             }
+            maxLength={255}
             placeholder={
               isCorporate
                 ? 'Örn: ABC Teknoloji A.Ş.'
                 : 'Örn: Ahmet Yılmaz'
             }
           />
-
-          {/* IDENTIFICATION */}
 
           <Input
             label={
@@ -990,9 +1189,13 @@ const ClientEdit = () => {
               onChange={
                 handleChange
               }
+              error={
+                errors.postal_code
+              }
               disabled={
                 isPending
               }
+              maxLength={20}
             />
 
           </div>
@@ -1038,7 +1241,7 @@ const ClientEdit = () => {
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
 
                 <p>
-                  Arşiv durumu müvekkili silmez. Kayıt sistemde kalmaya ve ilişkili dava/belgelerle çalışmaya devam eder.
+                  Arşiv durumu müvekkili silmez. Kayıt sistemde kalır ve ilişkili dava, belge, görev ve diğer kayıtlarla bağlantısını korur.
                 </p>
 
               </div>
@@ -1074,7 +1277,9 @@ const ClientEdit = () => {
               <div className="mt-3 flex flex-wrap gap-2">
 
                 {tagsPreview.map(
-                  (tag) => (
+                  (
+                    tag
+                  ) => (
                     <Badge
                       key={
                         tag
@@ -1110,7 +1315,7 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
-              rows="4"
+              rows="5"
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               placeholder="Müvekkille ilgili önemli genel bilgiler..."
             />
@@ -1127,7 +1332,8 @@ const ClientEdit = () => {
                 updateMutation.isPending
               }
               disabled={
-                isPending
+                isPending ||
+                !isDirty
               }
             >
               <Save className="mr-2 h-4 w-4" />
@@ -1141,10 +1347,8 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
-              onClick={() =>
-                navigate(
-                  `/clients/${id}`
-                )
+              onClick={
+                handleCancel
               }
             >
               Vazgeç

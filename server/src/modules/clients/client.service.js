@@ -1,4 +1,9 @@
 import {
+  Op,
+  QueryTypes,
+} from 'sequelize';
+
+import {
   Client,
 } from '../../models/Client.js';
 
@@ -19,8 +24,8 @@ import {
 } from '../../models/User.js';
 
 import {
-  Op,
-} from 'sequelize';
+  sequelize,
+} from '../../config/database.js';
 
 import {
   paginate,
@@ -52,6 +57,19 @@ const USER_SUMMARY_ATTRIBUTES = [
   'first_name',
   'last_name',
 ];
+
+const CLIENT_STATUSES =
+  new Set([
+    'active',
+    'passive',
+    'archived',
+  ]);
+
+const CLIENT_TYPES =
+  new Set([
+    'individual',
+    'corporate',
+  ]);
 
 // ======================================================
 // HELPERS
@@ -94,9 +112,11 @@ const normalizeTags = (
   return [
     ...new Set(
       values
-        .map((item) =>
-          String(item)
-            .trim()
+        .map(
+          (item) =>
+            String(
+              item
+            ).trim()
         )
         .filter(Boolean)
     ),
@@ -114,13 +134,48 @@ const normalizeNullableString = (
   }
 
   if (
-    value === null
+    value ===
+    null
   ) {
     return null;
   }
 
   const normalized =
-    String(value)
+    String(
+      value
+    ).trim();
+
+  return (
+    normalized ||
+    null
+  );
+};
+
+const normalizeIdentificationNumber = (
+  value
+) => {
+  if (
+    value ===
+    undefined
+  ) {
+    return undefined;
+  }
+
+  if (
+    value ===
+    null
+  ) {
+    return null;
+  }
+
+  const normalized =
+    String(
+      value
+    )
+      .replace(
+        /\s+/g,
+        ''
+      )
       .trim();
 
   return (
@@ -129,12 +184,97 @@ const normalizeNullableString = (
   );
 };
 
+const normalizePhone = (
+  value
+) => {
+  if (
+    value ===
+    undefined
+  ) {
+    return undefined;
+  }
+
+  if (
+    value ===
+    null
+  ) {
+    return null;
+  }
+
+  const normalized =
+    String(
+      value
+    )
+      .trim()
+      .replace(
+        /\s+/g,
+        ' '
+      );
+
+  return (
+    normalized ||
+    null
+  );
+};
+
+const normalizePagination = (
+  page,
+  limit
+) => {
+  const safePage =
+    Math.max(
+      Number.parseInt(
+        page,
+        10
+      ) || 1,
+      1
+    );
+
+  const safeLimit =
+    Math.min(
+      Math.max(
+        Number.parseInt(
+          limit,
+          10
+        ) || 10,
+        1
+      ),
+      100
+    );
+
+  return {
+    safePage,
+    safeLimit,
+  };
+};
+
 const prepareClientData = (
-  data
+  data = {}
 ) => {
   const prepared = {
     ...data,
   };
+
+  // ====================================================
+  // SERVER CONTROLLED / IMMUTABLE
+  // ====================================================
+
+  delete prepared.id;
+  delete prepared.created_at;
+  delete prepared.updated_at;
+  delete prepared.deleted_at;
+
+  /*
+   * UPDATE sırasında created_by değiştirilmemeli.
+   * CREATE tarafında controller tarafından ekleniyor.
+   *
+   * Bu nedenle create/update ayrımı service metodunda
+   * ayrıca kontrol edilecek.
+   */
+
+  // ====================================================
+  // NAME
+  // ====================================================
 
   if (
     Object.prototype.hasOwnProperty.call(
@@ -148,6 +288,26 @@ const prepareClientData = (
           ''
       ).trim();
   }
+
+  // ====================================================
+  // IDENTIFICATION
+  // ====================================================
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      prepared,
+      'identification_number'
+    )
+  ) {
+    prepared.identification_number =
+      normalizeIdentificationNumber(
+        prepared.identification_number
+      );
+  }
+
+  // ====================================================
+  // EMAIL
+  // ====================================================
 
   if (
     Object.prototype.hasOwnProperty.call(
@@ -166,6 +326,10 @@ const prepareClientData = (
         : null;
   }
 
+  // ====================================================
+  // PHONE
+  // ====================================================
+
   if (
     Object.prototype.hasOwnProperty.call(
       prepared,
@@ -173,20 +337,24 @@ const prepareClientData = (
     )
   ) {
     prepared.phone =
-      normalizeNullableString(
+      normalizePhone(
         prepared.phone
       );
   }
 
+  // ====================================================
+  // ADDRESS
+  // ====================================================
+
   if (
     Object.prototype.hasOwnProperty.call(
       prepared,
-      'identification_number'
+      'address'
     )
   ) {
-    prepared.identification_number =
+    prepared.address =
       normalizeNullableString(
-        prepared.identification_number
+        prepared.address
       );
   }
 
@@ -226,17 +394,9 @@ const prepareClientData = (
       );
   }
 
-  if (
-    Object.prototype.hasOwnProperty.call(
-      prepared,
-      'address'
-    )
-  ) {
-    prepared.address =
-      normalizeNullableString(
-        prepared.address
-      );
-  }
+  // ====================================================
+  // NOTES
+  // ====================================================
 
   if (
     Object.prototype.hasOwnProperty.call(
@@ -249,6 +409,10 @@ const prepareClientData = (
         prepared.notes
       );
   }
+
+  // ====================================================
+  // TAGS
+  // ====================================================
 
   if (
     Object.prototype.hasOwnProperty.call(
@@ -263,6 +427,176 @@ const prepareClientData = (
   }
 
   return prepared;
+};
+
+const validateClientData = (
+  data,
+  {
+    partial = false,
+  } = {}
+) => {
+  // ====================================================
+  // NAME
+  // ====================================================
+
+  if (
+    !partial ||
+    Object.prototype.hasOwnProperty.call(
+      data,
+      'name'
+    )
+  ) {
+    const name =
+      String(
+        data.name ||
+          ''
+      ).trim();
+
+    if (!name) {
+      throw new Error(
+        'Müvekkil adı gereklidir'
+      );
+    }
+
+    if (
+      name.length <
+      2
+    ) {
+      throw new Error(
+        'Müvekkil adı en az 2 karakter olmalıdır'
+      );
+    }
+
+    if (
+      name.length >
+      255
+    ) {
+      throw new Error(
+        'Müvekkil adı en fazla 255 karakter olabilir'
+      );
+    }
+  }
+
+  // ====================================================
+  // CLIENT TYPE
+  // ====================================================
+
+  if (
+    data.client_type !==
+      undefined &&
+    !CLIENT_TYPES.has(
+      data.client_type
+    )
+  ) {
+    throw new Error(
+      'Geçersiz müvekkil türü'
+    );
+  }
+
+  // ====================================================
+  // STATUS
+  // ====================================================
+
+  if (
+    data.status !==
+      undefined &&
+    !CLIENT_STATUSES.has(
+      data.status
+    )
+  ) {
+    throw new Error(
+      'Geçersiz müvekkil durumu'
+    );
+  }
+
+  // ====================================================
+  // IDENTIFICATION
+  // ====================================================
+
+  if (
+    data.identification_number
+  ) {
+    const identificationNumber =
+      String(
+        data.identification_number
+      );
+
+    if (
+      !/^\d+$/.test(
+        identificationNumber
+      )
+    ) {
+      throw new Error(
+        'TCKNO/VKN yalnızca rakamlardan oluşmalıdır'
+      );
+    }
+
+    const clientType =
+      data.client_type;
+
+    if (
+      clientType ===
+        'corporate' &&
+      identificationNumber.length !==
+        10
+    ) {
+      throw new Error(
+        'VKN 10 haneli olmalıdır'
+      );
+    }
+
+    if (
+      clientType ===
+        'individual' &&
+      identificationNumber.length !==
+        11
+    ) {
+      throw new Error(
+        'TCKNO 11 haneli olmalıdır'
+      );
+    }
+
+    /*
+     * UPDATE request'i client_type göndermeyebilir.
+     * Bu durumda model tarafındaki genel uzunluk
+     * kontrolünü bozmayalım.
+     */
+
+    if (
+      !clientType &&
+      ![
+        10,
+        11,
+      ].includes(
+        identificationNumber.length
+      )
+    ) {
+      throw new Error(
+        'TCKNO 11, VKN 10 haneli olmalıdır'
+      );
+    }
+  }
+
+  // ====================================================
+  // EMAIL
+  // ====================================================
+
+  if (
+    data.email
+  ) {
+    const emailRegex =
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (
+      !emailRegex.test(
+        data.email
+      )
+    ) {
+      throw new Error(
+        'Geçerli bir e-posta adresi girilmelidir'
+      );
+    }
+  }
 };
 
 const handleUniqueConstraint = (
@@ -284,16 +618,38 @@ const handleUniqueConstraint = (
       'Bu TCKNO/VKN başka bir müvekkil kaydında kullanılıyor',
 
     email:
-      'Bu e-posta için veritabanında mevcut bir benzersizlik kısıtı bulunuyor',
+      'Bu e-posta adresi başka bir müvekkil kaydında kullanılıyor',
 
     phone:
-      'Bu telefon için veritabanında mevcut bir benzersizlik kısıtı bulunuyor',
+      'Bu telefon numarası başka bir müvekkil kaydında kullanılıyor',
   };
 
   throw new Error(
     messages[field] ||
-      'Bu değer başka bir kayıtta kullanılıyor'
+      'Bu değer başka bir müvekkil kaydında kullanılıyor'
   );
+};
+
+const assertClientExists = async (
+  id
+) => {
+  const client =
+    await Client.findByPk(
+      id,
+      {
+        attributes: [
+          'id',
+        ],
+      }
+    );
+
+  if (!client) {
+    throw new Error(
+      'Client not found'
+    );
+  }
+
+  return client;
 };
 
 // ======================================================
@@ -314,6 +670,10 @@ export const clientService = {
           data
         );
 
+      validateClientData(
+        preparedData
+      );
+
       return await Client.create(
         preparedData
       );
@@ -327,10 +687,12 @@ export const clientService = {
   // ====================================================
   // LIST
   //
-  // Liste endpoint'inde davaların tamamını taşımıyoruz.
-  // Clientları page ile getirip sadece o sayfadaki
-  // müvekkillerin dava ilişkisini ikinci hafif sorguda
-  // alıyoruz.
+  // Liste endpoint'i sadece ihtiyaç duyulan client
+  // alanlarını getirir.
+  //
+  // Case kayıtlarının tamamı JOIN edilmez.
+  // Sayfadaki client'ların dava sayıları junction
+  // table üzerinde GROUP BY ile hesaplanır.
   // ====================================================
 
   async findAll({
@@ -342,24 +704,20 @@ export const clientService = {
     tags,
     city,
   }) {
-    const safePage =
-      Math.max(
-        Number(page) ||
-          1,
-        1
-      );
-
-    const safeLimit =
-      Math.min(
-        Math.max(
-          Number(limit) ||
-            10,
-          1
-        ),
-        100
+    const {
+      safePage,
+      safeLimit,
+    } =
+      normalizePagination(
+        page,
+        limit
       );
 
     const where = {};
+
+    // ==================================================
+    // SEARCH
+    // ==================================================
 
     const normalizedSearch =
       normalizeSearch(
@@ -392,22 +750,7 @@ export const clientService = {
         },
 
         {
-          identification_number:
-            {
-              [Op.iLike]:
-                `%${normalizedSearch}%`,
-            },
-        },
-
-        {
-          city: {
-            [Op.iLike]:
-              `%${normalizedSearch}%`,
-          },
-        },
-
-        {
-          district: {
+          identification_number: {
             [Op.iLike]:
               `%${normalizedSearch}%`,
           },
@@ -415,24 +758,55 @@ export const clientService = {
       ];
     }
 
-    if (status) {
+    // ==================================================
+    // STATUS
+    // ==================================================
+
+    if (
+      status &&
+      CLIENT_STATUSES.has(
+        status
+      )
+    ) {
       where.status =
         status;
     }
 
-    if (client_type) {
+    // ==================================================
+    // CLIENT TYPE
+    // ==================================================
+
+    if (
+      client_type &&
+      CLIENT_TYPES.has(
+        client_type
+      )
+    ) {
       where.client_type =
         client_type;
     }
 
-    if (city) {
+    // ==================================================
+    // CITY
+    // ==================================================
+
+    const normalizedCity =
+      normalizeSearch(
+        city
+      );
+
+    if (
+      normalizedCity
+    ) {
       where.city = {
         [Op.iLike]:
-          `%${String(
-            city
-          ).trim()}%`,
+          `%${normalizedCity}%`,
       };
     }
+
+    // ==================================================
+    // TAGS
+    // ==================================================
 
     const normalizedTags =
       normalizeTags(
@@ -448,6 +822,10 @@ export const clientService = {
           normalizedTags,
       };
     }
+
+    // ==================================================
+    // PAGINATED CLIENT QUERY
+    // ==================================================
 
     const query =
       paginate(
@@ -484,19 +862,30 @@ export const clientService = {
           },
         ],
 
-        distinct:
-          true,
+        /*
+         * Burada belongsTo dışında çoğaltıcı JOIN yok.
+         * Bu yüzden DISTINCT kullanmıyoruz.
+         */
 
         order: [
           [
             'created_at',
             'DESC',
           ],
+
+          /*
+           * Aynı timestamp'e sahip kayıtların pagination
+           * sırası değişmesin diye deterministic tie-break.
+           */
+          [
+            'id',
+            'DESC',
+          ],
         ],
       });
 
     // ==================================================
-    // CASE COUNT
+    // CASE COUNTS
     // ==================================================
 
     const clientIds =
@@ -513,62 +902,48 @@ export const clientService = {
       0
     ) {
       /*
-       * Burada Client tablosunu tekrar çekiyoruz ama
-       * sadece id + relation geliyor.
+       * Case modellerini hydrate etmiyoruz.
        *
-       * Sayfa başına 10-25 client için çok hafif.
-       * Büyük case payload taşınmıyor.
+       * Sadece case_clients junction table:
+       *
+       * client_id | case_count
        */
-      const clientsWithCases =
-        await Client.findAll({
-          where: {
-            id: {
-              [Op.in]:
-                clientIds,
+
+      const caseCounts =
+        await sequelize.query(
+          `
+            SELECT
+              client_id,
+              COUNT(*)::int AS case_count
+            FROM case_clients
+            WHERE client_id IN (:clientIds)
+            GROUP BY client_id
+          `,
+          {
+            replacements: {
+              clientIds,
             },
-          },
 
-          attributes: [
-            'id',
-          ],
+            type:
+              QueryTypes.SELECT,
+          }
+        );
 
-          include: [
-            {
-              model:
-                Case,
-
-              as:
-                'cases',
-
-              attributes: [
-                'id',
-              ],
-
-              through: {
-                attributes:
-                  [],
-              },
-
-              required:
-                false,
-            },
-          ],
-        });
-
-      clientsWithCases.forEach(
-        (client) => {
+      caseCounts.forEach(
+        (row) => {
           caseCountMap.set(
-            client.id,
-            Array.isArray(
-              client.cases
-            )
-              ? client.cases
-                  .length
-              : 0
+            row.client_id,
+            Number(
+              row.case_count
+            ) || 0
           );
         }
       );
     }
+
+    // ==================================================
+    // RESPONSE
+    // ==================================================
 
     const resultRows =
       rows.map(
@@ -587,27 +962,27 @@ export const clientService = {
         }
       );
 
-    const pagination =
-      getPaginationData(
-        count,
-        safePage,
-        safeLimit
-      );
-
     return {
       data:
         resultRows,
 
-      pagination,
+      pagination:
+        getPaginationData(
+          count,
+          safePage,
+          safeLimit
+        ),
     };
   },
 
   // ====================================================
   // DETAIL
   //
-  // Client ana kaydı + ilişkiler paralel sorgular.
+  // Tek dev JOIN yerine client ana kaydı önce alınır.
+  // Case, payment ve note sorguları paralel çalıştırılır.
   //
-  // cases/payment/notes tek dev JOIN'e sokulmuyor.
+  // Böylece cases × payments × notes şeklinde
+  // Cartesian satır çoğalması oluşmaz.
   // ====================================================
 
   async findOne(
@@ -648,7 +1023,7 @@ export const clientService = {
     ] =
       await Promise.all([
         // ================================================
-        // CASES - N:N
+        // CASES
         // ================================================
 
         Case.findAll({
@@ -726,6 +1101,11 @@ export const clientService = {
           order: [
             [
               'payment_date',
+              'DESC',
+            ],
+
+            [
+              'created_at',
               'DESC',
             ],
           ],
@@ -817,19 +1197,35 @@ export const clientService = {
           data
         );
 
-      // ==================================================
-      // IMMUTABLE / SERVER CONTROLLED FIELDS
-      // ==================================================
-
-      delete preparedData.id;
-
+      /*
+       * Server controlled.
+       */
       delete preparedData.created_by;
 
-      delete preparedData.created_at;
+      /*
+       * Partial update olduğu için gönderilmeyen alanlar
+       * validation'a zorlanmaz.
+       *
+       * identification_number gönderilip client_type
+       * gönderilmediyse mevcut client_type validation
+       * için kullanılır.
+       */
 
-      delete preparedData.updated_at;
+      const validationData = {
+        ...preparedData,
 
-      delete preparedData.deleted_at;
+        client_type:
+          preparedData.client_type ??
+          client.client_type,
+      };
+
+      validateClientData(
+        validationData,
+        {
+          partial:
+            true,
+        }
+      );
 
       await client.update(
         preparedData
@@ -881,10 +1277,10 @@ export const clientService = {
     }
 
     /*
-     * paranoid:true
+     * Client model paranoid:true olduğu için
+     * fiziksel DELETE gerçekleşmez.
      *
-     * Fiziksel DELETE değil.
-     * deleted_at set edilir.
+     * deleted_at doldurulur.
      */
     await client.destroy();
 
@@ -944,10 +1340,6 @@ export const clientService = {
           },
         }),
 
-        /*
-         * Artık Case.client_id olmadığı için
-         * total case sayısı direkt Case tablosundan.
-         */
         Case.count(),
 
         Payment.sum(
@@ -985,27 +1377,14 @@ export const clientService = {
 
   // ====================================================
   // CASE HISTORY
-  // N:N
   // ====================================================
 
   async getCaseHistory(
     clientId
   ) {
-    const client =
-      await Client.findByPk(
-        clientId,
-        {
-          attributes: [
-            'id',
-          ],
-        }
-      );
-
-    if (!client) {
-      throw new Error(
-        'Client not found'
-      );
-    }
+    await assertClientExists(
+      clientId
+    );
 
     return Case.findAll({
       include: [
@@ -1078,6 +1457,10 @@ export const clientService = {
   async getPayments(
     clientId
   ) {
+    await assertClientExists(
+      clientId
+    );
+
     return Payment.findAll({
       where: {
         client_id:
@@ -1087,6 +1470,11 @@ export const clientService = {
       order: [
         [
           'payment_date',
+          'DESC',
+        ],
+
+        [
+          'created_at',
           'DESC',
         ],
       ],
@@ -1100,6 +1488,10 @@ export const clientService = {
   async getNotes(
     clientId
   ) {
+    await assertClientExists(
+      clientId
+    );
+
     return Note.findAll({
       where: {
         client_id:
@@ -1131,3 +1523,5 @@ export const clientService = {
     });
   },
 };
+
+export default clientService;

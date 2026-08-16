@@ -28,7 +28,6 @@ router.use(
 // COLLECTION
 // ======================================================
 
-// Müvekkil oluştur
 router.post(
   '/',
   authorize(
@@ -39,7 +38,6 @@ router.post(
   clientController.create
 );
 
-// Müvekkil listesi
 router.get(
   '/',
   authorize(
@@ -51,7 +49,6 @@ router.get(
   clientController.findAll
 );
 
-// İstatistik
 router.get(
   '/statistics',
   authorize(
@@ -62,10 +59,9 @@ router.get(
 );
 
 // ======================================================
-// CLIENT DETAIL SUBRESOURCES
+// CLIENT SUBRESOURCES
 // ======================================================
 
-// Dava geçmişi
 router.get(
   '/:id/cases',
   authorize(
@@ -77,7 +73,6 @@ router.get(
   clientController.getCaseHistory
 );
 
-// Ödemeler
 router.get(
   '/:id/payments',
   authorize(
@@ -88,7 +83,6 @@ router.get(
   clientController.getPayments
 );
 
-// Notlar
 router.get(
   '/:id/notes',
   authorize(
@@ -100,10 +94,9 @@ router.get(
 );
 
 // ======================================================
-// CLIENT DETAIL
+// DETAIL
 // ======================================================
 
-// Müvekkil detay
 router.get(
   '/:id',
   authorize(
@@ -115,7 +108,6 @@ router.get(
   clientController.findOne
 );
 
-// Metadata güncelle
 router.patch(
   '/:id',
   authorize(
@@ -126,7 +118,6 @@ router.patch(
   clientController.update
 );
 
-// Soft delete
 router.delete(
   '/:id',
   authorize(

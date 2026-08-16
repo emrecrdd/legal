@@ -13,6 +13,8 @@ import {
 
 import {
   useClient,
+  useClientCaseHistory,
+  useClientPayments,
 } from '../../features/clients/client.query.js';
 
 import {
@@ -241,6 +243,50 @@ const normalizePhone = (
   );
 };
 
+// ======================================================
+// CLIENT STATUS
+// ======================================================
+
+const getClientStatusLabel = (
+  status
+) => {
+  const labels = {
+    active:
+      'Aktif',
+
+    passive:
+      'Pasif',
+
+    archived:
+      'Arşiv',
+  };
+
+  return (
+    labels[status] ||
+    status ||
+    '-'
+  );
+};
+
+const getClientStatusVariant = (
+  status
+) => {
+  switch (status) {
+    case 'active':
+      return 'success';
+
+    case 'passive':
+      return 'warning';
+
+    default:
+      return 'default';
+  }
+};
+
+// ======================================================
+// CASE STATUS
+// ======================================================
+
 const getCaseStatusLabel = (
   status
 ) => {
@@ -298,41 +344,9 @@ const getCaseStatusVariant = (
   }
 };
 
-const getClientStatusLabel = (
-  status
-) => {
-  switch (status) {
-    case 'active':
-      return 'Aktif';
-
-    case 'passive':
-      return 'Pasif';
-
-    case 'archived':
-      return 'Arşiv';
-
-    default:
-      return status || '-';
-  }
-};
-
-const getClientStatusVariant = (
-  status
-) => {
-  switch (status) {
-    case 'active':
-      return 'success';
-
-    case 'passive':
-      return 'warning';
-
-    case 'archived':
-      return 'default';
-
-    default:
-      return 'default';
-  }
-};
+// ======================================================
+// POA STATUS
+// ======================================================
 
 const getPOAStatusLabel = (
   status
@@ -372,6 +386,10 @@ const getPOAStatusVariant = (
       return 'default';
   }
 };
+
+// ======================================================
+// TASK STATUS
+// ======================================================
 
 const getTaskStatusLabel = (
   status
@@ -417,6 +435,10 @@ const getTaskStatusVariant = (
       return 'default';
   }
 };
+
+// ======================================================
+// MEETING STATUS
+// ======================================================
 
 const getMeetingStatusLabel = (
   status
@@ -516,6 +538,46 @@ const ClientDetail = () => {
     );
 
   // ======================================================
+  // CASES
+  //
+  // Ana client endpoint'inden ayrıldı.
+  // ======================================================
+
+  const {
+    data:
+      casesData,
+
+    isLoading:
+      casesLoading,
+
+    error:
+      casesError,
+  } =
+    useClientCaseHistory(
+      id
+    );
+
+  // ======================================================
+  // PAYMENTS
+  //
+  // Ana client endpoint'inden ayrıldı.
+  // ======================================================
+
+  const {
+    data:
+      paymentsData,
+
+    isLoading:
+      paymentsLoading,
+
+    error:
+      paymentsError,
+  } =
+    useClientPayments(
+      id
+    );
+
+  // ======================================================
   // TASK COCKPIT
   // ======================================================
 
@@ -532,8 +594,11 @@ const ClientDetail = () => {
     useClientTaskOverview(
       id,
       {
-        active_limit: 5,
-        recent_limit: 5,
+        active_limit:
+          5,
+
+        recent_limit:
+          5,
       }
     );
 
@@ -554,8 +619,11 @@ const ClientDetail = () => {
     useClientMeetingTimeline(
       id,
       {
-        upcoming_limit: 5,
-        recent_limit: 5,
+        upcoming_limit:
+          5,
+
+        recent_limit:
+          5,
       }
     );
 
@@ -642,16 +710,24 @@ const ClientDetail = () => {
 
   const cases =
     Array.isArray(
-      client?.cases
+      casesData?.data?.data
     )
-      ? client.cases
+      ? casesData.data.data
+      : Array.isArray(
+          casesData?.data
+        )
+      ? casesData.data
       : [];
 
   const payments =
     Array.isArray(
-      client?.payments
+      paymentsData?.data?.data
     )
-      ? client.payments
+      ? paymentsData.data.data
+      : Array.isArray(
+          paymentsData?.data
+        )
+      ? paymentsData.data
       : [];
 
   const powerOfAttorneys =
@@ -663,16 +739,13 @@ const ClientDetail = () => {
 
   const documents =
     Array.isArray(
-      documentsData
-        ?.data?.data
+      documentsData?.data?.data
     )
-      ? documentsData
-          .data.data
+      ? documentsData.data.data
       : [];
 
   const documentPagination =
-    documentsData
-      ?.data
+    documentsData?.data
       ?.pagination;
 
   const taskOverview =
@@ -690,13 +763,21 @@ const ClientDetail = () => {
       : [];
 
   const taskSummary =
-    taskOverview
-      ?.summary || {
-      total: 0,
-      pending: 0,
-      in_progress: 0,
-      completed: 0,
-      overdue: 0,
+    taskOverview?.summary || {
+      total:
+        0,
+
+      pending:
+        0,
+
+      in_progress:
+        0,
+
+      completed:
+        0,
+
+      overdue:
+        0,
     };
 
   const meetingTimeline =
@@ -718,16 +799,22 @@ const ClientDetail = () => {
   // ======================================================
   // FINANCE
   //
-  // Case.estimated_value artık modelde bulunmadığı için
-  // ödeme kayıtlarını esas alıyoruz.
+  // Payment kayıtlarını esas alıyoruz.
   // ======================================================
 
   const financialSummary =
     useMemo(() => {
-      let agreed = 0;
-      let received = 0;
-      let refunded = 0;
-      let expense = 0;
+      let agreed =
+        0;
+
+      let received =
+        0;
+
+      let refunded =
+        0;
+
+      let expense =
+        0;
 
       payments.forEach(
         (
@@ -743,7 +830,8 @@ const ClientDetail = () => {
               ?.payment_type ===
             'agreed'
           ) {
-            agreed += amount;
+            agreed +=
+              amount;
 
             return;
           }
@@ -801,10 +889,14 @@ const ClientDetail = () => {
 
       return {
         agreed,
+
         received:
           netReceived,
+
         refunded,
+
         expense,
+
         remaining,
       };
     }, [
@@ -893,8 +985,7 @@ const ClientDetail = () => {
 
         <p className="mt-2 text-sm text-gray-500">
           {error?.response
-            ?.data
-            ?.message ||
+            ?.data?.message ||
             error?.message ||
             'Müvekkil bilgileri yüklenemedi'}
         </p>
@@ -1058,6 +1149,7 @@ const ClientDetail = () => {
               className="inline-flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
             >
               <Phone className="h-4 w-4" />
+
               Ara
             </a>
           )}
@@ -1072,6 +1164,7 @@ const ClientDetail = () => {
               className="inline-flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
             >
               <MessageCircle className="h-4 w-4" />
+
               WhatsApp
             </a>
           )}
@@ -1084,6 +1177,7 @@ const ClientDetail = () => {
               className="inline-flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
             >
               <Mail className="h-4 w-4" />
+
               E-posta
             </a>
           )}
@@ -1106,17 +1200,22 @@ const ClientDetail = () => {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
 
         <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <Briefcase className="h-4 w-4" />
             Davalar
           </div>
 
           <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
-            {cases.length}
+            {casesLoading
+              ? '...'
+              : cases.length}
           </p>
+
         </div>
 
         <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <ListTodo className="h-4 w-4" />
             Aktif Görev
@@ -1138,9 +1237,11 @@ const ClientDetail = () => {
               {taskSummary.overdue} gecikmiş
             </p>
           )}
+
         </div>
 
         <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <CalendarDays className="h-4 w-4" />
             Yaklaşan Toplantı
@@ -1149,9 +1250,11 @@ const ClientDetail = () => {
           <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
             {upcomingMeetings.length}
           </p>
+
         </div>
 
         <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <FileText className="h-4 w-4" />
             Belgeler
@@ -1161,19 +1264,24 @@ const ClientDetail = () => {
             {documentPagination?.total ??
               documents.length}
           </p>
+
         </div>
 
         <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <WalletCards className="h-4 w-4" />
             Tahsilat
           </div>
 
           <p className="mt-2 text-lg font-bold text-green-600">
-            {formatMoney(
-              financialSummary.received
-            )}
+            {paymentsLoading
+              ? '...'
+              : formatMoney(
+                  financialSummary.received
+                )}
           </p>
+
         </div>
 
       </div>
@@ -1230,7 +1338,8 @@ const ClientDetail = () => {
                   </p>
 
                   <p className="mt-1 text-sm text-blue-700 dark:text-blue-400">
-                    İlk toplantı: {formatDateTime(
+                    İlk toplantı:{' '}
+                    {formatDateTime(
                       upcomingMeetings[0]?.start_date
                     )}
                   </p>
@@ -1264,6 +1373,7 @@ const ClientDetail = () => {
                 <ListTodo className="h-5 w-5 text-blue-600" />
 
                 <div>
+
                   <h2 className="font-semibold text-gray-900 dark:text-white">
                     Aktif Görevler
                   </h2>
@@ -1271,6 +1381,7 @@ const ClientDetail = () => {
                   <p className="text-xs text-gray-500">
                     Öncelikli ve açık görevler
                   </p>
+
                 </div>
 
               </div>
@@ -1383,6 +1494,7 @@ const ClientDetail = () => {
                 <CalendarDays className="h-5 w-5 text-blue-600" />
 
                 <div>
+
                   <h2 className="font-semibold text-gray-900 dark:text-white">
                     Yaklaşan Toplantılar
                   </h2>
@@ -1390,6 +1502,7 @@ const ClientDetail = () => {
                   <p className="text-xs text-gray-500">
                     Müvekkil ile planlanan görüşmeler
                   </p>
+
                 </div>
 
               </div>
@@ -1504,6 +1617,7 @@ const ClientDetail = () => {
               <FileText className="h-5 w-5 text-blue-600" />
 
               <div>
+
                 <h2 className="font-semibold text-gray-900 dark:text-white">
                   Son Belgeler
                 </h2>
@@ -1511,6 +1625,7 @@ const ClientDetail = () => {
                 <p className="text-xs text-gray-500">
                   Müvekkile doğrudan bağlı son belge kayıtları
                 </p>
+
               </div>
 
             </div>
@@ -1587,7 +1702,9 @@ const ClientDetail = () => {
                       </p>
 
                       <p className="mt-1 truncate text-xs text-gray-500">
-                        {documentItem.original_name}
+                        {
+                          documentItem.original_name
+                        }
                       </p>
 
                     </div>
@@ -1648,6 +1765,7 @@ const ClientDetail = () => {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 
               <div>
+
                 <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
                   Ad Soyad / Unvan
                 </p>
@@ -1656,9 +1774,11 @@ const ClientDetail = () => {
                   {client.name ||
                     '-'}
                 </p>
+
               </div>
 
               <div>
+
                 <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
                   TCKNO / VKN
                 </p>
@@ -1667,9 +1787,11 @@ const ClientDetail = () => {
                   {client.identification_number ||
                     '-'}
                 </p>
+
               </div>
 
               <div>
+
                 <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
                   Telefon
                 </p>
@@ -1678,9 +1800,11 @@ const ClientDetail = () => {
                   {client.phone ||
                     '-'}
                 </p>
+
               </div>
 
               <div>
+
                 <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
                   E-posta
                 </p>
@@ -1689,9 +1813,11 @@ const ClientDetail = () => {
                   {client.email ||
                     '-'}
                 </p>
+
               </div>
 
               <div>
+
                 <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
                   Şehir
                 </p>
@@ -1700,9 +1826,11 @@ const ClientDetail = () => {
                   {client.city ||
                     '-'}
                 </p>
+
               </div>
 
               <div>
+
                 <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
                   İlçe
                 </p>
@@ -1711,6 +1839,7 @@ const ClientDetail = () => {
                   {client.district ||
                     '-'}
                 </p>
+
               </div>
 
             </div>
@@ -1827,142 +1956,170 @@ const ClientDetail = () => {
 
           <Card.Body>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-
-              <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
-                <p className="text-xs text-gray-400">
-                  Anlaşılan
-                </p>
-
-                <p className="mt-2 font-bold text-gray-900 dark:text-white">
-                  {formatMoney(
-                    financialSummary.agreed
-                  )}
-                </p>
+            {paymentsLoading ? (
+              <div className="py-10 text-center text-sm text-gray-500">
+                Finansal bilgiler yükleniyor...
               </div>
+            ) : paymentsError ? (
+              <div className="py-10 text-center">
 
-              <div className="rounded-xl bg-green-50 p-3 dark:bg-green-900/20">
-                <p className="text-xs text-green-600">
-                  Tahsil Edilen
+                <WalletCards className="mx-auto h-8 w-8 text-red-300" />
+
+                <p className="mt-2 text-sm text-red-500">
+                  Finansal bilgiler yüklenemedi.
                 </p>
-
-                <p className="mt-2 font-bold text-green-700 dark:text-green-300">
-                  {formatMoney(
-                    financialSummary.received
-                  )}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-red-50 p-3 dark:bg-red-900/20">
-                <p className="text-xs text-red-500">
-                  Kalan
-                </p>
-
-                <p className="mt-2 font-bold text-red-600">
-                  {formatMoney(
-                    financialSummary.remaining
-                  )}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
-                <p className="text-xs text-gray-400">
-                  Masraf
-                </p>
-
-                <p className="mt-2 font-bold text-gray-900 dark:text-white">
-                  {formatMoney(
-                    financialSummary.expense
-                  )}
-                </p>
-              </div>
-
-            </div>
-
-            {payments.length >
-            0 ? (
-              <div className="mt-6">
-
-                <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">
-                  Son Finansal Hareketler
-                </h3>
-
-                <div className="space-y-2">
-
-                  {payments
-                    .slice(
-                      0,
-                      5
-                    )
-                    .map(
-                      (
-                        payment
-                      ) => (
-                        <div
-                          key={
-                            payment.id
-                          }
-                          className="flex items-center justify-between rounded-lg border border-gray-100 p-3 dark:border-gray-700"
-                        >
-
-                          <div>
-
-                            <p className="font-medium text-gray-900 dark:text-white">
-                              {formatMoney(
-                                payment.amount
-                              )}
-                            </p>
-
-                            <p className="mt-1 text-xs text-gray-500">
-                              {payment.description ||
-                                payment.payment_type ||
-                                'Finansal hareket'}
-                            </p>
-
-                          </div>
-
-                          <div className="text-right">
-
-                            <Badge
-                              variant={
-                                payment.status ===
-                                'completed'
-                                  ? 'success'
-                                  : payment.status ===
-                                    'cancelled'
-                                  ? 'danger'
-                                  : 'warning'
-                              }
-                            >
-                              {payment.status ||
-                                '-'}
-                            </Badge>
-
-                            <p className="mt-1 text-xs text-gray-400">
-                              {formatDate(
-                                payment.payment_date
-                              )}
-                            </p>
-
-                          </div>
-
-                        </div>
-                      )
-                    )}
-
-                </div>
 
               </div>
             ) : (
-              <div className="py-10 text-center">
+              <>
 
-                <WalletCards className="mx-auto h-8 w-8 text-gray-300" />
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
 
-                <p className="mt-2 text-sm text-gray-400">
-                  Henüz finansal hareket bulunmuyor.
-                </p>
+                  <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
 
-              </div>
+                    <p className="text-xs text-gray-400">
+                      Anlaşılan
+                    </p>
+
+                    <p className="mt-2 font-bold text-gray-900 dark:text-white">
+                      {formatMoney(
+                        financialSummary.agreed
+                      )}
+                    </p>
+
+                  </div>
+
+                  <div className="rounded-xl bg-green-50 p-3 dark:bg-green-900/20">
+
+                    <p className="text-xs text-green-600">
+                      Tahsil Edilen
+                    </p>
+
+                    <p className="mt-2 font-bold text-green-700 dark:text-green-300">
+                      {formatMoney(
+                        financialSummary.received
+                      )}
+                    </p>
+
+                  </div>
+
+                  <div className="rounded-xl bg-red-50 p-3 dark:bg-red-900/20">
+
+                    <p className="text-xs text-red-500">
+                      Kalan
+                    </p>
+
+                    <p className="mt-2 font-bold text-red-600">
+                      {formatMoney(
+                        financialSummary.remaining
+                      )}
+                    </p>
+
+                  </div>
+
+                  <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
+
+                    <p className="text-xs text-gray-400">
+                      Masraf
+                    </p>
+
+                    <p className="mt-2 font-bold text-gray-900 dark:text-white">
+                      {formatMoney(
+                        financialSummary.expense
+                      )}
+                    </p>
+
+                  </div>
+
+                </div>
+
+                {payments.length >
+                0 ? (
+                  <div className="mt-6">
+
+                    <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">
+                      Son Finansal Hareketler
+                    </h3>
+
+                    <div className="space-y-2">
+
+                      {payments
+                        .slice(
+                          0,
+                          5
+                        )
+                        .map(
+                          (
+                            payment
+                          ) => (
+                            <div
+                              key={
+                                payment.id
+                              }
+                              className="flex items-center justify-between rounded-lg border border-gray-100 p-3 dark:border-gray-700"
+                            >
+
+                              <div>
+
+                                <p className="font-medium text-gray-900 dark:text-white">
+                                  {formatMoney(
+                                    payment.amount
+                                  )}
+                                </p>
+
+                                <p className="mt-1 text-xs text-gray-500">
+                                  {payment.description ||
+                                    payment.payment_type ||
+                                    'Finansal hareket'}
+                                </p>
+
+                              </div>
+
+                              <div className="text-right">
+
+                                <Badge
+                                  variant={
+                                    payment.status ===
+                                    'completed'
+                                      ? 'success'
+                                      : payment.status ===
+                                        'cancelled'
+                                      ? 'danger'
+                                      : 'warning'
+                                  }
+                                >
+                                  {payment.status ||
+                                    '-'}
+                                </Badge>
+
+                                <p className="mt-1 text-xs text-gray-400">
+                                  {formatDate(
+                                    payment.payment_date
+                                  )}
+                                </p>
+
+                              </div>
+
+                            </div>
+                          )
+                        )}
+
+                    </div>
+
+                  </div>
+                ) : (
+                  <div className="py-10 text-center">
+
+                    <WalletCards className="mx-auto h-8 w-8 text-gray-300" />
+
+                    <p className="mt-2 text-sm text-gray-400">
+                      Henüz finansal hareket bulunmuyor.
+                    </p>
+
+                  </div>
+                )}
+
+              </>
             )}
 
           </Card.Body>
@@ -1986,6 +2143,7 @@ const ClientDetail = () => {
               <Scale className="h-5 w-5 text-blue-600" />
 
               <div>
+
                 <h2 className="font-semibold text-gray-900 dark:text-white">
                   Vekâletnameler
                 </h2>
@@ -1993,6 +2151,7 @@ const ClientDetail = () => {
                 <p className="text-xs text-gray-500">
                   Müvekkile ait vekâletname kayıtları
                 </p>
+
               </div>
 
             </div>
@@ -2068,13 +2227,13 @@ const ClientDetail = () => {
                         {poa.case && (
                           <p className="mt-1 text-sm text-gray-500">
                             {
-                              poa.case
-                                .title
+                              poa.case.title
                             }
                           </p>
                         )}
 
                         <p className="mt-2 text-xs text-gray-400">
+
                           {poa.start_date
                             ? `Başlangıç: ${formatDate(
                                 poa.start_date
@@ -2086,6 +2245,7 @@ const ClientDetail = () => {
                                 poa.end_date
                               )}`
                             : ''}
+
                         </p>
 
                       </div>
@@ -2128,6 +2288,7 @@ const ClientDetail = () => {
               <Briefcase className="h-5 w-5 text-blue-600" />
 
               <div>
+
                 <h2 className="font-semibold text-gray-900 dark:text-white">
                   Davalar
                 </h2>
@@ -2135,12 +2296,15 @@ const ClientDetail = () => {
                 <p className="text-xs text-gray-500">
                   Müvekkile bağlı dava kayıtları
                 </p>
+
               </div>
 
             </div>
 
             <Badge variant="default">
-              {cases.length} dava
+              {casesLoading
+                ? '...'
+                : `${cases.length} dava`}
             </Badge>
 
           </div>
@@ -2149,8 +2313,22 @@ const ClientDetail = () => {
 
         <Card.Body>
 
-          {cases.length ===
-          0 ? (
+          {casesLoading ? (
+            <div className="py-8 text-center text-sm text-gray-500">
+              Davalar yükleniyor...
+            </div>
+          ) : casesError ? (
+            <div className="py-8 text-center">
+
+              <Briefcase className="mx-auto h-9 w-9 text-red-300" />
+
+              <p className="mt-2 text-sm text-red-500">
+                Davalar yüklenemedi.
+              </p>
+
+            </div>
+          ) : cases.length ===
+            0 ? (
             <div className="py-8 text-center">
 
               <Briefcase className="mx-auto h-10 w-10 text-gray-300" />
@@ -2211,8 +2389,10 @@ const ClientDetail = () => {
                     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
 
                       <div>
+
                         <p className="flex items-center gap-1 text-xs text-gray-400">
                           <Building2 className="h-3 w-3" />
+
                           Mahkeme
                         </p>
 
@@ -2220,11 +2400,14 @@ const ClientDetail = () => {
                           {caseItem.court_name ||
                             '-'}
                         </p>
+
                       </div>
 
                       <div>
+
                         <p className="flex items-center gap-1 text-xs text-gray-400">
                           <CalendarDays className="h-3 w-3" />
+
                           Açılış
                         </p>
 
@@ -2233,11 +2416,14 @@ const ClientDetail = () => {
                             caseItem.opening_date
                           )}
                         </p>
+
                       </div>
 
                       <div>
+
                         <p className="flex items-center gap-1 text-xs text-gray-400">
                           <UserCog className="h-3 w-3" />
+
                           Atanan Avukat
                         </p>
 
@@ -2246,6 +2432,7 @@ const ClientDetail = () => {
                             caseItem.assignee
                           )}
                         </p>
+
                       </div>
 
                     </div>
@@ -2262,7 +2449,7 @@ const ClientDetail = () => {
       </Card>
 
       {/* ==================================================
-          FOOTER SECURITY INFO
+          FOOTER
       ================================================== */}
 
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
@@ -2272,13 +2459,16 @@ const ClientDetail = () => {
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
 
           <div>
+
             <p className="text-sm font-medium text-gray-900 dark:text-white">
               Müvekkil çalışma alanı
             </p>
 
             <p className="mt-1 text-xs leading-5 text-gray-500">
-              Bu ekran müvekkile bağlı dava, görev, toplantı, belge, vekâletname ve finansal kayıtları merkezi olarak gösterir.
+              Bu ekran müvekkile bağlı dava, görev, toplantı, belge,
+              vekâletname ve finansal kayıtları merkezi olarak gösterir.
             </p>
+
           </div>
 
         </div>

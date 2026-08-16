@@ -320,7 +320,7 @@ export const clientController = {
           client.id,
 
         description:
-          `"${client.name}" müvekkil kaydı arşivden kaldırılmak üzere silindi`,
+          `"${client.name}" müvekkil kaydı soft-delete ile kaldırıldı`,
       });
 
       return successResponse(

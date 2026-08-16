@@ -14,19 +14,25 @@ import toast from 'react-hot-toast';
 // ======================================================
 
 export const CLIENT_QUERY_KEYS = {
-  all: ['clients'],
+  all: [
+    'clients',
+  ],
 
   lists: () => [
     ...CLIENT_QUERY_KEYS.all,
     'list',
   ],
 
-  list: (params = {}) => [
+  list: (
+    params = {}
+  ) => [
     ...CLIENT_QUERY_KEYS.lists(),
     params,
   ],
 
-  detail: (id) => [
+  detail: (
+    id
+  ) => [
     ...CLIENT_QUERY_KEYS.all,
     'detail',
     id,
@@ -37,37 +43,35 @@ export const CLIENT_QUERY_KEYS = {
     'statistics',
   ],
 
-  caseHistory: (clientId) => [
+  caseHistory: (
+    clientId
+  ) => [
     ...CLIENT_QUERY_KEYS.all,
     'case-history',
     clientId,
   ],
 
-  payments: (clientId) => [
+  payments: (
+    clientId
+  ) => [
     ...CLIENT_QUERY_KEYS.all,
     'payments',
     clientId,
   ],
 
-  notes: (clientId) => [
+  notes: (
+    clientId
+  ) => [
     ...CLIENT_QUERY_KEYS.all,
     'notes',
     clientId,
   ],
 
-  infinite: (params = {}) => [
-    ...CLIENT_QUERY_KEYS.all,
-    'infinite',
-    params,
-  ],
-
-  search: (
-    query,
+  infinite: (
     params = {}
   ) => [
     ...CLIENT_QUERY_KEYS.all,
-    'search',
-    query,
+    'infinite',
     params,
   ],
 };
@@ -77,11 +81,17 @@ export const CLIENT_QUERY_KEYS = {
 // ======================================================
 
 const CACHE = {
-  NORMAL:
+  LIST:
+    2 * 60 * 1000,
+
+  DETAIL:
     5 * 60 * 1000,
 
-  LONG:
+  STATISTICS:
     10 * 60 * 1000,
+
+  RELATIONS:
+    3 * 60 * 1000,
 
   GC:
     15 * 60 * 1000,
@@ -103,6 +113,57 @@ const getErrorMessage = (
   );
 };
 
+const invalidateClientLists = (
+  queryClient
+) => {
+  return queryClient.invalidateQueries({
+    queryKey:
+      CLIENT_QUERY_KEYS.lists(),
+  });
+};
+
+const invalidateClientStatistics = (
+  queryClient
+) => {
+  return queryClient.invalidateQueries({
+    queryKey:
+      CLIENT_QUERY_KEYS.statistics(),
+  });
+};
+
+const removeClientRelatedCache = (
+  queryClient,
+  id
+) => {
+  queryClient.removeQueries({
+    queryKey:
+      CLIENT_QUERY_KEYS.detail(
+        id
+      ),
+  });
+
+  queryClient.removeQueries({
+    queryKey:
+      CLIENT_QUERY_KEYS.caseHistory(
+        id
+      ),
+  });
+
+  queryClient.removeQueries({
+    queryKey:
+      CLIENT_QUERY_KEYS.payments(
+        id
+      ),
+  });
+
+  queryClient.removeQueries({
+    queryKey:
+      CLIENT_QUERY_KEYS.notes(
+        id
+      ),
+  });
+};
+
 // ======================================================
 // CLIENT LIST
 // ======================================================
@@ -122,18 +183,15 @@ export const useClients = (
       ),
 
     staleTime:
-      CACHE.NORMAL,
+      CACHE.LIST,
 
     gcTime:
       CACHE.GC,
 
-    /*
-     * Pagination sırasında önceki listeyi
-     * ekranda tutar.
-     */
     placeholderData: (
       previousData
-    ) => previousData,
+    ) =>
+      previousData,
   });
 };
 
@@ -156,10 +214,12 @@ export const useClient = (
       ),
 
     enabled:
-      Boolean(id),
+      Boolean(
+        id
+      ),
 
     staleTime:
-      CACHE.NORMAL,
+      CACHE.DETAIL,
 
     gcTime:
       CACHE.GC,
@@ -180,7 +240,7 @@ export const useClientStatistics =
         clientApi.getStatistics(),
 
       staleTime:
-        CACHE.LONG,
+        CACHE.STATISTICS,
 
       gcTime:
         CACHE.GC,
@@ -211,7 +271,7 @@ export const useClientCaseHistory = (
       ),
 
     staleTime:
-      CACHE.NORMAL,
+      CACHE.RELATIONS,
 
     gcTime:
       CACHE.GC,
@@ -242,7 +302,7 @@ export const useClientPayments = (
       ),
 
     staleTime:
-      CACHE.NORMAL,
+      CACHE.RELATIONS,
 
     gcTime:
       CACHE.GC,
@@ -273,7 +333,7 @@ export const useClientNotes = (
       ),
 
     staleTime:
-      CACHE.NORMAL,
+      CACHE.RELATIONS,
 
     gcTime:
       CACHE.GC,
@@ -300,15 +360,13 @@ export const useCreateClient =
       onSuccess:
         async () => {
           await Promise.all([
-            queryClient.invalidateQueries({
-              queryKey:
-                CLIENT_QUERY_KEYS.lists(),
-            }),
+            invalidateClientLists(
+              queryClient
+            ),
 
-            queryClient.invalidateQueries({
-              queryKey:
-                CLIENT_QUERY_KEYS.statistics(),
-            }),
+            invalidateClientStatistics(
+              queryClient
+            ),
           ]);
 
           toast.success(
@@ -350,33 +408,44 @@ export const useUpdateClient =
 
       onSuccess:
         async (
-          _response,
+          response,
           variables
         ) => {
+          const updatedClient =
+            response?.data
+              ?.data ??
+            response?.data ??
+            null;
+
+          /*
+           * Detail cache'i response ile doğrudan güncellenebilir.
+           * Böylece detail ekranına dönünce gereksiz network
+           * request beklemek zorunda kalmayız.
+           */
+
+          if (
+            updatedClient
+          ) {
+            queryClient.setQueryData(
+              CLIENT_QUERY_KEYS.detail(
+                variables.id
+              ),
+              response
+            );
+          }
+
           await Promise.all([
-            queryClient.invalidateQueries({
-              queryKey:
-                CLIENT_QUERY_KEYS.detail(
-                  variables.id
-                ),
-            }),
+            invalidateClientLists(
+              queryClient
+            ),
 
-            queryClient.invalidateQueries({
-              queryKey:
-                CLIENT_QUERY_KEYS.lists(),
-            }),
-
-            queryClient.invalidateQueries({
-              queryKey:
-                CLIENT_QUERY_KEYS.statistics(),
-            }),
-
-            queryClient.invalidateQueries({
-              queryKey:
-                CLIENT_QUERY_KEYS.caseHistory(
-                  variables.id
-                ),
-            }),
+            /*
+             * Status veya client_type değişmiş olabilir.
+             * Statistics bundan etkilenebilir.
+             */
+            invalidateClientStatistics(
+              queryClient
+            ),
           ]);
 
           toast.success(
@@ -419,48 +488,19 @@ export const useDeleteClient =
           _response,
           id
         ) => {
-          /*
-           * Soft-delete sonrası client detay cache'ini
-           * doğrudan kaldırıyoruz.
-           */
-          queryClient.removeQueries({
-            queryKey:
-              CLIENT_QUERY_KEYS.detail(
-                id
-              ),
-          });
-
-          queryClient.removeQueries({
-            queryKey:
-              CLIENT_QUERY_KEYS.caseHistory(
-                id
-              ),
-          });
-
-          queryClient.removeQueries({
-            queryKey:
-              CLIENT_QUERY_KEYS.payments(
-                id
-              ),
-          });
-
-          queryClient.removeQueries({
-            queryKey:
-              CLIENT_QUERY_KEYS.notes(
-                id
-              ),
-          });
+          removeClientRelatedCache(
+            queryClient,
+            id
+          );
 
           await Promise.all([
-            queryClient.invalidateQueries({
-              queryKey:
-                CLIENT_QUERY_KEYS.lists(),
-            }),
+            invalidateClientLists(
+              queryClient
+            ),
 
-            queryClient.invalidateQueries({
-              queryKey:
-                CLIENT_QUERY_KEYS.statistics(),
-            }),
+            invalidateClientStatistics(
+              queryClient
+            ),
           ]);
 
           toast.success(
@@ -483,12 +523,6 @@ export const useDeleteClient =
 
 // ======================================================
 // BULK DELETE
-//
-// Backend'de bulk endpoint olmadığı için şimdilik
-// Promise.allSettled kullanıyoruz.
-//
-// Böylece 5 kayıttan 4'ü başarılı, 1'i başarısız
-// olursa başarılı işlemleri kaybetmiyoruz.
 // ======================================================
 
 export const useBulkDeleteClients =
@@ -568,46 +602,21 @@ export const useBulkDeleteClients =
         ) => {
           result.succeeded.forEach(
             (id) => {
-              queryClient.removeQueries({
-                queryKey:
-                  CLIENT_QUERY_KEYS.detail(
-                    id
-                  ),
-              });
-
-              queryClient.removeQueries({
-                queryKey:
-                  CLIENT_QUERY_KEYS.caseHistory(
-                    id
-                  ),
-              });
-
-              queryClient.removeQueries({
-                queryKey:
-                  CLIENT_QUERY_KEYS.payments(
-                    id
-                  ),
-              });
-
-              queryClient.removeQueries({
-                queryKey:
-                  CLIENT_QUERY_KEYS.notes(
-                    id
-                  ),
-              });
+              removeClientRelatedCache(
+                queryClient,
+                id
+              );
             }
           );
 
           await Promise.all([
-            queryClient.invalidateQueries({
-              queryKey:
-                CLIENT_QUERY_KEYS.lists(),
-            }),
+            invalidateClientLists(
+              queryClient
+            ),
 
-            queryClient.invalidateQueries({
-              queryKey:
-                CLIENT_QUERY_KEYS.statistics(),
-            }),
+            invalidateClientStatistics(
+              queryClient
+            ),
           ]);
 
           if (
@@ -628,7 +637,8 @@ export const useBulkDeleteClients =
             toast(
               `${result.succeeded.length} kayıt kaldırıldı, ${result.failed.length} kayıt kaldırılamadı`,
               {
-                icon: '⚠️',
+                icon:
+                  '⚠️',
               }
             );
 
@@ -654,7 +664,7 @@ export const useBulkDeleteClients =
   };
 
 // ======================================================
-// INFINITE LIST
+// INFINITE CLIENTS
 // ======================================================
 
 export const useInfiniteClients = (
@@ -671,6 +681,7 @@ export const useInfiniteClients = (
     }) =>
       clientApi.getAll({
         ...params,
+
         page:
           pageParam,
       }),
@@ -701,21 +712,15 @@ export const useInfiniteClients = (
           pagination.totalPages
         ) || 1;
 
-      if (
-        currentPage <
+      return currentPage <
         totalPages
-      ) {
-        return (
-          currentPage +
-          1
-        );
-      }
-
-      return undefined;
+        ? currentPage +
+            1
+        : undefined;
     },
 
     staleTime:
-      CACHE.NORMAL,
+      CACHE.LIST,
 
     gcTime:
       CACHE.GC,
@@ -724,6 +729,10 @@ export const useInfiniteClients = (
 
 // ======================================================
 // SEARCH
+//
+// Ayrı search namespace yerine aynı list cache yapısını
+// kullanıyoruz. Böylece aynı request iki ayrı cache'te
+// tutulmaz.
 // ======================================================
 
 export const useSearchClients = (
@@ -731,33 +740,42 @@ export const useSearchClients = (
   params = {}
 ) => {
   const normalizedQuery =
-    query?.trim() ||
-    '';
+    String(
+      query || ''
+    ).trim();
+
+  const queryParams = {
+    ...params,
+
+    search:
+      normalizedQuery,
+  };
 
   return useQuery({
     queryKey:
-      CLIENT_QUERY_KEYS.search(
-        normalizedQuery,
-        params
+      CLIENT_QUERY_KEYS.list(
+        queryParams
       ),
 
     queryFn: () =>
-      clientApi.getAll({
-        ...params,
-
-        search:
-          normalizedQuery,
-      }),
+      clientApi.getAll(
+        queryParams
+      ),
 
     enabled:
       normalizedQuery.length >=
       2,
 
     staleTime:
-      CACHE.NORMAL,
+      CACHE.LIST,
 
     gcTime:
       CACHE.GC,
+
+    placeholderData: (
+      previousData
+    ) =>
+      previousData,
   });
 };
 
@@ -785,7 +803,7 @@ export const prefetchClient = (
       ),
 
     staleTime:
-      CACHE.NORMAL,
+      CACHE.DETAIL,
   });
 };
 
@@ -809,6 +827,6 @@ export const prefetchClients = (
       ),
 
     staleTime:
-      CACHE.NORMAL,
+      CACHE.LIST,
   });
 };

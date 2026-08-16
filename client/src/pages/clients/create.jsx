@@ -83,13 +83,10 @@ const normalizeNullable = (
 ) => {
   const normalized =
     String(
-      value || ''
+      value ?? ''
     ).trim();
 
-  return (
-    normalized ||
-    null
-  );
+  return normalized || null;
 };
 
 const validateEmail = (
@@ -102,6 +99,79 @@ const validateEmail = (
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
     email
   );
+};
+
+const buildPayload = (
+  formData
+) => {
+  return {
+    name:
+      formData.name.trim(),
+
+    identification_number:
+      normalizeNullable(
+        String(
+          formData.identification_number ||
+          ''
+        ).replace(
+          /\s+/g,
+          ''
+        )
+      ),
+
+    email:
+      normalizeNullable(
+        String(
+          formData.email ||
+          ''
+        )
+          .trim()
+          .toLowerCase()
+      ),
+
+    phone:
+      normalizeNullable(
+        normalizePhone(
+          formData.phone
+        )
+      ),
+
+    address:
+      normalizeNullable(
+        formData.address
+      ),
+
+    city:
+      normalizeNullable(
+        formData.city
+      ),
+
+    district:
+      normalizeNullable(
+        formData.district
+      ),
+
+    postal_code:
+      normalizeNullable(
+        formData.postal_code
+      ),
+
+    notes:
+      normalizeNullable(
+        formData.notes
+      ),
+
+    tags:
+      normalizeTags(
+        formData.tags
+      ),
+
+    client_type:
+      formData.client_type,
+
+    status:
+      formData.status,
+  };
 };
 
 // ======================================================
@@ -154,7 +224,8 @@ const ClientCreate = () => {
     const {
       name,
       value,
-    } = event.target;
+    } =
+      event.target;
 
     setFormData(
       (current) => ({
@@ -170,11 +241,43 @@ const ClientCreate = () => {
       setErrors(
         (current) => ({
           ...current,
-          [name]: '',
+          [name]:
+            '',
         })
       );
     }
   };
+
+  // ======================================================
+  // CLIENT TYPE
+  // ======================================================
+
+  const handleClientTypeChange =
+    (type) => {
+      if (
+        createMutation.isPending
+      ) {
+        return;
+      }
+
+      setFormData(
+        (current) => ({
+          ...current,
+          client_type:
+            type,
+        })
+      );
+
+      setErrors(
+        (current) => ({
+          ...current,
+          identification_number:
+            '',
+          client_type:
+            '',
+        })
+      );
+    };
 
   // ======================================================
   // VALIDATION
@@ -189,8 +292,15 @@ const ClientCreate = () => {
         formData.name.trim();
 
       const identificationNumber =
-        formData.identification_number
-          .replace(/\s+/g, '');
+        String(
+          formData.identification_number ||
+          ''
+        )
+          .replace(
+            /\s+/g,
+            ''
+          )
+          .trim();
 
       const phone =
         normalizePhone(
@@ -198,7 +308,10 @@ const ClientCreate = () => {
         );
 
       const email =
-        formData.email
+        String(
+          formData.email ||
+          ''
+        )
           .trim()
           .toLowerCase();
 
@@ -207,9 +320,13 @@ const ClientCreate = () => {
           isCorporate
             ? 'Şirket / kurum unvanı gereklidir'
             : 'Ad Soyad gereklidir';
-      }
-
-      if (
+      } else if (
+        name.length <
+        2
+      ) {
+        nextErrors.name =
+          'Müvekkil adı en az 2 karakter olmalıdır';
+      } else if (
         name.length >
         255
       ) {
@@ -244,9 +361,7 @@ const ClientCreate = () => {
         }
       }
 
-      if (
-        phone
-      ) {
+      if (phone) {
         const digits =
           phone.replace(
             /\D/g,
@@ -274,6 +389,15 @@ const ClientCreate = () => {
           'Geçerli bir e-posta adresi giriniz';
       }
 
+      if (
+        formData.postal_code &&
+        formData.postal_code.trim().length >
+          20
+      ) {
+        nextErrors.postal_code =
+          'Posta kodu en fazla 20 karakter olabilir';
+      }
+
       setErrors(
         nextErrors
       );
@@ -283,6 +407,73 @@ const ClientCreate = () => {
           nextErrors
         ).length === 0
       );
+    };
+
+  // ======================================================
+  // BACKEND ERROR MAPPING
+  // ======================================================
+
+  const mapBackendError =
+    (error) => {
+      const message =
+        error?.response
+          ?.data?.message ||
+        error?.message ||
+        '';
+
+      const nextErrors =
+        {};
+
+      if (
+        /TCKNO|VKN|identification_number/i.test(
+          message
+        )
+      ) {
+        nextErrors.identification_number =
+          message;
+      }
+
+      if (
+        /email|e-posta/i.test(
+          message
+        )
+      ) {
+        nextErrors.email =
+          message;
+      }
+
+      if (
+        /phone|telefon/i.test(
+          message
+        )
+      ) {
+        nextErrors.phone =
+          message;
+      }
+
+      if (
+        /name|ad soyad|unvan/i.test(
+          message
+        )
+      ) {
+        nextErrors.name =
+          message;
+      }
+
+      if (
+        Object.keys(
+          nextErrors
+        ).length >
+        0
+      ) {
+        setErrors(
+          nextErrors
+        );
+
+        return true;
+      }
+
+      return false;
     };
 
   // ======================================================
@@ -310,68 +501,10 @@ const ClientCreate = () => {
       return;
     }
 
-    const payload = {
-      name:
-        formData.name.trim(),
-
-      identification_number:
-        normalizeNullable(
-          formData.identification_number.replace(
-            /\s+/g,
-            ''
-          )
-        ),
-
-      email:
-        normalizeNullable(
-          formData.email
-            .trim()
-            .toLowerCase()
-        ),
-
-      phone:
-        normalizeNullable(
-          normalizePhone(
-            formData.phone
-          )
-        ),
-
-      address:
-        normalizeNullable(
-          formData.address
-        ),
-
-      city:
-        normalizeNullable(
-          formData.city
-        ),
-
-      district:
-        normalizeNullable(
-          formData.district
-        ),
-
-      postal_code:
-        normalizeNullable(
-          formData.postal_code
-        ),
-
-      notes:
-        normalizeNullable(
-          formData.notes
-        ),
-
-      tags:
-        normalizeTags(
-          formData.tags
-        ),
-
-      client_type:
-        formData.client_type,
-
-      status:
-        formData.status,
-    };
+    const payload =
+      buildPayload(
+        formData
+      );
 
     createMutation.mutate(
       payload,
@@ -379,11 +512,6 @@ const ClientCreate = () => {
         onSuccess: (
           response
         ) => {
-          /*
-           * Backend create response'undan ID geliyorsa
-           * doğrudan yeni müvekkil detayına geçiyoruz.
-           * Gelmezse listeye dönüyoruz.
-           */
           const createdClient =
             response?.data?.data ??
             response?.data ??
@@ -407,50 +535,17 @@ const ClientCreate = () => {
         onError: (
           error
         ) => {
-          const message =
-            error?.response
-              ?.data?.message ||
-            error?.message ||
-            '';
+          const handled =
+            mapBackendError(
+              error
+            );
 
-          const nextErrors =
-            {};
-
-          if (
-            /TCKNO|VKN|identification_number/i.test(
-              message
-            )
-          ) {
-            nextErrors.identification_number =
-              message;
-          } else if (
-            /email|e-posta/i.test(
-              message
-            )
-          ) {
-            /*
-             * Eski DB unique constraint hâlâ duruyorsa
-             * backend bu hatayı döndürebilir.
-             */
-            nextErrors.email =
-              message;
-          } else if (
-            /phone|telefon/i.test(
-              message
-            )
-          ) {
-            nextErrors.phone =
-              message;
-          }
-
-          if (
-            Object.keys(
-              nextErrors
-            ).length >
-            0
-          ) {
-            setErrors(
-              nextErrors
+          if (!handled) {
+            toast.error(
+              error?.response
+                ?.data?.message ||
+                error?.message ||
+                'Müvekkil oluşturulamadı'
             );
           }
         },
@@ -483,7 +578,7 @@ const ClientCreate = () => {
         </h1>
 
         <p className="mt-1 text-sm text-gray-500">
-          Müvekkilin temel kimlik, iletişim ve sınıflandırma bilgilerini oluşturun.
+          Müvekkilin kimlik, iletişim, adres ve sınıflandırma bilgilerini oluşturun.
         </p>
 
       </div>
@@ -513,15 +608,11 @@ const ClientCreate = () => {
                   createMutation.isPending
                 }
                 onClick={() =>
-                  setFormData(
-                    (current) => ({
-                      ...current,
-                      client_type:
-                        'individual',
-                    })
+                  handleClientTypeChange(
+                    'individual'
                   )
                 }
-                className={`flex items-center gap-3 rounded-xl border p-4 text-left transition-colors ${
+                className={`flex items-center gap-3 rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                   !isCorporate
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-200 hover:border-gray-300 dark:border-gray-700'
@@ -550,15 +641,11 @@ const ClientCreate = () => {
                   createMutation.isPending
                 }
                 onClick={() =>
-                  setFormData(
-                    (current) => ({
-                      ...current,
-                      client_type:
-                        'corporate',
-                    })
+                  handleClientTypeChange(
+                    'corporate'
                   )
                 }
-                className={`flex items-center gap-3 rounded-xl border p-4 text-left transition-colors ${
+                className={`flex items-center gap-3 rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                   isCorporate
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-200 hover:border-gray-300 dark:border-gray-700'
@@ -606,6 +693,7 @@ const ClientCreate = () => {
             disabled={
               createMutation.isPending
             }
+            maxLength={255}
             placeholder={
               isCorporate
                 ? 'Örn: ABC Teknoloji A.Ş.'
@@ -758,9 +846,13 @@ const ClientCreate = () => {
               onChange={
                 handleChange
               }
+              error={
+                errors.postal_code
+              }
               disabled={
                 createMutation.isPending
               }
+              maxLength={20}
             />
 
           </div>
@@ -829,7 +921,9 @@ const ClientCreate = () => {
               <div className="mt-3 flex flex-wrap gap-2">
 
                 {tagsPreview.map(
-                  (tag) => (
+                  (
+                    tag
+                  ) => (
                     <Badge
                       key={
                         tag
@@ -865,7 +959,7 @@ const ClientCreate = () => {
               disabled={
                 createMutation.isPending
               }
-              rows="4"
+              rows="5"
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               placeholder="Müvekkille ilgili önemli genel bilgiler..."
             />
