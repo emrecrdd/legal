@@ -754,7 +754,7 @@ const PaymentPlanCreate = () => {
           }
 
           navigate(
-            '/payments'
+            '/finance'
           );
         },
       }
@@ -773,7 +773,7 @@ const PaymentPlanCreate = () => {
       <div>
 
         <Link
-          to="/payments"
+          to="/finance"
           className="inline-flex items-center gap-1 text-blue-600 hover:underline"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -1611,7 +1611,7 @@ const PaymentPlanCreate = () => {
             }
             onClick={() =>
               navigate(
-                '/payments'
+                '/finance'
               )
             }
           >
