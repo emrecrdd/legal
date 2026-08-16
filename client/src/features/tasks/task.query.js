@@ -1,4 +1,10 @@
-import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  useInfiniteQuery,
+} from '@tanstack/react-query';
+
 import taskApi from './task.api.js';
 import toast from 'react-hot-toast';
 
@@ -8,15 +14,70 @@ import toast from 'react-hot-toast';
 
 export const TASK_QUERY_KEYS = {
   all: ['tasks'],
-  list: (params = {}) => ['tasks', params],
-  detail: (id) => ['task', id],
-  myTasks: (params = {}) => ['my-tasks', params],
-  overdue: () => ['my-overdue-tasks'],
-  upcoming: () => ['my-upcoming-tasks'],
-  statistics: () => ['task-statistics'],
-  notes: (id) => ['task-notes', id],
-  infinite: (params = {}) => ['tasks-infinite', params],
-  search: (query, params = {}) => ['tasks-search', query, params],
+
+  list: (params = {}) => [
+    'tasks',
+    params,
+  ],
+
+  detail: (id) => [
+    'task',
+    id,
+  ],
+
+  myTasks: (params = {}) => [
+    'my-tasks',
+    params,
+  ],
+
+  overdue: () => [
+    'my-overdue-tasks',
+  ],
+
+  upcoming: () => [
+    'my-upcoming-tasks',
+  ],
+
+  statistics: () => [
+    'task-statistics',
+  ],
+
+  notes: (id) => [
+    'task-notes',
+    id,
+  ],
+
+  byClient: (
+    clientId,
+    params = {}
+  ) => [
+    'client-tasks',
+    clientId,
+    params,
+  ],
+
+  clientOverview: (
+    clientId,
+    params = {}
+  ) => [
+    'client-task-overview',
+    clientId,
+    params,
+  ],
+
+  infinite: (params = {}) => [
+    'tasks-infinite',
+    params,
+  ],
+
+  search: (
+    query,
+    params = {}
+  ) => [
+    'tasks-search',
+    query,
+    params,
+  ],
 };
 
 // ======================================================
@@ -24,304 +85,1101 @@ export const TASK_QUERY_KEYS = {
 // ======================================================
 
 const CACHE = {
-  SHORT: 2 * 60 * 1000, // 2 dakika
-  NORMAL: 5 * 60 * 1000, // 5 dakika
-  LONG: 10 * 60 * 1000, // 10 dakika
-  GC: 10 * 60 * 1000, // 10 dakika
-  GC_LONG: 30 * 60 * 1000, // 30 dakika
+  SHORT:
+    60 * 1000,
+
+  NORMAL:
+    5 * 60 * 1000,
+
+  LONG:
+    10 * 60 * 1000,
+
+  GC:
+    10 * 60 * 1000,
 };
 
 // ======================================================
 // INVALIDATE HELPERS
 // ======================================================
 
-const invalidateTaskLists = (queryClient) => {
-  queryClient.invalidateQueries({ queryKey: ['tasks'] });
-  queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+const invalidateTaskLists = (
+  queryClient
+) => {
+  queryClient.invalidateQueries({
+    queryKey: [
+      'tasks',
+    ],
+  });
+
+  queryClient.invalidateQueries({
+    queryKey: [
+      'my-tasks',
+    ],
+  });
+
+  queryClient.invalidateQueries({
+    queryKey: [
+      'my-overdue-tasks',
+    ],
+  });
+
+  queryClient.invalidateQueries({
+    queryKey: [
+      'my-upcoming-tasks',
+    ],
+  });
 };
 
-const invalidateTask = (queryClient, id) => {
-  queryClient.invalidateQueries({ queryKey: ['task', id] });
+const invalidateTask = (
+  queryClient,
+  id
+) => {
+  if (!id) {
+    return;
+  }
+
+  queryClient.invalidateQueries({
+    queryKey:
+      TASK_QUERY_KEYS.detail(
+        id
+      ),
+  });
 };
 
-const invalidateTaskNotes = (queryClient, id) => {
-  queryClient.invalidateQueries({ queryKey: ['task-notes', id] });
+const invalidateTaskNotes = (
+  queryClient,
+  id
+) => {
+  if (!id) {
+    return;
+  }
+
+  queryClient.invalidateQueries({
+    queryKey:
+      TASK_QUERY_KEYS.notes(
+        id
+      ),
+  });
+};
+
+const invalidateClientTasks = (
+  queryClient,
+  clientId
+) => {
+  if (clientId) {
+    queryClient.invalidateQueries({
+      queryKey: [
+        'client-tasks',
+        clientId,
+      ],
+    });
+
+    queryClient.invalidateQueries({
+      queryKey: [
+        'client-task-overview',
+        clientId,
+      ],
+    });
+
+    queryClient.invalidateQueries({
+      queryKey: [
+        'client',
+        clientId,
+      ],
+    });
+
+    return;
+  }
+
+  /*
+   * Mutation response/variables client_id vermiyorsa
+   * mevcut client cockpit cache'lerini genel olarak
+   * stale işaretle.
+   */
+  queryClient.invalidateQueries({
+    queryKey: [
+      'client-tasks',
+    ],
+  });
+
+  queryClient.invalidateQueries({
+    queryKey: [
+      'client-task-overview',
+    ],
+  });
+};
+
+const invalidateCaseTasks = (
+  queryClient,
+  caseId
+) => {
+  if (!caseId) {
+    return;
+  }
+
+  queryClient.invalidateQueries({
+    queryKey: [
+      'case',
+      caseId,
+    ],
+  });
 };
 
 // ======================================================
-// TOAST HELPERS
+// TOAST
 // ======================================================
 
-const success = (message) => toast.success(message);
-const failure = (error, fallback) => {
-  toast.error(error.response?.data?.message || fallback);
+const success = (
+  message
+) => {
+  toast.success(
+    message
+  );
+};
+
+const failure = (
+  error,
+  fallback
+) => {
+  toast.error(
+    error?.response
+      ?.data?.message ||
+      error?.message ||
+      fallback
+  );
 };
 
 // ======================================================
 // QUERIES
 // ======================================================
 
-export const useTasks = (params = {}) => {
+export const useTasks = (
+  params = {}
+) => {
   return useQuery({
-    queryKey: TASK_QUERY_KEYS.list(params),
-    queryFn: () => taskApi.getAll(params),
-    staleTime: CACHE.NORMAL,
-    keepPreviousData: true,
+    queryKey:
+      TASK_QUERY_KEYS.list(
+        params
+      ),
+
+    queryFn: () =>
+      taskApi.getAll(
+        params
+      ),
+
+    staleTime:
+      CACHE.NORMAL,
+
+    gcTime:
+      CACHE.GC,
+
+    placeholderData:
+      (
+        previousData
+      ) =>
+        previousData,
   });
 };
 
-export const useTask = (id) => {
+export const useTask = (
+  id
+) => {
   return useQuery({
-    queryKey: TASK_QUERY_KEYS.detail(id),
-    queryFn: () => taskApi.getOne(id),
-    enabled: !!id,
-    staleTime: CACHE.NORMAL,
+    queryKey:
+      TASK_QUERY_KEYS.detail(
+        id
+      ),
+
+    queryFn: () =>
+      taskApi.getOne(
+        id
+      ),
+
+    enabled:
+      Boolean(id),
+
+    staleTime:
+      CACHE.NORMAL,
+
+    gcTime:
+      CACHE.GC,
   });
 };
 
-export const useMyTasks = (params = {}) => {
+export const useMyTasks = (
+  params = {}
+) => {
   return useQuery({
-    queryKey: TASK_QUERY_KEYS.myTasks(params),
-    queryFn: () => taskApi.getMyTasks(params),
-    staleTime: CACHE.NORMAL,
+    queryKey:
+      TASK_QUERY_KEYS.myTasks(
+        params
+      ),
+
+    queryFn: () =>
+      taskApi.getMyTasks(
+        params
+      ),
+
+    staleTime:
+      CACHE.SHORT,
+
+    gcTime:
+      CACHE.GC,
+
+    placeholderData:
+      (
+        previousData
+      ) =>
+        previousData,
   });
 };
 
-export const useMyOverdueTasks = () => {
-  return useQuery({
-    queryKey: TASK_QUERY_KEYS.overdue(),
-    queryFn: () => taskApi.getMyOverdue(),
-    staleTime: CACHE.NORMAL,
-  });
-};
+export const useMyOverdueTasks =
+  () => {
+    return useQuery({
+      queryKey:
+        TASK_QUERY_KEYS.overdue(),
 
-export const useMyUpcomingTasks = () => {
-  return useQuery({
-    queryKey: TASK_QUERY_KEYS.upcoming(),
-    queryFn: () => taskApi.getMyUpcoming(),
-    staleTime: CACHE.NORMAL,
-  });
-};
+      queryFn: () =>
+        taskApi.getMyOverdue(),
 
-export const useTaskStatistics = () => {
-  return useQuery({
-    queryKey: TASK_QUERY_KEYS.statistics(),
-    queryFn: () => taskApi.getStatistics(),
-    staleTime: CACHE.LONG,
-  });
-};
+      staleTime:
+        CACHE.SHORT,
 
-export const useTaskNotes = (taskId) => {
+      gcTime:
+        CACHE.GC,
+    });
+  };
+
+export const useMyUpcomingTasks =
+  () => {
+    return useQuery({
+      queryKey:
+        TASK_QUERY_KEYS.upcoming(),
+
+      queryFn: () =>
+        taskApi.getMyUpcoming(),
+
+      staleTime:
+        CACHE.SHORT,
+
+      gcTime:
+        CACHE.GC,
+    });
+  };
+
+export const useTaskStatistics =
+  () => {
+    return useQuery({
+      queryKey:
+        TASK_QUERY_KEYS.statistics(),
+
+      queryFn: () =>
+        taskApi.getStatistics(),
+
+      staleTime:
+        CACHE.LONG,
+
+      gcTime:
+        CACHE.GC,
+    });
+  };
+
+export const useTaskNotes = (
+  taskId
+) => {
   return useQuery({
-    queryKey: TASK_QUERY_KEYS.notes(taskId),
-    queryFn: () => taskApi.getNotes(taskId),
-    enabled: !!taskId,
-    staleTime: CACHE.SHORT,
+    queryKey:
+      TASK_QUERY_KEYS.notes(
+        taskId
+      ),
+
+    queryFn: () =>
+      taskApi.getNotes(
+        taskId
+      ),
+
+    enabled:
+      Boolean(
+        taskId
+      ),
+
+    staleTime:
+      CACHE.SHORT,
+
+    gcTime:
+      CACHE.GC,
   });
 };
 
 // ======================================================
-// MUTATIONS
+// CLIENT TASKS
 // ======================================================
 
-export const useCreateTask = () => {
-  const queryClient = useQueryClient();
+export const useClientTasks = (
+  clientId,
+  params = {}
+) => {
+  return useQuery({
+    queryKey:
+      TASK_QUERY_KEYS.byClient(
+        clientId,
+        params
+      ),
 
-  return useMutation({
-    mutationFn: taskApi.create,
-    onSuccess: () => {
-      invalidateTaskLists(queryClient);
-      success('Görev başarıyla oluşturuldu');
-    },
-    onError: (error) => {
-      failure(error, 'Görev oluşturulamadı');
-    },
+    queryFn: () =>
+      taskApi.getByClient(
+        clientId,
+        params
+      ),
+
+    enabled:
+      Boolean(
+        clientId
+      ),
+
+    staleTime:
+      CACHE.NORMAL,
+
+    gcTime:
+      CACHE.GC,
+
+    placeholderData:
+      (
+        previousData
+      ) =>
+        previousData,
   });
 };
 
-export const useUpdateTask = () => {
-  const queryClient = useQueryClient();
+// ======================================================
+// CLIENT COCKPIT OVERVIEW
+// ======================================================
 
-  return useMutation({
-    mutationFn: ({ id, data }) => taskApi.update(id, data),
-    onSuccess: (_, { id }) => {
-      invalidateTaskLists(queryClient);
-      invalidateTask(queryClient, id);
-      success('Görev başarıyla güncellendi');
-    },
-    onError: (error) => {
-      failure(error, 'Görev güncellenemedi');
-    },
+export const useClientTaskOverview = (
+  clientId,
+  params = {
+    active_limit: 5,
+    recent_limit: 5,
+  }
+) => {
+  return useQuery({
+    queryKey:
+      TASK_QUERY_KEYS.clientOverview(
+        clientId,
+        params
+      ),
+
+    queryFn: () =>
+      taskApi.getClientOverview(
+        clientId,
+        params
+      ),
+
+    enabled:
+      Boolean(
+        clientId
+      ),
+
+    staleTime:
+      CACHE.SHORT,
+
+    gcTime:
+      CACHE.GC,
   });
 };
 
-export const useDeleteTask = () => {
-  const queryClient = useQueryClient();
+// ======================================================
+// CREATE
+// ======================================================
 
-  return useMutation({
-    mutationFn: taskApi.delete,
-    onSuccess: () => {
-      invalidateTaskLists(queryClient);
-      success('Görev başarıyla silindi');
-    },
-    onError: (error) => {
-      failure(error, 'Görev silinemedi');
-    },
-  });
-};
+export const useCreateTask =
+  () => {
+    const queryClient =
+      useQueryClient();
 
-export const useUpdateTaskStatus = () => {
-  const queryClient = useQueryClient();
+    return useMutation({
+      mutationFn: (
+        data
+      ) =>
+        taskApi.create(
+          data
+        ),
 
-  return useMutation({
-    mutationFn: ({ id, status }) => taskApi.updateStatus(id, status),
-    onSuccess: (_, { id }) => {
-      invalidateTaskLists(queryClient);
-      invalidateTask(queryClient, id);
-      success('Görev durumu güncellendi');
-    },
-    onError: (error) => {
-      failure(error, 'Durum güncellenemedi');
-    },
-  });
-};
+      onSuccess: (
+        _,
+        variables
+      ) => {
+        invalidateTaskLists(
+          queryClient
+        );
 
-export const useAssignTask = () => {
-  const queryClient = useQueryClient();
+        invalidateClientTasks(
+          queryClient,
+          variables?.client_id
+        );
 
-  return useMutation({
-    mutationFn: ({ id, assigned_to }) => taskApi.assignTask(id, assigned_to),
-    onSuccess: (_, { id }) => {
-      invalidateTaskLists(queryClient);
-      invalidateTask(queryClient, id);
-      success('Görev başarıyla atandı');
-    },
-    onError: (error) => {
-      failure(error, 'Görev atanamadı');
-    },
-  });
-};
+        invalidateCaseTasks(
+          queryClient,
+          variables?.case_id
+        );
 
-export const useStartTask = () => {
-  const queryClient = useQueryClient();
+        queryClient.invalidateQueries({
+          queryKey:
+            TASK_QUERY_KEYS.statistics(),
+        });
 
-  return useMutation({
-    mutationFn: taskApi.startTask,
-    onSuccess: (_, id) => {
-      invalidateTaskLists(queryClient);
-      invalidateTask(queryClient, id);
-      success('Görev başlatıldı!');
-    },
-    onError: (error) => {
-      failure(error, 'Görev başlatılamadı');
-    },
-  });
-};
+        success(
+          'Görev başarıyla oluşturuldu'
+        );
+      },
 
-export const useCompleteTask = () => {
-  const queryClient = useQueryClient();
+      onError: (
+        error
+      ) => {
+        failure(
+          error,
+          'Görev oluşturulamadı'
+        );
+      },
+    });
+  };
 
-  return useMutation({
-    mutationFn: ({ id, note, actual_hours }) =>
-      taskApi.completeTask(id, { note, actual_hours }),
-    onSuccess: (_, { id }) => {
-      invalidateTaskLists(queryClient);
-      invalidateTask(queryClient, id);
-      invalidateTaskNotes(queryClient, id);
-      success('Görev tamamlandı! Onay bekleniyor.');
-    },
-    onError: (error) => {
-      failure(error, 'Görev tamamlanamadı');
-    },
-  });
-};
+// ======================================================
+// UPDATE
+// ======================================================
 
-export const useApproveTask = () => {
-  const queryClient = useQueryClient();
+export const useUpdateTask =
+  () => {
+    const queryClient =
+      useQueryClient();
 
-  return useMutation({
-    mutationFn: taskApi.approveTask,
-    onSuccess: (_, id) => {
-      invalidateTaskLists(queryClient);
-      invalidateTask(queryClient, id);
-      invalidateTaskNotes(queryClient, id);
-      success('Görev onaylandı! 🎉');
-    },
-    onError: (error) => {
-      failure(error, 'Görev onaylanamadı');
-    },
-  });
-};
+    return useMutation({
+      mutationFn:
+        ({
+          id,
+          data,
+        }) =>
+          taskApi.update(
+            id,
+            data
+          ),
 
-export const useAddNote = () => {
-  const queryClient = useQueryClient();
+      onSuccess: (
+        _,
+        variables
+      ) => {
+        invalidateTaskLists(
+          queryClient
+        );
 
-  return useMutation({
-    mutationFn: ({ id, content }) => taskApi.addNote(id, content),
-    onSuccess: (_, { id }) => {
-      invalidateTaskNotes(queryClient, id);
-      success('Not eklendi');
-    },
-    onError: (error) => {
-      failure(error, 'Not eklenemedi');
-    },
-  });
-};
+        invalidateTask(
+          queryClient,
+          variables.id
+        );
 
-export const useUpdateProgress = () => {
-  const queryClient = useQueryClient();
+        invalidateClientTasks(
+          queryClient,
+          variables?.data
+            ?.client_id
+        );
 
-  return useMutation({
-    mutationFn: ({ id, progress }) => taskApi.updateProgress(id, progress),
-    onSuccess: (_, { id }) => {
-      invalidateTask(queryClient, id);
-      invalidateTaskLists(queryClient);
-      success('İlerleme güncellendi');
-    },
-    onError: (error) => {
-      failure(error, 'İlerleme güncellenemedi');
-    },
-  });
-};
+        invalidateCaseTasks(
+          queryClient,
+          variables?.data
+            ?.case_id
+        );
 
-export const useBulkUpdateTaskStatus = () => {
-  const queryClient = useQueryClient();
+        success(
+          'Görev başarıyla güncellendi'
+        );
+      },
 
-  return useMutation({
-    mutationFn: ({ ids, status }) =>
-      Promise.all(ids.map((id) => taskApi.updateStatus(id, status))),
-    onSuccess: (_, { ids }) => {
-      invalidateTaskLists(queryClient);
-      success(`${ids.length} görevin durumu güncellendi`);
-    },
-    onError: (error) => {
-      failure(error, 'Toplu güncelleme başarısız');
-    },
-  });
-};
+      onError: (
+        error
+      ) => {
+        failure(
+          error,
+          'Görev güncellenemedi'
+        );
+      },
+    });
+  };
+
+// ======================================================
+// DELETE
+// ======================================================
+
+export const useDeleteTask =
+  () => {
+    const queryClient =
+      useQueryClient();
+
+    return useMutation({
+      mutationFn: (
+        id
+      ) =>
+        taskApi.delete(
+          id
+        ),
+
+      onSuccess: (
+        _,
+        id
+      ) => {
+        invalidateTaskLists(
+          queryClient
+        );
+
+        invalidateClientTasks(
+          queryClient
+        );
+
+        queryClient.removeQueries({
+          queryKey:
+            TASK_QUERY_KEYS.detail(
+              id
+            ),
+        });
+
+        queryClient.invalidateQueries({
+          queryKey:
+            TASK_QUERY_KEYS.statistics(),
+        });
+
+        success(
+          'Görev başarıyla silindi'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        failure(
+          error,
+          'Görev silinemedi'
+        );
+      },
+    });
+  };
+
+// ======================================================
+// STATUS
+// ======================================================
+
+export const useUpdateTaskStatus =
+  () => {
+    const queryClient =
+      useQueryClient();
+
+    return useMutation({
+      mutationFn:
+        ({
+          id,
+          status,
+        }) =>
+          taskApi.updateStatus(
+            id,
+            status
+          ),
+
+      onSuccess: (
+        _,
+        variables
+      ) => {
+        invalidateTaskLists(
+          queryClient
+        );
+
+        invalidateTask(
+          queryClient,
+          variables.id
+        );
+
+        invalidateClientTasks(
+          queryClient
+        );
+
+        success(
+          'Görev durumu güncellendi'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        failure(
+          error,
+          'Durum güncellenemedi'
+        );
+      },
+    });
+  };
+
+// ======================================================
+// ASSIGN
+// ======================================================
+
+export const useAssignTask =
+  () => {
+    const queryClient =
+      useQueryClient();
+
+    return useMutation({
+      mutationFn:
+        ({
+          id,
+          assigned_to,
+        }) =>
+          taskApi.assignTask(
+            id,
+            assigned_to
+          ),
+
+      onSuccess: (
+        _,
+        variables
+      ) => {
+        invalidateTaskLists(
+          queryClient
+        );
+
+        invalidateTask(
+          queryClient,
+          variables.id
+        );
+
+        invalidateClientTasks(
+          queryClient
+        );
+
+        success(
+          'Görev başarıyla atandı'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        failure(
+          error,
+          'Görev atanamadı'
+        );
+      },
+    });
+  };
+
+// ======================================================
+// START
+// ======================================================
+
+export const useStartTask =
+  () => {
+    const queryClient =
+      useQueryClient();
+
+    return useMutation({
+      mutationFn: (
+        id
+      ) =>
+        taskApi.startTask(
+          id
+        ),
+
+      onSuccess: (
+        _,
+        id
+      ) => {
+        invalidateTaskLists(
+          queryClient
+        );
+
+        invalidateTask(
+          queryClient,
+          id
+        );
+
+        invalidateTaskNotes(
+          queryClient,
+          id
+        );
+
+        invalidateClientTasks(
+          queryClient
+        );
+
+        success(
+          'Görev başlatıldı'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        failure(
+          error,
+          'Görev başlatılamadı'
+        );
+      },
+    });
+  };
+
+// ======================================================
+// COMPLETE
+// ======================================================
+
+export const useCompleteTask =
+  () => {
+    const queryClient =
+      useQueryClient();
+
+    return useMutation({
+      mutationFn:
+        ({
+          id,
+          note,
+          actual_hours,
+        }) =>
+          taskApi.completeTask(
+            id,
+            {
+              note,
+              actual_hours,
+            }
+          ),
+
+      onSuccess: (
+        _,
+        variables
+      ) => {
+        invalidateTaskLists(
+          queryClient
+        );
+
+        invalidateTask(
+          queryClient,
+          variables.id
+        );
+
+        invalidateTaskNotes(
+          queryClient,
+          variables.id
+        );
+
+        invalidateClientTasks(
+          queryClient
+        );
+
+        success(
+          'Görev tamamlandı. Onay bekleniyor.'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        failure(
+          error,
+          'Görev tamamlanamadı'
+        );
+      },
+    });
+  };
+
+// ======================================================
+// APPROVE
+// ======================================================
+
+export const useApproveTask =
+  () => {
+    const queryClient =
+      useQueryClient();
+
+    return useMutation({
+      mutationFn: (
+        id
+      ) =>
+        taskApi.approveTask(
+          id
+        ),
+
+      onSuccess: (
+        _,
+        id
+      ) => {
+        invalidateTaskLists(
+          queryClient
+        );
+
+        invalidateTask(
+          queryClient,
+          id
+        );
+
+        invalidateTaskNotes(
+          queryClient,
+          id
+        );
+
+        invalidateClientTasks(
+          queryClient
+        );
+
+        success(
+          'Görev onaylandı'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        failure(
+          error,
+          'Görev onaylanamadı'
+        );
+      },
+    });
+  };
+
+// ======================================================
+// NOTES
+// ======================================================
+
+export const useAddNote =
+  () => {
+    const queryClient =
+      useQueryClient();
+
+    return useMutation({
+      mutationFn:
+        ({
+          id,
+          content,
+        }) =>
+          taskApi.addNote(
+            id,
+            content
+          ),
+
+      onSuccess: (
+        _,
+        variables
+      ) => {
+        invalidateTaskNotes(
+          queryClient,
+          variables.id
+        );
+
+        invalidateTask(
+          queryClient,
+          variables.id
+        );
+
+        success(
+          'Not eklendi'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        failure(
+          error,
+          'Not eklenemedi'
+        );
+      },
+    });
+  };
+
+// ======================================================
+// PROGRESS
+// ======================================================
+
+export const useUpdateProgress =
+  () => {
+    const queryClient =
+      useQueryClient();
+
+    return useMutation({
+      mutationFn:
+        ({
+          id,
+          progress,
+        }) =>
+          taskApi.updateProgress(
+            id,
+            progress
+          ),
+
+      onSuccess: (
+        _,
+        variables
+      ) => {
+        invalidateTask(
+          queryClient,
+          variables.id
+        );
+
+        invalidateTaskLists(
+          queryClient
+        );
+
+        invalidateClientTasks(
+          queryClient
+        );
+
+        success(
+          'İlerleme güncellendi'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        failure(
+          error,
+          'İlerleme güncellenemedi'
+        );
+      },
+    });
+  };
+
+// ======================================================
+// BULK STATUS
+// ======================================================
+
+export const useBulkUpdateTaskStatus =
+  () => {
+    const queryClient =
+      useQueryClient();
+
+    return useMutation({
+      mutationFn:
+        ({
+          ids,
+          status,
+        }) =>
+          Promise.allSettled(
+            ids.map(
+              (id) =>
+                taskApi.updateStatus(
+                  id,
+                  status
+                )
+            )
+          ),
+
+      onSuccess: (
+        results,
+        variables
+      ) => {
+        invalidateTaskLists(
+          queryClient
+        );
+
+        invalidateClientTasks(
+          queryClient
+        );
+
+        const successful =
+          results.filter(
+            (result) =>
+              result.status ===
+              'fulfilled'
+          ).length;
+
+        const failed =
+          results.length -
+          successful;
+
+        if (
+          failed === 0
+        ) {
+          success(
+            `${successful} görevin durumu güncellendi`
+          );
+
+          return;
+        }
+
+        if (
+          successful > 0
+        ) {
+          toast(
+            `${successful} görev güncellendi, ${failed} görev güncellenemedi`,
+            {
+              icon: '⚠️',
+            }
+          );
+
+          return;
+        }
+
+        toast.error(
+          'Toplu güncelleme başarısız'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        failure(
+          error,
+          'Toplu güncelleme başarısız'
+        );
+      },
+    });
+  };
 
 // ======================================================
 // INFINITE QUERY
 // ======================================================
 
-export const useInfiniteTasks = (params = {}) => {
+export const useInfiniteTasks = (
+  params = {}
+) => {
   return useInfiniteQuery({
-    queryKey: TASK_QUERY_KEYS.infinite(params),
-    queryFn: ({ pageParam = 1 }) =>
+    queryKey:
+      TASK_QUERY_KEYS.infinite(
+        params
+      ),
+
+    queryFn: ({
+      pageParam = 1,
+    }) =>
       taskApi.getAll({
         ...params,
-        page: pageParam,
+
+        page:
+          pageParam,
       }),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      const pagination = lastPage?.data?.pagination;
-      if (!pagination) return undefined;
-      return pagination.page < pagination.totalPages
-        ? pagination.page + 1
+
+    initialPageParam:
+      1,
+
+    getNextPageParam: (
+      lastPage
+    ) => {
+      const pagination =
+        lastPage?.data
+          ?.pagination;
+
+      if (!pagination) {
+        return undefined;
+      }
+
+      return pagination.page <
+        pagination.totalPages
+        ? pagination.page +
+            1
         : undefined;
     },
-    staleTime: CACHE.NORMAL,
-    gcTime: CACHE.GC,
+
+    staleTime:
+      CACHE.NORMAL,
+
+    gcTime:
+      CACHE.GC,
   });
 };
 
@@ -329,50 +1187,43 @@ export const useInfiniteTasks = (params = {}) => {
 // PREFETCH
 // ======================================================
 
-export const prefetchTask = (queryClient, id) =>
-  queryClient.prefetchQuery({
-    queryKey: TASK_QUERY_KEYS.detail(id),
-    queryFn: () => taskApi.getOne(id),
-    staleTime: CACHE.NORMAL,
-  });
+export const prefetchTask = (
+  queryClient,
+  id
+) => {
+  return queryClient.prefetchQuery({
+    queryKey:
+      TASK_QUERY_KEYS.detail(
+        id
+      ),
 
-export const prefetchTasks = (queryClient, params = {}) =>
-  queryClient.prefetchQuery({
-    queryKey: TASK_QUERY_KEYS.list(params),
-    queryFn: () => taskApi.getAll(params),
-    staleTime: CACHE.NORMAL,
-  });
+    queryFn: () =>
+      taskApi.getOne(
+        id
+      ),
 
-// ======================================================
-// CACHE HELPERS
-// ======================================================
-
-export const updateTaskCache = (queryClient, id, updater) => {
-  queryClient.setQueryData(TASK_QUERY_KEYS.detail(id), (oldData) => {
-    if (!oldData) return oldData;
-    return {
-      ...oldData,
-      data: updater(oldData.data),
-    };
+    staleTime:
+      CACHE.NORMAL,
   });
 };
 
-export const updateTasksCache = (queryClient, params, updater) => {
-  queryClient.setQueryData(TASK_QUERY_KEYS.list(params), (oldData) => {
-    if (!oldData) return oldData;
-    return {
-      ...oldData,
-      data: {
-        ...oldData.data,
-        data: oldData.data.data.map(updater),
-      },
-    };
-  });
-};
+export const prefetchTasks = (
+  queryClient,
+  params = {}
+) => {
+  return queryClient.prefetchQuery({
+    queryKey:
+      TASK_QUERY_KEYS.list(
+        params
+      ),
 
-export const removeTaskFromCache = (queryClient, id) => {
-  queryClient.removeQueries({
-    queryKey: TASK_QUERY_KEYS.detail(id),
+    queryFn: () =>
+      taskApi.getAll(
+        params
+      ),
+
+    staleTime:
+      CACHE.NORMAL,
   });
 };
 
@@ -380,17 +1231,40 @@ export const removeTaskFromCache = (queryClient, id) => {
 // SEARCH
 // ======================================================
 
-export const useSearchTasks = (query, params = {}) => {
+export const useSearchTasks = (
+  query,
+  params = {}
+) => {
+  const normalizedQuery =
+    typeof query ===
+    'string'
+      ? query.trim()
+      : '';
+
   return useQuery({
-    queryKey: TASK_QUERY_KEYS.search(query, params),
+    queryKey:
+      TASK_QUERY_KEYS.search(
+        normalizedQuery,
+        params
+      ),
+
     queryFn: () =>
       taskApi.getAll({
         ...params,
-        search: query,
+
+        search:
+          normalizedQuery,
       }),
-    enabled: !!query && query.length >= 2,
-    staleTime: CACHE.NORMAL,
-    gcTime: CACHE.GC,
+
+    enabled:
+      normalizedQuery.length >=
+      2,
+
+    staleTime:
+      CACHE.NORMAL,
+
+    gcTime:
+      CACHE.GC,
   });
 };
 
@@ -401,11 +1275,16 @@ export const useSearchTasks = (query, params = {}) => {
 export default {
   useTasks,
   useTask,
+
   useMyTasks,
   useMyOverdueTasks,
   useMyUpcomingTasks,
+
   useTaskStatistics,
   useTaskNotes,
+
+  useClientTasks,
+  useClientTaskOverview,
 
   useCreateTask,
   useUpdateTask,
@@ -424,8 +1303,4 @@ export default {
 
   prefetchTask,
   prefetchTasks,
-
-  updateTaskCache,
-  updateTasksCache,
-  removeTaskFromCache,
 };

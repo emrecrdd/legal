@@ -1,11 +1,26 @@
-import { Op } from 'sequelize';
+import {
+  Op,
+} from 'sequelize';
 
-import { Meeting } from '../../models/Meeting.js';
-import { Case } from '../../models/Case.js';
-import { Client } from '../../models/Client.js';
-import { User } from '../../models/User.js';
+import {
+  Meeting,
+} from '../../models/Meeting.js';
 
-import { sequelize } from '../../config/database.js';
+import {
+  Case,
+} from '../../models/Case.js';
+
+import {
+  Client,
+} from '../../models/Client.js';
+
+import {
+  User,
+} from '../../models/User.js';
+
+import {
+  sequelize,
+} from '../../config/database.js';
 
 import {
   paginate,
@@ -16,37 +31,131 @@ import {
   reminderService,
 } from '../reminders/reminder.service.js';
 
-const TERMINAL_STATUSES = new Set([
-  'completed',
-  'cancelled',
-]);
+// ======================================================
+// CONSTANTS
+// ======================================================
 
-const shouldHaveReminders = (meeting) => {
-  return (
-    Boolean(meeting?.start_date) &&
-    Boolean(meeting?.assigned_to || meeting?.created_by) &&
-    !TERMINAL_STATUSES.has(meeting?.status)
-  );
-};
+const TERMINAL_STATUSES =
+  new Set([
+    'completed',
+    'cancelled',
+  ]);
 
-const normalizePagination = (page, limit) => {
-  const pageNumber = Math.max(
-    Number.parseInt(page, 10) || 1,
-    1
-  );
+const ALLOWED_STATUSES =
+  new Set([
+    'scheduled',
+    'ongoing',
+    'completed',
+    'cancelled',
+  ]);
 
-  const limitNumber = Math.min(
+const ALLOWED_MEETING_TYPES =
+  new Set([
+    'client',
+    'internal',
+    'phone',
+    'other',
+  ]);
+
+const USER_SUMMARY_ATTRIBUTES = [
+  'id',
+  'first_name',
+  'last_name',
+];
+
+const ASSIGNEE_ATTRIBUTES = [
+  'id',
+  'first_name',
+  'last_name',
+  'email',
+];
+
+const CASE_SUMMARY_ATTRIBUTES = [
+  'id',
+  'title',
+  'case_number',
+];
+
+const CLIENT_SUMMARY_ATTRIBUTES = [
+  'id',
+  'name',
+];
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const normalizePagination = (
+  page,
+  limit
+) => {
+  const pageNumber =
     Math.max(
-      Number.parseInt(limit, 10) || 10,
+      Number.parseInt(
+        page,
+        10
+      ) || 1,
       1
-    ),
-    100
-  );
+    );
+
+  const limitNumber =
+    Math.min(
+      Math.max(
+        Number.parseInt(
+          limit,
+          10
+        ) || 10,
+        1
+      ),
+      100
+    );
 
   return {
     pageNumber,
     limitNumber,
   };
+};
+
+const normalizeSearch = (
+  value
+) => {
+  if (
+    typeof value !==
+    'string'
+  ) {
+    return '';
+  }
+
+  return value
+    .trim()
+    .slice(
+      0,
+      150
+    );
+};
+
+const parseDate = (
+  value,
+  errorMessage
+) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
+    throw new Error(
+      errorMessage
+    );
+  }
+
+  return parsed;
 };
 
 const validateMeetingDates = ({
@@ -59,38 +168,25 @@ const validateMeetingDates = ({
     );
   }
 
-  const parsedStartDate =
-    new Date(startDate);
-
-  if (
-    Number.isNaN(
-      parsedStartDate.getTime()
-    )
-  ) {
-    throw new Error(
+  const parsedStart =
+    parseDate(
+      startDate,
       'Invalid meeting start date'
     );
-  }
 
   if (!endDate) {
     return;
   }
 
-  const parsedEndDate =
-    new Date(endDate);
-
-  if (
-    Number.isNaN(
-      parsedEndDate.getTime()
-    )
-  ) {
-    throw new Error(
+  const parsedEnd =
+    parseDate(
+      endDate,
       'Invalid meeting end date'
     );
-  }
 
   if (
-    parsedEndDate < parsedStartDate
+    parsedEnd <
+    parsedStart
   ) {
     throw new Error(
       'Meeting end date cannot be before start date'
@@ -98,28 +194,271 @@ const validateMeetingDates = ({
   }
 };
 
+const validateStatus = (
+  status
+) => {
+  if (
+    !ALLOWED_STATUSES.has(
+      status
+    )
+  ) {
+    throw new Error(
+      'Invalid meeting status'
+    );
+  }
+};
+
+const validateMeetingType = (
+  meetingType
+) => {
+  if (
+    meetingType &&
+    !ALLOWED_MEETING_TYPES.has(
+      meetingType
+    )
+  ) {
+    throw new Error(
+      'Invalid meeting type'
+    );
+  }
+};
+
+const shouldHaveReminders = (
+  meeting
+) => {
+  return (
+    Boolean(
+      meeting?.start_date
+    ) &&
+    Boolean(
+      meeting?.assigned_to ||
+        meeting?.created_by
+    ) &&
+    !TERMINAL_STATUSES.has(
+      meeting?.status
+    )
+  );
+};
+
+const prepareMeetingData = (
+  data
+) => {
+  const prepared = {
+    ...data,
+  };
+
+  /*
+   * Server controlled alanları
+   * body üzerinden değiştirmiyoruz.
+   */
+  delete prepared.id;
+  delete prepared.created_at;
+  delete prepared.updated_at;
+  delete prepared.deleted_at;
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      prepared,
+      'title'
+    )
+  ) {
+    prepared.title =
+      String(
+        prepared.title || ''
+      ).trim();
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      prepared,
+      'description'
+    )
+  ) {
+    prepared.description =
+      prepared.description
+        ? String(
+            prepared.description
+          ).trim()
+        : null;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      prepared,
+      'location'
+    )
+  ) {
+    prepared.location =
+      prepared.location
+        ? String(
+            prepared.location
+          ).trim()
+        : null;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      prepared,
+      'meeting_link'
+    )
+  ) {
+    prepared.meeting_link =
+      prepared.meeting_link
+        ? String(
+            prepared.meeting_link
+          ).trim()
+        : null;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      prepared,
+      'notes'
+    )
+  ) {
+    prepared.notes =
+      prepared.notes
+        ? String(
+            prepared.notes
+          ).trim()
+        : null;
+  }
+
+  if (
+    prepared.status
+  ) {
+    validateStatus(
+      prepared.status
+    );
+  }
+
+  if (
+    prepared.meeting_type
+  ) {
+    validateMeetingType(
+      prepared.meeting_type
+    );
+  }
+
+  return prepared;
+};
+
+const buildIncludes = ({
+  includeClient = true,
+  includeCase = true,
+  includeCreator = true,
+  includeAssignee = true,
+} = {}) => {
+  const includes = [];
+
+  if (includeCase) {
+    includes.push({
+      model:
+        Case,
+
+      as:
+        'case',
+
+      attributes:
+        CASE_SUMMARY_ATTRIBUTES,
+
+      required:
+        false,
+    });
+  }
+
+  if (includeClient) {
+    includes.push({
+      model:
+        Client,
+
+      as:
+        'client',
+
+      attributes:
+        CLIENT_SUMMARY_ATTRIBUTES,
+
+      required:
+        false,
+    });
+  }
+
+  if (includeCreator) {
+    includes.push({
+      model:
+        User,
+
+      as:
+        'creator',
+
+      attributes:
+        USER_SUMMARY_ATTRIBUTES,
+
+      required:
+        false,
+    });
+  }
+
+  if (includeAssignee) {
+    includes.push({
+      model:
+        User,
+
+      as:
+        'assignee',
+
+      attributes:
+        ASSIGNEE_ATTRIBUTES,
+
+      required:
+        false,
+    });
+  }
+
+  return includes;
+};
+
+// ======================================================
+// SERVICE
+// ======================================================
+
 export const meetingService = {
-  async create(data) {
+  // ====================================================
+  // CREATE
+  // ====================================================
+
+  async create(
+    data
+  ) {
+    const preparedData =
+      prepareMeetingData(
+        data
+      );
+
     validateMeetingDates({
-      startDate: data.start_date,
-      endDate: data.end_date,
+      startDate:
+        preparedData.start_date,
+
+      endDate:
+        preparedData.end_date,
     });
 
     const transaction =
       await sequelize.transaction();
 
     try {
-     
       const meeting =
         await Meeting.create(
-          data,
+          preparedData,
           {
             transaction,
           }
         );
 
       if (
-        shouldHaveReminders(meeting)
+        shouldHaveReminders(
+          meeting
+        )
       ) {
         await reminderService
           .createMeetingReminders(
@@ -135,13 +474,18 @@ export const meetingService = {
       return meeting;
     } catch (error) {
       await transaction.rollback();
+
       throw error;
     }
   },
 
+  // ====================================================
+  // LIST
+  // ====================================================
+
   async findAll({
-    page,
-    limit,
+    page = 1,
+    limit = 10,
     search,
     status,
     meeting_type,
@@ -153,10 +497,14 @@ export const meetingService = {
   }) {
     const where = {};
 
-    if (search?.trim()) {
-      const normalizedSearch =
-        search.trim();
+    const normalizedSearch =
+      normalizeSearch(
+        search
+      );
 
+    if (
+      normalizedSearch
+    ) {
       where[Op.or] = [
         {
           title: {
@@ -164,8 +512,16 @@ export const meetingService = {
               `%${normalizedSearch}%`,
           },
         },
+
         {
           description: {
+            [Op.iLike]:
+              `%${normalizedSearch}%`,
+          },
+        },
+
+        {
+          location: {
             [Op.iLike]:
               `%${normalizedSearch}%`,
           },
@@ -174,20 +530,33 @@ export const meetingService = {
     }
 
     if (status) {
-      where.status = status;
+      validateStatus(
+        status
+      );
+
+      where.status =
+        status;
     }
 
-    if (meeting_type) {
+    if (
+      meeting_type
+    ) {
+      validateMeetingType(
+        meeting_type
+      );
+
       where.meeting_type =
         meeting_type;
     }
 
     if (case_id) {
-      where.case_id = case_id;
+      where.case_id =
+        case_id;
     }
 
     if (client_id) {
-      where.client_id = client_id;
+      where.client_id =
+        client_id;
     }
 
     if (assigned_to) {
@@ -202,108 +571,63 @@ export const meetingService = {
       where.start_date = {};
 
       if (start_date) {
-        const startDate =
-          new Date(start_date);
-
-        if (
-          Number.isNaN(
-            startDate.getTime()
-          )
-        ) {
-          throw new Error(
+        where.start_date[
+          Op.gte
+        ] =
+          parseDate(
+            start_date,
             'Invalid start date filter'
           );
-        }
-
-        where.start_date[Op.gte] =
-          startDate;
       }
 
       if (end_date) {
-        const endDate =
-          new Date(end_date);
-
-        if (
-          Number.isNaN(
-            endDate.getTime()
-          )
-        ) {
-          throw new Error(
+        where.start_date[
+          Op.lte
+        ] =
+          parseDate(
+            end_date,
             'Invalid end date filter'
           );
-        }
-
-        where.start_date[Op.lte] =
-          endDate;
       }
     }
 
     const {
       pageNumber,
       limitNumber,
-    } = normalizePagination(
-      page,
-      limit
-    );
+    } =
+      normalizePagination(
+        page,
+        limit
+      );
 
-    const query = paginate(
-      {
-        where,
-      },
-      pageNumber,
-      limitNumber
-    );
+    const query =
+      paginate(
+        {
+          where,
+        },
+        pageNumber,
+        limitNumber
+      );
 
-    const { count, rows } =
+    const {
+      count,
+      rows,
+    } =
       await Meeting.findAndCountAll({
         ...query,
 
-        include: [
-          {
-            model: Case,
-            as: 'case',
-            attributes: [
-              'id',
-              'title',
-              'case_number',
-            ],
-          },
-          {
-            model: Client,
-            as: 'client',
-            attributes: [
-              'id',
-              'name',
-            ],
-          },
-          {
-            model: User,
-            as: 'creator',
-            attributes: [
-              'id',
-              'first_name',
-              'last_name',
-            ],
-          },
-          {
-            model: User,
-            as: 'assignee',
-            attributes: [
-              'id',
-              'first_name',
-              'last_name',
-              'email',
-            ],
-          },
-        ],
+        include:
+          buildIncludes(),
 
-        distinct: true,
+        distinct:
+          true,
 
         order: [
           [
             'start_date',
             'ASC',
           ],
+
           [
             'created_at',
             'DESC',
@@ -312,7 +636,8 @@ export const meetingService = {
       });
 
     return {
-      data: rows,
+      data:
+        rows,
 
       pagination:
         getPaginationData(
@@ -323,51 +648,19 @@ export const meetingService = {
     };
   },
 
-  async findOne(id) {
+  // ====================================================
+  // DETAIL
+  // ====================================================
+
+  async findOne(
+    id
+  ) {
     const meeting =
       await Meeting.findByPk(
         id,
         {
-          include: [
-            {
-              model: Case,
-              as: 'case',
-              attributes: [
-                'id',
-                'title',
-                'case_number',
-              ],
-            },
-            {
-              model: Client,
-              as: 'client',
-              attributes: [
-                'id',
-                'name',
-                'phone',
-                'email',
-              ],
-            },
-            {
-              model: User,
-              as: 'creator',
-              attributes: [
-                'id',
-                'first_name',
-                'last_name',
-              ],
-            },
-            {
-              model: User,
-              as: 'assignee',
-              attributes: [
-                'id',
-                'first_name',
-                'last_name',
-                'email',
-              ],
-            },
-          ],
+          include:
+            buildIncludes(),
         }
       );
 
@@ -380,7 +673,14 @@ export const meetingService = {
     return meeting;
   },
 
-  async update(id, data) {
+  // ====================================================
+  // UPDATE
+  // ====================================================
+
+  async update(
+    id,
+    data
+  ) {
     const transaction =
       await sequelize.transaction();
 
@@ -390,8 +690,10 @@ export const meetingService = {
           id,
           {
             transaction,
+
             lock:
-              transaction.LOCK.UPDATE,
+              transaction
+                .LOCK.UPDATE,
           }
         );
 
@@ -401,14 +703,26 @@ export const meetingService = {
         );
       }
 
+      const preparedData =
+        prepareMeetingData(
+          data
+        );
+
+      /*
+       * created_by update endpoint üzerinden
+       * değiştirilemez.
+       */
+      delete preparedData.created_by;
+
       validateMeetingDates({
         startDate:
-          data.start_date ??
+          preparedData.start_date ??
           meeting.start_date,
 
         endDate:
-          data.end_date !== undefined
-            ? data.end_date
+          preparedData.end_date !==
+          undefined
+            ? preparedData.end_date
             : meeting.end_date,
       });
 
@@ -430,9 +744,6 @@ export const meetingService = {
         assignedTo:
           meeting.assigned_to,
 
-        createdBy:
-          meeting.created_by,
-
         status:
           meeting.status,
 
@@ -441,7 +752,7 @@ export const meetingService = {
       };
 
       await meeting.update(
-        data,
+        preparedData,
         {
           transaction,
         }
@@ -465,9 +776,6 @@ export const meetingService = {
         assignedTo:
           meeting.assigned_to,
 
-        createdBy:
-          meeting.created_by,
-
         status:
           meeting.status,
 
@@ -482,8 +790,6 @@ export const meetingService = {
           currentValues.endDate ||
         previousValues.assignedTo !==
           currentValues.assignedTo ||
-        previousValues.createdBy !==
-          currentValues.createdBy ||
         previousValues.status !==
           currentValues.status ||
         previousValues.title !==
@@ -496,8 +802,12 @@ export const meetingService = {
       ) {
         await reminderService
           .cancelForSource({
-            sourceType: 'meeting',
-            sourceId: meeting.id,
+            sourceType:
+              'meeting',
+
+            sourceId:
+              meeting.id,
+
             transaction,
           });
       } else if (
@@ -514,15 +824,16 @@ export const meetingService = {
             }
           );
       } else if (
-        schedulingChanged &&
-        !shouldHaveReminders(
-          meeting
-        )
+        schedulingChanged
       ) {
         await reminderService
           .cancelForSource({
-            sourceType: 'meeting',
-            sourceId: meeting.id,
+            sourceType:
+              'meeting',
+
+            sourceId:
+              meeting.id,
+
             transaction,
           });
       }
@@ -532,11 +843,18 @@ export const meetingService = {
       return meeting;
     } catch (error) {
       await transaction.rollback();
+
       throw error;
     }
   },
 
-  async remove(id) {
+  // ====================================================
+  // REMOVE
+  // ====================================================
+
+  async remove(
+    id
+  ) {
     const transaction =
       await sequelize.transaction();
 
@@ -546,8 +864,10 @@ export const meetingService = {
           id,
           {
             transaction,
+
             lock:
-              transaction.LOCK.UPDATE,
+              transaction
+                .LOCK.UPDATE,
           }
         );
 
@@ -559,8 +879,12 @@ export const meetingService = {
 
       await reminderService
         .cancelForSource({
-          sourceType: 'meeting',
-          sourceId: meeting.id,
+          sourceType:
+            'meeting',
+
+          sourceId:
+            meeting.id,
+
           transaction,
         });
 
@@ -573,155 +897,316 @@ export const meetingService = {
       return meeting;
     } catch (error) {
       await transaction.rollback();
+
       throw error;
     }
   },
 
-  async getMyMeetings(userId) {
-    return Meeting.findAll({
-      where: {
-        [Op.or]: [
-          {
-            created_by: userId,
+  // ====================================================
+  // MY MEETINGS
+  // ====================================================
+
+  async getMyMeetings(
+    userId,
+    {
+      page = 1,
+      limit = 25,
+      includeCompleted = false,
+    } = {}
+  ) {
+    const {
+      pageNumber,
+      limitNumber,
+    } =
+      normalizePagination(
+        page,
+        limit
+      );
+
+    const where = {
+      [Op.or]: [
+        {
+          created_by:
+            userId,
+        },
+
+        {
+          assigned_to:
+            userId,
+        },
+      ],
+    };
+
+    if (
+      !includeCompleted
+    ) {
+      where.status = {
+        [Op.notIn]: [
+          'completed',
+          'cancelled',
+        ],
+      };
+    }
+
+    const {
+      count,
+      rows,
+    } =
+      await Meeting.findAndCountAll({
+        where,
+
+        include:
+          buildIncludes({
+            includeCreator:
+              false,
+          }),
+
+        distinct:
+          true,
+
+        order: [
+          [
+            'start_date',
+            'ASC',
+          ],
+        ],
+
+        limit:
+          limitNumber,
+
+        offset:
+          (
+            pageNumber -
+            1
+          ) *
+          limitNumber,
+      });
+
+    return {
+      data:
+        rows,
+
+      pagination:
+        getPaginationData(
+          count,
+          pageNumber,
+          limitNumber
+        ),
+    };
+  },
+
+  // ====================================================
+  // BY CASE
+  // ====================================================
+
+  async getByCase(
+    caseId,
+    {
+      page = 1,
+      limit = 25,
+    } = {}
+  ) {
+    return this.findAll({
+      page,
+      limit,
+
+      case_id:
+        caseId,
+    });
+  },
+
+  // ====================================================
+  // BY CLIENT
+  // ====================================================
+
+  async getByClient(
+    clientId,
+    {
+      page = 1,
+      limit = 25,
+    } = {}
+  ) {
+    return this.findAll({
+      page,
+      limit,
+
+      client_id:
+        clientId,
+    });
+  },
+
+  // ====================================================
+  // CLIENT COCKPIT
+  //
+  // Müvekkil detay ekranı için bütün toplantı geçmişini
+  // çekmek yerine yaklaşan ve son toplantıları getirir.
+  // ====================================================
+
+  async getClientTimeline(
+    clientId,
+    {
+      upcomingLimit = 5,
+      recentLimit = 5,
+    } = {}
+  ) {
+    const safeUpcomingLimit =
+      Math.min(
+        Math.max(
+          Number(
+            upcomingLimit
+          ) || 5,
+          1
+        ),
+        20
+      );
+
+    const safeRecentLimit =
+      Math.min(
+        Math.max(
+          Number(
+            recentLimit
+          ) || 5,
+          1
+        ),
+        20
+      );
+
+    const now =
+      new Date();
+
+    const [
+      upcoming,
+      recent,
+    ] =
+      await Promise.all([
+        Meeting.findAll({
+          where: {
+            client_id:
+              clientId,
+
+            start_date: {
+              [Op.gte]:
+                now,
+            },
+
+            status: {
+              [Op.notIn]: [
+                'completed',
+                'cancelled',
+              ],
+            },
           },
-          {
-            assigned_to: userId,
+
+          include:
+            buildIncludes({
+              includeClient:
+                false,
+
+              includeCreator:
+                false,
+            }),
+
+          order: [
+            [
+              'start_date',
+              'ASC',
+            ],
+          ],
+
+          limit:
+            safeUpcomingLimit,
+        }),
+
+        Meeting.findAll({
+          where: {
+            client_id:
+              clientId,
+
+            [Op.or]: [
+              {
+                start_date: {
+                  [Op.lt]:
+                    now,
+                },
+              },
+
+              {
+                status: {
+                  [Op.in]: [
+                    'completed',
+                    'cancelled',
+                  ],
+                },
+              },
+            ],
           },
-        ],
+
+          include:
+            buildIncludes({
+              includeClient:
+                false,
+
+              includeCreator:
+                false,
+            }),
+
+          order: [
+            [
+              'start_date',
+              'DESC',
+            ],
+          ],
+
+          limit:
+            safeRecentLimit,
+        }),
+      ]);
+
+    return {
+      upcoming,
+      recent,
+
+      counts: {
+        upcoming:
+          upcoming.length,
+
+        recent:
+          recent.length,
       },
-
-      include: [
-        {
-          model: Case,
-          as: 'case',
-          attributes: [
-            'id',
-            'title',
-            'case_number',
-          ],
-        },
-        {
-          model: Client,
-          as: 'client',
-          attributes: [
-            'id',
-            'name',
-          ],
-        },
-        {
-          model: User,
-          as: 'assignee',
-          attributes: [
-            'id',
-            'first_name',
-            'last_name',
-          ],
-        },
-      ],
-
-      order: [
-        [
-          'start_date',
-          'ASC',
-        ],
-      ],
-    });
+    };
   },
 
-  async getByCase(caseId) {
-    return Meeting.findAll({
-      where: {
-        case_id: caseId,
-      },
-
-      include: [
-        {
-          model: Client,
-          as: 'client',
-          attributes: [
-            'id',
-            'name',
-          ],
-        },
-        {
-          model: User,
-          as: 'assignee',
-          attributes: [
-            'id',
-            'first_name',
-            'last_name',
-          ],
-        },
-      ],
-
-      order: [
-        [
-          'start_date',
-          'ASC',
-        ],
-      ],
-    });
-  },
-
-  async getByClient(clientId) {
-    return Meeting.findAll({
-      where: {
-        client_id: clientId,
-      },
-
-      include: [
-        {
-          model: Case,
-          as: 'case',
-          attributes: [
-            'id',
-            'title',
-            'case_number',
-          ],
-        },
-        {
-          model: User,
-          as: 'assignee',
-          attributes: [
-            'id',
-            'first_name',
-            'last_name',
-          ],
-        },
-      ],
-
-      order: [
-        [
-          'start_date',
-          'ASC',
-        ],
-      ],
-    });
-  },
+  // ====================================================
+  // UPCOMING
+  // ====================================================
 
   async getUpcoming(
     userId,
     limit = 5
   ) {
-    const safeLimit = Math.min(
-      Math.max(
-        Number.parseInt(
-          limit,
-          10
-        ) || 5,
-        1
-      ),
-      50
-    );
+    const safeLimit =
+      Math.min(
+        Math.max(
+          Number.parseInt(
+            limit,
+            10
+          ) || 5,
+          1
+        ),
+        50
+      );
 
     return Meeting.findAll({
       where: {
         [Op.or]: [
           {
-            created_by: userId,
+            created_by:
+              userId,
           },
+
           {
-            assigned_to: userId,
+            assigned_to:
+              userId,
           },
         ],
 
@@ -738,34 +1223,11 @@ export const meetingService = {
         },
       },
 
-      include: [
-        {
-          model: Case,
-          as: 'case',
-          attributes: [
-            'id',
-            'title',
-            'case_number',
-          ],
-        },
-        {
-          model: Client,
-          as: 'client',
-          attributes: [
-            'id',
-            'name',
-          ],
-        },
-        {
-          model: User,
-          as: 'assignee',
-          attributes: [
-            'id',
-            'first_name',
-            'last_name',
-          ],
-        },
-      ],
+      include:
+        buildIncludes({
+          includeCreator:
+            false,
+        }),
 
       order: [
         [
@@ -774,14 +1236,23 @@ export const meetingService = {
         ],
       ],
 
-      limit: safeLimit,
+      limit:
+        safeLimit,
     });
   },
+
+  // ====================================================
+  // STATUS
+  // ====================================================
 
   async updateStatus(
     id,
     status
   ) {
+    validateStatus(
+      status
+    );
+
     const transaction =
       await sequelize.transaction();
 
@@ -791,8 +1262,10 @@ export const meetingService = {
           id,
           {
             transaction,
+
             lock:
-              transaction.LOCK.UPDATE,
+              transaction
+                .LOCK.UPDATE,
           }
         );
 
@@ -800,6 +1273,18 @@ export const meetingService = {
         throw new Error(
           'Meeting not found'
         );
+      }
+
+      /*
+       * Gereksiz UPDATE + reminder işlemini önle.
+       */
+      if (
+        meeting.status ===
+        status
+      ) {
+        await transaction.commit();
+
+        return meeting;
       }
 
       await meeting.update(
@@ -818,8 +1303,12 @@ export const meetingService = {
       ) {
         await reminderService
           .cancelForSource({
-            sourceType: 'meeting',
-            sourceId: meeting.id,
+            sourceType:
+              'meeting',
+
+            sourceId:
+              meeting.id,
+
             transaction,
           });
       } else if (
@@ -841,6 +1330,7 @@ export const meetingService = {
       return meeting;
     } catch (error) {
       await transaction.rollback();
+
       throw error;
     }
   },

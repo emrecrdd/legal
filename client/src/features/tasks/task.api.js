@@ -1,75 +1,244 @@
 import axios from '../../app/config/axios.js';
 
 const taskApi = {
-  getAll: (params) => {
-    return axios.get('/tasks', { params });
+  // ======================================================
+  // LIST
+  // ======================================================
+
+  getAll: (params = {}) => {
+    return axios.get('/tasks', {
+      params,
+    });
   },
+
+  // ======================================================
+  // DETAIL
+  // ======================================================
 
   getOne: (id) => {
-    return axios.get(`/tasks/${id}`);
+    return axios.get(
+      `/tasks/${id}`
+    );
   },
+
+  // ======================================================
+  // CREATE
+  // ======================================================
 
   create: (data) => {
-    return axios.post('/tasks', data);
+    return axios.post(
+      '/tasks',
+      data
+    );
   },
+
+  // ======================================================
+  // UPDATE
+  // ======================================================
 
   update: (id, data) => {
-    return axios.put(`/tasks/${id}`, data);
+    return axios.put(
+      `/tasks/${id}`,
+      data
+    );
   },
+
+  // ======================================================
+  // DELETE
+  // ======================================================
 
   delete: (id) => {
-    return axios.delete(`/tasks/${id}`);
+    return axios.delete(
+      `/tasks/${id}`
+    );
   },
 
-  updateStatus: (id, status) => {
-    return axios.patch(`/tasks/${id}/status`, { status });
+  // ======================================================
+  // STATUS
+  // ======================================================
+
+  updateStatus: (
+    id,
+    status
+  ) => {
+    return axios.patch(
+      `/tasks/${id}/status`,
+      {
+        status,
+      }
+    );
   },
 
-  assignTask: (id, assigned_to) => {
-    return axios.patch(`/tasks/${id}/assign`, { assigned_to });
+  // ======================================================
+  // ASSIGN
+  // ======================================================
+
+  assignTask: (
+    id,
+    assigned_to
+  ) => {
+    return axios.patch(
+      `/tasks/${id}/assign`,
+      {
+        assigned_to,
+      }
+    );
   },
 
-  getMyTasks: (params) => {
-    return axios.get('/tasks/my', { params });
+  // ======================================================
+  // MY TASKS
+  // ======================================================
+
+  getMyTasks: (
+    params = {}
+  ) => {
+    return axios.get(
+      '/tasks/my',
+      {
+        params,
+      }
+    );
   },
 
   getMyOverdue: () => {
-    return axios.get('/tasks/my/overdue');
+    return axios.get(
+      '/tasks/my/overdue'
+    );
   },
 
   getMyUpcoming: () => {
-    return axios.get('/tasks/my/upcoming');
+    return axios.get(
+      '/tasks/my/upcoming'
+    );
   },
+
+  // ======================================================
+  // STATISTICS
+  // ======================================================
 
   getStatistics: () => {
-    return axios.get('/tasks/statistics');
+    return axios.get(
+      '/tasks/statistics'
+    );
   },
 
-  // ✅ YENİ: Süre Takibi
+  // ======================================================
+  // CLIENT TASKS
+  //
+  // Tüm müvekkil görevleri - paginated
+  //
+  // params:
+  // {
+  //   page,
+  //   limit,
+  //   status
+  // }
+  // ======================================================
+
+  getByClient: (
+    clientId,
+    params = {}
+  ) => {
+    return axios.get(
+      `/tasks/client/${clientId}`,
+      {
+        params,
+      }
+    );
+  },
+
+  // ======================================================
+  // CLIENT COCKPIT OVERVIEW
+  //
+  // params:
+  // {
+  //   active_limit,
+  //   recent_limit
+  // }
+  // ======================================================
+
+  getClientOverview: (
+    clientId,
+    params = {}
+  ) => {
+    return axios.get(
+      `/tasks/client/${clientId}/overview`,
+      {
+        params,
+      }
+    );
+  },
+
+  // ======================================================
+  // START
+  // ======================================================
+
   startTask: (id) => {
-    return axios.post(`/tasks/${id}/start`);
+    return axios.post(
+      `/tasks/${id}/start`
+    );
   },
 
-  completeTask: (id, data) => {
-    return axios.post(`/tasks/${id}/complete`, data);
+  // ======================================================
+  // COMPLETE
+  // ======================================================
+
+  completeTask: (
+    id,
+    data
+  ) => {
+    return axios.post(
+      `/tasks/${id}/complete`,
+      data
+    );
   },
 
-  updateProgress: (id, progress) => {
-    return axios.patch(`/tasks/${id}/progress`, { progress });
+  // ======================================================
+  // PROGRESS
+  // ======================================================
+
+  updateProgress: (
+    id,
+    progress
+  ) => {
+    return axios.patch(
+      `/tasks/${id}/progress`,
+      {
+        progress,
+      }
+    );
   },
 
-  // ✅ YENİ: Onay (sadece admin)
+  // ======================================================
+  // APPROVE
+  // ======================================================
+
   approveTask: (id) => {
-    return axios.post(`/tasks/${id}/approve`);
+    return axios.post(
+      `/tasks/${id}/approve`
+    );
   },
 
-  // ✅ YENİ: Notlar
-  addNote: (id, content) => {
-    return axios.post(`/tasks/${id}/notes`, { content });
+  // ======================================================
+  // NOTES
+  // ======================================================
+
+  addNote: (
+    id,
+    content
+  ) => {
+    return axios.post(
+      `/tasks/${id}/notes`,
+      {
+        content,
+      }
+    );
   },
 
   getNotes: (id) => {
-    return axios.get(`/tasks/${id}/notes`);
+    return axios.get(
+      `/tasks/${id}/notes`
+    );
   },
 };
 

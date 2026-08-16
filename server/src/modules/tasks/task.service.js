@@ -119,14 +119,15 @@ export const taskService = {
   },
 
   async findAll({
-    page,
-    limit,
-    search,
-    status,
-    priority,
-    assigned_to,
-    case_id,
-  }) {
+  page,
+  limit,
+  search,
+  status,
+  priority,
+  assigned_to,
+  case_id,  
+  client_id,
+}) {
     const where = {};
 
     if (search?.trim()) {
@@ -155,12 +156,16 @@ export const taskService = {
     }
 
     if (assigned_to) {
-      where.assigned_to = assigned_to;
-    }
+  where.assigned_to = assigned_to;
+}
 
-    if (case_id) {
-      where.case_id = case_id;
-    }
+if (case_id) {
+  where.case_id = case_id;
+}
+
+if (client_id) {
+  where.client_id = client_id;
+}
 
     const pageNum = Math.max(
       Number.parseInt(page, 10) || 1,
@@ -752,7 +757,207 @@ export const taskService = {
       ),
     };
   },
+async getByClient(
+  clientId,
+  {
+    page = 1,
+    limit = 25,
+    status,
+  } = {}
+) {
+  return this.findAll({
+    page,
+    limit,
+    status,
+    client_id: clientId,
+  });
+},
 
+async getClientOverview(
+  clientId,
+  {
+    activeLimit = 5,
+    recentLimit = 5,
+  } = {}
+) {
+  const safeActiveLimit = Math.min(
+    Math.max(
+      Number.parseInt(
+        activeLimit,
+        10
+      ) || 5,
+      1
+    ),
+    20
+  );
+
+  const safeRecentLimit = Math.min(
+    Math.max(
+      Number.parseInt(
+        recentLimit,
+        10
+      ) || 5,
+      1
+    ),
+    20
+  );
+
+  const now = new Date();
+
+  const [
+    active,
+    recent,
+    total,
+    pending,
+    inProgress,
+    completed,
+    overdue,
+  ] = await Promise.all([
+    Task.findAll({
+      where: {
+        client_id: clientId,
+
+        status: {
+          [Op.notIn]: [
+            'completed',
+            'cancelled',
+          ],
+        },
+      },
+
+      include: [
+        {
+          model: User,
+          as: 'assignee',
+          attributes: [
+            'id',
+            'first_name',
+            'last_name',
+          ],
+          required: false,
+        },
+
+        {
+          model: Case,
+          as: 'case',
+          attributes: [
+            'id',
+            'title',
+          ],
+          required: false,
+        },
+      ],
+
+      order: [
+        ['priority', 'DESC'],
+        ['due_date', 'ASC'],
+        ['created_at', 'DESC'],
+      ],
+
+      limit: safeActiveLimit,
+    }),
+
+    Task.findAll({
+      where: {
+        client_id: clientId,
+
+        status: {
+          [Op.in]: [
+            'completed',
+            'cancelled',
+          ],
+        },
+      },
+
+      include: [
+        {
+          model: User,
+          as: 'assignee',
+          attributes: [
+            'id',
+            'first_name',
+            'last_name',
+          ],
+          required: false,
+        },
+
+        {
+          model: Case,
+          as: 'case',
+          attributes: [
+            'id',
+            'title',
+          ],
+          required: false,
+        },
+      ],
+
+      order: [
+        ['completed_at', 'DESC'],
+        ['updated_at', 'DESC'],
+      ],
+
+      limit: safeRecentLimit,
+    }),
+
+    Task.count({
+      where: {
+        client_id: clientId,
+      },
+    }),
+
+    Task.count({
+      where: {
+        client_id: clientId,
+        status: 'pending',
+      },
+    }),
+
+    Task.count({
+      where: {
+        client_id: clientId,
+        status: 'in_progress',
+      },
+    }),
+
+    Task.count({
+      where: {
+        client_id: clientId,
+        status: 'completed',
+      },
+    }),
+
+    Task.count({
+      where: {
+        client_id: clientId,
+
+        due_date: {
+          [Op.lt]: now,
+        },
+
+        status: {
+          [Op.notIn]: [
+            'completed',
+            'cancelled',
+          ],
+        },
+      },
+    }),
+  ]);
+
+  return {
+    active,
+    recent,
+
+    summary: {
+      total,
+      pending,
+      in_progress: inProgress,
+      completed,
+      overdue,
+    },
+  };
+},
   async getStatistics(userId) {
     const now = new Date();
 

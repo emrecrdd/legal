@@ -1,135 +1,489 @@
 import { clientService } from './client.service.js';
-import { successResponse, errorResponse, paginatedResponse } from '../../utils/response.js';
-import { logger } from '../../config/logger.js';
-import { AuditLog } from '../../models/AuditLog.js';
+
+import {
+  successResponse,
+  errorResponse,
+  paginatedResponse,
+} from '../../utils/response.js';
+
+import {
+  logger,
+} from '../../config/logger.js';
+
+import {
+  AuditLog,
+} from '../../models/AuditLog.js';
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const getHttpStatusFromError = (
+  error,
+  fallback = 400
+) => {
+  const message =
+    String(
+      error?.message || ''
+    ).toLowerCase();
+
+  if (
+    message.includes(
+      'not found'
+    )
+  ) {
+    return 404;
+  }
+
+  if (
+    message.includes(
+      'yetkiniz'
+    ) ||
+    message.includes(
+      'forbidden'
+    )
+  ) {
+    return 403;
+  }
+
+  if (
+    message.includes(
+      'unauthorized'
+    )
+  ) {
+    return 401;
+  }
+
+  return fallback;
+};
+
+const createAuditLog = async ({
+  req,
+  action,
+  entityId,
+  description,
+}) => {
+  try {
+    await AuditLog.create({
+      action,
+
+      entity_type:
+        'client',
+
+      entity_id:
+        entityId,
+
+      user_id:
+        req.user.id,
+
+      description,
+
+      ip_address:
+        req.ip,
+
+      user_agent:
+        req.headers[
+          'user-agent'
+        ],
+    });
+  } catch (auditError) {
+    /*
+     * Audit log hatası ana business işlemini
+     * başarısız göstermesin.
+     *
+     * Üretimde audit sistemini ayrıca izlemek gerekir.
+     */
+    logger.error(
+      'Client audit log error:',
+      auditError
+    );
+  }
+};
+
+// ======================================================
+// CONTROLLER
+// ======================================================
 
 export const clientController = {
+  // ====================================================
+  // CREATE
+  // ====================================================
+
   async create(req, res) {
     try {
-      const clientData = { ...req.body, created_by: req.user.id };
-      const client = await clientService.create(clientData);
+      const clientData = {
+        ...req.body,
 
-      await AuditLog.create({
-        action: 'create',
-        entity_type: 'client',
-        entity_id: client.id,
-        user_id: req.user.id,
-        description: `"${client.name}" müvekkili oluşturuldu`, // ✅ değişti
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
+        created_by:
+          req.user.id,
+      };
+
+      const client =
+        await clientService.create(
+          clientData
+        );
+
+      await createAuditLog({
+        req,
+
+        action:
+          'create',
+
+        entityId:
+          client.id,
+
+        description:
+          `"${client.name}" müvekkil kaydı oluşturuldu`,
       });
 
-      return successResponse(res, client, 'Client created successfully', 201);
+      return successResponse(
+        res,
+        client,
+        'Müvekkil başarıyla oluşturuldu',
+        201
+      );
     } catch (error) {
-      logger.error('Create client error:', error);
-      return errorResponse(res, error.message, 400);
+      logger.error(
+        'Create client error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        getHttpStatusFromError(
+          error,
+          400
+        )
+      );
     }
   },
+
+  // ====================================================
+  // LIST
+  // ====================================================
 
   async findAll(req, res) {
     try {
-      const { page = 1, limit = 10, search, status, tags } = req.query;
-      const result = await clientService.findAll({ page, limit, search, status, tags });
-      return paginatedResponse(res, result.data, result.pagination, 'Clients fetched successfully');
+      const {
+        page = 1,
+        limit = 10,
+        search,
+        status,
+        client_type,
+        tags,
+        city,
+      } = req.query;
+
+      const result =
+        await clientService.findAll({
+          page,
+          limit,
+          search,
+          status,
+          client_type,
+          tags,
+          city,
+        });
+
+      return paginatedResponse(
+        res,
+        result.data,
+        result.pagination,
+        'Müvekkiller başarıyla getirildi'
+      );
     } catch (error) {
-      logger.error('Get clients error:', error);
-      return errorResponse(res, error.message, 400);
+      logger.error(
+        'Get clients error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        getHttpStatusFromError(
+          error,
+          400
+        )
+      );
     }
   },
+
+  // ====================================================
+  // DETAIL
+  // ====================================================
 
   async findOne(req, res) {
     try {
-      console.log('🔍 findOne çağrıldı, ID:', req.params.id);
-      const client = await clientService.findOne(req.params.id);
-      console.log('📋 Bulunan client:', client);
-      return successResponse(res, client, 'Client fetched successfully');
+      const client =
+        await clientService.findOne(
+          req.params.id
+        );
+
+      return successResponse(
+        res,
+        client,
+        'Müvekkil başarıyla getirildi'
+      );
     } catch (error) {
-      console.error('❌ Hata:', error);
-      logger.error('Get client error:', error);
-      return errorResponse(res, error.message, 404);
+      logger.error(
+        'Get client error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        getHttpStatusFromError(
+          error,
+          404
+        )
+      );
     }
   },
+
+  // ====================================================
+  // UPDATE
+  // ====================================================
 
   async update(req, res) {
     try {
-      const client = await clientService.update(req.params.id, req.body);
+      const client =
+        await clientService.update(
+          req.params.id,
+          req.body
+        );
 
-      await AuditLog.create({
-        action: 'update',
-        entity_type: 'client',
-        entity_id: client.id,
-        user_id: req.user.id,
-        description: `"${client.name}" müvekkili güncellendi`, // ✅ değişti
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
+      await createAuditLog({
+        req,
+
+        action:
+          'update',
+
+        entityId:
+          client.id,
+
+        description:
+          `"${client.name}" müvekkil kaydı güncellendi`,
       });
 
-      return successResponse(res, client, 'Client updated successfully');
+      return successResponse(
+        res,
+        client,
+        'Müvekkil başarıyla güncellendi'
+      );
     } catch (error) {
-      logger.error('Update client error:', error);
-      return errorResponse(res, error.message, 400);
+      logger.error(
+        'Update client error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        getHttpStatusFromError(
+          error,
+          400
+        )
+      );
     }
   },
+
+  // ====================================================
+  // REMOVE
+  //
+  // Client paranoid:true olduğu için
+  // bu işlem soft-delete.
+  // ====================================================
 
   async remove(req, res) {
     try {
-      const client = await clientService.findOne(req.params.id);
-      await clientService.remove(req.params.id);
+      /*
+       * Burada findOne yerine remove doğrudan
+       * client döndürüyor.
+       *
+       * Böylece aynı client için iki ayrı detay sorgusu
+       * çalıştırmıyoruz.
+       */
+      const client =
+        await clientService.remove(
+          req.params.id
+        );
 
-      await AuditLog.create({
-        action: 'delete',
-        entity_type: 'client',
-        entity_id: req.params.id,
-        user_id: req.user.id,
-        description: `"${client.name}" müvekkili silindi`, // ✅ değişti
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
+      await createAuditLog({
+        req,
+
+        action:
+          'delete',
+
+        entityId:
+          client.id,
+
+        description:
+          `"${client.name}" müvekkil kaydı arşivden kaldırılmak üzere silindi`,
       });
 
-      return successResponse(res, null, 'Client deleted successfully');
+      return successResponse(
+        res,
+        null,
+        'Müvekkil kaydı kaldırıldı'
+      );
     } catch (error) {
-      logger.error('Delete client error:', error);
-      return errorResponse(res, error.message, 400);
+      logger.error(
+        'Delete client error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        getHttpStatusFromError(
+          error,
+          400
+        )
+      );
     }
   },
 
-  async getStatistics(req, res) {
+  // ====================================================
+  // STATISTICS
+  // ====================================================
+
+  async getStatistics(
+    req,
+    res
+  ) {
     try {
-      const stats = await clientService.getStatistics(req.user.id);
-      return successResponse(res, stats, 'Client statistics fetched successfully');
+      const stats =
+        await clientService.getStatistics();
+
+      return successResponse(
+        res,
+        stats,
+        'Müvekkil istatistikleri başarıyla getirildi'
+      );
     } catch (error) {
-      logger.error('Get client statistics error:', error);
-      return errorResponse(res, error.message, 400);
+      logger.error(
+        'Get client statistics error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        getHttpStatusFromError(
+          error,
+          400
+        )
+      );
     }
   },
 
-  async getCaseHistory(req, res) {
+  // ====================================================
+  // CASE HISTORY
+  // ====================================================
+
+  async getCaseHistory(
+    req,
+    res
+  ) {
     try {
-      const cases = await clientService.getCaseHistory(req.params.id);
-      return successResponse(res, cases, 'Case history fetched successfully');
+      const cases =
+        await clientService.getCaseHistory(
+          req.params.id
+        );
+
+      return successResponse(
+        res,
+        cases,
+        'Müvekkil dava geçmişi başarıyla getirildi'
+      );
     } catch (error) {
-      logger.error('Get case history error:', error);
-      return errorResponse(res, error.message, 400);
+      logger.error(
+        'Get client case history error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        getHttpStatusFromError(
+          error,
+          400
+        )
+      );
     }
   },
 
-  async getPayments(req, res) {
+  // ====================================================
+  // PAYMENTS
+  // ====================================================
+
+  async getPayments(
+    req,
+    res
+  ) {
     try {
-      const payments = await clientService.getPayments(req.params.id);
-      return successResponse(res, payments, 'Payments fetched successfully');
+      const payments =
+        await clientService.getPayments(
+          req.params.id
+        );
+
+      return successResponse(
+        res,
+        payments,
+        'Müvekkil ödemeleri başarıyla getirildi'
+      );
     } catch (error) {
-      logger.error('Get payments error:', error);
-      return errorResponse(res, error.message, 400);
+      logger.error(
+        'Get client payments error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        getHttpStatusFromError(
+          error,
+          400
+        )
+      );
     }
   },
 
-  async getNotes(req, res) {
+  // ====================================================
+  // NOTES
+  // ====================================================
+
+  async getNotes(
+    req,
+    res
+  ) {
     try {
-      const notes = await clientService.getNotes(req.params.id);
-      return successResponse(res, notes, 'Notes fetched successfully');
+      const notes =
+        await clientService.getNotes(
+          req.params.id
+        );
+
+      return successResponse(
+        res,
+        notes,
+        'Müvekkil notları başarıyla getirildi'
+      );
     } catch (error) {
-      logger.error('Get notes error:', error);
-      return errorResponse(res, error.message, 400);
+      logger.error(
+        'Get client notes error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        getHttpStatusFromError(
+          error,
+          400
+        )
+      );
     }
   },
 };

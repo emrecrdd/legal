@@ -1,25 +1,167 @@
 import express from 'express';
-import { meetingController } from './meeting.controller.js';
-import { authenticate } from '../../middlewares/auth.middleware.js';
-import { authorize } from '../../middlewares/auth.middleware.js';
-import { ROLES } from '../../constants/roles.js';
 
-const router = express.Router();
+import {
+  meetingController,
+} from './meeting.controller.js';
 
-router.use(authenticate);
+import {
+  authenticate,
+  authorize,
+} from '../../middlewares/auth.middleware.js';
 
-// ✅ Özel route'lar (önce gelmeli)
-router.get('/my', meetingController.getMyMeetings);
-router.get('/upcoming', meetingController.getUpcoming);
-router.get('/case/:caseId', meetingController.getByCase);
-router.get('/client/:clientId', meetingController.getByClient);
+import {
+  ROLES,
+} from '../../constants/roles.js';
 
-// ✅ Ana CRUD
-router.post('/', authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.SECRETARY), meetingController.create);
-router.get('/', authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.INTERN, ROLES.SECRETARY), meetingController.findAll);
-router.get('/:id', authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.INTERN, ROLES.SECRETARY), meetingController.findOne);
-router.put('/:id', authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.SECRETARY), meetingController.update);
-router.delete('/:id', authorize(ROLES.ADMIN, ROLES.LAWYER), meetingController.remove);
-router.patch('/:id/status', authorize(ROLES.ADMIN, ROLES.LAWYER, ROLES.SECRETARY), meetingController.updateStatus);
+const router =
+  express.Router();
 
-export { router as meetingRoutes };
+// ======================================================
+// AUTH
+// ======================================================
+
+router.use(
+  authenticate
+);
+
+// ======================================================
+// ROLE GROUPS
+// ======================================================
+
+const CAN_READ = [
+  ROLES.ADMIN,
+  ROLES.LAWYER,
+  ROLES.INTERN,
+  ROLES.SECRETARY,
+];
+
+const CAN_WRITE = [
+  ROLES.ADMIN,
+  ROLES.LAWYER,
+  ROLES.SECRETARY,
+];
+
+const CAN_DELETE = [
+  ROLES.ADMIN,
+  ROLES.LAWYER,
+];
+
+// ======================================================
+// SPECIAL ROUTES
+//
+// Bunlar mutlaka /:id route'undan önce tanımlanmalı.
+// ======================================================
+
+// Kullanıcının toplantıları
+router.get(
+  '/my',
+  authorize(
+    ...CAN_READ
+  ),
+  meetingController.getMyMeetings
+);
+
+// Yaklaşan toplantılar
+router.get(
+  '/upcoming',
+  authorize(
+    ...CAN_READ
+  ),
+  meetingController.getUpcoming
+);
+
+// Dava bazlı toplantılar
+router.get(
+  '/case/:caseId',
+  authorize(
+    ...CAN_READ
+  ),
+  meetingController.getByCase
+);
+
+// ======================================================
+// CLIENT ROUTES
+// ======================================================
+
+// Client cockpit için hafif timeline.
+//
+// ÖNEMLİ:
+// /client/:clientId route'undan önce tanımlıyoruz.
+router.get(
+  '/client/:clientId/timeline',
+  authorize(
+    ...CAN_READ
+  ),
+  meetingController.getClientTimeline
+);
+
+// Müvekkilin tüm toplantıları - paginated
+router.get(
+  '/client/:clientId',
+  authorize(
+    ...CAN_READ
+  ),
+  meetingController.getByClient
+);
+
+// ======================================================
+// CRUD
+// ======================================================
+
+// Oluştur
+router.post(
+  '/',
+  authorize(
+    ...CAN_WRITE
+  ),
+  meetingController.create
+);
+
+// Liste
+router.get(
+  '/',
+  authorize(
+    ...CAN_READ
+  ),
+  meetingController.findAll
+);
+
+// Detay
+router.get(
+  '/:id',
+  authorize(
+    ...CAN_READ
+  ),
+  meetingController.findOne
+);
+
+// Güncelle
+router.put(
+  '/:id',
+  authorize(
+    ...CAN_WRITE
+  ),
+  meetingController.update
+);
+
+// Durum değiştir
+router.patch(
+  '/:id/status',
+  authorize(
+    ...CAN_WRITE
+  ),
+  meetingController.updateStatus
+);
+
+// Sil
+router.delete(
+  '/:id',
+  authorize(
+    ...CAN_DELETE
+  ),
+  meetingController.remove
+);
+
+export {
+  router as meetingRoutes,
+};
