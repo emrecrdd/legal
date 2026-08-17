@@ -33,10 +33,20 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
+  ArrowLeft,
+  BriefcaseBusiness,
+  CheckCircle2,
+  File,
   FilePlus2,
+  FileText,
+  FolderOpen,
+  Link2,
+  Plus,
   ShieldCheck,
+  Tag,
   Trash2,
   UploadCloud,
+  UserRound,
   X,
 } from 'lucide-react';
 
@@ -68,42 +78,34 @@ const CATEGORY_OPTIONS = [
   {
     value: 'general',
     label: 'Genel',
-    icon: '📁',
   },
   {
     value: 'petition',
     label: 'Dilekçe',
-    icon: '📝',
   },
   {
     value: 'expert_report',
     label: 'Bilirkişi Raporu',
-    icon: '📊',
   },
   {
     value: 'court_decision',
     label: 'Mahkeme Kararı',
-    icon: '⚖️',
   },
   {
     value: 'notification',
     label: 'Tebligat',
-    icon: '📨',
   },
   {
     value: 'evidence',
     label: 'Delil',
-    icon: '🔍',
   },
   {
     value: 'correspondence',
     label: 'Yazışma',
-    icon: '✉️',
   },
   {
     value: 'other',
     label: 'Diğer',
-    icon: '📌',
   },
 ];
 
@@ -120,7 +122,9 @@ const getExtension = (
   const index =
     value.lastIndexOf('.');
 
-  if (index < 0) {
+  if (
+    index < 0
+  ) {
     return '';
   }
 
@@ -176,7 +180,9 @@ const formatFileSize = (
   const size =
     Number(bytes) || 0;
 
-  if (size <= 0) {
+  if (
+    size <= 0
+  ) {
     return '0 B';
   }
 
@@ -187,20 +193,21 @@ const formatFileSize = (
     'GB',
   ];
 
-  const index = Math.min(
-    Math.floor(
-      Math.log(size) /
-        Math.log(1024)
-    ),
-    units.length - 1
-  );
+  const index =
+    Math.min(
+      Math.floor(
+        Math.log(size) /
+          Math.log(1024)
+      ),
+      units.length - 1
+    );
 
   const value =
     size /
     1024 ** index;
 
   return `${Number(
-    value.toFixed(2)
+    value.toFixed(1)
   )} ${units[index]}`;
 };
 
@@ -234,6 +241,19 @@ const removeExtension = (
   );
 };
 
+const getCategoryLabel = (
+  category
+) => {
+  return (
+    CATEGORY_OPTIONS.find(
+      (item) =>
+        item.value ===
+        category
+    )?.label ||
+    'Genel'
+  );
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -247,7 +267,8 @@ const DocumentUpload = () => {
 
   const [
     searchParams,
-  ] = useSearchParams();
+  ] =
+    useSearchParams();
 
   const fileInputRef =
     useRef(null);
@@ -255,111 +276,127 @@ const DocumentUpload = () => {
   const [
     formData,
     setFormData,
-  ] = useState({
-    name: '',
-    description: '',
-    category: 'general',
-    tags: '',
+  ] =
+    useState({
+      name: '',
+      description: '',
+      category: 'general',
+      tags: '',
 
-    case_id:
-      searchParams.get(
-        'case'
-      ) || '',
+      case_id:
+        searchParams.get(
+          'case'
+        ) || '',
 
-    client_id:
-      searchParams.get(
-        'client'
-      ) || '',
+      client_id:
+        searchParams.get(
+          'client'
+        ) || '',
 
-    power_of_attorney_id:
-      searchParams.get(
-        'power_of_attorney_id'
-      ) || '',
+      power_of_attorney_id:
+        searchParams.get(
+          'power_of_attorney_id'
+        ) || '',
 
-    is_public: false,
-  });
+      is_public: false,
+    });
 
   const [
     files,
     setFiles,
-  ] = useState([]);
+  ] =
+    useState([]);
 
   const [
     errors,
     setErrors,
-  ] = useState({});
+  ] =
+    useState({});
 
   const [
     isDragging,
     setIsDragging,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   // ======================================================
   // RELATED DATA
   // ======================================================
 
   const {
-    data: casesData,
-    isLoading:
-      casesLoading,
-  } = useQuery({
-    queryKey: [
-      'cases',
-      {
-        limit: 100,
-      },
-    ],
-
-    queryFn: () =>
-      caseApi.getAll({
-        limit: 100,
-      }),
-
-    staleTime:
-      5 * 60 * 1000,
-  });
-
-  const {
-    data: clientsData,
+    data:
+      clientsData,
     isLoading:
       clientsLoading,
-  } = useQuery({
-    queryKey: [
-      'clients',
-      {
-        limit: 100,
-      },
-    ],
+  } =
+    useQuery({
+      queryKey: [
+        'clients',
+        {
+          limit: 100,
+        },
+      ],
 
-    queryFn: () =>
-      clientApi.getAll({
-        limit: 100,
-      }),
+      queryFn: () =>
+        clientApi.getAll({
+          limit: 100,
+        }),
 
-    staleTime:
-      5 * 60 * 1000,
-  });
+      staleTime:
+        5 * 60 * 1000,
+    });
 
   const {
-    data: poaData,
+    data:
+      casesData,
+    isLoading:
+      casesLoading,
+  } =
+    useQuery({
+      queryKey: [
+        'cases',
+        {
+          limit: 100,
+          client_id:
+            formData.client_id ||
+            undefined,
+        },
+      ],
+
+      queryFn: () =>
+        caseApi.getAll({
+          limit: 100,
+          client_id:
+            formData.client_id ||
+            undefined,
+        }),
+
+      staleTime:
+        5 * 60 * 1000,
+    });
+
+  const {
+    data:
+      poaData,
     isLoading:
       poaLoading,
-  } = useQuery({
-    queryKey: [
-      'powerOfAttorneys',
-      {
-        limit: 100,
-      },
-    ],
+  } =
+    useQuery({
+      queryKey: [
+        'powerOfAttorneys',
+        {
+          limit: 100,
+        },
+      ],
 
-    queryFn: () =>
-      powerOfAttorneyApi.getAll({
-        limit: 100,
-      }),
+      queryFn: () =>
+        powerOfAttorneyApi.getAll({
+          limit: 100,
+        }),
 
-    staleTime:
-      5 * 60 * 1000,
-  });
+      staleTime:
+        5 * 60 * 1000,
+    });
 
   // ======================================================
   // MUTATIONS
@@ -380,21 +417,45 @@ const DocumentUpload = () => {
   // ======================================================
 
   const cases =
-    casesData?.data
-      ?.data ??
-    [];
+    Array.isArray(
+      casesData?.data?.data
+    )
+      ? casesData.data.data
+      : [];
 
   const clients =
-    clientsData?.data
-      ?.data ??
-    [];
+    Array.isArray(
+      clientsData?.data?.data
+    )
+      ? clientsData.data.data
+      : [];
 
   const powerOfAttorneys =
-    Array.isArray(
-      poaData?.data?.data
-    )
-      ? poaData.data.data
-      : [];
+    useMemo(() => {
+      const raw =
+        Array.isArray(
+          poaData?.data?.data
+        )
+          ? poaData.data.data
+          : [];
+
+      if (
+        !formData.client_id
+      ) {
+        return raw;
+      }
+
+      return raw.filter(
+        (
+          poa
+        ) =>
+          poa.client_id ===
+          formData.client_id
+      );
+    }, [
+      poaData,
+      formData.client_id,
+    ]);
 
   // ======================================================
   // DERIVED
@@ -428,210 +489,311 @@ const DocumentUpload = () => {
       formData.tags,
     ]);
 
+  const selectedClient =
+    useMemo(() => {
+      return clients.find(
+        (
+          client
+        ) =>
+          client.id ===
+          formData.client_id
+      );
+    }, [
+      clients,
+      formData.client_id,
+    ]);
+
+  const selectedCase =
+    useMemo(() => {
+      return cases.find(
+        (
+          caseItem
+        ) =>
+          caseItem.id ===
+          formData.case_id
+      );
+    }, [
+      cases,
+      formData.case_id,
+    ]);
+
+  const selectedPowerOfAttorney =
+    useMemo(() => {
+      return powerOfAttorneys.find(
+        (
+          poa
+        ) =>
+          poa.id ===
+          formData.power_of_attorney_id
+      );
+    }, [
+      powerOfAttorneys,
+      formData.power_of_attorney_id,
+    ]);
+
   // ======================================================
   // HANDLERS
   // ======================================================
 
-  const handleChange = (
-    event
-  ) => {
-    const {
-      name,
-      value,
-      type,
-      checked,
-    } = event.target;
+  const handleChange =
+    (
+      event
+    ) => {
+      const {
+        name,
+        value,
+        type,
+        checked,
+      } =
+        event.target;
 
-    setFormData(
-      (current) => ({
-        ...current,
+      const nextValue =
+        type ===
+        'checkbox'
+          ? checked
+          : value;
 
-        [name]:
-          type ===
-          'checkbox'
-            ? checked
-            : value,
-      })
-    );
+      setFormData(
+        (
+          current
+        ) => {
+          /*
+           * Müvekkil değişirse önceki dava ve
+           * vekalet ilişkisi geçersiz olabilir.
+           */
+          if (
+            name ===
+            'client_id'
+          ) {
+            return {
+              ...current,
+              client_id:
+                nextValue,
+              case_id:
+                '',
+              power_of_attorney_id:
+                '',
+            };
+          }
 
-    if (errors[name]) {
-      setErrors(
-        (current) => ({
-          ...current,
-          [name]: '',
-        })
+          return {
+            ...current,
+            [name]:
+              nextValue,
+          };
+        }
       );
-    }
-  };
+
+      if (
+        errors[name]
+      ) {
+        setErrors(
+          (
+            current
+          ) => ({
+            ...current,
+            [name]:
+              '',
+          })
+        );
+      }
+    };
 
   // ======================================================
   // FILE VALIDATION
   // ======================================================
 
-  const validateFiles = (
-    selectedFiles
-  ) => {
-    const validFiles = [];
-
-    for (
-      const file of
+  const validateFiles =
+    (
       selectedFiles
-    ) {
-      if (
-        file.size >
-        MAX_FILE_SIZE
-      ) {
-        toast.error(
-          `${file.name}: dosya boyutu 10 MB sınırını aşıyor`
-        );
+    ) => {
+      const validFiles =
+        [];
 
-        continue;
+      for (
+        const file of
+        selectedFiles
+      ) {
+        if (
+          file.size >
+          MAX_FILE_SIZE
+        ) {
+          toast.error(
+            `${file.name}: dosya boyutu 10 MB sınırını aşıyor`
+          );
+
+          continue;
+        }
+
+        const extension =
+          getExtension(
+            file.name
+          );
+
+        if (
+          !ALLOWED_EXTENSIONS.includes(
+            extension
+          )
+        ) {
+          toast.error(
+            `${file.name}: desteklenmeyen dosya türü`
+          );
+
+          continue;
+        }
+
+        validFiles.push(
+          file
+        );
       }
 
-      const extension =
-        getExtension(
-          file.name
-        );
-
-      if (
-        !ALLOWED_EXTENSIONS.includes(
-          extension
-        )
-      ) {
-        toast.error(
-          `${file.name}: desteklenmeyen dosya türü`
-        );
-
-        continue;
-      }
-
-      validFiles.push(
-        file
-      );
-    }
-
-    return validFiles;
-  };
+      return validFiles;
+    };
 
   // ======================================================
   // ADD FILES
   // ======================================================
 
-  const addFiles = (
-    selectedFiles
-  ) => {
-    if (isUploading) {
-      return;
-    }
-
-    const validFiles =
-      validateFiles(
-        selectedFiles
-      );
-
-    if (
-      validFiles.length ===
-      0
-    ) {
-      return;
-    }
-
-    setFiles(
-      (current) => {
-        const signatures =
-          new Set(
-            current.map(
-              (file) =>
-                `${file.name}-${file.size}-${file.lastModified}`
-            )
-          );
-
-        const uniqueNewFiles =
-          validFiles.filter(
-            (file) => {
-              const signature =
-                `${file.name}-${file.size}-${file.lastModified}`;
-
-              return !signatures.has(
-                signature
-              );
-            }
-          );
-
-        return [
-          ...current,
-          ...uniqueNewFiles,
-        ];
-      }
-    );
-
-    /*
-     * Tek dosyada belge adını otomatik doldur.
-     */
-    if (
-      files.length === 0 &&
-      validFiles.length ===
-        1 &&
-      !formData.name.trim()
-    ) {
-      setFormData(
-        (current) => ({
-          ...current,
-
-          name:
-            removeExtension(
-              validFiles[0].name
-            ),
-        })
-      );
-    }
-  };
-
-  const handleFileChange = (
-    event
-  ) => {
-    addFiles(
-      Array.from(
-        event.target.files ||
-          []
-      )
-    );
-
-    /*
-     * Aynı dosyanın daha sonra
-     * yeniden seçilebilmesini sağlar.
-     */
-    event.target.value =
-      '';
-  };
-
-  const removeFile = (
-    index
-  ) => {
-    if (isUploading) {
-      return;
-    }
-
-    setFiles(
-      (current) =>
-        current.filter(
-          (
-            _file,
-            currentIndex
-          ) =>
-            currentIndex !==
-            index
-        )
-    );
-  };
-
-  const clearFiles =
-    () => {
-      if (isUploading) {
+  const addFiles =
+    (
+      selectedFiles
+    ) => {
+      if (
+        isUploading
+      ) {
         return;
       }
 
-      setFiles([]);
+      const validFiles =
+        validateFiles(
+          selectedFiles
+        );
+
+      if (
+        validFiles.length ===
+        0
+      ) {
+        return;
+      }
+
+      let firstAddedFile =
+        null;
+
+      setFiles(
+        (
+          current
+        ) => {
+          const signatures =
+            new Set(
+              current.map(
+                (
+                  file
+                ) =>
+                  `${file.name}-${file.size}-${file.lastModified}`
+              )
+            );
+
+          const uniqueNewFiles =
+            validFiles.filter(
+              (
+                file
+              ) => {
+                const signature =
+                  `${file.name}-${file.size}-${file.lastModified}`;
+
+                return !signatures.has(
+                  signature
+                );
+              }
+            );
+
+          if (
+            current.length ===
+              0 &&
+            uniqueNewFiles.length ===
+              1
+          ) {
+            firstAddedFile =
+              uniqueNewFiles[0];
+          }
+
+          return [
+            ...current,
+            ...uniqueNewFiles,
+          ];
+        }
+      );
+
+      if (
+        firstAddedFile &&
+        !formData.name.trim()
+      ) {
+        setFormData(
+          (
+            current
+          ) => ({
+            ...current,
+
+            name:
+              removeExtension(
+                firstAddedFile.name
+              ),
+          })
+        );
+      }
+    };
+
+  const handleFileChange =
+    (
+      event
+    ) => {
+      addFiles(
+        Array.from(
+          event.target.files ||
+            []
+        )
+      );
+
+      event.target.value =
+        '';
+    };
+
+  const removeFile =
+    (
+      index
+    ) => {
+      if (
+        isUploading
+      ) {
+        return;
+      }
+
+      setFiles(
+        (
+          current
+        ) =>
+          current.filter(
+            (
+              _file,
+              currentIndex
+            ) =>
+              currentIndex !==
+              index
+          )
+      );
+    };
+
+  const clearFiles =
+    () => {
+      if (
+        isUploading
+      ) {
+        return;
+      }
+
+      setFiles(
+        []
+      );
 
       if (
         fileInputRef.current
@@ -645,133 +807,142 @@ const DocumentUpload = () => {
   // DRAG DROP
   // ======================================================
 
-  const handleDragEnter = (
-    event
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleDragEnter =
+    (
+      event
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
 
-    if (!isUploading) {
+      if (
+        !isUploading
+      ) {
+        setIsDragging(
+          true
+        );
+      }
+    };
+
+  const handleDragLeave =
+    (
+      event
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+
       setIsDragging(
-        true
+        false
       );
-    }
-  };
+    };
 
-  const handleDragLeave = (
-    event
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleDragOver =
+    (
+      event
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
 
-    setIsDragging(
-      false
-    );
-  };
+      if (
+        !isUploading
+      ) {
+        setIsDragging(
+          true
+        );
+      }
+    };
 
-  const handleDragOver = (
-    event
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleDrop =
+    (
+      event
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
 
-    if (!isUploading) {
       setIsDragging(
-        true
+        false
       );
-    }
-  };
 
-  const handleDrop = (
-    event
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
+      if (
+        isUploading
+      ) {
+        return;
+      }
 
-    setIsDragging(
-      false
-    );
-
-    if (isUploading) {
-      return;
-    }
-
-    addFiles(
-      Array.from(
-        event.dataTransfer
-          .files || []
-      )
-    );
-  };
+      addFiles(
+        Array.from(
+          event.dataTransfer
+            .files ||
+            []
+        )
+      );
+    };
 
   // ======================================================
   // FORM DATA BUILDERS
   // ======================================================
 
-  const appendSharedMetadata = (
-    payload
-  ) => {
-    payload.append(
-      'description',
-      formData.description.trim()
-    );
-
-    payload.append(
-      'category',
-      formData.category
-    );
-
-    /*
-     * Backend upload service string gelirse
-     * comma ile split ediyor.
-     * JSON.stringify göndermiyoruz.
-     */
-    payload.append(
-      'tags',
-      normalizeTags(
-        formData.tags
-      ).join(',')
-    );
-
-    if (
-      formData.case_id
-    ) {
+  const appendSharedMetadata =
+    (
+      payload
+    ) => {
       payload.append(
-        'case_id',
+        'description',
+        formData.description.trim()
+      );
+
+      payload.append(
+        'category',
+        formData.category
+      );
+
+      payload.append(
+        'tags',
+        normalizeTags(
+          formData.tags
+        ).join(',')
+      );
+
+      if (
         formData.case_id
-      );
-    }
+      ) {
+        payload.append(
+          'case_id',
+          formData.case_id
+        );
+      }
 
-    if (
-      formData.client_id
-    ) {
-      payload.append(
-        'client_id',
+      if (
         formData.client_id
-      );
-    }
+      ) {
+        payload.append(
+          'client_id',
+          formData.client_id
+        );
+      }
 
-    if (
-      formData.power_of_attorney_id
-    ) {
-      payload.append(
-        'power_of_attorney_id',
+      if (
         formData.power_of_attorney_id
-      );
-    }
+      ) {
+        payload.append(
+          'power_of_attorney_id',
+          formData.power_of_attorney_id
+        );
+      }
 
-    payload.append(
-      'is_public',
-      String(
-        Boolean(
-          formData.is_public
+      payload.append(
+        'is_public',
+        String(
+          Boolean(
+            formData.is_public
+          )
         )
-      )
-    );
-  };
+      );
+    };
 
   const createSingleUploadData =
-    (file) => {
+    (
+      file
+    ) => {
       const payload =
         new FormData();
 
@@ -801,7 +972,9 @@ const DocumentUpload = () => {
         new FormData();
 
       files.forEach(
-        (file) => {
+        (
+          file
+        ) => {
           payload.append(
             'files',
             file
@@ -809,11 +982,6 @@ const DocumentUpload = () => {
         }
       );
 
-      /*
-       * Çoklu yüklemede ortak isim göndermiyoruz.
-       * Backend her dosyanın kendi originalname'ini
-       * name olarak kullanacak.
-       */
       appendSharedMetadata(
         payload
       );
@@ -822,12 +990,13 @@ const DocumentUpload = () => {
     };
 
   // ======================================================
-  // RELATED CACHE REFRESH
+  // CACHE REFRESH
   // ======================================================
 
   const refreshRelatedQueries =
     async () => {
-      const promises = [];
+      const promises =
+        [];
 
       if (
         formData.case_id
@@ -913,65 +1082,80 @@ const DocumentUpload = () => {
   // SUBMIT
   // ======================================================
 
-  const handleSubmit = (
-    event
-  ) => {
-    event.preventDefault();
+  const handleSubmit =
+    (
+      event
+    ) => {
+      event.preventDefault();
 
-    if (isUploading) {
-      return;
-    }
+      if (
+        isUploading
+      ) {
+        return;
+      }
 
-    if (
-      files.length ===
-      0
-    ) {
-      toast.error(
-        'Lütfen en az bir dosya seçin'
+      if (
+        files.length ===
+        0
+      ) {
+        toast.error(
+          'Lütfen en az bir dosya seçin'
+        );
+
+        return;
+      }
+
+      const nextErrors =
+        {};
+
+      if (
+        formData.name.length >
+        255
+      ) {
+        nextErrors.name =
+          'Belge adı en fazla 255 karakter olabilir';
+      }
+
+      setErrors(
+        nextErrors
       );
 
-      return;
-    }
+      if (
+        Object.keys(
+          nextErrors
+        ).length >
+        0
+      ) {
+        return;
+      }
 
-    const nextErrors =
-      {};
+      // SINGLE
 
-    /*
-     * Tek dosyada isim zorunlu değil;
-     * boşsa dosya adından oluşturuyoruz.
-     */
-    if (
-      formData.name.length >
-      255
-    ) {
-      nextErrors.name =
-        'Belge adı en fazla 255 karakter olabilir';
-    }
+      if (
+        files.length ===
+        1
+      ) {
+        uploadDocumentMutation.mutate(
+          createSingleUploadData(
+            files[0]
+          ),
+          {
+            onSuccess:
+              async () => {
+                await refreshRelatedQueries();
 
-    setErrors(
-      nextErrors
-    );
+                redirectAfterUpload();
+              },
+          }
+        );
 
-    if (
-      Object.keys(
-        nextErrors
-      ).length > 0
-    ) {
-      return;
-    }
+        return;
+      }
 
-    // ==================================================
-    // SINGLE
-    // ==================================================
+      // MULTIPLE
 
-    if (
-      files.length ===
-      1
-    ) {
-      uploadDocumentMutation.mutate(
-        createSingleUploadData(
-          files[0]
-        ),
+      uploadDocumentsMutation.mutate(
+        createBulkUploadData(),
         {
           onSuccess:
             async () => {
@@ -981,26 +1165,7 @@ const DocumentUpload = () => {
             },
         }
       );
-
-      return;
-    }
-
-    // ==================================================
-    // MULTIPLE
-    // ==================================================
-
-    uploadDocumentsMutation.mutate(
-      createBulkUploadData(),
-      {
-        onSuccess:
-          async () => {
-            await refreshRelatedQueries();
-
-            redirectAfterUpload();
-          },
-      }
-    );
-  };
+    };
 
   // ======================================================
   // CANCEL
@@ -1008,7 +1173,9 @@ const DocumentUpload = () => {
 
   const handleCancel =
     () => {
-      if (isUploading) {
+      if (
+        isUploading
+      ) {
         return;
       }
 
@@ -1042,52 +1209,77 @@ const DocumentUpload = () => {
   // ======================================================
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
 
       {/* HEADER */}
 
-      <div className="flex items-start justify-between gap-4">
+      <div>
 
-        <div>
+        <Link
+          to="/documents"
+          className="
+            inline-flex
+            items-center
+            gap-1.5
+            text-xs
+            font-medium
+            text-gray-500
+            transition
+            hover:text-blue-600
+            dark:text-slate-500
+            dark:hover:text-blue-400
+          "
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
 
-          <Link
-            to="/documents"
-            className="text-blue-600 hover:underline"
+          Belgeler
+        </Link>
+
+        <div className="mt-3 flex items-start gap-3">
+
+          <div
+            className="
+              flex
+              h-11
+              w-11
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-blue-50
+              text-blue-600
+              dark:bg-blue-500/[0.08]
+              dark:text-blue-400
+            "
           >
-            ← Belgeler
-          </Link>
-
-          <h1 className="mt-2 flex items-center gap-2 text-2xl font-bold text-gray-900 dark:text-white">
-            <FilePlus2 className="h-6 w-6" />
-
-            Belge Yükle
-          </h1>
-
-          <p className="mt-1 text-sm text-gray-500">
-            Tek belge veya birden fazla dosyayı aynı işlemde sisteme ekleyebilirsiniz.
-          </p>
-
-        </div>
-
-      </div>
-
-      {/* INFO */}
-
-      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
-
-        <div className="flex items-start gap-3">
-
-          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+            <FilePlus2 size={21} />
+          </div>
 
           <div>
 
-            <p className="font-medium text-blue-900 dark:text-blue-200">
-              Belge ilişkileri yükleme sırasında oluşturulur
-            </p>
+            <h1
+              className="
+                text-2xl
+                font-semibold
+                tracking-[-0.035em]
+                text-gray-900
+                dark:text-white
+              "
+            >
+              Belge Yükle
+            </h1>
 
-            <p className="mt-1 text-sm leading-6 text-blue-800 dark:text-blue-300">
-              Belgeyi dava, müvekkil veya vekâletname ile ilişkilendirebilirsiniz.
-              Daha sonra dosya içeriğini değiştirmek yerine versiyon sistemi kullanılacaktır.
+            <p
+              className="
+                mt-1
+                max-w-2xl
+                text-sm
+                leading-6
+                text-gray-500
+                dark:text-slate-400
+              "
+            >
+              Dosyaları sisteme ekleyin, ilişkili dava veya müvekkili belirleyin ve erişim kapsamını yönetin.
             </p>
 
           </div>
@@ -1096,22 +1288,59 @@ const DocumentUpload = () => {
 
       </div>
 
-      <Card>
+      <form
+        onSubmit={
+          handleSubmit
+        }
+        className="space-y-5"
+      >
 
-        <form
-          onSubmit={
-            handleSubmit
-          }
-          className="space-y-6 p-6"
-        >
+        {/* ==================================================
+            FILES
+        ================================================== */}
 
-          {/* FILE DROP AREA */}
+        <Card>
 
-          <div>
+          <Card.Header>
 
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Dosyalar *
-            </label>
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-blue-50
+                  text-blue-600
+                  dark:bg-blue-500/[0.08]
+                  dark:text-blue-400
+                "
+              >
+                <UploadCloud size={17} />
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Dosyalar
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Tek veya birden fazla dosyayı aynı işlemde yükleyebilirsiniz
+                </p>
+
+              </div>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            {/* DROP AREA */}
 
             <div
               role="button"
@@ -1123,7 +1352,9 @@ const DocumentUpload = () => {
                   fileInputRef.current?.click();
                 }
               }}
-              onKeyDown={(event) => {
+              onKeyDown={(
+                event
+              ) => {
                 if (
                   !isUploading &&
                   (
@@ -1150,59 +1381,145 @@ const DocumentUpload = () => {
               onDrop={
                 handleDrop
               }
-              className={`rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
-                isUploading
-                  ? 'cursor-not-allowed opacity-60'
-                  : 'cursor-pointer'
-              } ${
-                isDragging
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                  : 'border-gray-300 hover:border-blue-500 dark:border-gray-600'
-              }`}
+              className={`
+                rounded-xl
+                border-2
+                border-dashed
+                transition
+                ${
+                  isUploading
+                    ? 'cursor-not-allowed opacity-60'
+                    : 'cursor-pointer'
+                }
+                ${
+                  isDragging
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/[0.05]'
+                    : files.length > 0
+                      ? 'border-gray-200 bg-gray-50/50 hover:border-blue-400 dark:border-white/[0.08] dark:bg-white/[0.015]'
+                      : 'border-gray-200 bg-gray-50/50 hover:border-blue-400 hover:bg-blue-50/30 dark:border-white/[0.08] dark:bg-white/[0.015] dark:hover:border-blue-500/40'
+                }
+              `}
             >
 
               {files.length ===
               0 ? (
-                <div>
+                <div className="px-6 py-10 text-center">
 
-                  <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
+                  <div
+                    className="
+                      mx-auto
+                      flex
+                      h-14
+                      w-14
+                      items-center
+                      justify-center
+                      rounded-2xl
+                      bg-blue-50
+                      text-blue-600
+                      dark:bg-blue-500/[0.08]
+                      dark:text-blue-400
+                    "
+                  >
+                    <UploadCloud size={25} />
+                  </div>
 
-                  <p className="mt-3 font-medium text-gray-700 dark:text-gray-300">
-                    Dosyaları buraya sürükleyin veya seçmek için tıklayın
+                  <p className="mt-4 text-sm font-semibold text-gray-900 dark:text-white">
+                    Dosyaları buraya sürükleyin
                   </p>
 
-                  <p className="mt-1 text-sm text-gray-500">
-                    PDF, Word, Excel, görsel ve desteklenen video dosyaları
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+                    veya bilgisayarınızdan seçmek için tıklayın
                   </p>
 
-                  <p className="mt-1 text-xs text-gray-400">
-                    Dosya başına maksimum 10 MB
-                  </p>
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+
+                    <Badge variant="default">
+                      PDF
+                    </Badge>
+
+                    <Badge variant="default">
+                      Word
+                    </Badge>
+
+                    <Badge variant="default">
+                      Excel
+                    </Badge>
+
+                    <Badge variant="default">
+                      Görsel
+                    </Badge>
+
+                    <Badge variant="default">
+                      Video
+                    </Badge>
+
+                    <Badge variant="default">
+                      Maks. 10 MB / dosya
+                    </Badge>
+
+                  </div>
 
                 </div>
               ) : (
-                <div>
+                <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
 
-                  <div className="text-4xl">
-                    📎
+                  <div className="flex items-center gap-3">
+
+                    <div
+                      className="
+                        flex
+                        h-10
+                        w-10
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-xl
+                        bg-emerald-50
+                        text-emerald-600
+                        dark:bg-emerald-500/[0.08]
+                        dark:text-emerald-400
+                      "
+                    >
+                      <CheckCircle2 size={19} />
+                    </div>
+
+                    <div>
+
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {files.length} dosya hazır
+                      </p>
+
+                      <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-500">
+                        Toplam {formatFileSize(
+                          totalFileSize
+                        )}
+                      </p>
+
+                    </div>
+
                   </div>
 
-                  <p className="mt-2 text-lg font-medium text-gray-900 dark:text-white">
-                    {files.length}{' '}
-                    dosya seçildi
-                  </p>
-
-                  <p className="mt-1 text-sm text-gray-500">
-                    Toplam{' '}
-                    {formatFileSize(
-                      totalFileSize
-                    )}
-                  </p>
-
                   {!isUploading && (
-                    <p className="mt-2 text-sm text-blue-600">
-                      Başka dosya eklemek için tıklayın
-                    </p>
+                    <div className="flex items-center gap-2">
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={(
+                          event
+                        ) => {
+                          event.stopPropagation();
+
+                          fileInputRef.current?.click();
+                        }}
+                      >
+                        <Plus className="h-4 w-4" />
+
+                        Dosya Ekle
+                      </Button>
+
+                    </div>
                   )}
 
                 </div>
@@ -1228,483 +1545,1002 @@ const DocumentUpload = () => {
 
             </div>
 
-            {/* FILES */}
+            {/* FILE LIST */}
 
             {files.length >
               0 && (
-              <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
+              <div className="mt-4 overflow-hidden rounded-xl border border-gray-100 dark:border-white/[0.05]">
 
-                {files.map(
-                  (
-                    file,
-                    index
-                  ) => (
-                    <div
-                      key={`${file.name}-${file.size}-${file.lastModified}`}
-                      className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800"
-                    >
+                <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
 
-                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                  {files.map(
+                    (
+                      file,
+                      index
+                    ) => (
+                      <div
+                        key={`${file.name}-${file.size}-${file.lastModified}`}
+                        className="
+                          flex
+                          items-center
+                          justify-between
+                          gap-3
+                          bg-white
+                          px-4
+                          py-3
+                          transition
+                          hover:bg-gray-50/70
+                          dark:bg-transparent
+                          dark:hover:bg-white/[0.02]
+                        "
+                      >
 
-                        <span className="shrink-0 text-2xl">
-                          {getFileIcon(
-                            file
-                          )}
-                        </span>
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
 
-                        <div className="min-w-0 flex-1">
+                          <div
+                            className="
+                              flex
+                              h-9
+                              w-9
+                              shrink-0
+                              items-center
+                              justify-center
+                              rounded-lg
+                              bg-gray-100
+                              text-lg
+                              dark:bg-white/[0.04]
+                            "
+                          >
+                            {getFileIcon(
+                              file
+                            )}
+                          </div>
 
-                          <p className="truncate font-medium text-gray-900 dark:text-white">
-                            {
-                              file.name
-                            }
-                          </p>
+                          <div className="min-w-0">
 
-                          <div className="mt-1 flex flex-wrap items-center gap-2">
-
-                            <span className="text-xs text-gray-500">
-                              {formatFileSize(
-                                file.size
-                              )}
-                            </span>
-
-                            <Badge
-                              variant="default"
-                              className="text-xs"
-                            >
-                              {getExtension(
+                            <p
+                              className="truncate text-sm font-medium text-gray-900 dark:text-white"
+                              title={
                                 file.name
-                              )
-                                .replace(
-                                  '.',
-                                  ''
+                              }
+                            >
+                              {file.name}
+                            </p>
+
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400 dark:text-slate-500">
+
+                              <span>
+                                {formatFileSize(
+                                  file.size
+                                )}
+                              </span>
+
+                              <span>
+                                ·
+                              </span>
+
+                              <span className="uppercase">
+                                {getExtension(
+                                  file.name
                                 )
-                                .toUpperCase() ||
-                                'DOSYA'}
-                            </Badge>
+                                  .replace(
+                                    '.',
+                                    ''
+                                  ) ||
+                                  'dosya'}
+                              </span>
+
+                            </div>
 
                           </div>
 
                         </div>
 
+                        <button
+                          type="button"
+                          disabled={
+                            isUploading
+                          }
+                          onClick={() =>
+                            removeFile(
+                              index
+                            )
+                          }
+                          className="
+                            inline-flex
+                            h-8
+                            w-8
+                            shrink-0
+                            items-center
+                            justify-center
+                            rounded-lg
+                            text-gray-400
+                            transition
+                            hover:bg-red-50
+                            hover:text-red-600
+                            disabled:cursor-not-allowed
+                            disabled:opacity-50
+                            dark:hover:bg-red-500/[0.08]
+                            dark:hover:text-red-400
+                          "
+                          aria-label={`${file.name} dosyasını kaldır`}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+
                       </div>
-
-                      <button
-                        type="button"
-                        disabled={
-                          isUploading
-                        }
-                        onClick={() =>
-                          removeFile(
-                            index
-                          )
-                        }
-                        className="rounded-md p-2 text-red-500 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-900/20"
-                        aria-label={`${file.name} dosyasını kaldır`}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-
-                    </div>
-                  )
-                )}
-
-              </div>
-            )}
-
-          </div>
-
-          {/* DOCUMENT NAME */}
-
-          <div>
-
-            <Input
-              label={
-                files.length >
-                1
-                  ? 'Ortak Belge Adı'
-                  : 'Belge Adı'
-              }
-              name="name"
-              value={
-                formData.name
-              }
-              onChange={
-                handleChange
-              }
-              error={
-                errors.name
-              }
-              disabled={
-                isUploading
-              }
-              placeholder={
-                files.length >
-                1
-                  ? 'Çoklu yüklemede boş bırakabilirsiniz'
-                  : 'Boş bırakılırsa dosya adı kullanılır'
-              }
-            />
-
-            {files.length >
-              1 && (
-              <p className="mt-1 text-xs text-gray-500">
-                Çoklu yüklemede her belge kendi dosya adıyla kaydedilir.
-              </p>
-            )}
-
-          </div>
-
-          {/* CATEGORY */}
-
-          <div>
-
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Kategori
-            </label>
-
-            <select
-              name="category"
-              value={
-                formData.category
-              }
-              onChange={
-                handleChange
-              }
-              disabled={
-                isUploading
-              }
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-            >
-
-              {CATEGORY_OPTIONS.map(
-                (
-                  category
-                ) => (
-                  <option
-                    key={
-                      category.value
-                    }
-                    value={
-                      category.value
-                    }
-                  >
-                    {
-                      category.icon
-                    }{' '}
-                    {
-                      category.label
-                    }
-                  </option>
-                )
-              )}
-
-            </select>
-
-          </div>
-
-          {/* CASE + CLIENT */}
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
-            <div>
-
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                📁 İlişkili Dava
-              </label>
-
-              <select
-                name="case_id"
-                value={
-                  formData.case_id
-                }
-                onChange={
-                  handleChange
-                }
-                disabled={
-                  casesLoading ||
-                  isUploading
-                }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-wait disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
-
-                <option value="">
-                  İlişki yok
-                </option>
-
-                {cases.map(
-                  (
-                    caseItem
-                  ) => (
-                    <option
-                      key={
-                        caseItem.id
-                      }
-                      value={
-                        caseItem.id
-                      }
-                    >
-                      {
-                        caseItem.title
-                      }
-                    </option>
-                  )
-                )}
-
-              </select>
-
-            </div>
-
-            <div>
-
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                👤 İlişkili Müvekkil
-              </label>
-
-              <select
-                name="client_id"
-                value={
-                  formData.client_id
-                }
-                onChange={
-                  handleChange
-                }
-                disabled={
-                  clientsLoading ||
-                  isUploading
-                }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-wait disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
-
-                <option value="">
-                  İlişki yok
-                </option>
-
-                {clients.map(
-                  (client) => (
-                    <option
-                      key={
-                        client.id
-                      }
-                      value={
-                        client.id
-                      }
-                    >
-                      {
-                        client.name
-                      }
-
-                      {client.company_name &&
-                        ` (${client.company_name})`}
-                    </option>
-                  )
-                )}
-
-              </select>
-
-            </div>
-
-          </div>
-
-          {/* POWER OF ATTORNEY */}
-
-          <div>
-
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              📜 İlişkili Vekâletname
-            </label>
-
-            <select
-              name="power_of_attorney_id"
-              value={
-                formData.power_of_attorney_id
-              }
-              onChange={
-                handleChange
-              }
-              disabled={
-                poaLoading ||
-                isUploading
-              }
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-wait disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-            >
-
-              <option value="">
-                İlişki yok
-              </option>
-
-              {powerOfAttorneys.map(
-                (poa) => (
-                  <option
-                    key={
-                      poa.id
-                    }
-                    value={
-                      poa.id
-                    }
-                  >
-                    {
-                      poa.title
-                    }
-
-                    {poa.client?.name &&
-                      ` · ${poa.client.name}`}
-                  </option>
-                )
-              )}
-
-            </select>
-
-          </div>
-
-          {/* TAGS */}
-
-          <div>
-
-            <Input
-              label="Etiketler"
-              name="tags"
-              value={
-                formData.tags
-              }
-              onChange={
-                handleChange
-              }
-              disabled={
-                isUploading
-              }
-              placeholder="acil, ceza, bilirkişi, önemli"
-            />
-
-            <p className="mt-1 text-xs text-gray-500">
-              Birden fazla etiketi virgülle ayırın.
-            </p>
-
-            {tagsPreview.length >
-              0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-
-                {tagsPreview.map(
-                  (tag) => (
-                    <Badge
-                      key={
-                        tag
-                      }
-                      variant="default"
-                      className="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                    >
-                      #{tag}
-                    </Badge>
-                  )
-                )}
-
-              </div>
-            )}
-
-          </div>
-
-          {/* DESCRIPTION */}
-
-          <div>
-
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Açıklama
-            </label>
-
-            <textarea
-              name="description"
-              value={
-                formData.description
-              }
-              onChange={
-                handleChange
-              }
-              disabled={
-                isUploading
-              }
-              rows="4"
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              placeholder="Belgenin içeriği veya dosyadaki önemi hakkında not..."
-            />
-
-          </div>
-
-          {/* ACCESS */}
-
-          <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
-
-            <div className="flex items-start gap-3">
-
-              <ShieldCheck className={`mt-0.5 h-5 w-5 shrink-0 ${
-                formData.is_public
-                  ? 'text-green-600'
-                  : 'text-gray-400'
-              }`} />
-
-              <div className="flex-1">
-
-                <div className="flex items-center gap-2">
-
-                  <input
-                    id="document-general-access"
-                    type="checkbox"
-                    name="is_public"
-                    checked={
-                      formData.is_public
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    disabled={
-                      isUploading
-                    }
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
-                  />
-
-                  <label
-                    htmlFor="document-general-access"
-                    className="font-medium text-gray-900 dark:text-white"
-                  >
-                    Büro içi genel erişim
-                  </label>
+                    )
+                  )}
 
                 </div>
 
-                <p className="mt-2 text-sm leading-6 text-gray-500">
-                  Bu ayar yalnızca sistem içindeki yetkili kullanıcıların belgeye erişim kapsamını belirtir; internet üzerinde herkese açık paylaşım anlamına gelmez.
+              </div>
+            )}
+
+          </Card.Body>
+
+        </Card>
+
+        {/* ==================================================
+            DOCUMENT INFO
+        ================================================== */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-indigo-50
+                  text-indigo-600
+                  dark:bg-indigo-500/[0.08]
+                  dark:text-indigo-400
+                "
+              >
+                <FileText size={17} />
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Belge Bilgileri
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Belgenin adı, kategorisi, etiketleri ve açıklaması
                 </p>
 
               </div>
 
             </div>
 
+          </Card.Header>
+
+          <Card.Body className="space-y-5">
+
+            {/* NAME - ONLY SINGLE */}
+
+            {files.length <=
+              1 && (
+              <Input
+                label="Belge Adı"
+                name="name"
+                value={
+                  formData.name
+                }
+                onChange={
+                  handleChange
+                }
+                error={
+                  errors.name
+                }
+                disabled={
+                  isUploading
+                }
+                placeholder="Boş bırakılırsa dosya adı kullanılır"
+              />
+            )}
+
+            {files.length >
+              1 && (
+              <div
+                className="
+                  flex
+                  items-start
+                  gap-3
+                  rounded-lg
+                  border
+                  border-blue-100
+                  bg-blue-50/60
+                  px-3
+                  py-3
+                  text-sm
+                  text-blue-700
+                  dark:border-blue-500/10
+                  dark:bg-blue-500/[0.035]
+                  dark:text-blue-300
+                "
+              >
+                <File className="mt-0.5 h-4 w-4 shrink-0" />
+
+                Çoklu yüklemede her belge kendi dosya adıyla kaydedilir.
+              </div>
+            )}
+
+            {/* CATEGORY */}
+
+            <div>
+
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                Kategori
+              </label>
+
+              <select
+                name="category"
+                value={
+                  formData.category
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isUploading
+                }
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  text-sm
+                  text-gray-700
+                  outline-none
+                  disabled:cursor-not-allowed
+                  disabled:opacity-50
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                "
+              >
+
+                {CATEGORY_OPTIONS.map(
+                  (
+                    category
+                  ) => (
+                    <option
+                      key={
+                        category.value
+                      }
+                      value={
+                        category.value
+                      }
+                    >
+                      {category.label}
+                    </option>
+                  )
+                )}
+
+              </select>
+
+            </div>
+
+            {/* TAGS */}
+
+            <div>
+
+              <Input
+                label="Etiketler"
+                name="tags"
+                value={
+                  formData.tags
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isUploading
+                }
+                placeholder="acil, ceza, bilirkişi, önemli"
+                icon={
+                  <Tag size={15} />
+                }
+              />
+
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+                Birden fazla etiketi virgülle ayırın.
+              </p>
+
+              {tagsPreview.length >
+                0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+
+                  {tagsPreview.map(
+                    (
+                      tag
+                    ) => (
+                      <Badge
+                        key={
+                          tag
+                        }
+                        variant="primary"
+                      >
+                        #{tag}
+                      </Badge>
+                    )
+                  )}
+
+                </div>
+              )}
+
+            </div>
+
+            {/* DESCRIPTION */}
+
+            <div>
+
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                Açıklama
+              </label>
+
+              <textarea
+                name="description"
+                value={
+                  formData.description
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isUploading
+                }
+                rows={4}
+                placeholder="Belgenin içeriği, amacı veya önemi hakkında kısa açıklama..."
+                className="
+                  w-full
+                  resize-y
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  py-2.5
+                  text-sm
+                  leading-6
+                  text-gray-900
+                  outline-none
+                  placeholder:text-gray-400
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  disabled:cursor-not-allowed
+                  disabled:opacity-50
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-white
+                  dark:placeholder:text-slate-500
+                "
+              />
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+        {/* ==================================================
+            RELATIONS
+        ================================================== */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-violet-50
+                  text-violet-600
+                  dark:bg-violet-500/[0.08]
+                  dark:text-violet-400
+                "
+              >
+                <Link2 size={17} />
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  İlişkili Kayıtlar
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Belgeyi müvekkil, dava veya vekaletname kaydıyla ilişkilendirin
+                </p>
+
+              </div>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body className="space-y-4">
+
+            <div className="grid gap-4 md:grid-cols-2">
+
+              {/* CLIENT */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Müvekkil
+                </label>
+
+                <select
+                  name="client_id"
+                  value={
+                    formData.client_id
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    clientsLoading ||
+                    isUploading
+                  }
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    text-sm
+                    text-gray-700
+                    outline-none
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                  "
+                >
+
+                  <option value="">
+                    {clientsLoading
+                      ? 'Müvekkiller yükleniyor...'
+                      : 'İlişki yok'}
+                  </option>
+
+                  {clients.map(
+                    (
+                      client
+                    ) => (
+                      <option
+                        key={
+                          client.id
+                        }
+                        value={
+                          client.id
+                        }
+                      >
+                        {client.name}
+                        {client.company_name
+                          ? ` · ${client.company_name}`
+                          : ''}
+                      </option>
+                    )
+                  )}
+
+                </select>
+
+                {selectedClient && (
+                  <div
+                    className="
+                      mt-3
+                      flex
+                      items-center
+                      gap-3
+                      rounded-lg
+                      border
+                      border-gray-100
+                      bg-gray-50
+                      p-3
+                      dark:border-white/[0.05]
+                      dark:bg-white/[0.025]
+                    "
+                  >
+
+                    <UserRound
+                      size={15}
+                      className="shrink-0 text-gray-400"
+                    />
+
+                    <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
+                      {selectedClient.name}
+                    </p>
+
+                  </div>
+                )}
+
+              </div>
+
+              {/* CASE */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Dava
+                </label>
+
+                <select
+                  name="case_id"
+                  value={
+                    formData.case_id
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    casesLoading ||
+                    isUploading
+                  }
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    text-sm
+                    text-gray-700
+                    outline-none
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                  "
+                >
+
+                  <option value="">
+                    {casesLoading
+                      ? 'Davalar yükleniyor...'
+                      : 'İlişki yok'}
+                  </option>
+
+                  {cases.map(
+                    (
+                      caseItem
+                    ) => (
+                      <option
+                        key={
+                          caseItem.id
+                        }
+                        value={
+                          caseItem.id
+                        }
+                      >
+                        {caseItem.title}
+                      </option>
+                    )
+                  )}
+
+                </select>
+
+                {selectedCase && (
+                  <div
+                    className="
+                      mt-3
+                      flex
+                      items-center
+                      gap-3
+                      rounded-lg
+                      border
+                      border-gray-100
+                      bg-gray-50
+                      p-3
+                      dark:border-white/[0.05]
+                      dark:bg-white/[0.025]
+                    "
+                  >
+
+                    <FolderOpen
+                      size={15}
+                      className="shrink-0 text-gray-400"
+                    />
+
+                    <div className="min-w-0">
+
+                      <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
+                        {selectedCase.title}
+                      </p>
+
+                      {selectedCase.case_number && (
+                        <p className="mt-0.5 text-[10px] text-gray-400 dark:text-slate-500">
+                          {selectedCase.case_number}
+                        </p>
+                      )}
+
+                    </div>
+
+                  </div>
+                )}
+
+              </div>
+
+            </div>
+
+            {/* POA */}
+
+            <div>
+
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                Vekaletname
+              </label>
+
+              <select
+                name="power_of_attorney_id"
+                value={
+                  formData.power_of_attorney_id
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  poaLoading ||
+                  isUploading
+                }
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  text-sm
+                  text-gray-700
+                  outline-none
+                  disabled:cursor-not-allowed
+                  disabled:opacity-50
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                "
+              >
+
+                <option value="">
+                  {poaLoading
+                    ? 'Vekaletnameler yükleniyor...'
+                    : 'İlişki yok'}
+                </option>
+
+                {powerOfAttorneys.map(
+                  (
+                    poa
+                  ) => (
+                    <option
+                      key={
+                        poa.id
+                      }
+                      value={
+                        poa.id
+                      }
+                    >
+                      {poa.title ||
+                        'Başlıksız Vekaletname'}
+
+                      {poa.client?.name
+                        ? ` · ${poa.client.name}`
+                        : ''}
+                    </option>
+                  )
+                )}
+
+              </select>
+
+              {selectedPowerOfAttorney && (
+                <div
+                  className="
+                    mt-3
+                    flex
+                    items-center
+                    gap-3
+                    rounded-lg
+                    border
+                    border-gray-100
+                    bg-gray-50
+                    p-3
+                    dark:border-white/[0.05]
+                    dark:bg-white/[0.025]
+                  "
+                >
+
+                  <BriefcaseBusiness
+                    size={15}
+                    className="shrink-0 text-gray-400"
+                  />
+
+                  <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
+                    {selectedPowerOfAttorney.title ||
+                      'Başlıksız Vekaletname'}
+                  </p>
+
+                </div>
+              )}
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+        {/* ==================================================
+            ACCESS
+        ================================================== */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-emerald-50
+                  text-emerald-600
+                  dark:bg-emerald-500/[0.08]
+                  dark:text-emerald-400
+                "
+              >
+                <ShieldCheck size={17} />
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Erişim
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Büro içindeki görünürlük kapsamını belirleyin
+                </p>
+
+              </div>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            <label
+              htmlFor="document-general-access"
+              className="
+                flex
+                cursor-pointer
+                items-start
+                gap-3
+                rounded-xl
+                border
+                border-gray-100
+                bg-gray-50/60
+                p-4
+                transition
+                hover:border-blue-200
+                dark:border-white/[0.05]
+                dark:bg-white/[0.02]
+              "
+            >
+
+              <input
+                id="document-general-access"
+                type="checkbox"
+                name="is_public"
+                checked={
+                  formData.is_public
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isUploading
+                }
+                className="
+                  mt-0.5
+                  h-4
+                  w-4
+                  rounded
+                  border-gray-300
+                  text-blue-600
+                  focus:ring-blue-500
+                "
+              />
+
+              <div>
+
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Büro içi genel erişim
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-500">
+                  Etkin olduğunda belge, sistemde bu belgeyi görüntüleme yetkisine sahip diğer kullanıcılar tarafından erişilebilir olur. İnternet üzerinde herkese açık hale gelmez.
+                </p>
+
+              </div>
+
+            </label>
+
+          </Card.Body>
+
+        </Card>
+
+        {/* ==================================================
+            SUMMARY
+        ================================================== */}
+
+        {files.length >
+          0 && (
+          <div
+            className="
+              grid
+              gap-3
+              rounded-xl
+              border
+              border-gray-200
+              bg-gray-50/50
+              p-4
+              dark:border-white/[0.07]
+              dark:bg-white/[0.015]
+              sm:grid-cols-4
+            "
+          >
+
+            <div>
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+                Dosya
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-700 dark:text-slate-300">
+                {files.length} adet
+              </p>
+
+            </div>
+
+            <div>
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+                Boyut
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-700 dark:text-slate-300">
+                {formatFileSize(
+                  totalFileSize
+                )}
+              </p>
+
+            </div>
+
+            <div>
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+                Kategori
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-700 dark:text-slate-300">
+                {getCategoryLabel(
+                  formData.category
+                )}
+              </p>
+
+            </div>
+
+            <div>
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+                İlişki
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-700 dark:text-slate-300">
+                {formData.case_id
+                  ? 'Dava'
+                  : formData.client_id
+                    ? 'Müvekkil'
+                    : formData.power_of_attorney_id
+                      ? 'Vekaletname'
+                      : 'Bağımsız'}
+              </p>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* ==================================================
+            ACTIONS
+        ================================================== */}
+
+        <div
+          className="
+            flex
+            flex-col-reverse
+            gap-3
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            p-4
+            shadow-sm
+            dark:border-white/[0.07]
+            dark:bg-[#0b1b33]
+            sm:flex-row
+            sm:items-center
+            sm:justify-between
+          "
+        >
+
+          <div>
+
+            {files.length >
+              0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={
+                  isUploading
+                }
+                onClick={
+                  clearFiles
+                }
+                className="text-red-500 hover:text-red-600"
+              >
+                <Trash2 className="h-4 w-4" />
+
+                Dosyaları Temizle
+              </Button>
+            )}
+
           </div>
 
-          {/* ACTIONS */}
-
-          <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
-
-            <Button
-              type="submit"
-              loading={
-                isUploading
-              }
-              disabled={
-                files.length ===
-                  0 ||
-                isUploading
-              }
-            >
-              <UploadCloud className="mr-2 h-4 w-4" />
-
-              {files.length ===
-              0
-                ? 'Dosya Seçin'
-                : files.length ===
-                    1
-                  ? 'Belgeyi Yükle'
-                  : `${files.length} Belgeyi Yükle`}
-            </Button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
 
             <Button
               type="button"
@@ -1719,57 +2555,33 @@ const DocumentUpload = () => {
               Vazgeç
             </Button>
 
-            {files.length >
-              0 && (
-              <Button
-                type="button"
-                variant="danger"
-                disabled={
-                  isUploading
-                }
-                onClick={
-                  clearFiles
-                }
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
+            <Button
+              type="submit"
+              loading={
+                isUploading
+              }
+              disabled={
+                files.length ===
+                  0 ||
+                isUploading
+              }
+            >
+              <UploadCloud className="h-4 w-4" />
 
-                Tümünü Temizle
-              </Button>
-            )}
+              {files.length ===
+              0
+                ? 'Dosya Seçin'
+                : files.length ===
+                    1
+                  ? 'Belgeyi Yükle'
+                  : `${files.length} Belgeyi Yükle`}
+            </Button>
 
           </div>
 
-          {/* SUMMARY */}
+        </div>
 
-          {files.length >
-            0 && (
-            <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-
-              <span className="font-medium">
-                Yükleme özeti:
-              </span>{' '}
-
-              {files.length}{' '}
-              dosya ·{' '}
-              {formatFileSize(
-                totalFileSize
-              )}
-
-              {formData.case_id &&
-                ' · Dava ile ilişkili'}
-
-              {formData.client_id &&
-                ' · Müvekkil ile ilişkili'}
-
-              {formData.power_of_attorney_id &&
-                ' · Vekâletname ile ilişkili'}
-
-            </div>
-          )}
-
-        </form>
-
-      </Card>
+      </form>
 
     </div>
   );
