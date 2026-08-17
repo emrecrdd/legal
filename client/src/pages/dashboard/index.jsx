@@ -44,7 +44,7 @@ import meetingApi from '../../features/meetings/meeting.api.js';
 import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Card from '../../components/ui/Card.jsx';
-import Loader from '../../components/common/Loader.jsx';
+import Loader from '../../components/shared/Loader.jsx';
 
 dayjs.locale('tr');
 
