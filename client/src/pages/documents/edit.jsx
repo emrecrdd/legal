@@ -30,9 +30,14 @@ import Badge from '../../components/ui/Badge.jsx';
 import {
   AlertTriangle,
   ArrowLeft,
+  BriefcaseBusiness,
+  FileText,
+  FolderOpen,
   LockKeyhole,
   Save,
   ShieldCheck,
+  Tags,
+  UserRound,
 } from 'lucide-react';
 
 import toast from 'react-hot-toast';
@@ -296,26 +301,26 @@ const DocumentEdit = () => {
   // ======================================================
 
   const documentItem =
-    documentData?.data
-      ?.data ??
+    documentData?.data?.data ??
     documentData?.data ??
     null;
 
   const cases =
-    casesData?.data
-      ?.data ??
-    [];
+    Array.isArray(
+      casesData?.data?.data
+    )
+      ? casesData.data.data
+      : [];
 
   const clients =
-    clientsData?.data
-      ?.data ??
-    [];
+    Array.isArray(
+      clientsData?.data?.data
+    )
+      ? clientsData.data.data
+      : [];
 
   // ======================================================
   // FORM INITIALIZATION
-  //
-  // Query refetch olduğunda kullanıcının yazdığı alanların
-  // tekrar ezilmesini engelliyoruz.
   // ======================================================
 
   useEffect(() => {
@@ -400,6 +405,30 @@ const DocumentEdit = () => {
       formData.tags,
     ]);
 
+  const selectedCase =
+    useMemo(() => {
+      return cases.find(
+        (item) =>
+          item.id ===
+          formData.case_id
+      );
+    }, [
+      cases,
+      formData.case_id,
+    ]);
+
+  const selectedClient =
+    useMemo(() => {
+      return clients.find(
+        (item) =>
+          item.id ===
+          formData.client_id
+      );
+    }, [
+      clients,
+      formData.client_id,
+    ]);
+
   const hasRelationLoadError =
     Boolean(
       casesError ||
@@ -442,6 +471,10 @@ const DocumentEdit = () => {
     }
   };
 
+  // ======================================================
+  // VALIDATION
+  // ======================================================
+
   const validateForm =
     () => {
       const nextErrors =
@@ -473,6 +506,10 @@ const DocumentEdit = () => {
       );
     };
 
+  // ======================================================
+  // SUBMIT
+  // ======================================================
+
   const handleSubmit = (
     event
   ) => {
@@ -495,11 +532,6 @@ const DocumentEdit = () => {
     }
 
     const updateData = {
-      /*
-       * Yalnızca belge ailesinin metadata alanlarını gönderiyoruz.
-       * Fiziksel dosya/version alanlarına bu ekran dokunmuyor.
-       */
-
       name:
         formData.name.trim(),
 
@@ -556,7 +588,15 @@ const DocumentEdit = () => {
     return (
       <div className="flex h-64 items-center justify-center">
 
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600" />
+        <div className="text-center">
+
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600" />
+
+          <p className="mt-4 text-sm text-gray-500">
+            Belge bilgileri yükleniyor...
+          </p>
+
+        </div>
 
       </div>
     );
@@ -573,17 +613,18 @@ const DocumentEdit = () => {
     return (
       <div className="py-12 text-center">
 
-        <div className="mb-4 text-6xl">
+        <div className="mb-4 text-5xl">
           📄
         </div>
 
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
           Belge Bulunamadı
         </h2>
 
-        <p className="mt-2 text-gray-500">
+        <p className="mt-2 text-sm text-gray-500">
           {documentError
-            ?.response?.data
+            ?.response
+            ?.data
             ?.message ||
             documentError
               ?.message ||
@@ -592,9 +633,11 @@ const DocumentEdit = () => {
 
         <Link
           to="/documents"
-          className="mt-4 inline-block text-blue-600 hover:underline"
+          className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline"
         >
-          ← Belgeler Listesine Dön
+          <ArrowLeft className="h-4 w-4" />
+
+          Belgeler Listesine Dön
         </Link>
 
       </div>
@@ -606,49 +649,75 @@ const DocumentEdit = () => {
   // ======================================================
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
 
-      {/* HEADER */}
+      {/* ==================================================
+          HEADER
+      ================================================== */}
 
       <div>
 
         <Link
           to={`/documents/${id}`}
-          className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+          className="
+            inline-flex
+            items-center
+            gap-1.5
+            text-xs
+            font-medium
+            text-gray-500
+            transition
+            hover:text-blue-600
+            dark:text-slate-500
+            dark:hover:text-blue-400
+          "
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-3.5 w-3.5" />
 
           Belge Detayı
         </Link>
 
-        <h1 className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
-          Belge Bilgilerini Düzenle
-        </h1>
+        <div className="mt-3 flex items-start gap-3">
 
-        <p className="mt-1 text-sm text-gray-500">
-          Belge ailesinin kayıt, sınıflandırma ve ilişki bilgilerini güncelleyin.
-        </p>
+          <div
+            className="
+              flex
+              h-11
+              w-11
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-blue-50
+              text-blue-600
+              dark:bg-blue-500/[0.08]
+              dark:text-blue-400
+            "
+          >
+            <FileText size={20} />
+          </div>
 
-      </div>
+          <div className="min-w-0">
 
-      {/* IMPORTANT INFO */}
+            <h1
+              className="
+                text-2xl
+                font-semibold
+                tracking-[-0.035em]
+                text-gray-900
+                dark:text-white
+              "
+            >
+              Belge Bilgilerini Düzenle
+            </h1>
 
-      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
-
-        <div className="flex items-start gap-3">
-
-          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
-
-          <div>
-
-            <p className="font-medium text-blue-900 dark:text-blue-200">
-              Dosya içeriği bu ekrandan değiştirilmez
+            <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400">
+              Belge ailesinin adı, sınıflandırması, ilişkileri ve erişim bilgilerini güncelleyin.
             </p>
 
-            <p className="mt-1 text-sm leading-6 text-blue-800 dark:text-blue-300">
-              Düzeltilmiş veya yeni bir dosya yüklemek için belge detayındaki
-              <strong> Yeni Versiyon </strong>
-              işlemini kullanın. Böylece önceki sürümler korunur ve belge geçmişi bozulmaz.
+            <p className="mt-1 max-w-xl truncate text-xs text-gray-400 dark:text-slate-500">
+              {documentItem.original_name ||
+                documentItem.name}
             </p>
 
           </div>
@@ -657,23 +726,73 @@ const DocumentEdit = () => {
 
       </div>
 
-      {/* RELATION LOAD WARNING */}
+      {/* ==================================================
+          VERSION INFO
+      ================================================== */}
+
+      <div
+        className="
+          rounded-xl
+          border
+          border-blue-200
+          bg-blue-50/70
+          p-4
+          dark:border-blue-500/20
+          dark:bg-blue-500/[0.06]
+        "
+      >
+
+        <div className="flex items-start gap-3">
+
+          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+
+          <div>
+
+            <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+              Dosya içeriği bu ekrandan değiştirilmez
+            </p>
+
+            <p className="mt-1 text-sm leading-6 text-blue-800/80 dark:text-blue-300/80">
+              Düzeltilmiş veya yeni bir dosya yüklemek için belge detayındaki
+              <strong> Yeni Versiyon </strong>
+              işlemini kullanın. Böylece eski sürümler korunmaya devam eder.
+            </p>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* ==================================================
+          RELATION WARNING
+      ================================================== */}
 
       {hasRelationLoadError && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+        <div
+          className="
+            rounded-xl
+            border
+            border-amber-200
+            bg-amber-50
+            p-4
+            dark:border-amber-500/20
+            dark:bg-amber-500/[0.06]
+          "
+        >
 
           <div className="flex items-start gap-3">
 
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
 
             <div>
 
-              <p className="font-medium text-amber-900 dark:text-amber-200">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
                 Bazı ilişkili kayıtlar yüklenemedi
               </p>
 
-              <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-                Dava veya müvekkil listesi eksik görünebilir. Mevcut belge bilgilerini değiştirmeden kaydedebilirsiniz.
+              <p className="mt-1 text-sm text-amber-800/80 dark:text-amber-300/80">
+                Dava veya müvekkil listesi eksik görünebilir.
               </p>
 
             </div>
@@ -683,37 +802,102 @@ const DocumentEdit = () => {
         </div>
       )}
 
-      {/* FORM */}
+      <form
+        onSubmit={
+          handleSubmit
+        }
+        className="space-y-5"
+      >
 
-      <Card>
+        {/* ==================================================
+            ORIGINAL FILE
+        ================================================== */}
 
-        <form
-          onSubmit={
-            handleSubmit
-          }
-          className="space-y-6 p-6"
-        >
+        <Card>
 
-          {/* FILE READ ONLY */}
+          <Card.Header>
 
-          <div className="rounded-xl bg-gray-50 p-4 dark:bg-gray-800/50">
+            <div className="flex items-center gap-3">
 
-            <div className="flex items-start gap-4">
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-gray-100
+                  text-gray-600
+                  dark:bg-white/[0.04]
+                  dark:text-slate-400
+                "
+              >
+                <FileText size={17} />
+              </div>
 
-              <span className="text-4xl">
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Fiziksel Dosya
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Bu bilgiler salt okunurdur
+                </p>
+
+              </div>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            <div
+              className="
+                flex
+                flex-col
+                gap-4
+                rounded-xl
+                border
+                border-gray-100
+                bg-gray-50/70
+                p-4
+                dark:border-white/[0.05]
+                dark:bg-white/[0.02]
+                sm:flex-row
+                sm:items-center
+              "
+            >
+
+              <div
+                className="
+                  flex
+                  h-14
+                  w-14
+                  shrink-0
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-white
+                  text-3xl
+                  shadow-sm
+                  dark:bg-white/[0.04]
+                "
+              >
                 {getFileIcon(
                   documentItem.file_type
                 )}
-              </span>
+              </div>
 
               <div className="min-w-0 flex-1">
 
                 <div className="flex flex-wrap items-center gap-2">
 
-                  <p className="break-all font-medium text-gray-900 dark:text-white">
-                    {
-                      documentItem.original_name
-                    }
+                  <p className="max-w-xl truncate font-semibold text-gray-900 dark:text-white">
+                    {documentItem.original_name ||
+                      '-'}
                   </p>
 
                   <Badge variant="info">
@@ -724,382 +908,843 @@ const DocumentEdit = () => {
 
                 </div>
 
-                <p className="mt-1 text-sm text-gray-500">
-                  {formatFileSize(
-                    documentItem.file_size
-                  )}
-                  {' · '}
-                  {documentItem.mime_type ||
-                    'Bilinmiyor'}
-                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-slate-500">
 
-                <p className="mt-2 text-xs text-gray-500">
-                  Fiziksel dosya, MIME türü ve versiyon bilgileri salt okunurdur.
+                  <span>
+                    {formatFileSize(
+                      documentItem.file_size
+                    )}
+                  </span>
+
+                  <span className="hidden sm:inline">
+                    •
+                  </span>
+
+                  <span>
+                    {documentItem.mime_type ||
+                      'Dosya türü bilinmiyor'}
+                  </span>
+
+                </div>
+
+              </div>
+
+              <div
+                className="
+                  inline-flex
+                  items-center
+                  gap-1.5
+                  self-start
+                  rounded-lg
+                  bg-gray-100
+                  px-2.5
+                  py-1.5
+                  text-xs
+                  font-medium
+                  text-gray-500
+                  dark:bg-white/[0.04]
+                  dark:text-slate-500
+                  sm:self-center
+                "
+              >
+                <LockKeyhole className="h-3.5 w-3.5" />
+
+                Salt Okunur
+              </div>
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+        {/* ==================================================
+            DOCUMENT INFO
+        ================================================== */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-blue-50
+                  text-blue-600
+                  dark:bg-blue-500/[0.08]
+                  dark:text-blue-400
+                "
+              >
+                <FileText size={17} />
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Belge Bilgileri
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Belgenin sistemde görünen adı ve kategorisi
                 </p>
 
               </div>
 
             </div>
 
-          </div>
+          </Card.Header>
 
-          {/* NAME */}
-
-          <Input
-            label="Belge Adı *"
-            name="name"
-            value={
-              formData.name
-            }
-            onChange={
-              handleChange
-            }
-            error={
-              errors.name
-            }
-            placeholder="Belge adını girin"
-            disabled={
-              updateMutation.isPending
-            }
-          />
-
-          {/* CATEGORY */}
-
-          <div>
-
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Kategori
-            </label>
-
-            <select
-              name="category"
-              value={
-                formData.category
-              }
-              onChange={
-                handleChange
-              }
-              disabled={
-                updateMutation.isPending
-              }
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-            >
-              {CATEGORY_OPTIONS.map(
-                (category) => (
-                  <option
-                    key={
-                      category.value
-                    }
-                    value={
-                      category.value
-                    }
-                  >
-                    {
-                      category.icon
-                    }{' '}
-                    {
-                      category.label
-                    }
-                  </option>
-                )
-              )}
-            </select>
-
-            <div className="mt-2">
-
-              <Badge
-                variant={getCategoryVariant(
-                  selectedCategory.value
-                )}
-              >
-                {
-                  selectedCategory.label
-                }
-              </Badge>
-
-            </div>
-
-          </div>
-
-          {/* RELATED RECORDS */}
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
-            <div>
-
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                📁 İlişkili Dava
-              </label>
-
-              <select
-                name="case_id"
-                value={
-                  formData.case_id
-                }
-                onChange={
-                  handleChange
-                }
-                disabled={
-                  casesLoading ||
-                  updateMutation.isPending
-                }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-wait disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
-
-                <option value="">
-                  İlişki yok
-                </option>
-
-                {cases.map(
-                  (caseItem) => (
-                    <option
-                      key={
-                        caseItem.id
-                      }
-                      value={
-                        caseItem.id
-                      }
-                    >
-                      {
-                        caseItem.title
-                      }
-                    </option>
-                  )
-                )}
-
-              </select>
-
-            </div>
-
-            <div>
-
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                👤 İlişkili Müvekkil
-              </label>
-
-              <select
-                name="client_id"
-                value={
-                  formData.client_id
-                }
-                onChange={
-                  handleChange
-                }
-                disabled={
-                  clientsLoading ||
-                  updateMutation.isPending
-                }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-wait disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
-
-                <option value="">
-                  İlişki yok
-                </option>
-
-                {clients.map(
-                  (client) => (
-                    <option
-                      key={
-                        client.id
-                      }
-                      value={
-                        client.id
-                      }
-                    >
-                      {
-                        client.name
-                      }
-
-                      {client.company_name &&
-                        ` (${client.company_name})`}
-                    </option>
-                  )
-                )}
-
-              </select>
-
-            </div>
-
-          </div>
-
-          {/* TAGS */}
-
-          <div>
+          <Card.Body className="space-y-5">
 
             <Input
-              label="Etiketler"
-              name="tags"
+              label="Belge Adı *"
+              name="name"
               value={
-                formData.tags
+                formData.name
               }
               onChange={
                 handleChange
               }
-              placeholder="acil, ceza, bilirkişi, önemli"
+              error={
+                errors.name
+              }
+              placeholder="Belge adını girin"
               disabled={
                 updateMutation.isPending
               }
             />
 
-            <p className="mt-1 text-xs text-gray-500">
-              Birden fazla etiketi virgülle ayırın. Tekrarlanan etiketler otomatik temizlenir.
-            </p>
+            <div>
 
-            {tagsPreview.length >
-              0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                Kategori
+              </label>
 
-                {tagsPreview.map(
-                  (tag) => (
-                    <Badge
+              <select
+                name="category"
+                value={
+                  formData.category
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  updateMutation.isPending
+                }
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  text-sm
+                  text-gray-700
+                  outline-none
+                  transition
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  disabled:cursor-not-allowed
+                  disabled:opacity-60
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                "
+              >
+
+                {CATEGORY_OPTIONS.map(
+                  (
+                    category
+                  ) => (
+                    <option
                       key={
-                        tag
+                        category.value
                       }
-                      variant="default"
-                      className="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                      value={
+                        category.value
+                      }
                     >
-                      #{tag}
-                    </Badge>
+                      {category.icon}{' '}
+                      {category.label}
+                    </option>
                   )
                 )}
 
+              </select>
+
+              <div className="mt-2">
+
+                <Badge
+                  variant={getCategoryVariant(
+                    selectedCategory.value
+                  )}
+                >
+                  {selectedCategory.icon}{' '}
+                  {selectedCategory.label}
+                </Badge>
+
               </div>
-            )}
 
-          </div>
+            </div>
 
-          {/* DESCRIPTION */}
+          </Card.Body>
 
-          <div>
+        </Card>
 
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Açıklama
-            </label>
+        {/* ==================================================
+            RELATIONS
+        ================================================== */}
 
-            <textarea
-              name="description"
-              value={
-                formData.description
-              }
-              onChange={
-                handleChange
-              }
-              disabled={
-                updateMutation.isPending
-              }
-              rows="5"
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              placeholder="Belgenin içeriği, amacı veya dosyadaki önemi hakkında not..."
-            />
+        <Card>
 
-          </div>
+          <Card.Header>
 
-          {/* ACCESS */}
+            <div className="flex items-center gap-3">
 
-          <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-violet-50
+                  text-violet-600
+                  dark:bg-violet-500/[0.08]
+                  dark:text-violet-400
+                "
+              >
+                <BriefcaseBusiness size={17} />
+              </div>
 
-            <div className="flex items-start gap-3">
+              <div>
 
-              {formData.is_public ? (
-                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
-              ) : (
-                <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-gray-500" />
-              )}
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  İlişkili Kayıtlar
+                </h2>
 
-              <div className="flex-1">
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Belgenin bağlı olduğu dava ve müvekkil
+                </p>
 
-                <div className="flex items-center gap-2">
+              </div>
 
-                  <input
-                    id="document-general-access"
-                    type="checkbox"
-                    name="is_public"
-                    checked={
-                      formData.is_public
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+              {/* CASE */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  İlişkili Dava
+                </label>
+
+                <div className="relative">
+
+                  <FolderOpen className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+
+                  <select
+                    name="case_id"
+                    value={
+                      formData.case_id
                     }
                     onChange={
                       handleChange
                     }
                     disabled={
+                      casesLoading ||
                       updateMutation.isPending
                     }
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
-                  />
-
-                  <label
-                    htmlFor="document-general-access"
-                    className="font-medium text-gray-900 dark:text-white"
+                    className="
+                      h-10
+                      w-full
+                      rounded-lg
+                      border
+                      border-gray-200
+                      bg-white
+                      pl-9
+                      pr-3
+                      text-sm
+                      text-gray-700
+                      outline-none
+                      focus:border-blue-500
+                      focus:ring-2
+                      focus:ring-blue-500/10
+                      disabled:cursor-wait
+                      disabled:opacity-60
+                      dark:border-white/[0.08]
+                      dark:bg-white/[0.035]
+                      dark:text-slate-300
+                    "
                   >
-                    Büro içi genel erişim
-                  </label>
+
+                    <option value="">
+                      İlişki yok
+                    </option>
+
+                    {cases.map(
+                      (
+                        caseItem
+                      ) => (
+                        <option
+                          key={
+                            caseItem.id
+                          }
+                          value={
+                            caseItem.id
+                          }
+                        >
+                          {caseItem.title}
+                        </option>
+                      )
+                    )}
+
+                  </select>
 
                 </div>
 
-                <p className="mt-2 text-sm leading-6 text-gray-500">
-                  Açıldığında belge, sistemde belge görüntüleme yetkisi bulunan kullanıcılar için genel erişilebilir olarak işaretlenir.
-                  Bu ayar belgenin internet üzerinde herkese açık olduğu anlamına gelmez.
+                {selectedCase && (
+                  <p className="mt-2 truncate text-xs text-gray-400 dark:text-slate-500">
+                    Seçili: {selectedCase.title}
+                  </p>
+                )}
+
+              </div>
+
+              {/* CLIENT */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  İlişkili Müvekkil
+                </label>
+
+                <div className="relative">
+
+                  <UserRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+
+                  <select
+                    name="client_id"
+                    value={
+                      formData.client_id
+                    }
+                    onChange={
+                      handleChange
+                    }
+                    disabled={
+                      clientsLoading ||
+                      updateMutation.isPending
+                    }
+                    className="
+                      h-10
+                      w-full
+                      rounded-lg
+                      border
+                      border-gray-200
+                      bg-white
+                      pl-9
+                      pr-3
+                      text-sm
+                      text-gray-700
+                      outline-none
+                      focus:border-blue-500
+                      focus:ring-2
+                      focus:ring-blue-500/10
+                      disabled:cursor-wait
+                      disabled:opacity-60
+                      dark:border-white/[0.08]
+                      dark:bg-white/[0.035]
+                      dark:text-slate-300
+                    "
+                  >
+
+                    <option value="">
+                      İlişki yok
+                    </option>
+
+                    {clients.map(
+                      (
+                        client
+                      ) => (
+                        <option
+                          key={
+                            client.id
+                          }
+                          value={
+                            client.id
+                          }
+                        >
+                          {client.name}
+
+                          {client.company_name &&
+                            ` (${client.company_name})`}
+                        </option>
+                      )
+                    )}
+
+                  </select>
+
+                </div>
+
+                {selectedClient && (
+                  <p className="mt-2 truncate text-xs text-gray-400 dark:text-slate-500">
+                    Seçili: {selectedClient.name}
+                  </p>
+                )}
+
+              </div>
+
+            </div>
+
+            <div
+              className="
+                mt-5
+                flex
+                items-start
+                gap-2
+                rounded-lg
+                bg-amber-50
+                p-3
+                text-sm
+                text-amber-900
+                dark:bg-amber-500/[0.06]
+                dark:text-amber-200
+              "
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+
+              <p>
+                Dava veya müvekkil ilişkisini değiştirmek belgenin dosya içindeki bağlamını değiştirir.
+              </p>
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+        {/* ==================================================
+            TAGS & DESCRIPTION
+        ================================================== */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-amber-50
+                  text-amber-600
+                  dark:bg-amber-500/[0.08]
+                  dark:text-amber-400
+                "
+              >
+                <Tags size={17} />
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Açıklama ve Etiketler
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Arama ve sınıflandırma için yardımcı bilgiler
                 </p>
 
               </div>
 
             </div>
 
-          </div>
+          </Card.Header>
 
-          {/* WARNING */}
+          <Card.Body className="space-y-5">
 
-          <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+            <div>
 
-            <div className="flex items-start gap-2">
+              <Input
+                label="Etiketler"
+                name="tags"
+                value={
+                  formData.tags
+                }
+                onChange={
+                  handleChange
+                }
+                placeholder="acil, ceza, bilirkişi, önemli"
+                disabled={
+                  updateMutation.isPending
+                }
+              />
 
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-
-              <p>
-                Dava veya müvekkil ilişkisini değiştirmeniz belgenin dosyadaki bağlamını etkiler. Kaydetmeden önce seçilen kayıtları kontrol edin.
+              <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                Etiketleri virgülle ayırabilirsiniz.
               </p>
+
+              {tagsPreview.length >
+                0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+
+                  {tagsPreview.map(
+                    (
+                      tag
+                    ) => (
+                      <Badge
+                        key={
+                          tag
+                        }
+                        variant="default"
+                        className="bg-blue-50 text-blue-700 dark:bg-blue-500/[0.08] dark:text-blue-300"
+                      >
+                        #{tag}
+                      </Badge>
+                    )
+                  )}
+
+                </div>
+              )}
 
             </div>
 
+            <div>
+
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                Açıklama
+              </label>
+
+              <textarea
+                name="description"
+                value={
+                  formData.description
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  updateMutation.isPending
+                }
+                rows={5}
+                placeholder="Belgenin içeriği, amacı veya dosyadaki önemi hakkında not..."
+                className="
+                  w-full
+                  resize-y
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  py-2.5
+                  text-sm
+                  leading-6
+                  text-gray-900
+                  outline-none
+                  placeholder:text-gray-400
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  disabled:cursor-not-allowed
+                  disabled:opacity-60
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-white
+                  dark:placeholder:text-slate-500
+                "
+              />
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+        {/* ==================================================
+            ACCESS
+        ================================================== */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className={`
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  ${
+                    formData.is_public
+                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400'
+                      : 'bg-gray-100 text-gray-500 dark:bg-white/[0.04] dark:text-slate-400'
+                  }
+                `}
+              >
+                {formData.is_public ? (
+                  <ShieldCheck size={17} />
+                ) : (
+                  <LockKeyhole size={17} />
+                )}
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Erişim
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Büro içindeki erişim kapsamını belirleyin
+                </p>
+
+              </div>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            <label
+              htmlFor="document-general-access"
+              className="
+                flex
+                cursor-pointer
+                items-start
+                gap-4
+                rounded-xl
+                border
+                border-gray-100
+                p-4
+                transition
+                hover:bg-gray-50
+                dark:border-white/[0.05]
+                dark:hover:bg-white/[0.02]
+              "
+            >
+
+              <div className="pt-0.5">
+
+                <input
+                  id="document-general-access"
+                  type="checkbox"
+                  name="is_public"
+                  checked={
+                    formData.is_public
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    updateMutation.isPending
+                  }
+                  className="
+                    h-4
+                    w-4
+                    rounded
+                    border-gray-300
+                    text-blue-600
+                    focus:ring-blue-500
+                    disabled:cursor-not-allowed
+                  "
+                />
+
+              </div>
+
+              <div className="flex-1">
+
+                <div className="flex flex-wrap items-center gap-2">
+
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Büro içi genel erişim
+                  </p>
+
+                  <Badge
+                    variant={
+                      formData.is_public
+                        ? 'success'
+                        : 'default'
+                    }
+                  >
+                    {formData.is_public
+                      ? 'Açık'
+                      : 'Kısıtlı'}
+                  </Badge>
+
+                </div>
+
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500 dark:text-slate-400">
+                  Bu seçenek belgeyi internete açmaz. Yalnızca sistem içindeki yetkili kullanıcıların erişim kapsamını belirler.
+                </p>
+
+              </div>
+
+            </label>
+
+          </Card.Body>
+
+        </Card>
+
+        {/* ==================================================
+            SUMMARY
+        ================================================== */}
+
+        <div
+          className="
+            grid
+            gap-3
+            rounded-xl
+            border
+            border-gray-200
+            bg-gray-50/50
+            p-4
+            dark:border-white/[0.07]
+            dark:bg-white/[0.015]
+            sm:grid-cols-4
+          "
+        >
+
+          <div>
+
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+              Kategori
+            </p>
+
+            <p className="mt-1 truncate text-sm font-medium text-gray-700 dark:text-slate-300">
+              {selectedCategory.label}
+            </p>
+
           </div>
 
-          {/* ACTIONS */}
+          <div>
 
-          <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+              Dava
+            </p>
 
-            <Button
-              type="submit"
-              loading={
-                updateMutation.isPending
-              }
-              disabled={
-                updateMutation.isPending
-              }
-            >
-              <Save className="mr-2 h-4 w-4" />
-
-              Değişiklikleri Kaydet
-            </Button>
-
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() =>
-                navigate(
-                  `/documents/${id}`
-                )
-              }
-              disabled={
-                updateMutation.isPending
-              }
-            >
-              Vazgeç
-            </Button>
+            <p className="mt-1 truncate text-sm font-medium text-gray-700 dark:text-slate-300">
+              {selectedCase?.title ||
+                'İlişki yok'}
+            </p>
 
           </div>
 
-        </form>
+          <div>
 
-      </Card>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+              Müvekkil
+            </p>
+
+            <p className="mt-1 truncate text-sm font-medium text-gray-700 dark:text-slate-300">
+              {selectedClient?.name ||
+                'İlişki yok'}
+            </p>
+
+          </div>
+
+          <div>
+
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+              Erişim
+            </p>
+
+            <p
+              className={`mt-1 text-sm font-medium ${
+                formData.is_public
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-gray-700 dark:text-slate-300'
+              }`}
+            >
+              {formData.is_public
+                ? 'Büro içi genel'
+                : 'Kısıtlı'}
+            </p>
+
+          </div>
+
+        </div>
+
+        {/* ==================================================
+            ACTIONS
+        ================================================== */}
+
+        <div
+          className="
+            flex
+            flex-col-reverse
+            gap-3
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            p-4
+            shadow-sm
+            dark:border-white/[0.07]
+            dark:bg-[#0b1b33]
+            sm:flex-row
+            sm:items-center
+            sm:justify-end
+          "
+        >
+
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() =>
+              navigate(
+                `/documents/${id}`
+              )
+            }
+            disabled={
+              updateMutation.isPending
+            }
+          >
+            Vazgeç
+          </Button>
+
+          <Button
+            type="submit"
+            loading={
+              updateMutation.isPending
+            }
+            disabled={
+              updateMutation.isPending
+            }
+          >
+            <Save className="h-4 w-4" />
+
+            Değişiklikleri Kaydet
+          </Button>
+
+        </div>
+
+      </form>
 
     </div>
   );

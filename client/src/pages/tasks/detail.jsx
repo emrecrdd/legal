@@ -19,13 +19,18 @@ import {
   useUpdateProgress,
 } from '../../features/tasks/task.query.js';
 
-import { useAuth } from '../../app/providers/auth.provider.jsx';
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
 
 import Badge from '../../components/ui/Badge.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 
 import {
+  AlertTriangle,
+  ArrowLeft,
+  CalendarDays,
   CheckCircle2,
   Clock3,
   Edit2,
@@ -36,12 +41,14 @@ import {
   ShieldCheck,
   Timer,
   User,
+  Users,
+  X,
 } from 'lucide-react';
 
 import toast from 'react-hot-toast';
 
 // ======================================================
-// SABİTLER
+// CONSTANTS
 // ======================================================
 
 const STATUS_LABELS = {
@@ -58,7 +65,8 @@ const PRIORITY_LABELS = {
   critical: 'Kritik',
 };
 
-const MAX_MANUAL_PROGRESS = 99;
+const MAX_MANUAL_PROGRESS =
+  99;
 
 // ======================================================
 // BADGE HELPERS
@@ -121,29 +129,25 @@ const getPriorityVariant = (
     case 'high':
       return 'warning';
 
-    case 'normal':
-      return 'default';
-
-    case 'low':
-      return 'default';
-
     default:
       return 'default';
   }
 };
 
 // ======================================================
-// TARİH / SAAT
-// Türkiye saat diliminde göster
+// DATE
 // ======================================================
 
-const formatDateTime = (date) => {
+const formatDateTime = (
+  date
+) => {
   if (!date) {
     return '-';
   }
 
   try {
-    const parsed = new Date(date);
+    const parsed =
+      new Date(date);
 
     if (
       Number.isNaN(
@@ -175,7 +179,7 @@ const formatDateTime = (date) => {
 };
 
 // ======================================================
-// KULLANICI ADI
+// USER
 // ======================================================
 
 const getUserName = (
@@ -194,7 +198,10 @@ const getUserName = (
     .join(' ')
     .trim();
 
-  return name || fallback;
+  return (
+    name ||
+    fallback
+  );
 };
 
 // ======================================================
@@ -202,12 +209,14 @@ const getUserName = (
 // ======================================================
 
 const TaskDetail = () => {
-  const { id } = useParams();
+  const { id } =
+    useParams();
 
-  const { user } = useAuth();
+  const { user } =
+    useAuth();
 
   // ======================================================
-  // LOCAL STATE
+  // STATE
   // ======================================================
 
   const [
@@ -246,7 +255,8 @@ const TaskDetail = () => {
   } = useTask(id);
 
   const {
-    data: notesData,
+    data:
+      notesData,
   } = useTaskNotes(id);
 
   // ======================================================
@@ -276,15 +286,19 @@ const TaskDetail = () => {
     data?.data?.data;
 
   const notes =
-    notesData?.data?.data || [];
+    notesData?.data?.data ||
+    [];
 
   // ======================================================
-  // PERMISSIONS / WORKFLOW
+  // PERMISSIONS
   // ======================================================
 
-  const permissions = useMemo(
-    () => {
-      if (!task || !user) {
+  const permissions =
+    useMemo(() => {
+      if (
+        !task ||
+        !user
+      ) {
         return {
           isAdmin: false,
           isAssignee: false,
@@ -298,13 +312,16 @@ const TaskDetail = () => {
       }
 
       const isAdmin =
-        user.role === 'admin';
+        user.role ===
+        'admin';
 
       const isAssignee =
-        task.assigned_to === user.id;
+        task.assigned_to ===
+        user.id;
 
       const isCreator =
-        task.created_by === user.id;
+        task.created_by ===
+        user.id;
 
       return {
         isAdmin,
@@ -313,7 +330,8 @@ const TaskDetail = () => {
 
         canStart:
           isAssignee &&
-          task.status === 'pending',
+          task.status ===
+            'pending',
 
         canComplete:
           isAssignee &&
@@ -331,17 +349,15 @@ const TaskDetail = () => {
           task.status ===
             'in_progress',
 
-        // Backend addNote şu anda
-        // yalnızca assignee için izin veriyor.
-        canAddNote: isAssignee,
+        canAddNote:
+          isAssignee,
       };
-    },
-    [task, user]
-  );
+    }, [
+      task,
+      user,
+    ]);
 
   const {
-    isAdmin,
-    isAssignee,
     canStart,
     canComplete,
     canApprove,
@@ -350,11 +366,11 @@ const TaskDetail = () => {
   } = permissions;
 
   // ======================================================
-  // WORKFLOW STATE
+  // WORKFLOW
   // ======================================================
 
-  const workflow = useMemo(
-    () => {
+  const workflow =
+    useMemo(() => {
       if (!task) {
         return null;
       }
@@ -369,19 +385,15 @@ const TaskDetail = () => {
           task.approved_at
         );
 
-      const completed =
-        task.status ===
-          'completed';
-
       return {
         awaitingApproval,
         approved,
-        completed,
 
         statusLabel:
           getStatusLabel({
             status:
               task.status,
+
             approvedAt:
               task.approved_at,
           }),
@@ -390,27 +402,33 @@ const TaskDetail = () => {
           getStatusVariant({
             status:
               task.status,
+
             approvedAt:
               task.approved_at,
           }),
       };
-    },
-    [task]
-  );
+    }, [
+      task,
+    ]);
 
   // ======================================================
   // OVERDUE
   // ======================================================
 
   const isOverdue =
-    Boolean(task?.due_date) &&
+    Boolean(
+      task?.due_date
+    ) &&
     new Date(
       task.due_date
-    ) < new Date() &&
+    ) <
+      new Date() &&
     ![
       'completed',
       'cancelled',
-    ].includes(task?.status);
+    ].includes(
+      task?.status
+    );
 
   // ======================================================
   // PROGRESS SYNC
@@ -422,60 +440,69 @@ const TaskDetail = () => {
     }
 
     setProgressValue(
-      Number(task.progress) || 0
+      Number(
+        task.progress
+      ) || 0
     );
-  }, [task]);
+  }, [
+    task,
+  ]);
 
   // ======================================================
-  // HANDLERS
+  // PROGRESS
   // ======================================================
 
-  const handleProgressChange = (
-    event
-  ) => {
-    const rawValue =
-      Number.parseInt(
-        event.target.value,
-        10
-      );
+  const handleProgressChange =
+    (event) => {
+      const rawValue =
+        Number.parseInt(
+          event.target.value,
+          10
+        );
 
-    const safeValue =
-      Number.isFinite(rawValue)
-        ? rawValue
-        : 0;
-
-    setProgressValue(
-      Math.min(
-        MAX_MANUAL_PROGRESS,
-        Math.max(
-          0,
-          safeValue
+      const safeValue =
+        Number.isFinite(
+          rawValue
         )
-      )
-    );
-  };
+          ? rawValue
+          : 0;
 
-  const handleUpdateProgress = () => {
-    if (
-      progressValue < 0 ||
-      progressValue >
-        MAX_MANUAL_PROGRESS
-    ) {
-      toast.error(
-        `İlerleme 0-${MAX_MANUAL_PROGRESS} arasında olmalıdır`
+      setProgressValue(
+        Math.min(
+          MAX_MANUAL_PROGRESS,
+          Math.max(
+            0,
+            safeValue
+          )
+        )
       );
+    };
 
-      return;
-    }
+  const handleUpdateProgress =
+    () => {
+      if (
+        progressValue <
+          0 ||
+        progressValue >
+          MAX_MANUAL_PROGRESS
+      ) {
+        toast.error(
+          `İlerleme 0-${MAX_MANUAL_PROGRESS} arasında olmalıdır`
+        );
 
-    updateProgressMutation.mutate(
-      {
+        return;
+      }
+
+      updateProgressMutation.mutate({
         id,
         progress:
           progressValue,
-      }
-    );
-  };
+      });
+    };
+
+  // ======================================================
+  // START
+  // ======================================================
 
   const handleStart = () => {
     if (!task) {
@@ -491,8 +518,14 @@ const TaskDetail = () => {
       return;
     }
 
-    startMutation.mutate(id);
+    startMutation.mutate(
+      id
+    );
   };
+
+  // ======================================================
+  // COMPLETE
+  // ======================================================
 
   const handleOpenCompleteModal =
     () => {
@@ -519,69 +552,79 @@ const TaskDetail = () => {
       setActualHours('');
     };
 
-  const handleComplete = () => {
-    const cleanNote =
-      completionNote.trim();
+  const handleComplete =
+    () => {
+      const cleanNote =
+        completionNote.trim();
 
-    if (!cleanNote) {
-      toast.error(
-        'Tamamlama notu girmelisiniz'
-      );
-
-      return;
-    }
-
-    let parsedHours;
-
-    if (
-      actualHours !== ''
-    ) {
-      parsedHours =
-        Number.parseFloat(
-          actualHours
-        );
-
-      if (
-        !Number.isFinite(
-          parsedHours
-        ) ||
-        parsedHours < 0
-      ) {
+      if (!cleanNote) {
         toast.error(
-          'Gerçek süre geçerli bir sayı olmalıdır'
+          'Tamamlama notu girmelisiniz'
         );
 
         return;
       }
-    }
 
-    completeMutation.mutate(
-      {
-        id,
-        note: cleanNote,
+      let parsedHours;
 
-        actual_hours:
-          actualHours !== ''
-            ? parsedHours
-            : undefined,
-      },
-      {
-        onSuccess: () => {
-          setShowCompleteModal(
-            false
+      if (
+        actualHours !==
+        ''
+      ) {
+        parsedHours =
+          Number.parseFloat(
+            actualHours
           );
 
-          setCompletionNote(
-            ''
+        if (
+          !Number.isFinite(
+            parsedHours
+          ) ||
+          parsedHours <
+            0
+        ) {
+          toast.error(
+            'Gerçek süre geçerli bir sayı olmalıdır'
           );
 
-          setActualHours(
-            ''
-          );
-        },
+          return;
+        }
       }
-    );
-  };
+
+      completeMutation.mutate(
+        {
+          id,
+          note:
+            cleanNote,
+
+          actual_hours:
+            actualHours !==
+            ''
+              ? parsedHours
+              : undefined,
+        },
+        {
+          onSuccess:
+            () => {
+              setShowCompleteModal(
+                false
+              );
+
+              setCompletionNote(
+                ''
+              );
+
+              setActualHours(
+                ''
+              );
+            },
+        }
+      );
+    };
+
+  // ======================================================
+  // APPROVE
+  // ======================================================
 
   const handleApprove = () => {
     if (!task) {
@@ -597,33 +640,41 @@ const TaskDetail = () => {
       return;
     }
 
-    approveMutation.mutate(id);
-  };
-
-  const handleAddNote = () => {
-    const content =
-      noteContent.trim();
-
-    if (!content) {
-      toast.error(
-        'Not içeriği boş olamaz'
-      );
-
-      return;
-    }
-
-    addNoteMutation.mutate(
-      {
-        id,
-        content,
-      },
-      {
-        onSuccess: () => {
-          setNoteContent('');
-        },
-      }
+    approveMutation.mutate(
+      id
     );
   };
+
+  // ======================================================
+  // NOTE
+  // ======================================================
+
+  const handleAddNote =
+    () => {
+      const content =
+        noteContent.trim();
+
+      if (!content) {
+        toast.error(
+          'Not içeriği boş olamaz'
+        );
+
+        return;
+      }
+
+      addNoteMutation.mutate(
+        {
+          id,
+          content,
+        },
+        {
+          onSuccess:
+            () => {
+              setNoteContent('');
+            },
+        }
+      );
+    };
 
   // ======================================================
   // LOADING
@@ -632,7 +683,17 @@ const TaskDetail = () => {
   if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600" />
+
+        <div className="text-center">
+
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600" />
+
+          <p className="mt-4 text-sm text-gray-500">
+            Görev yükleniyor...
+          </p>
+
+        </div>
+
       </div>
     );
   }
@@ -647,16 +708,34 @@ const TaskDetail = () => {
   ) {
     return (
       <div className="py-12 text-center">
-        <p className="font-medium text-red-600">
-          Görev bulunamadı
+
+        <div className="mb-4 text-5xl">
+          ✅
+        </div>
+
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+          Görev Bulunamadı
+        </h2>
+
+        <p className="mt-2 text-sm text-gray-500">
+          {error
+            ?.response
+            ?.data
+            ?.message ||
+            error
+              ?.message ||
+            'Görev bilgileri yüklenemedi'}
         </p>
 
         <Link
           to="/tasks"
-          className="mt-3 inline-block text-blue-600 hover:underline"
+          className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline"
         >
-          ← Görevlere Dön
+          <ArrowLeft className="h-4 w-4" />
+
+          Görevlere Dön
         </Link>
+
       </div>
     );
   }
@@ -666,189 +745,230 @@ const TaskDetail = () => {
   // ======================================================
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
 
       {/* ==================================================
           HEADER
       ================================================== */}
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
 
-        <div>
-          <Link
-            to="/tasks"
-            className="text-blue-600 hover:underline"
-          >
-            ← Görevler
-          </Link>
+        <Link
+          to="/tasks"
+          className="
+            inline-flex
+            items-center
+            gap-1.5
+            text-xs
+            font-medium
+            text-gray-500
+            transition
+            hover:text-blue-600
+            dark:text-slate-500
+            dark:hover:text-blue-400
+          "
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
 
-          <h1 className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
-            {task.title}
-          </h1>
+          Görevler
+        </Link>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="mt-3 flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
 
-            <Badge
-              variant={
-                workflow.statusVariant
-              }
+          {/* LEFT */}
+
+          <div className="min-w-0">
+
+            <h1
+              className="
+                text-2xl
+                font-semibold
+                tracking-[-0.035em]
+                text-gray-900
+                dark:text-white
+              "
             >
-              {
-                workflow.statusLabel
-              }
-            </Badge>
+              {task.title}
+            </h1>
 
-            <Badge
-              variant={getPriorityVariant(
-                task.priority
+            {task.description && (
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-500 dark:text-slate-400">
+                {task.description}
+              </p>
+            )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+
+              <Badge
+                variant={
+                  workflow.statusVariant
+                }
+              >
+                {
+                  workflow.statusLabel
+                }
+              </Badge>
+
+              <Badge
+                variant={getPriorityVariant(
+                  task.priority
+                )}
+              >
+                {PRIORITY_LABELS[
+                  task.priority
+                ] ||
+                  task.priority}
+              </Badge>
+
+              {isOverdue && (
+                <Badge variant="danger">
+                  ⚠️ Gecikti
+                </Badge>
               )}
-            >
-              {PRIORITY_LABELS[
-                task.priority
-              ] ||
-                task.priority}
-            </Badge>
 
-            {isOverdue && (
-              <Badge variant="danger">
-                ⚠️ Gecikti
-              </Badge>
-            )}
+              {workflow.approved && (
+                <Badge variant="success">
+                  Onaylandı
+                </Badge>
+              )}
 
-            {workflow.approved && (
-              <Badge variant="success">
-                ✅ Onaylandı
-              </Badge>
-            )}
-
-          </div>
-        </div>
-
-        {/* ACTION BUTTONS */}
-
-        <div className="flex flex-wrap items-center gap-2">
-
-          {canStart && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={
-                handleStart
-              }
-              loading={
-                startMutation.isPending
-              }
-              disabled={
-                startMutation.isPending
-              }
-              className="flex items-center gap-1"
-            >
-              <Play className="h-4 w-4" />
-
-              Görevi Başlat
-            </Button>
-          )}
-
-          {canComplete && (
-            <Button
-              variant="success"
-              size="sm"
-              onClick={
-                handleOpenCompleteModal
-              }
-              loading={
-                completeMutation.isPending
-              }
-              className="flex items-center gap-1"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-
-              Tamamlanmak Üzere Gönder
-            </Button>
-          )}
-
-          {canApprove && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={
-                handleApprove
-              }
-              loading={
-                approveMutation.isPending
-              }
-              disabled={
-                approveMutation.isPending
-              }
-              className="flex items-center gap-1"
-            >
-              <ShieldCheck className="h-4 w-4" />
-
-              Görevi Onayla
-            </Button>
-          )}
-
-          <Link
-            to={`/tasks/${task.id}/edit`}
-          >
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-1"
-            >
-              <Edit2 className="h-4 w-4" />
-
-              Düzenle
-            </Button>
-          </Link>
-
-        </div>
-      </div>
-
-      {/* ==================================================
-          ONAY BEKLEME UYARISI
-      ================================================== */}
-
-      {workflow.awaitingApproval && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
-
-          <div className="flex items-start gap-3">
-
-            <Clock3 className="mt-0.5 h-5 w-5 text-amber-600 dark:text-amber-400" />
-
-            <div>
-              <p className="font-medium text-amber-900 dark:text-amber-200">
-                Görev tamamlandı ve yönetici onayı bekliyor
-              </p>
-
-              <p className="mt-1 text-sm leading-6 text-amber-800 dark:text-amber-300">
-                Görevi yapan kullanıcı çalışmayı tamamladı.
-                Yönetici inceleyip onayladıktan sonra görev
-                nihai olarak kapanacaktır.
-              </p>
             </div>
 
           </div>
+
+          {/* ACTIONS */}
+
+          <div className="flex flex-wrap items-center gap-2">
+
+            {canStart && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={
+                  handleStart
+                }
+                loading={
+                  startMutation.isPending
+                }
+              >
+                <Play className="mr-2 h-4 w-4" />
+
+                Görevi Başlat
+              </Button>
+            )}
+
+            {canComplete && (
+              <Button
+                variant="success"
+                size="sm"
+                onClick={
+                  handleOpenCompleteModal
+                }
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+
+                Tamamlamaya Gönder
+              </Button>
+            )}
+
+            {canApprove && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={
+                  handleApprove
+                }
+                loading={
+                  approveMutation.isPending
+                }
+              >
+                <ShieldCheck className="mr-2 h-4 w-4" />
+
+                Onayla
+              </Button>
+            )}
+
+            <Link
+              to={`/tasks/${task.id}/edit`}
+            >
+              <Button
+                variant="outline"
+                size="sm"
+              >
+                <Edit2 className="mr-2 h-4 w-4" />
+
+                Düzenle
+              </Button>
+            </Link>
+
+          </div>
+
         </div>
-      )}
+
+      </div>
 
       {/* ==================================================
-          ONAYLANMIŞ
+          WORKFLOW ALERTS
       ================================================== */}
 
-      {workflow.approved && (
-        <div className="rounded-xl border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+      {workflow.awaitingApproval && (
+        <div
+          className="
+            rounded-xl
+            border
+            border-amber-200
+            bg-amber-50
+            p-4
+            dark:border-amber-500/20
+            dark:bg-amber-500/[0.06]
+          "
+        >
 
           <div className="flex items-start gap-3">
 
-            <FileCheck2 className="mt-0.5 h-5 w-5 text-green-600 dark:text-green-400" />
+            <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
 
             <div>
-              <p className="font-medium text-green-900 dark:text-green-200">
-                Görev başarıyla onaylandı
+
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                Yönetici onayı bekleniyor
               </p>
 
-              <p className="mt-1 text-sm text-green-800 dark:text-green-300">
+              <p className="mt-1 text-sm leading-6 text-amber-800 dark:text-amber-300">
+                Çalışma tamamlandı. Yönetici inceleyip onayladıktan sonra görev nihai olarak kapanacak.
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {workflow.approved && (
+        <div
+          className="
+            rounded-xl
+            border
+            border-emerald-200
+            bg-emerald-50
+            p-4
+            dark:border-emerald-500/20
+            dark:bg-emerald-500/[0.06]
+          "
+        >
+
+          <div className="flex items-start gap-3">
+
+            <FileCheck2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+
+            <div>
+
+              <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+                Görev onaylandı
+              </p>
+
+              <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-300">
                 {task.approver
                   ? `${getUserName(
                       task.approver
@@ -861,229 +981,362 @@ const TaskDetail = () => {
                     )} tarihinde onaylandı.`
                   : ' onaylandı.'}
               </p>
+
             </div>
 
           </div>
+
         </div>
       )}
 
       {/* ==================================================
-          BODY GRID
+          QUICK STATS
       ================================================== */}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
 
-        {/* ==================================================
-            BİLGİLER
-        ================================================== */}
+        {/* STATUS */}
 
-        <Card className="lg:col-span-2">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.06] dark:bg-gray-800">
 
-          <Card.Header>
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              📋 Görev Bilgileri
-            </h2>
-          </Card.Header>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+            Durum
+          </p>
 
-          <Card.Body className="space-y-5">
+          <div className="mt-3">
+            <Badge
+              variant={
+                workflow.statusVariant
+              }
+            >
+              {
+                workflow.statusLabel
+              }
+            </Badge>
+          </div>
 
-            {task.description && (
-              <div>
-                <p className="text-sm text-gray-500">
-                  Açıklama
-                </p>
+        </div>
 
-                <p className="mt-1 whitespace-pre-wrap leading-7 text-gray-900 dark:text-white">
-                  {task.description}
-                </p>
-              </div>
-            )}
+        {/* PRIORITY */}
 
-            {/* PEOPLE */}
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.06] dark:bg-gray-800">
 
-            <div className="grid gap-4 sm:grid-cols-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+            Öncelik
+          </p>
 
-              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+          <div className="mt-3">
+            <Badge
+              variant={getPriorityVariant(
+                task.priority
+              )}
+            >
+              {PRIORITY_LABELS[
+                task.priority
+              ] ||
+                task.priority}
+            </Badge>
+          </div>
 
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <User className="h-4 w-4" />
-                  Atanan Kişi
+        </div>
+
+        {/* DUE */}
+
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.06] dark:bg-gray-800">
+
+          <div className="flex items-center gap-2 text-gray-400">
+            <CalendarDays className="h-4 w-4" />
+
+            <span className="text-[10px] font-semibold uppercase tracking-wider">
+              Son Tarih
+            </span>
+          </div>
+
+          <p
+            className={`mt-3 text-sm font-semibold ${
+              isOverdue
+                ? 'text-red-600 dark:text-red-400'
+                : 'text-gray-900 dark:text-white'
+            }`}
+          >
+            {task.due_date
+              ? formatDateTime(
+                  task.due_date
+                )
+              : 'Belirtilmedi'}
+          </p>
+
+        </div>
+
+        {/* PROGRESS */}
+
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.06] dark:bg-gray-800">
+
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+            İlerleme
+          </p>
+
+          <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">
+            {task.progress ||
+              0}
+            %
+          </p>
+
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+
+            <div
+              className="h-full rounded-full bg-blue-600"
+              style={{
+                width: `${Math.min(
+                  100,
+                  Math.max(
+                    0,
+                    task.progress ||
+                      0
+                  )
+                )}%`,
+              }}
+            />
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* ==================================================
+          MAIN GRID
+      ================================================== */}
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+
+        {/* LEFT */}
+
+        <div className="space-y-6">
+
+          {/* ==================================================
+              TASK INFO
+          ================================================== */}
+
+          <Card>
+
+            <Card.Header>
+
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
+
+                  <Users size={17} />
+
                 </div>
 
-                <p className="mt-1 font-medium text-gray-900 dark:text-white">
-                  {getUserName(
-                    task.assignee,
-                    'Atanmadı'
-                  )}
-                </p>
+                <div>
 
-              </div>
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Görev Bilgileri
+                  </h2>
 
-              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
-
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <User className="h-4 w-4" />
-                  Oluşturan
-                </div>
-
-                <p className="mt-1 font-medium text-gray-900 dark:text-white">
-                  {getUserName(
-                    task.creator,
-                    'Bilinmiyor'
-                  )}
-                </p>
-
-              </div>
-
-            </div>
-
-            {/* DATE / ESTIMATE */}
-
-            <div className="grid gap-4 sm:grid-cols-2">
-
-              <div>
-                <p className="text-sm text-gray-500">
-                  📅 Son Tarih
-                </p>
-
-                <p
-                  className={`mt-1 font-medium ${
-                    isOverdue
-                      ? 'text-red-600'
-                      : 'text-gray-900 dark:text-white'
-                  }`}
-                >
-                  {task.due_date
-                    ? formatDateTime(
-                        task.due_date
-                      )
-                    : 'Belirtilmemiş'}
-
-                  {isOverdue &&
-                    ' · Gecikti'}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500">
-                  ⏱️ Tahmini Süre
-                </p>
-
-                <p className="mt-1 font-medium text-gray-900 dark:text-white">
-                  {task.estimated_hours !=
-                  null
-                    ? `${task.estimated_hours} saat`
-                    : 'Belirtilmemiş'}
-                </p>
-              </div>
-
-            </div>
-
-            {/* ==================================================
-                TIME TRACKING
-            ================================================== */}
-
-            {(task.started_at ||
-              task.completed_at ||
-              task.actual_hours != null) && (
-              <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
-
-                <div className="mb-3 flex items-center gap-2">
-
-                  <Timer className="h-4 w-4 text-blue-600" />
-
-                  <p className="font-medium text-gray-700 dark:text-gray-300">
-                    Süre Takibi
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    Sorumlu kişiler ve temel görev bilgileri
                   </p>
 
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-3">
+              </div>
 
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      Başlangıç
-                    </p>
+            </Card.Header>
 
-                    <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-                      {task.started_at
-                        ? formatDateTime(
-                            task.started_at
-                          )
-                        : '-'}
-                    </p>
+            <Card.Body>
+
+              <div className="grid gap-4 md:grid-cols-2">
+
+                {/* ASSIGNEE */}
+
+                <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/[0.05] dark:bg-white/[0.02]">
+
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <User className="h-4 w-4" />
+
+                    Atanan Kişi
                   </div>
 
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      Bitiş
-                    </p>
-
-                    <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-                      {task.completed_at
-                        ? formatDateTime(
-                            task.completed_at
-                          )
-                        : '-'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      Gerçek Süre
-                    </p>
-
-                    <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-                      {task.actual_hours !=
-                      null
-                        ? `${task.actual_hours} saat`
-                        : 'Otomatik hesaplanacak'}
-                    </p>
-                  </div>
+                  <p className="mt-2 font-semibold text-gray-900 dark:text-white">
+                    {getUserName(
+                      task.assignee,
+                      'Atanmadı'
+                    )}
+                  </p>
 
                 </div>
+
+                {/* CREATOR */}
+
+                <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/[0.05] dark:bg-white/[0.02]">
+
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <User className="h-4 w-4" />
+
+                    Oluşturan
+                  </div>
+
+                  <p className="mt-2 font-semibold text-gray-900 dark:text-white">
+                    {getUserName(
+                      task.creator,
+                      'Bilinmiyor'
+                    )}
+                  </p>
+
+                </div>
+
               </div>
-            )}
 
-            {/* ==================================================
-                PROGRESS
-            ================================================== */}
+              <div className="mt-5 grid gap-5 border-t border-gray-100 pt-5 dark:border-white/[0.05] sm:grid-cols-2">
 
-            <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
+                <div>
 
-              <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-400">
+                    Tahmini Süre
+                  </p>
 
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  📊 İlerleme
+                  <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                    {task.estimated_hours !=
+                    null
+                      ? `${task.estimated_hours} saat`
+                      : 'Belirtilmemiş'}
+                  </p>
+
+                </div>
+
+                <div>
+
+                  <p className="text-xs text-gray-400">
+                    Son Tarih
+                  </p>
+
+                  <p
+                    className={`mt-1 text-sm font-medium ${
+                      isOverdue
+                        ? 'text-red-600'
+                        : 'text-gray-900 dark:text-white'
+                    }`}
+                  >
+                    {task.due_date
+                      ? formatDateTime(
+                          task.due_date
+                        )
+                      : 'Belirtilmemiş'}
+                  </p>
+
+                </div>
+
+              </div>
+
+            </Card.Body>
+
+          </Card>
+
+          {/* ==================================================
+              DESCRIPTION
+          ================================================== */}
+
+          {task.description && (
+            <Card>
+
+              <Card.Header>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Açıklama
+                </h2>
+
+              </Card.Header>
+
+              <Card.Body>
+
+                <p className="whitespace-pre-wrap text-sm leading-7 text-gray-700 dark:text-slate-300">
+                  {task.description}
                 </p>
 
-                <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {task.progress || 0}%
-                </span>
+              </Card.Body>
+
+            </Card>
+          )}
+
+          {/* ==================================================
+              PROGRESS
+          ================================================== */}
+
+          <Card>
+
+            <Card.Header>
+
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400">
+
+                  <Timer size={17} />
+
+                </div>
+
+                <div>
+
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    İlerleme ve Süre
+                  </h2>
+
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    Görevin tamamlanma oranı ve çalışma süresi
+                  </p>
+
+                </div>
 
               </div>
 
-              <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+            </Card.Header>
 
-                <div
-                  className="h-full rounded-full bg-blue-600 transition-all duration-300"
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      Math.max(
-                        0,
-                        task.progress || 0
-                      )
-                    )}%`,
-                  }}
-                />
+            <Card.Body className="space-y-6">
+
+              {/* PROGRESS */}
+
+              <div>
+
+                <div className="flex items-center justify-between">
+
+                  <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                    İlerleme
+                  </span>
+
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {task.progress ||
+                      0}
+                    %
+                  </span>
+
+                </div>
+
+                <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+
+                  <div
+                    className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.max(
+                          0,
+                          task.progress ||
+                            0
+                        )
+                      )}%`,
+                    }}
+                  />
+
+                </div>
 
               </div>
 
               {canUpdateProgress && (
-                <div className="mt-4 space-y-2">
+                <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 dark:border-white/[0.05] dark:bg-white/[0.02]">
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
 
                     <input
                       type="range"
@@ -1100,251 +1353,435 @@ const TaskDetail = () => {
                       className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-blue-600 dark:bg-gray-700"
                     />
 
-                    <input
-                      type="number"
-                      min="0"
-                      max={
-                        MAX_MANUAL_PROGRESS
-                      }
-                      value={
-                        progressValue
-                      }
-                      onChange={
-                        handleProgressChange
-                      }
-                      className="w-20 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                    />
+                    <div className="flex items-center gap-2">
 
-                    <Button
-                      size="sm"
-                      onClick={
-                        handleUpdateProgress
-                      }
-                      loading={
-                        updateProgressMutation.isPending
-                      }
-                      disabled={
-                        updateProgressMutation.isPending
-                      }
-                    >
-                      Güncelle
-                    </Button>
+                      <input
+                        type="number"
+                        min="0"
+                        max={
+                          MAX_MANUAL_PROGRESS
+                        }
+                        value={
+                          progressValue
+                        }
+                        onChange={
+                          handleProgressChange
+                        }
+                        className="h-9 w-20 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white"
+                      />
+
+                      <Button
+                        size="sm"
+                        onClick={
+                          handleUpdateProgress
+                        }
+                        loading={
+                          updateProgressMutation.isPending
+                        }
+                      >
+                        Güncelle
+                      </Button>
+
+                    </div>
 
                   </div>
 
-                  <p className="text-xs text-gray-500">
-                    %100 ilerleme, görev tamamlanmak üzere
-                    gönderildiğinde otomatik olarak atanır.
+                  <p className="mt-3 text-xs text-gray-400">
+                    %100 değeri görev tamamlanmaya gönderildiğinde otomatik atanır.
                   </p>
 
                 </div>
               )}
 
-            </div>
+              {/* TIME */}
 
-            {/* ==================================================
-                RELATED
-            ================================================== */}
+              {(task.started_at ||
+                task.completed_at ||
+                task.actual_hours !=
+                  null) && (
+                <div className="grid gap-4 border-t border-gray-100 pt-5 dark:border-white/[0.05] sm:grid-cols-3">
 
-            {(task.case ||
-              task.client) && (
-              <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
+                  <div>
 
-                <div className="mb-2 flex items-center gap-2">
+                    <p className="text-xs text-gray-400">
+                      Başlangıç
+                    </p>
 
-                  <Link2 className="h-4 w-4 text-blue-600" />
+                    <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                      {task.started_at
+                        ? formatDateTime(
+                            task.started_at
+                          )
+                        : '-'}
+                    </p>
 
-                  <p className="font-medium text-gray-700 dark:text-gray-300">
-                    İlişkili Kayıtlar
-                  </p>
+                  </div>
+
+                  <div>
+
+                    <p className="text-xs text-gray-400">
+                      Bitiş
+                    </p>
+
+                    <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                      {task.completed_at
+                        ? formatDateTime(
+                            task.completed_at
+                          )
+                        : '-'}
+                    </p>
+
+                  </div>
+
+                  <div>
+
+                    <p className="text-xs text-gray-400">
+                      Gerçek Süre
+                    </p>
+
+                    <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                      {task.actual_hours !=
+                      null
+                        ? `${task.actual_hours} saat`
+                        : 'Otomatik'}
+                    </p>
+
+                  </div>
+
+                </div>
+              )}
+
+            </Card.Body>
+
+          </Card>
+
+          {/* ==================================================
+              RELATED
+          ================================================== */}
+
+          {(task.case ||
+            task.client) && (
+            <Card>
+
+              <Card.Header>
+
+                <div className="flex items-center gap-3">
+
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400">
+
+                    <Link2 size={17} />
+
+                  </div>
+
+                  <div>
+
+                    <h2 className="font-semibold text-gray-900 dark:text-white">
+                      İlişkili Kayıtlar
+                    </h2>
+
+                    <p className="mt-0.5 text-xs text-gray-400">
+                      Görevin bağlı olduğu dava veya müvekkil
+                    </p>
+
+                  </div>
 
                 </div>
 
-                <div className="space-y-2">
+              </Card.Header>
+
+              <Card.Body>
+
+                <div className="grid gap-3 md:grid-cols-2">
 
                   {task.case && (
-                    <div>
-                      <span className="text-sm text-gray-500">
-                        Dava:{' '}
-                      </span>
+                    <Link
+                      to={`/cases/${task.case.id}`}
+                      className="rounded-xl border border-gray-100 p-4 transition hover:border-blue-200 hover:bg-blue-50/40 dark:border-white/[0.05] dark:hover:border-blue-500/20 dark:hover:bg-blue-500/[0.03]"
+                    >
 
-                      <Link
-                        to={`/cases/${task.case.id}`}
-                        className="text-sm font-medium text-blue-600 hover:underline"
-                      >
+                      <p className="text-xs text-gray-400">
+                        Dava
+                      </p>
+
+                      <p className="mt-1 font-medium text-blue-600 dark:text-blue-400">
                         {
                           task.case
                             .title
                         }
-                      </Link>
-                    </div>
+                      </p>
+
+                    </Link>
                   )}
 
                   {task.client && (
-                    <div>
-                      <span className="text-sm text-gray-500">
-                        Müvekkil:{' '}
-                      </span>
+                    <Link
+                      to={`/clients/${task.client.id}`}
+                      className="rounded-xl border border-gray-100 p-4 transition hover:border-blue-200 hover:bg-blue-50/40 dark:border-white/[0.05] dark:hover:border-blue-500/20 dark:hover:bg-blue-500/[0.03]"
+                    >
 
-                      <Link
-                        to={`/clients/${task.client.id}`}
-                        className="text-sm font-medium text-blue-600 hover:underline"
-                      >
+                      <p className="text-xs text-gray-400">
+                        Müvekkil
+                      </p>
+
+                      <p className="mt-1 font-medium text-blue-600 dark:text-blue-400">
                         {
                           task.client
                             .name
                         }
-                      </Link>
-                    </div>
+                      </p>
+
+                    </Link>
                   )}
 
                 </div>
-              </div>
-            )}
 
-          </Card.Body>
-        </Card>
+              </Card.Body>
+
+            </Card>
+          )}
+
+        </div>
 
         {/* ==================================================
             NOTES
         ================================================== */}
 
-        <Card>
+        <div>
 
-          <Card.Header>
-            <div className="flex items-center gap-2">
+          <Card>
 
-              <MessageSquarePlus className="h-4 w-4 text-blue-600" />
+            <Card.Header>
 
-              <h2 className="font-semibold text-gray-900 dark:text-white">
-                Görev Notları
-              </h2>
+              <div className="flex items-center gap-3">
 
-            </div>
-          </Card.Header>
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
 
-          <Card.Body className="space-y-4">
+                  <MessageSquarePlus size={17} />
 
-            {canAddNote && (
-              <div className="space-y-2">
+                </div>
 
-                <textarea
-                  value={
-                    noteContent
-                  }
-                  onChange={(event) =>
-                    setNoteContent(
-                      event.target
-                        .value
-                    )
-                  }
-                  placeholder="Görevle ilgili bir çalışma notu ekleyin..."
-                  rows="3"
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                />
+                <div>
 
-                <Button
-                  size="sm"
-                  onClick={
-                    handleAddNote
-                  }
-                  loading={
-                    addNoteMutation.isPending
-                  }
-                  disabled={
-                    addNoteMutation.isPending
-                  }
-                  className="flex items-center gap-1"
-                >
-                  <MessageSquarePlus className="h-4 w-4" />
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Görev Notları
+                  </h2>
 
-                  Not Ekle
-                </Button>
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    {notes.length} not
+                  </p>
+
+                </div>
 
               </div>
-            )}
 
-            <div className="max-h-[32rem] space-y-3 overflow-y-auto">
+            </Card.Header>
 
-              {notes.length === 0 ? (
-                <div className="py-8 text-center text-sm text-gray-500">
-                  Henüz görev notu bulunmuyor.
+            <Card.Body className="space-y-4">
+
+              {canAddNote && (
+                <div className="space-y-3">
+
+                  <textarea
+                    value={
+                      noteContent
+                    }
+                    onChange={(event) =>
+                      setNoteContent(
+                        event.target
+                          .value
+                      )
+                    }
+                    placeholder="Çalışma notu ekleyin..."
+                    rows="4"
+                    className="
+                      w-full
+                      resize-none
+                      rounded-lg
+                      border
+                      border-gray-200
+                      bg-white
+                      px-3
+                      py-2.5
+                      text-sm
+                      text-gray-900
+                      outline-none
+                      placeholder:text-gray-400
+                      focus:border-blue-500
+                      focus:ring-2
+                      focus:ring-blue-500/10
+                      dark:border-white/[0.08]
+                      dark:bg-white/[0.035]
+                      dark:text-white
+                    "
+                  />
+
+                  <Button
+                    size="sm"
+                    onClick={
+                      handleAddNote
+                    }
+                    loading={
+                      addNoteMutation.isPending
+                    }
+                    className="w-full"
+                  >
+                    <MessageSquarePlus className="mr-2 h-4 w-4" />
+
+                    Not Ekle
+                  </Button>
+
                 </div>
-              ) : (
-                notes.map(
-                  (note) => (
-                    <div
-                      key={
-                        note.id
-                      }
-                      className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"
-                    >
-
-                      <p className="whitespace-pre-wrap text-sm leading-6 text-gray-900 dark:text-white">
-                        {
-                          note.content
-                        }
-                      </p>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-
-                        <span className="font-medium">
-                          {getUserName(
-                            note.creator,
-                            'Sistem'
-                          )}
-                        </span>
-
-                        <span>
-                          •
-                        </span>
-
-                        <span>
-                          {formatDateTime(
-                            note.created_at
-                          )}
-                        </span>
-
-                      </div>
-                    </div>
-                  )
-                )
               )}
 
-            </div>
+              <div className="max-h-[40rem] space-y-3 overflow-y-auto pr-1">
 
-          </Card.Body>
-        </Card>
+                {notes.length ===
+                0 ? (
+                  <div className="py-10 text-center">
+
+                    <MessageSquarePlus className="mx-auto h-8 w-8 text-gray-300" />
+
+                    <p className="mt-3 text-sm text-gray-500">
+                      Henüz görev notu yok
+                    </p>
+
+                  </div>
+                ) : (
+                  notes.map(
+                    (
+                      note
+                    ) => (
+                      <div
+                        key={
+                          note.id
+                        }
+                        className="rounded-xl border border-gray-100 bg-gray-50/60 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]"
+                      >
+
+                        <p className="whitespace-pre-wrap text-sm leading-6 text-gray-700 dark:text-slate-300">
+                          {
+                            note.content
+                          }
+                        </p>
+
+                        <div className="mt-3 border-t border-gray-100 pt-2 text-[11px] text-gray-400 dark:border-white/[0.05]">
+
+                          <p className="font-medium text-gray-500 dark:text-slate-400">
+                            {getUserName(
+                              note.creator,
+                              'Sistem'
+                            )}
+                          </p>
+
+                          <p className="mt-0.5">
+                            {formatDateTime(
+                              note.created_at
+                            )}
+                          </p>
+
+                        </div>
+
+                      </div>
+                    )
+                  )
+                )}
+
+              </div>
+
+            </Card.Body>
+
+          </Card>
+
+        </div>
 
       </div>
 
       {/* ==================================================
-          COMPLETION MODAL
+          COMPLETE MODAL
       ================================================== */}
 
       {showCompleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div
+          className="
+            fixed
+            inset-0
+            z-50
+            flex
+            items-center
+            justify-center
+            bg-black/60
+            p-4
+            backdrop-blur-sm
+          "
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              handleCloseCompleteModal();
+            }
+          }}
+        >
 
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-gray-800">
+          <div
+            className="
+              w-full
+              max-w-lg
+              overflow-hidden
+              rounded-2xl
+              border
+              border-gray-200
+              bg-white
+              shadow-2xl
+              dark:border-white/[0.08]
+              dark:bg-[#0b1b33]
+            "
+          >
 
-            <div className="mb-5">
+            {/* MODAL HEADER */}
 
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Görevi Tamamlanmak Üzere Gönder
-              </h3>
+            <div className="flex items-start justify-between border-b border-gray-100 px-6 py-5 dark:border-white/[0.05]">
 
-              <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
-                Çalışmayı tamamladığınızda görev yönetici
-                onayına gönderilecektir. Yönetici onaylayana
-                kadar görev nihai olarak kapanmış sayılmaz.
-              </p>
+              <div>
+
+                <div className="flex items-center gap-2">
+
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+
+                  <h3 className="font-semibold text-gray-900 dark:text-white">
+                    Görevi Tamamla
+                  </h3>
+
+                </div>
+
+                <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-slate-400">
+                  Görev yönetici onayına gönderilecek. Onay verilene kadar nihai olarak kapanmayacak.
+                </p>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  handleCloseCompleteModal
+                }
+                disabled={
+                  completeMutation.isPending
+                }
+                className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
 
             </div>
 
-            <div className="space-y-4">
+            {/* BODY */}
+
+            <div className="space-y-5 px-6 py-5">
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
                   Tamamlama Notu *
                 </label>
 
@@ -1358,61 +1795,100 @@ const TaskDetail = () => {
                         .value
                     )
                   }
-                  placeholder="Hangi işlemler yapıldı? Sonuç nedir? Kontrol edilmesi gereken bir husus var mı?"
                   rows="5"
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  placeholder="Yapılan işlemleri ve sonucu kısaca açıklayın..."
+                  className="
+                    w-full
+                    resize-y
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    py-2.5
+                    text-sm
+                    leading-6
+                    text-gray-900
+                    outline-none
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-white
+                  "
                 />
+
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Gerçek Süre (Saat)
+
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Gerçek Süre
                 </label>
 
-                <input
-                  type="number"
-                  value={
-                    actualHours
-                  }
-                  onChange={(event) =>
-                    setActualHours(
-                      event.target
-                        .value
-                    )
-                  }
-                  placeholder="Boş bırakırsanız sistem otomatik hesaplar"
-                  min="0"
-                  step="0.25"
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                />
+                <div className="relative">
 
-                <p className="mt-1 text-xs text-gray-500">
-                  Manuel süre girebilir veya boş bırakarak başlangıç
-                  ve bitiş saatlerinden otomatik hesaplatabilirsiniz.
+                  <Timer className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+
+                  <input
+                    type="number"
+                    value={
+                      actualHours
+                    }
+                    onChange={(event) =>
+                      setActualHours(
+                        event.target
+                          .value
+                      )
+                    }
+                    min="0"
+                    step="0.25"
+                    placeholder="Saat"
+                    className="
+                      h-10
+                      w-full
+                      rounded-lg
+                      border
+                      border-gray-200
+                      bg-white
+                      pl-9
+                      pr-3
+                      text-sm
+                      text-gray-900
+                      outline-none
+                      focus:border-blue-500
+                      focus:ring-2
+                      focus:ring-blue-500/10
+                      dark:border-white/[0.08]
+                      dark:bg-white/[0.035]
+                      dark:text-white
+                    "
+                  />
+
+                </div>
+
+                <p className="mt-1.5 text-xs text-gray-400">
+                  Boş bırakırsanız başlangıç ve bitiş zamanından otomatik hesaplanır.
                 </p>
+
+              </div>
+
+              <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-500/[0.06] dark:text-amber-200">
+
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+
+                <p>
+                  Bu işlem ilerlemeyi %100 yapar ve görevi yönetici onayına gönderir.
+                </p>
+
               </div>
 
             </div>
 
-            <div className="mt-6 flex gap-3">
+            {/* FOOTER */}
 
-              <Button
-                variant="success"
-                onClick={
-                  handleComplete
-                }
-                loading={
-                  completeMutation.isPending
-                }
-                disabled={
-                  completeMutation.isPending
-                }
-                className="flex-1"
-              >
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-
-                Yönetici Onayına Gönder
-              </Button>
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 px-6 py-4 dark:border-white/[0.05] sm:flex-row sm:justify-end">
 
               <Button
                 variant="secondary"
@@ -1422,14 +1898,28 @@ const TaskDetail = () => {
                 disabled={
                   completeMutation.isPending
                 }
-                className="flex-1"
               >
                 Vazgeç
+              </Button>
+
+              <Button
+                variant="success"
+                onClick={
+                  handleComplete
+                }
+                loading={
+                  completeMutation.isPending
+                }
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+
+                Yönetici Onayına Gönder
               </Button>
 
             </div>
 
           </div>
+
         </div>
       )}
 
