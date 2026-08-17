@@ -1,18 +1,115 @@
 import express from 'express';
-import { casePartyController } from './case-party.controller.js';
-import { authenticate } from '../../middlewares/auth.middleware.js';
 
-const router = express.Router();
+import {
+  casePartyController,
+} from './case-party.controller.js';
 
-// ✅ Tüm route'lar için kimlik doğrulama
-router.use(authenticate);
+import {
+  authenticate,
+  authorize,
+} from '../../middlewares/auth.middleware.js';
 
-// 📌 CaseParty Routes
-router.post('/case/:caseId', casePartyController.create);
-router.get('/case/:caseId', casePartyController.getByCase);
-router.get('/', casePartyController.findAll);
-router.get('/:id', casePartyController.findOne);
-router.put('/:id', casePartyController.update);
-router.delete('/:id', casePartyController.remove);
+import {
+  ROLES,
+} from '../../constants/roles.js';
 
-export { router as casePartyRoutes };
+const router =
+  express.Router();
+
+// ======================================================
+// AUTH
+// ======================================================
+
+router.use(
+  authenticate
+);
+
+// ======================================================
+// CREATE
+// ======================================================
+
+router.post(
+  '/case/:caseId',
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.SECRETARY
+  ),
+  casePartyController.create
+);
+
+// ======================================================
+// CASE PARTIES
+// ======================================================
+
+router.get(
+  '/case/:caseId',
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.INTERN,
+    ROLES.SECRETARY
+  ),
+  casePartyController.getByCase
+);
+
+// ======================================================
+// LIST
+// ======================================================
+
+router.get(
+  '/',
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.INTERN,
+    ROLES.SECRETARY
+  ),
+  casePartyController.findAll
+);
+
+// ======================================================
+// DETAIL
+// ======================================================
+
+router.get(
+  '/:id',
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.INTERN,
+    ROLES.SECRETARY
+  ),
+  casePartyController.findOne
+);
+
+// ======================================================
+// UPDATE
+// ======================================================
+
+router.patch(
+  '/:id',
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER,
+    ROLES.SECRETARY
+  ),
+  casePartyController.update
+);
+
+// ======================================================
+// DELETE
+// ======================================================
+
+router.delete(
+  '/:id',
+  authorize(
+    ROLES.ADMIN,
+    ROLES.LAWYER
+  ),
+  casePartyController.remove
+);
+
+export {
+  router as casePartyRoutes,
+};

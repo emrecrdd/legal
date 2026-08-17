@@ -1,227 +1,733 @@
-import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useMemo,
+  useState,
+} from 'react';
+
+import {
+  Link,
+  useParams,
+} from 'react-router-dom';
+
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+
 import casePartyApi from '../../features/case-parties/case-party.api.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
+
+import {
+  ArrowLeft,
+  Building2,
+  Edit2,
+  Mail,
+  Phone,
+  Plus,
+  Trash2,
+  UserRound,
+  Users,
+} from 'lucide-react';
+
 import toast from 'react-hot-toast';
 
-const CasePartyList = () => {
-  const { caseId } = useParams();
-  const queryClient = useQueryClient();
-  const [filter, setFilter] = useState('all');
+// ======================================================
+// CONSTANTS
+// ======================================================
 
-  // ✅ CaseParty API'den veri çek
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['case-parties', caseId],
-    queryFn: () => casePartyApi.getByCase(caseId),
-    enabled: !!caseId,
-  });
+const PARTY_TYPES = [
+  {
+    value: 'davaci',
+    label: 'Davacı',
+    variant: 'success',
+  },
+  {
+    value: 'davali',
+    label: 'Davalı',
+    variant: 'danger',
+  },
+  {
+    value: 'supheli',
+    label: 'Şüpheli',
+    variant: 'warning',
+  },
+  {
+    value: 'sanik',
+    label: 'Sanık',
+    variant: 'danger',
+  },
+  {
+    value: 'musteki',
+    label: 'Müşteki',
+    variant: 'info',
+  },
+  {
+    value: 'katilan',
+    label: 'Katılan',
+    variant: 'info',
+  },
+  {
+    value: 'magdur',
+    label: 'Mağdur',
+    variant: 'warning',
+  },
+  {
+    value: 'maktul',
+    label: 'Maktul',
+    variant: 'default',
+  },
+  {
+    value: 'alacakli',
+    label: 'Alacaklı',
+    variant: 'success',
+  },
+  {
+    value: 'borclu',
+    label: 'Borçlu',
+    variant: 'warning',
+  },
+  {
+    value: 'ucuncu_kisi',
+    label: 'Üçüncü Kişi',
+    variant: 'default',
+  },
+];
 
-  // ✅ Veriyi doğru al
-  const parties = data?.data?.data || data?.data || [];
+// ======================================================
+// HELPERS
+// ======================================================
 
-  // ✅ Silme işlemi
-  const deleteMutation = useMutation({
-    mutationFn: (id) => casePartyApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['case-parties', caseId] });
-      queryClient.invalidateQueries({ queryKey: ['case', caseId] });
-      toast.success('Taraf silindi');
-    },
-    onError: (error) => {
-      toast.error(error.response?.data?.message || 'Silme başarısız');
-    },
-  });
+const getPartyType = (
+  type
+) => {
+  return (
+    PARTY_TYPES.find(
+      (
+        item
+      ) =>
+        item.value ===
+        type
+    ) || {
+      value:
+        type,
 
-  const handleDelete = (id, name) => {
-    if (window.confirm(`"${name}" adlı tarafı silmek istediğinize emin misiniz?`)) {
-      deleteMutation.mutate(id);
+      label:
+        type ||
+        'Bilinmiyor',
+
+      variant:
+        'default',
     }
+  );
+};
+
+// ======================================================
+// COMPONENT
+// ======================================================
+
+const CasePartyList = () => {
+  const {
+    caseId,
+  } =
+    useParams();
+
+  const queryClient =
+    useQueryClient();
+
+  const [
+    filter,
+    setFilter,
+  ] =
+    useState(
+      'all'
+    );
+
+  // ======================================================
+  // QUERY
+  // ======================================================
+
+  const {
+    data,
+    isLoading,
+    error,
+  } =
+    useQuery({
+      queryKey: [
+        'case-parties',
+        caseId,
+      ],
+
+      queryFn: () =>
+        casePartyApi.getByCase(
+          caseId
+        ),
+
+      enabled:
+        Boolean(
+          caseId
+        ),
+
+      staleTime:
+        2 * 60 * 1000,
+    });
+
+  const parties =
+    Array.isArray(
+      data?.data?.data
+    )
+      ? data.data.data
+      : Array.isArray(
+          data?.data
+        )
+        ? data.data
+        : [];
+
+  // ======================================================
+  // COUNTS
+  // ======================================================
+
+  const counts =
+    useMemo(() => {
+      const result = {
+        all:
+          parties.length,
+      };
+
+      PARTY_TYPES.forEach(
+        (
+          type
+        ) => {
+          result[
+            type.value
+          ] =
+            parties.filter(
+              (
+                party
+              ) =>
+                party.party_type ===
+                type.value
+            ).length;
+        }
+      );
+
+      return result;
+    }, [
+      parties,
+    ]);
+
+  const availableFilters =
+    useMemo(() => {
+      return PARTY_TYPES.filter(
+        (
+          type
+        ) =>
+          counts[
+            type.value
+          ] >
+          0
+      );
+    }, [
+      counts,
+    ]);
+
+  const filteredParties =
+    useMemo(() => {
+      if (
+        filter ===
+        'all'
+      ) {
+        return parties;
+      }
+
+      return parties.filter(
+        (
+          party
+        ) =>
+          party.party_type ===
+          filter
+      );
+    }, [
+      parties,
+      filter,
+    ]);
+
+  // ======================================================
+  // DELETE
+  // ======================================================
+
+  const deleteMutation =
+    useMutation({
+      mutationFn: (
+        id
+      ) =>
+        casePartyApi.remove(
+          id
+        ),
+
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: [
+            'case-parties',
+            caseId,
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'case',
+            caseId,
+          ],
+        });
+
+        toast.success(
+          'Taraf silindi'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        toast.error(
+          error
+            ?.response
+            ?.data
+            ?.message ||
+          error?.message ||
+          'Taraf silinemedi'
+        );
+      },
+    });
+
+  const handleDelete = (
+    id,
+    name
+  ) => {
+    if (
+      deleteMutation.isPending
+    ) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `"${name}" taraf kaydını silmek istediğinize emin misiniz?`
+      );
+
+    if (
+      !confirmed
+    ) {
+      return;
+    }
+
+    deleteMutation.mutate(
+      id
+    );
   };
 
-  // ✅ Filtreleme
-  const filteredParties = filter === 'all' 
-    ? parties 
-    : parties.filter(p => p.party_type === filter);
+  // ======================================================
+  // LOADING
+  // ======================================================
 
-  const getPartyTypeLabel = (type) => {
-    const types = {
-      plaintiff: 'Davacı',
-      defendant: 'Davalı',
-      intervener: 'Müdahil',
-      witness: 'Tanık',
-      expert: 'Bilirkişi',
-    };
-    return types[type] || type;
-  };
-
-  const getPartyTypeVariant = (type) => {
-    const variants = {
-      plaintiff: 'success',
-      defendant: 'danger',
-      intervener: 'warning',
-      witness: 'info',
-      expert: 'secondary',
-    };
-    return variants[type] || 'default';
-  };
-
-  if (isLoading) {
+  if (
+    isLoading
+  ) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex min-h-[20rem] flex-col items-center justify-center gap-3">
+
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+
+        <p className="text-sm text-gray-500">
+          Taraflar yükleniyor...
+        </p>
+
       </div>
     );
   }
 
-  if (error) {
+  // ======================================================
+  // ERROR
+  // ======================================================
+
+  if (
+    error
+  ) {
     return (
-      <div className="text-center py-12">
-        <p className="text-red-600">Taraflar yüklenirken bir hata oluştu</p>
-        <Link to={`/cases/${caseId}`} className="text-blue-600 hover:underline">
-          ← Dava Detayına Dön
+      <div className="py-16 text-center">
+
+        <Users className="mx-auto h-12 w-12 text-gray-300" />
+
+        <h2 className="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
+          Taraflar yüklenemedi
+        </h2>
+
+        <p className="mt-2 text-sm text-gray-500">
+          {error
+            ?.response
+            ?.data
+            ?.message ||
+            'Bir hata oluştu.'}
+        </p>
+
+        <Link
+          to={`/cases/${caseId}`}
+          className="mt-5 inline-block"
+        >
+          <Button variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+
+            Davaya Dön
+          </Button>
         </Link>
+
       </div>
     );
   }
+
+  // ======================================================
+  // RENDER
+  // ======================================================
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-6xl space-y-6">
+
+      {/* HEADER */}
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+
         <div>
-          <Link to={`/cases/${caseId}`} className="text-blue-600 hover:underline">
-            ← Dava Detayı
+
+          <Link
+            to={`/cases/${caseId}`}
+            className="inline-flex items-center gap-1 text-sm text-gray-500 transition-colors hover:text-blue-600"
+          >
+            <ArrowLeft className="h-4 w-4" />
+
+            Davaya Dön
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-            👥 Davanın Tarafları
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Toplam {parties.length} taraf
-          </p>
+
+          <div className="mt-4 flex items-start gap-3">
+
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/20">
+
+              <Users className="h-6 w-6 text-blue-600" />
+
+            </div>
+
+            <div>
+
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Davanın Tarafları
+              </h1>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Dosyada yer alan kişi ve kurumların taraf sıfatlarını ve vekil bilgilerini yönetin.
+              </p>
+
+              <p className="mt-2 text-xs text-gray-400">
+                {parties.length} taraf kayıtlı
+              </p>
+
+            </div>
+
+          </div>
+
         </div>
-        <Link to={`/cases/${caseId}/parties/create`}>
-          <Button>+ Yeni Taraf Ekle</Button>
+
+        <Link
+          to={`/cases/${caseId}/parties/create`}
+        >
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+
+            Yeni Taraf
+          </Button>
         </Link>
+
       </div>
 
-      {/* Filtreler */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => setFilter('all')}
-          className={`px-3 py-1 rounded-full text-sm ${
-            filter === 'all'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-          }`}
-        >
-          Tümü ({parties.length})
-        </button>
-        <button
-          onClick={() => setFilter('plaintiff')}
-          className={`px-3 py-1 rounded-full text-sm ${
-            filter === 'plaintiff'
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-          }`}
-        >
-          Davacılar ({parties.filter(p => p.party_type === 'plaintiff').length})
-        </button>
-        <button
-          onClick={() => setFilter('defendant')}
-          className={`px-3 py-1 rounded-full text-sm ${
-            filter === 'defendant'
-              ? 'bg-red-600 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-          }`}
-        >
-          Davalılar ({parties.filter(p => p.party_type === 'defendant').length})
-        </button>
-        <button
-          onClick={() => setFilter('intervener')}
-          className={`px-3 py-1 rounded-full text-sm ${
-            filter === 'intervener'
-              ? 'bg-yellow-600 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-          }`}
-        >
-          Müdahiller ({parties.filter(p => p.party_type === 'intervener').length})
-        </button>
-        <button
-          onClick={() => setFilter('witness')}
-          className={`px-3 py-1 rounded-full text-sm ${
-            filter === 'witness'
-              ? 'bg-purple-600 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-          }`}
-        >
-          Tanıklar ({parties.filter(p => p.party_type === 'witness').length})
-        </button>
-      </div>
+      {/* FILTERS */}
 
-      {/* Liste */}
-      {filteredParties.length === 0 ? (
-        <Card>
-          <Card.Body className="text-center py-12 text-gray-500">
-            {filter === 'all' 
-              ? 'Henüz taraf eklenmemiş' 
-              : 'Bu türde taraf bulunamadı'}
-          </Card.Body>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredParties.map((party) => (
-            <Card key={party.id}>
-              <Card.Body>
-                <div className="flex items-start justify-between">
-                  <Link 
-                    to={`/cases/${caseId}/parties/${party.id}`}
-                    className="flex-1 hover:underline"
-                  >
-                    <h3 className="font-semibold text-gray-900 dark:text-white">
-                      {party.name}
-                    </h3>
-                    <Badge variant={getPartyTypeVariant(party.party_type)}>
-                      {getPartyTypeLabel(party.party_type)}
-                    </Badge>
-                  </Link>
-                  <div className="flex gap-1">
-                    <Link
-                      to={`/cases/${caseId}/parties/${party.id}/edit`}
-                      className="p-1 text-gray-500 hover:text-blue-600 rounded"
-                    >
-                      ✏️
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(party.id, party.name)}
-                      className="p-1 text-gray-500 hover:text-red-600 rounded"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-3 space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                  {party.tc_number && (
-                    <p>TC: {party.tc_number}</p>
-                  )}
-                  {party.phone && (
-                    <p>📞 {party.phone}</p>
-                  )}
-                  {party.email && (
-                    <p>📧 {party.email}</p>
-                  )}
-                  {party.lawyer_name && (
-                    <p className="text-xs text-gray-500">
-                      Av. {party.lawyer_name}
-                    </p>
-                  )}
-                </div>
-              </Card.Body>
-            </Card>
-          ))}
+      {parties.length >
+        0 && (
+        <div className="flex flex-wrap gap-2">
+
+          <button
+            type="button"
+            onClick={() =>
+              setFilter(
+                'all'
+              )
+            }
+            className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              filter ===
+              'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+            }`}
+          >
+            Tümü ({counts.all})
+          </button>
+
+          {availableFilters.map(
+            (
+              type
+            ) => (
+              <button
+                key={
+                  type.value
+                }
+                type="button"
+                onClick={() =>
+                  setFilter(
+                    type.value
+                  )
+                }
+                className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+                  filter ===
+                  type.value
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+                }`}
+              >
+                {type.label}{' '}
+                ({counts[type.value]})
+              </button>
+            )
+          )}
+
         </div>
       )}
+
+      {/* EMPTY */}
+
+      {filteredParties.length ===
+      0 ? (
+        <Card>
+
+          <Card.Body className="py-14 text-center">
+
+            <Users className="mx-auto h-10 w-10 text-gray-300" />
+
+            <h3 className="mt-3 font-semibold text-gray-900 dark:text-white">
+              {filter ===
+              'all'
+                ? 'Henüz taraf eklenmemiş'
+                : 'Bu türde taraf bulunmuyor'}
+            </h3>
+
+            {filter ===
+              'all' && (
+              <Link
+                to={`/cases/${caseId}/parties/create`}
+                className="mt-4 inline-block"
+              >
+                <Button variant="outline">
+                  <Plus className="mr-2 h-4 w-4" />
+
+                  İlk Tarafı Ekle
+                </Button>
+              </Link>
+            )}
+
+          </Card.Body>
+
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+
+          {filteredParties.map(
+            (
+              party
+            ) => {
+              const type =
+                getPartyType(
+                  party.party_type
+                );
+
+              const isCompany =
+                party.entity_type ===
+                'company';
+
+              const identityNumber =
+                party.identification_number ||
+                party.tc_number ||
+                null;
+
+              return (
+                <Card
+                  key={
+                    party.id
+                  }
+                  className="transition-shadow hover:shadow-md"
+                >
+
+                  <Card.Body>
+
+                    <div className="flex items-start justify-between gap-4">
+
+                      <Link
+                        to={`/cases/${caseId}/parties/${party.id}`}
+                        className="min-w-0 flex-1"
+                      >
+
+                        <div className="flex items-start gap-3">
+
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
+
+                            {isCompany ? (
+                              <Building2 className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                            ) : (
+                              <UserRound className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                            )}
+
+                          </div>
+
+                          <div className="min-w-0">
+
+                            <h3 className="truncate font-semibold text-gray-900 dark:text-white">
+                              {party.name}
+                            </h3>
+
+                            <div className="mt-2 flex flex-wrap gap-2">
+
+                              <Badge
+                                variant={
+                                  type.variant
+                                }
+                              >
+                                {type.label}
+                              </Badge>
+
+                              <Badge variant="default">
+                                {isCompany
+                                  ? 'Tüzel Kişi'
+                                  : 'Gerçek Kişi'}
+                              </Badge>
+
+                            </div>
+
+                          </div>
+
+                        </div>
+
+                      </Link>
+
+                      <div className="flex shrink-0 gap-1">
+
+                        <Link
+                          to={`/cases/${caseId}/parties/${party.id}/edit`}
+                          className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20"
+                          aria-label="Tarafı düzenle"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Link>
+
+                        <button
+                          type="button"
+                          disabled={
+                            deleteMutation.isPending
+                          }
+                          onClick={() =>
+                            handleDelete(
+                              party.id,
+                              party.name
+                            )
+                          }
+                          className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/20"
+                          aria-label="Tarafı sil"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                    {/* INFO */}
+
+                    <div className="mt-5 space-y-2 border-t border-gray-100 pt-4 text-sm dark:border-gray-700">
+
+                      {identityNumber && (
+                        <div className="flex items-center justify-between gap-3">
+
+                          <span className="text-gray-400">
+                            {isCompany
+                              ? 'VKN'
+                              : 'TCKN'}
+                          </span>
+
+                          <span className="font-medium text-gray-700 dark:text-gray-300">
+                            {identityNumber}
+                          </span>
+
+                        </div>
+                      )}
+
+                      {party.phone && (
+                        <div className="flex items-center gap-2">
+
+                          <Phone className="h-4 w-4 text-gray-400" />
+
+                          <a
+                            href={`tel:${party.phone}`}
+                            className="text-gray-700 hover:text-blue-600 dark:text-gray-300"
+                          >
+                            {party.phone}
+                          </a>
+
+                        </div>
+                      )}
+
+                      {party.email && (
+                        <div className="flex items-center gap-2">
+
+                          <Mail className="h-4 w-4 text-gray-400" />
+
+                          <a
+                            href={`mailto:${party.email}`}
+                            className="truncate text-gray-700 hover:text-blue-600 dark:text-gray-300"
+                          >
+                            {party.email}
+                          </a>
+
+                        </div>
+                      )}
+
+                      {party.lawyer_name && (
+                        <div className="mt-3 rounded-lg bg-purple-50 p-3 dark:bg-purple-900/10">
+
+                          <p className="text-xs uppercase tracking-wide text-purple-500">
+                            Vekil
+                          </p>
+
+                          <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                            {party.lawyer_name}
+                          </p>
+
+                          {party.lawyer_registry_number && (
+                            <p className="mt-1 text-xs text-gray-500">
+                              Sicil: {party.lawyer_registry_number}
+                            </p>
+                          )}
+
+                        </div>
+                      )}
+
+                    </div>
+
+                  </Card.Body>
+
+                </Card>
+              );
+            }
+          )}
+
+        </div>
+      )}
+
     </div>
   );
 };

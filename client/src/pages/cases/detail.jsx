@@ -18,13 +18,19 @@ import {
   Activity,
   AlertTriangle,
   Brain,
+  Building2,
   CalendarDays,
   CheckCircle2,
   Edit2,
   ListTodo,
+  Mail,
+  Phone,
+  Plus,
   RefreshCw,
   ShieldAlert,
   Sparkles,
+  UserRound,
+  Users,
 } from 'lucide-react';
 
 import toast from 'react-hot-toast';
@@ -96,6 +102,86 @@ const PARTY_LABELS = {
   defendant: 'Davalı',
   intervener: 'Müdahil',
   witness: 'Tanık',
+};
+
+const PARTY_VARIANTS = {
+  davaci: 'success',
+  davali: 'danger',
+  supheli: 'warning',
+  sanik: 'danger',
+  musteki: 'info',
+  katilan: 'info',
+  magdur: 'warning',
+  maktul: 'default',
+  alacakli: 'success',
+  borclu: 'warning',
+  ucuncu_kisi: 'default',
+
+  // Eski kayıtlarla uyumluluk
+  plaintiff: 'success',
+  defendant: 'danger',
+  intervener: 'warning',
+  witness: 'info',
+};
+
+const normalizePartyRole = (role) => {
+  const normalizedRole = String(role || '')
+    .trim()
+    .toLocaleLowerCase('tr-TR');
+
+  const roleMap = {
+    'davacı': 'davaci',
+    davaci: 'davaci',
+    'davalı': 'davali',
+    davali: 'davali',
+    'şüpheli': 'supheli',
+    supheli: 'supheli',
+    'sanık': 'sanik',
+    sanik: 'sanik',
+    'müşteki': 'musteki',
+    musteki: 'musteki',
+    'şikayetçi': 'musteki',
+    sikayetci: 'musteki',
+    'katılan': 'katilan',
+    katilan: 'katilan',
+    'mağdur': 'magdur',
+    magdur: 'magdur',
+    maktul: 'maktul',
+    'alacaklı': 'alacakli',
+    alacakli: 'alacakli',
+    'borçlu': 'borclu',
+    borclu: 'borclu',
+    'üçüncü kişi': 'ucuncu_kisi',
+    'ucuncu kisi': 'ucuncu_kisi',
+    ucuncu_kisi: 'ucuncu_kisi',
+
+    // CaseParty modelinde ayrı tanık enum'u olmadığı için
+    // AI tarafından tanık olarak bulunan kişi üçüncü kişi olarak kaydedilir.
+    'tanık': 'ucuncu_kisi',
+    tanik: 'ucuncu_kisi',
+  };
+
+  return roleMap[normalizedRole] || 'ucuncu_kisi';
+};
+
+const normalizeAIEntityType = (entityType) => {
+  const normalized = String(entityType || '')
+    .trim()
+    .toLocaleLowerCase('tr-TR');
+
+  if (
+    normalized.includes('şirket') ||
+    normalized.includes('sirket') ||
+    normalized.includes('kurum') ||
+    normalized.includes('tüzel') ||
+    normalized.includes('tuzel') ||
+    normalized.includes('company') ||
+    normalized.includes('organization')
+  ) {
+    return 'company';
+  }
+
+  return 'person';
 };
 
 const PRIORITY_LABELS = {
@@ -1206,31 +1292,32 @@ const addMissingPartiesMutation =
 
       for (const party of parties) {
         const payload = {
-          name: party.name,
+          name: String(
+            party.name || ''
+          ).trim(),
 
-          party_type: (() => {
-            const roleMap = {
-  sanık: 'sanik',
-  şüpheli: 'supheli',
-  müşteki: 'musteki',
-  şikayetçi: 'musteki',
-  katılan: 'katilan',
-  davacı: 'davaci',
-  davalı: 'davali',
-  mağdur: 'magdur',
-  magdur: 'magdur',
-  maktul: 'maktul',
-  tanık: 'ucuncu_kisi',
-};
+          party_type:
+            normalizePartyRole(
+              party.role
+            ),
 
-            return roleMap[party.role] || 'other';
-          })(),
+          entity_type:
+            normalizeAIEntityType(
+              party.entityType
+            ),
+
+          identification_number:
+            party.identificationNumber ||
+            party.identification_number ||
+            null,
 
           lawyer_name:
-            party.representative || null,
+            party.representative ||
+            null,
 
           notes:
-            party.description || null,
+            party.description ||
+            null,
         };
 
         const response =
@@ -1246,9 +1333,14 @@ const addMissingPartiesMutation =
     },
 
     onSuccess: async (_, parties) => {
-      await queryClient.invalidateQueries({
-        queryKey: ['case', id],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['case', id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['case-parties', id],
+        }),
+      ]);
 
       setSelectedMissingParties([]);
 
@@ -1856,59 +1948,196 @@ const handleApplySelectedCaseUpdates = () => {
 
         {/* TARAFLAR */}
         <Card>
-          <Card.Header className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              👥 Taraflar
-            </h2>
+          <Card.Header>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
 
-            <Link
-              to={`/cases/${caseItem.id}/parties/create`}
-            >
-              <Button size="sm">
-                + Taraf Ekle
-              </Button>
-            </Link>
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Taraflar
+                  </h2>
+                </div>
+
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Dosyadaki taraf sıfatları, kişi türleri ve vekil bilgileri.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {caseItem.parties?.length > 0 && (
+                  <Link
+                    to={`/cases/${caseItem.id}/parties`}
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                    >
+                      Tüm Tarafları Gör
+                    </Button>
+                  </Link>
+                )}
+
+                <Link
+                  to={`/cases/${caseItem.id}/parties/create`}
+                >
+                  <Button size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Taraf Ekle
+                  </Button>
+                </Link>
+              </div>
+            </div>
           </Card.Header>
 
           <Card.Body>
             {!caseItem.parties ||
             caseItem.parties.length ===
               0 ? (
-              <p className="text-gray-500">
-                Henüz taraf eklenmemiş
-              </p>
+              <div className="rounded-xl border border-dashed border-gray-200 px-4 py-8 text-center dark:border-gray-700">
+                <Users className="mx-auto h-9 w-9 text-gray-300 dark:text-gray-600" />
+
+                <p className="mt-3 font-medium text-gray-900 dark:text-white">
+                  Henüz taraf eklenmemiş
+                </p>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Davacı, davalı, sanık, müşteki veya diğer tarafları dosyaya ekleyin.
+                </p>
+
+                <Link
+                  to={`/cases/${caseItem.id}/parties/create`}
+                  className="mt-4 inline-block"
+                >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    İlk Tarafı Ekle
+                  </Button>
+                </Link>
+              </div>
             ) : (
               <div className="space-y-3">
                 {caseItem.parties.map(
-                  (party) => (
-                    <div
-                      key={party.id}
-                      className="flex items-center justify-between rounded-lg bg-gray-50 p-3 dark:bg-gray-700"
-                    >
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          {party.name}
-                        </p>
+                  (party) => {
+                    const isCompany =
+                      party.entity_type ===
+                      'company';
 
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {PARTY_LABELS[
-                            party.party_type
-                          ] ||
-                            party.party_type ||
-                            'Taraf'}
-                        </p>
-                      </div>
+                    const identificationNumber =
+                      party.identification_number ||
+                      party.tc_number ||
+                      null;
 
-                      {party.lawyer_name && (
-                        <span className="text-sm text-gray-500">
-                          Av.{' '}
-                          {
-                            party.lawyer_name
-                          }
-                        </span>
-                      )}
-                    </div>
-                  )
+                    return (
+                      <Link
+                        key={party.id}
+                        to={`/cases/${caseItem.id}/parties/${party.id}`}
+                        className="block rounded-xl border border-gray-200 p-4 transition hover:border-blue-300 hover:bg-blue-50/40 dark:border-gray-700 dark:hover:border-blue-700 dark:hover:bg-blue-900/10"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex min-w-0 items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
+                              {isCompany ? (
+                                <Building2 className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                              ) : (
+                                <UserRound className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-gray-900 dark:text-white">
+                                {party.name}
+                              </p>
+
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <Badge
+                                  variant={
+                                    PARTY_VARIANTS[
+                                      party.party_type
+                                    ] ||
+                                    'default'
+                                  }
+                                >
+                                  {PARTY_LABELS[
+                                    party.party_type
+                                  ] ||
+                                    party.party_type ||
+                                    'Taraf'}
+                                </Badge>
+
+                                <Badge variant="default">
+                                  {isCompany
+                                    ? 'Tüzel Kişi'
+                                    : 'Gerçek Kişi'}
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+
+                          {party.lawyer_name && (
+                            <div className="hidden shrink-0 text-right sm:block">
+                              <p className="text-xs uppercase tracking-wide text-gray-400">
+                                Vekil
+                              </p>
+
+                              <p className="mt-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+                                {party.lawyer_name}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {(identificationNumber ||
+                          party.phone ||
+                          party.email ||
+                          party.lawyer_name) && (
+                          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-gray-700">
+                            {identificationNumber && (
+                              <span>
+                                {isCompany
+                                  ? 'VKN'
+                                  : 'TCKN'}
+                                :{' '}
+                                <span className="font-medium text-gray-700 dark:text-gray-300">
+                                  {identificationNumber}
+                                </span>
+                              </span>
+                            )}
+
+                            {party.phone && (
+                              <span className="inline-flex items-center gap-1">
+                                <Phone className="h-3.5 w-3.5" />
+                                {party.phone}
+                              </span>
+                            )}
+
+                            {party.email && (
+                              <span className="inline-flex min-w-0 items-center gap-1">
+                                <Mail className="h-3.5 w-3.5" />
+                                <span className="truncate">
+                                  {party.email}
+                                </span>
+                              </span>
+                            )}
+
+                            {party.lawyer_name && (
+                              <span className="sm:hidden">
+                                Vekil:{' '}
+                                <span className="font-medium text-gray-700 dark:text-gray-300">
+                                  {party.lawyer_name}
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </Link>
+                    );
+                  }
                 )}
               </div>
             )}

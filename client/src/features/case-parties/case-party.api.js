@@ -1,29 +1,48 @@
 import axios from '../../app/config/axios.js';
 
 const casePartyApi = {
-  // ✅ Bir davaya ait tarafları getir
-  getByCase: (caseId) => {
-    return axios.get(`/case-parties/case/${caseId}`);
+  getByCase: (
+    caseId
+  ) => {
+    return axios.get(
+      `/case-parties/case/${caseId}`
+    );
   },
 
-  // ✅ Taraf oluştur
-  create: (caseId, data) => {
-    return axios.post(`/case-parties/case/${caseId}`, data);
+  create: (
+    caseId,
+    data
+  ) => {
+    return axios.post(
+      `/case-parties/case/${caseId}`,
+      data
+    );
   },
 
-  // ✅ Tek bir taraf getir
-  getOne: (id) => {
-    return axios.get(`/case-parties/${id}`);
+  getOne: (
+    id
+  ) => {
+    return axios.get(
+      `/case-parties/${id}`
+    );
   },
 
-  // ✅ Taraf güncelle
-  update: (id, data) => {
-    return axios.put(`/case-parties/${id}`, data);
+  update: (
+    id,
+    data
+  ) => {
+    return axios.patch(
+      `/case-parties/${id}`,
+      data
+    );
   },
 
-  // ✅ Taraf sil
-  delete: (id) => {
-    return axios.delete(`/case-parties/${id}`);
+  remove: (
+    id
+  ) => {
+    return axios.delete(
+      `/case-parties/${id}`
+    );
   },
 };
 
