@@ -17,16 +17,24 @@ import Button from '../../components/ui/Button.jsx';
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   Brain,
+  BriefcaseBusiness,
   Building2,
   CalendarDays,
   CheckCircle2,
+  Clock3,
+  Download,
   Edit2,
+  FileText,
+  FolderOpen,
+  Gavel,
   ListTodo,
   Mail,
   Phone,
   Plus,
   RefreshCw,
+  Scale,
   ShieldAlert,
   Sparkles,
   UserRound,
@@ -1652,409 +1660,973 @@ const handleApplySelectedCaseUpdates = () => {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* HEADER */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Link
-            to="/cases"
-            className="text-blue-600 hover:underline"
-          >
-            ← Davalar
-          </Link>
+    return (
+    <div className="mx-auto max-w-7xl space-y-6">
 
-          <h1 className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
-            {caseItem.title ||
-              caseItem.judiciary_type ||
-              'Dava'}
-          </h1>
+      {/* ==================================================
+          HEADER
+      ================================================== */}
 
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className="text-sm text-gray-500">
-              {caseItem.case_number ||
-                'Esas no yok'}
-            </span>
+      <div>
+        <Link
+          to="/cases"
+          className="
+            inline-flex
+            items-center
+            gap-1.5
+            text-xs
+            font-medium
+            text-gray-500
+            transition
+            hover:text-blue-600
+            dark:text-slate-500
+            dark:hover:text-blue-400
+          "
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Davalar
+        </Link>
 
-            <Badge
-              variant={getStatusVariant(
-                caseItem.status
-              )}
+        <div className="mt-3 flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+
+          {/* LEFT */}
+
+          <div className="flex min-w-0 items-start gap-3">
+
+            <div
+              className="
+                flex
+                h-12
+                w-12
+                shrink-0
+                items-center
+                justify-center
+                rounded-xl
+                bg-blue-50
+                text-blue-600
+                dark:bg-blue-500/[0.08]
+                dark:text-blue-400
+              "
             >
-              {statuses.find(
-                (status) =>
-                  status.value ===
-                  caseItem.status
-              )?.label ||
-                caseItem.status}
-            </Badge>
+              <Gavel size={22} />
+            </div>
 
-            {caseItem.judiciary_type && (
-              <Badge variant="default">
-                {caseItem.judiciary_type}
-              </Badge>
-            )}
+            <div className="min-w-0">
 
-            {caseItem.judiciary_unit && (
-              <Badge variant="default">
-                {caseItem.judiciary_unit}
-              </Badge>
-            )}
+              <h1
+                className="
+                  truncate
+                  text-2xl
+                  font-semibold
+                  tracking-[-0.035em]
+                  text-gray-900
+                  dark:text-white
+                "
+              >
+                {caseItem.title ||
+                  caseItem.judiciary_type ||
+                  'Dava Dosyası'}
+              </h1>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+
+                <Badge
+                  variant={getStatusVariant(
+                    caseItem.status
+                  )}
+                >
+                  {statuses.find(
+                    (status) =>
+                      status.value === caseItem.status
+                  )?.label ||
+                    caseItem.status}
+                </Badge>
+
+                {caseItem.priority && (
+                  <Badge
+                    variant={
+                      caseItem.priority === 'critical'
+                        ? 'danger'
+                        : caseItem.priority === 'high'
+                          ? 'warning'
+                          : caseItem.priority === 'normal'
+                            ? 'primary'
+                            : 'default'
+                    }
+                  >
+                    {PRIORITY_LABELS[
+                      caseItem.priority
+                    ] ||
+                      caseItem.priority}
+                  </Badge>
+                )}
+
+                {caseItem.case_number && (
+                  <span
+                    className="
+                      rounded-full
+                      border
+                      border-gray-200
+                      bg-gray-50
+                      px-2.5
+                      py-1
+                      text-xs
+                      font-medium
+                      text-gray-500
+                      dark:border-white/[0.07]
+                      dark:bg-white/[0.025]
+                      dark:text-slate-400
+                    "
+                  >
+                    {caseItem.case_number}
+                  </span>
+                )}
+
+              </div>
+
+              <p className="mt-3 text-sm text-gray-500 dark:text-slate-400">
+                {[
+                  caseItem.judiciary_type,
+                  caseItem.judiciary_unit,
+                  caseItem.court_name,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || 'Yargı bilgisi belirtilmemiş'}
+              </p>
+
+            </div>
+
           </div>
-        </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={() =>
-              handleAIAnalysis(
-                false
-              )
-            }
-            loading={
-              aiSummaryMutation.isPending
-            }
-            disabled={
-              aiSummaryMutation.isPending
-            }
-          >
-            <Brain className="mr-2 h-4 w-4" />
-            AI Analiz Et
-          </Button>
+          {/* ACTIONS */}
 
+          <div className="flex flex-wrap items-center gap-2">
 
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              handleCaseCompletion(
-                false
-              )
-            }
-            loading={
-              caseCompletionMutation.isPending
-            }
-            disabled={
-              caseCompletionMutation.isPending
-            }
-          >
-            <Sparkles className="mr-2 h-4 w-4" />
-            AI ile Dosyayı Tamamla
-          </Button>
-
-          <Link
-            to={`/cases/${caseItem.id}/edit`}
-          >
             <Button
-              variant="outline"
-              size="sm"
+              type="button"
+              onClick={() =>
+                handleAIAnalysis(false)
+              }
+              loading={
+                aiSummaryMutation.isPending
+              }
+              disabled={
+                aiSummaryMutation.isPending
+              }
             >
-              <Edit2 className="mr-2 h-4 w-4" />
-              Düzenle
+              <Brain className="mr-2 h-4 w-4" />
+              AI Analiz Et
             </Button>
-          </Link>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                handleCaseCompletion(false)
+              }
+              loading={
+                caseCompletionMutation.isPending
+              }
+              disabled={
+                caseCompletionMutation.isPending
+              }
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Dosyayı Tamamla
+            </Button>
+
+            <Link
+              to={`/cases/${caseItem.id}/edit`}
+            >
+              <Button
+                variant="outline"
+              >
+                <Edit2 className="mr-2 h-4 w-4" />
+                Düzenle
+              </Button>
+            </Link>
+
+          </div>
+
         </div>
       </div>
 
-      {/* AI ANALYSIS */}
+      {/* ==================================================
+          QUICK SUMMARY
+      ================================================== */}
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+
+        {/* CLIENT */}
+
+        <div
+          className="
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            p-4
+            shadow-sm
+            dark:border-white/[0.06]
+            dark:bg-gray-800
+          "
+        >
+          <div className="flex items-center justify-between">
+
+            <div
+              className="
+                flex
+                h-9
+                w-9
+                items-center
+                justify-center
+                rounded-lg
+                bg-blue-50
+                text-blue-600
+                dark:bg-blue-500/[0.08]
+                dark:text-blue-400
+              "
+            >
+              <Users size={17} />
+            </div>
+
+            <span className="text-xs text-gray-400">
+              Müvekkil
+            </span>
+
+          </div>
+
+          <p className="mt-3 text-2xl font-semibold text-gray-900 dark:text-white">
+            {caseItem.clients?.length || 0}
+          </p>
+
+          <p className="mt-1 truncate text-xs text-gray-500 dark:text-slate-500">
+            {caseItem.clients?.[0]?.name ||
+              'Müvekkil yok'}
+          </p>
+        </div>
+
+        {/* PARTIES */}
+
+        <div
+          className="
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            p-4
+            shadow-sm
+            dark:border-white/[0.06]
+            dark:bg-gray-800
+          "
+        >
+          <div className="flex items-center justify-between">
+
+            <div
+              className="
+                flex
+                h-9
+                w-9
+                items-center
+                justify-center
+                rounded-lg
+                bg-violet-50
+                text-violet-600
+                dark:bg-violet-500/[0.08]
+                dark:text-violet-400
+              "
+            >
+              <UserRound size={17} />
+            </div>
+
+            <span className="text-xs text-gray-400">
+              Taraf
+            </span>
+
+          </div>
+
+          <p className="mt-3 text-2xl font-semibold text-gray-900 dark:text-white">
+            {caseItem.parties?.length || 0}
+          </p>
+
+          <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+            Dosyaya kayıtlı taraf
+          </p>
+        </div>
+
+        {/* DOCUMENT */}
+
+        <div
+          className="
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            p-4
+            shadow-sm
+            dark:border-white/[0.06]
+            dark:bg-gray-800
+          "
+        >
+          <div className="flex items-center justify-between">
+
+            <div
+              className="
+                flex
+                h-9
+                w-9
+                items-center
+                justify-center
+                rounded-lg
+                bg-emerald-50
+                text-emerald-600
+                dark:bg-emerald-500/[0.08]
+                dark:text-emerald-400
+              "
+            >
+              <FileText size={17} />
+            </div>
+
+            <span className="text-xs text-gray-400">
+              Belge
+            </span>
+
+          </div>
+
+          <p className="mt-3 text-2xl font-semibold text-gray-900 dark:text-white">
+            {caseItem.documents?.length || 0}
+          </p>
+
+          <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+            Dosyaya bağlı belge
+          </p>
+        </div>
+
+        {/* TASK */}
+
+        <div
+          className="
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            p-4
+            shadow-sm
+            dark:border-white/[0.06]
+            dark:bg-gray-800
+          "
+        >
+          <div className="flex items-center justify-between">
+
+            <div
+              className="
+                flex
+                h-9
+                w-9
+                items-center
+                justify-center
+                rounded-lg
+                bg-amber-50
+                text-amber-600
+                dark:bg-amber-500/[0.08]
+                dark:text-amber-400
+              "
+            >
+              <ListTodo size={17} />
+            </div>
+
+            <span className="text-xs text-gray-400">
+              Görev
+            </span>
+
+          </div>
+
+          <p className="mt-3 text-2xl font-semibold text-gray-900 dark:text-white">
+            {caseItem.tasks?.length || 0}
+          </p>
+
+          <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+            Toplam görev kaydı
+          </p>
+        </div>
+
+      </div>
+
+      {/* ==================================================
+          AI
+      ================================================== */}
+
       <CaseAIAnalysis
-  analysis={aiAnalysis}
-  onRefresh={() => handleAIAnalysis(true)}
-  refreshing={aiSummaryMutation.isPending}
-  caseId={caseItem.id}
-/>
+        analysis={aiAnalysis}
+        onRefresh={() =>
+          handleAIAnalysis(true)
+        }
+        refreshing={
+          aiSummaryMutation.isPending
+        }
+        caseId={caseItem.id}
+      />
 
       <CaseCompletionAnalysis
-  analysis={caseCompletion}
-  refreshing={
-    caseCompletionMutation.isPending
-  }
-  onRefresh={() =>
-    handleCaseCompletion(true)
-  }
-  selectedMissingParties={
-    selectedMissingParties
-  }
-  onToggleMissingParty={
-    toggleMissingParty
-  }
-  onAddSelectedMissingParties={
-    handleAddSelectedMissingParties
-  }
-  addingMissingParties={
-    addMissingPartiesMutation.isPending
-  }
-  selectedCaseUpdates={
-    selectedCaseUpdates
-  }
-  onToggleCaseUpdate={
-    toggleCaseUpdate
-  }
-  onApplySelectedCaseUpdates={
-    handleApplySelectedCaseUpdates
-  }
-  applyingCaseUpdates={
-    applyCaseUpdatesMutation.isPending
-  }
-/>
+        analysis={caseCompletion}
+        refreshing={
+          caseCompletionMutation.isPending
+        }
+        onRefresh={() =>
+          handleCaseCompletion(true)
+        }
+        selectedMissingParties={
+          selectedMissingParties
+        }
+        onToggleMissingParty={
+          toggleMissingParty
+        }
+        onAddSelectedMissingParties={
+          handleAddSelectedMissingParties
+        }
+        addingMissingParties={
+          addMissingPartiesMutation.isPending
+        }
+        selectedCaseUpdates={
+          selectedCaseUpdates
+        }
+        onToggleCaseUpdate={
+          toggleCaseUpdate
+        }
+        onApplySelectedCaseUpdates={
+          handleApplySelectedCaseUpdates
+        }
+        applyingCaseUpdates={
+          applyCaseUpdatesMutation.isPending
+        }
+      />
 
-      {/* BİLGİLER + TARAFLAR */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+      {/* ==================================================
+          MAIN INFORMATION
+      ================================================== */}
+
+      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+
+        {/* CASE INFO */}
+
         <Card>
+
           <Card.Header>
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              📋 Bilgiler
-            </h2>
-          </Card.Header>
 
-          <Card.Body className="space-y-3">
-            {caseItem.judiciary_type && (
-              <div>
-                <p className="text-sm text-gray-500">
-                  Yargı Türü
-                </p>
+            <div className="flex items-center gap-3">
 
-                <p className="text-gray-900 dark:text-white">
-                  {caseItem.judiciary_type}
-                </p>
-              </div>
-            )}
-
-            {caseItem.judiciary_unit && (
-              <div>
-                <p className="text-sm text-gray-500">
-                  Yargı Birimi
-                </p>
-
-                <p className="text-gray-900 dark:text-white">
-                  {caseItem.judiciary_unit}
-                </p>
-              </div>
-            )}
-
-            <div>
-              <p className="text-sm text-gray-500">
-                Mahkeme
-              </p>
-
-              <p className="text-gray-900 dark:text-white">
-                {caseItem.court_name ||
-                  '-'}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-500">
-                Dosya No
-              </p>
-
-              <p className="text-gray-900 dark:text-white">
-                {caseItem.case_number ||
-                  '-'}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-500">
-                Açılış Tarihi
-              </p>
-
-              <p className="text-gray-900 dark:text-white">
-                {formatDateUTC(
-                  caseItem.opening_date
-                )}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-500">
-                Müvekkiller
-              </p>
-
-              {caseItem.clients?.length >
-              0 ? (
-                <div className="mt-1 flex flex-wrap gap-2">
-                  {caseItem.clients.map(
-                    (client) => (
-                      <Link
-                        key={
-                          client.id
-                        }
-                        to={`/clients/${client.id}`}
-                        className="text-sm text-blue-600 hover:underline"
-                      >
-                        {client.name}
-                      </Link>
-                    )
-                  )}
-                </div>
-              ) : (
-                <p className="text-gray-900 dark:text-white">
-                  -
-                </p>
-              )}
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-500">
-                Atanan Avukat
-              </p>
-
-              <p className="text-gray-900 dark:text-white">
-                {caseItem.assignee
-                  ? `${caseItem.assignee.first_name || ''} ${
-                      caseItem.assignee.last_name || ''
-                    }`.trim()
-                  : 'Atanmadı'}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-500">
-                Öncelik
-              </p>
-
-              <Badge
-                variant={
-                  caseItem.priority ===
-                  'critical'
-                    ? 'danger'
-                    : caseItem.priority ===
-                        'high'
-                      ? 'warning'
-                      : 'default'
-                }
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-blue-50
+                  text-blue-600
+                  dark:bg-blue-500/[0.08]
+                  dark:text-blue-400
+                "
               >
-                {PRIORITY_LABELS[
-                  caseItem.priority
-                ] ||
-                  caseItem.priority ||
-                  'Normal'}
-              </Badge>
+                <Scale size={17} />
+              </div>
+
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Dava Bilgileri
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Dosyanın temel yargı ve sorumlu bilgileri
+                </p>
+              </div>
+
             </div>
 
-            {caseItem.subject && (
-              <div>
-                <p className="text-sm text-gray-500">
-                  Konu
-                </p>
-
-                <p className="text-gray-900 dark:text-white">
-                  {caseItem.subject}
-                </p>
-              </div>
-            )}
-          </Card.Body>
-        </Card>
-
-        {/* TARAFLAR */}
-        <Card>
-          <Card.Header>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-
-                  <h2 className="font-semibold text-gray-900 dark:text-white">
-                    Taraflar
-                  </h2>
-                </div>
-
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Dosyadaki taraf sıfatları, kişi türleri ve vekil bilgileri.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {caseItem.parties?.length > 0 && (
-                  <Link
-                    to={`/cases/${caseItem.id}/parties`}
-                  >
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                    >
-                      Tüm Tarafları Gör
-                    </Button>
-                  </Link>
-                )}
-
-                <Link
-                  to={`/cases/${caseItem.id}/parties/create`}
-                >
-                  <Button size="sm">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Taraf Ekle
-                  </Button>
-                </Link>
-              </div>
-            </div>
           </Card.Header>
 
           <Card.Body>
-            {!caseItem.parties ||
-            caseItem.parties.length ===
-              0 ? (
-              <div className="rounded-xl border border-dashed border-gray-200 px-4 py-8 text-center dark:border-gray-700">
-                <Users className="mx-auto h-9 w-9 text-gray-300 dark:text-gray-600" />
 
-                <p className="mt-3 font-medium text-gray-900 dark:text-white">
-                  Henüz taraf eklenmemiş
+            <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+
+              {/* JUDICIARY TYPE */}
+
+              <div className="grid grid-cols-[140px_1fr] gap-4 py-3 first:pt-0">
+
+                <span className="text-sm text-gray-500">
+                  Yargı Türü
+                </span>
+
+                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  {caseItem.judiciary_type || '-'}
+                </span>
+
+              </div>
+
+              {/* UNIT */}
+
+              <div className="grid grid-cols-[140px_1fr] gap-4 py-3">
+
+                <span className="text-sm text-gray-500">
+                  Yargı Birimi
+                </span>
+
+                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  {caseItem.judiciary_unit || '-'}
+                </span>
+
+              </div>
+
+              {/* COURT */}
+
+              <div className="grid grid-cols-[140px_1fr] gap-4 py-3">
+
+                <span className="text-sm text-gray-500">
+                  Mahkeme
+                </span>
+
+                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  {caseItem.court_name || '-'}
+                </span>
+
+              </div>
+
+              {/* NUMBER */}
+
+              <div className="grid grid-cols-[140px_1fr] gap-4 py-3">
+
+                <span className="text-sm text-gray-500">
+                  Dosya No
+                </span>
+
+                <span className="font-mono text-sm font-medium text-gray-900 dark:text-white">
+                  {caseItem.case_number || '-'}
+                </span>
+
+              </div>
+
+              {/* OPENING */}
+
+              <div className="grid grid-cols-[140px_1fr] gap-4 py-3">
+
+                <span className="text-sm text-gray-500">
+                  Açılış Tarihi
+                </span>
+
+                <span className="inline-flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+                  <CalendarDays className="h-4 w-4 text-gray-400" />
+
+                  {formatDateUTC(
+                    caseItem.opening_date
+                  )}
+                </span>
+
+              </div>
+
+              {/* ASSIGNEE */}
+
+              <div className="grid grid-cols-[140px_1fr] gap-4 py-3">
+
+                <span className="text-sm text-gray-500">
+                  Atanan Avukat
+                </span>
+
+                <span className="inline-flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+                  <BriefcaseBusiness className="h-4 w-4 text-gray-400" />
+
+                  {caseItem.assignee
+                    ? `${caseItem.assignee.first_name || ''} ${
+                        caseItem.assignee.last_name || ''
+                      }`.trim()
+                    : 'Atanmadı'}
+                </span>
+
+              </div>
+
+              {/* SUBJECT */}
+
+              <div className="grid grid-cols-[140px_1fr] gap-4 py-3 last:pb-0">
+
+                <span className="text-sm text-gray-500">
+                  Konu
+                </span>
+
+                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  {caseItem.subject || '-'}
+                </span>
+
+              </div>
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+        {/* CLIENTS */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-emerald-50
+                  text-emerald-600
+                  dark:bg-emerald-500/[0.08]
+                  dark:text-emerald-400
+                "
+              >
+                <Users size={17} />
+              </div>
+
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Müvekkiller
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Bu dava ile ilişkili müvekkiller
+                </p>
+              </div>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            {!caseItem.clients ||
+            caseItem.clients.length === 0 ? (
+              <div className="py-8 text-center">
+
+                <Users className="mx-auto h-8 w-8 text-gray-300 dark:text-slate-600" />
+
+                <p className="mt-3 text-sm text-gray-500">
+                  Müvekkil kaydı bulunmuyor
                 </p>
 
-                <p className="mt-1 text-sm text-gray-500">
-                  Davacı, davalı, sanık, müşteki veya diğer tarafları dosyaya ekleyin.
+              </div>
+            ) : (
+              <div className="space-y-2">
+
+                {caseItem.clients.map(
+                  (client) => (
+                    <Link
+                      key={client.id}
+                      to={`/clients/${client.id}`}
+                      className="
+                        flex
+                        items-center
+                        justify-between
+                        gap-3
+                        rounded-xl
+                        border
+                        border-gray-100
+                        p-3
+                        transition
+                        hover:border-blue-200
+                        hover:bg-blue-50/30
+                        dark:border-white/[0.05]
+                        dark:hover:border-blue-500/20
+                        dark:hover:bg-blue-500/[0.025]
+                      "
+                    >
+
+                      <div className="flex min-w-0 items-center gap-3">
+
+                        <div
+                          className="
+                            flex
+                            h-9
+                            w-9
+                            shrink-0
+                            items-center
+                            justify-center
+                            rounded-lg
+                            bg-gray-100
+                            text-gray-500
+                            dark:bg-white/[0.04]
+                            dark:text-slate-400
+                          "
+                        >
+                          {client.client_type ===
+                          'corporate' ? (
+                            <Building2 size={16} />
+                          ) : (
+                            <UserRound size={16} />
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+
+                          <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                            {client.name}
+                          </p>
+
+                          <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                            {client.client_type ===
+                            'corporate'
+                              ? 'Kurumsal Müvekkil'
+                              : 'Bireysel Müvekkil'}
+                          </p>
+
+                        </div>
+
+                      </div>
+
+                      <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                        Görüntüle
+                      </span>
+
+                    </Link>
+                  )
+                )}
+
+              </div>
+            )}
+
+          </Card.Body>
+
+        </Card>
+
+      </div>
+
+      {/* ==================================================
+          DESCRIPTION
+      ================================================== */}
+
+      {caseItem.description && (
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-amber-50
+                  text-amber-600
+                  dark:bg-amber-500/[0.08]
+                  dark:text-amber-400
+                "
+              >
+                <FileText size={17} />
+              </div>
+
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Dava Açıklaması
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Dosya hakkında girilmiş açıklamalar
+                </p>
+              </div>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            <p className="whitespace-pre-wrap text-sm leading-7 text-gray-700 dark:text-slate-300">
+              {caseItem.description}
+            </p>
+
+          </Card.Body>
+
+        </Card>
+      )}
+
+      {/* ==================================================
+          PARTIES
+      ================================================== */}
+
+      <Card>
+
+        <Card.Header>
+
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-violet-50
+                  text-violet-600
+                  dark:bg-violet-500/[0.08]
+                  dark:text-violet-400
+                "
+              >
+                <Users size={17} />
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Taraflar
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Davacı, davalı ve diğer dosya tarafları
                 </p>
 
+              </div>
+
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+
+              {caseItem.parties?.length >
+                0 && (
                 <Link
-                  to={`/cases/${caseItem.id}/parties/create`}
-                  className="mt-4 inline-block"
+                  to={`/cases/${caseItem.id}/parties`}
                 >
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                   >
-                    <Plus className="mr-2 h-4 w-4" />
-                    İlk Tarafı Ekle
+                    Tümünü Gör
                   </Button>
                 </Link>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {caseItem.parties.map(
-                  (party) => {
-                    const isCompany =
-                      party.entity_type ===
-                      'company';
+              )}
 
-                    const identificationNumber =
-                      party.identification_number ||
-                      party.tc_number ||
-                      null;
+              <Link
+                to={`/cases/${caseItem.id}/parties/create`}
+              >
+                <Button size="sm">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Taraf Ekle
+                </Button>
+              </Link>
 
-                    return (
-                      <Link
-                        key={party.id}
-                        to={`/cases/${caseItem.id}/parties/${party.id}`}
-                        className="block rounded-xl border border-gray-200 p-4 transition hover:border-blue-300 hover:bg-blue-50/40 dark:border-gray-700 dark:hover:border-blue-700 dark:hover:bg-blue-900/10"
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex min-w-0 items-start gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
-                              {isCompany ? (
-                                <Building2 className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                              ) : (
-                                <UserRound className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                              )}
-                            </div>
+            </div>
+
+          </div>
+
+        </Card.Header>
+
+        <Card.Body>
+
+          {!caseItem.parties ||
+          caseItem.parties.length ===
+            0 ? (
+            <div
+              className="
+                rounded-xl
+                border
+                border-dashed
+                border-gray-200
+                px-4
+                py-10
+                text-center
+                dark:border-white/[0.07]
+              "
+            >
+
+              <Users className="mx-auto h-8 w-8 text-gray-300 dark:text-slate-600" />
+
+              <p className="mt-3 font-medium text-gray-900 dark:text-white">
+                Henüz taraf eklenmemiş
+              </p>
+
+              <p className="mt-1 text-sm text-gray-500 dark:text-slate-500">
+                Dosyanın davacı, davalı veya diğer taraflarını ekleyin.
+              </p>
+
+            </div>
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-2">
+
+              {caseItem.parties.map(
+                (party) => {
+                  const isCompany =
+                    party.entity_type ===
+                    'company';
+
+                  const identificationNumber =
+                    party.identification_number ||
+                    party.tc_number ||
+                    null;
+
+                  return (
+                    <Link
+                      key={party.id}
+                      to={`/cases/${caseItem.id}/parties/${party.id}`}
+                      className="
+                        group
+                        rounded-xl
+                        border
+                        border-gray-100
+                        p-4
+                        transition
+                        hover:border-blue-200
+                        hover:bg-blue-50/30
+                        dark:border-white/[0.05]
+                        dark:hover:border-blue-500/20
+                        dark:hover:bg-blue-500/[0.025]
+                      "
+                    >
+
+                      <div className="flex items-start gap-3">
+
+                        <div
+                          className="
+                            flex
+                            h-10
+                            w-10
+                            shrink-0
+                            items-center
+                            justify-center
+                            rounded-xl
+                            bg-gray-100
+                            text-gray-500
+                            dark:bg-white/[0.04]
+                            dark:text-slate-400
+                          "
+                        >
+                          {isCompany ? (
+                            <Building2 size={17} />
+                          ) : (
+                            <UserRound size={17} />
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+
+                          <div className="flex items-start justify-between gap-3">
 
                             <div className="min-w-0">
-                              <p className="truncate font-semibold text-gray-900 dark:text-white">
+
+                              <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
                                 {party.name}
                               </p>
 
-                              <div className="mt-2 flex flex-wrap gap-2">
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+
                                 <Badge
                                   variant={
                                     PARTY_VARIANTS[
@@ -2075,332 +2647,537 @@ const handleApplySelectedCaseUpdates = () => {
                                     ? 'Tüzel Kişi'
                                     : 'Gerçek Kişi'}
                                 </Badge>
+
                               </div>
+
                             </div>
+
                           </div>
 
-                          {party.lawyer_name && (
-                            <div className="hidden shrink-0 text-right sm:block">
-                              <p className="text-xs uppercase tracking-wide text-gray-400">
-                                Vekil
-                              </p>
+                          <div className="mt-3 space-y-1 text-xs text-gray-500 dark:text-slate-500">
 
-                              <p className="mt-1 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                {party.lawyer_name}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-
-                        {(identificationNumber ||
-                          party.phone ||
-                          party.email ||
-                          party.lawyer_name) && (
-                          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-gray-700">
                             {identificationNumber && (
-                              <span>
+                              <p>
                                 {isCompany
                                   ? 'VKN'
                                   : 'TCKN'}
                                 :{' '}
-                                <span className="font-medium text-gray-700 dark:text-gray-300">
+                                <span className="font-medium text-gray-700 dark:text-slate-300">
                                   {identificationNumber}
                                 </span>
-                              </span>
+                              </p>
                             )}
 
                             {party.phone && (
-                              <span className="inline-flex items-center gap-1">
+                              <p className="flex items-center gap-1.5">
                                 <Phone className="h-3.5 w-3.5" />
                                 {party.phone}
-                              </span>
+                              </p>
                             )}
 
                             {party.email && (
-                              <span className="inline-flex min-w-0 items-center gap-1">
+                              <p className="flex min-w-0 items-center gap-1.5">
                                 <Mail className="h-3.5 w-3.5" />
+
                                 <span className="truncate">
                                   {party.email}
                                 </span>
-                              </span>
+                              </p>
                             )}
 
                             {party.lawyer_name && (
-                              <span className="sm:hidden">
-                                Vekil:{' '}
-                                <span className="font-medium text-gray-700 dark:text-gray-300">
-                                  {party.lawyer_name}
-                                </span>
-                              </span>
+                              <p className="pt-1 font-medium text-gray-700 dark:text-slate-300">
+                                Vekil: {party.lawyer_name}
+                              </p>
                             )}
-                          </div>
-                        )}
-                      </Link>
-                    );
-                  }
-                )}
-              </div>
-            )}
-          </Card.Body>
-        </Card>
-      </div>
 
-      {/* AÇIKLAMA */}
-      {caseItem.description && (
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                    </Link>
+                  );
+                }
+              )}
+
+            </div>
+          )}
+
+        </Card.Body>
+
+      </Card>
+
+      {/* ==================================================
+          DOCUMENTS + TASKS
+      ================================================== */}
+
+      <div className="grid gap-6 xl:grid-cols-2">
+
+        {/* DOCUMENTS */}
+
         <Card>
+
           <Card.Header>
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              📝 Açıklama
-            </h2>
+
+            <div className="flex items-center justify-between gap-3">
+
+              <div className="flex items-center gap-3">
+
+                <div
+                  className="
+                    flex
+                    h-9
+                    w-9
+                    items-center
+                    justify-center
+                    rounded-lg
+                    bg-emerald-50
+                    text-emerald-600
+                    dark:bg-emerald-500/[0.08]
+                    dark:text-emerald-400
+                  "
+                >
+                  <FolderOpen size={17} />
+                </div>
+
+                <div>
+
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Belgeler
+                  </h2>
+
+                  <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                    {caseItem.documents?.length || 0} belge
+                  </p>
+
+                </div>
+
+              </div>
+
+              <Link
+                to={`/documents/upload?case=${caseItem.id}`}
+              >
+                <Button size="sm">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Belge
+                </Button>
+              </Link>
+
+            </div>
+
           </Card.Header>
 
           <Card.Body>
-            <p className="whitespace-pre-wrap text-gray-900 dark:text-white">
-              {caseItem.description}
-            </p>
-          </Card.Body>
-        </Card>
-      )}
 
-      {/* BELGELER */}
-      <Card>
-        <Card.Header className="flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900 dark:text-white">
-            📄 Belgeler
-          </h2>
+            {!caseItem.documents ||
+            caseItem.documents.length ===
+              0 ? (
+              <div className="py-8 text-center">
 
-          <Link
-            to={`/documents/upload?case=${caseItem.id}`}
-          >
-            <Button size="sm">
-              + Belge Ekle
-            </Button>
-          </Link>
-        </Card.Header>
+                <FileText className="mx-auto h-7 w-7 text-gray-300 dark:text-slate-600" />
 
-        <Card.Body>
-          {!caseItem.documents ||
-          caseItem.documents.length ===
-            0 ? (
-            <p className="text-gray-500">
-              Henüz belge eklenmemiş
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {caseItem.documents.map(
-                (doc) => (
-                  <div
-                    key={doc.id}
-                    className="flex items-center justify-between rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600"
-                  >
-                    <Link
-                      to={`/documents/${doc.id}`}
-                      className="flex-1 hover:underline"
+                <p className="mt-3 text-sm text-gray-500">
+                  Henüz belge eklenmemiş
+                </p>
+
+              </div>
+            ) : (
+              <div className="space-y-2">
+
+                {caseItem.documents.map(
+                  (doc) => (
+                    <div
+                      key={doc.id}
+                      className="
+                        flex
+                        items-center
+                        justify-between
+                        gap-3
+                        rounded-xl
+                        border
+                        border-gray-100
+                        p-3
+                        dark:border-white/[0.05]
+                      "
                     >
-                      <p className="font-medium text-blue-600 dark:text-blue-400">
-                        {doc.name}
-                      </p>
 
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {formatDateUTC(
-                          doc.created_at
-                        )}
-                        {' - '}
-                        {(
-                          Number(
-                            doc.file_size ||
-                              0
-                          ) / 1024
-                        ).toFixed(1)}{' '}
-                        KB
-                      </p>
-                    </Link>
+                      <Link
+                        to={`/documents/${doc.id}`}
+                        className="min-w-0 flex-1"
+                      >
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleDownload(
-                          doc
-                        )
-                      }
-                      className="text-sm text-blue-600 hover:underline"
-                    >
-                      ⬇️ İndir
-                    </button>
-                  </div>
-                )
-              )}
-            </div>
-          )}
-        </Card.Body>
-      </Card>
+                        <p className="truncate text-sm font-semibold text-gray-900 hover:text-blue-600 dark:text-white dark:hover:text-blue-400">
+                          {doc.name}
+                        </p>
 
-      {/* GÖREVLER */}
-      <Card>
-        <Card.Header className="flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900 dark:text-white">
-            ✅ Görevler
-          </h2>
+                        <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                          {formatDateUTC(
+                            doc.created_at
+                          )}
+                          {' · '}
+                          {(
+                            Number(
+                              doc.file_size ||
+                                0
+                            ) / 1024
+                          ).toFixed(1)}{' '}
+                          KB
+                        </p>
 
-          <Link
-            to={`/tasks/create?case=${caseItem.id}`}
-          >
-            <Button size="sm">
-              + Görev Ekle
-            </Button>
-          </Link>
-        </Card.Header>
+                      </Link>
 
-        <Card.Body>
-          {!caseItem.tasks ||
-          caseItem.tasks.length ===
-            0 ? (
-            <p className="text-gray-500">
-              Henüz görev eklenmemiş
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {caseItem.tasks.map(
-                (task) => (
-                  <Link
-                    key={task.id}
-                    to={`/tasks/${task.id}`}
-                    className="flex items-center justify-between rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600"
-                  >
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900 dark:text-white">
-                        {task.title}
-                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleDownload(
+                            doc
+                          )
+                        }
+                        className="
+                          inline-flex
+                          h-8
+                          w-8
+                          shrink-0
+                          items-center
+                          justify-center
+                          rounded-lg
+                          text-gray-400
+                          transition
+                          hover:bg-blue-50
+                          hover:text-blue-600
+                          dark:hover:bg-blue-500/[0.08]
+                          dark:hover:text-blue-400
+                        "
+                        title="İndir"
+                      >
+                        <Download className="h-4 w-4" />
+                      </button>
 
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Atanan:{' '}
-                        {task.assignee
-                          ? `${task.assignee.first_name || ''} ${
-                              task.assignee.last_name || ''
-                            }`.trim()
-                          : 'Atanmadı'}
-                        {' - '}
-                        Son tarih:{' '}
-                        {formatDateUTC(
-                          task.due_date
-                        )}
-                      </p>
                     </div>
+                  )
+                )}
 
-                    <Badge
-                      variant={
-                        task.status ===
-                        'completed'
-                          ? 'success'
-                          : task.status ===
-                              'in_progress'
-                            ? 'warning'
-                            : task.status ===
-                                'cancelled'
-                              ? 'danger'
-                              : 'default'
-                      }
-                    >
-                      {task.status ===
-                      'pending'
-                        ? 'Bekliyor'
-                        : task.status ===
-                            'in_progress'
-                          ? 'Devam Ediyor'
-                          : task.status ===
-                              'completed'
-                            ? 'Tamamlandı'
-                            : 'İptal'}
-                    </Badge>
-                  </Link>
-                )
-              )}
+              </div>
+            )}
+
+          </Card.Body>
+
+        </Card>
+
+        {/* TASKS */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center justify-between gap-3">
+
+              <div className="flex items-center gap-3">
+
+                <div
+                  className="
+                    flex
+                    h-9
+                    w-9
+                    items-center
+                    justify-center
+                    rounded-lg
+                    bg-amber-50
+                    text-amber-600
+                    dark:bg-amber-500/[0.08]
+                    dark:text-amber-400
+                  "
+                >
+                  <ListTodo size={17} />
+                </div>
+
+                <div>
+
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Görevler
+                  </h2>
+
+                  <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                    {caseItem.tasks?.length || 0} görev
+                  </p>
+
+                </div>
+
+              </div>
+
+              <Link
+                to={`/tasks/create?case_id=${caseItem.id}`}
+              >
+                <Button size="sm">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Görev
+                </Button>
+              </Link>
+
             </div>
-          )}
-        </Card.Body>
-      </Card>
 
-      {/* DURUŞMALAR */}
+          </Card.Header>
+
+          <Card.Body>
+
+            {!caseItem.tasks ||
+            caseItem.tasks.length ===
+              0 ? (
+              <div className="py-8 text-center">
+
+                <ListTodo className="mx-auto h-7 w-7 text-gray-300 dark:text-slate-600" />
+
+                <p className="mt-3 text-sm text-gray-500">
+                  Henüz görev eklenmemiş
+                </p>
+
+              </div>
+            ) : (
+              <div className="space-y-2">
+
+                {caseItem.tasks.map(
+                  (task) => (
+                    <Link
+                      key={task.id}
+                      to={`/tasks/${task.id}`}
+                      className="
+                        block
+                        rounded-xl
+                        border
+                        border-gray-100
+                        p-3
+                        transition
+                        hover:border-blue-200
+                        dark:border-white/[0.05]
+                        dark:hover:border-blue-500/20
+                      "
+                    >
+
+                      <div className="flex items-start justify-between gap-3">
+
+                        <div className="min-w-0">
+
+                          <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                            {task.title}
+                          </p>
+
+                          <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                            {task.assignee
+                              ? `${task.assignee.first_name || ''} ${
+                                  task.assignee.last_name || ''
+                                }`.trim()
+                              : 'Atanmadı'}
+
+                            {task.due_date &&
+                              ` · ${formatDateUTC(
+                                task.due_date
+                              )}`}
+                          </p>
+
+                        </div>
+
+                        <Badge
+                          variant={
+                            task.status ===
+                            'completed'
+                              ? 'success'
+                              : task.status ===
+                                  'in_progress'
+                                ? 'info'
+                                : task.status ===
+                                    'cancelled'
+                                  ? 'danger'
+                                  : 'warning'
+                          }
+                        >
+                          {task.status ===
+                          'pending'
+                            ? 'Bekliyor'
+                            : task.status ===
+                                'in_progress'
+                              ? 'Devam Ediyor'
+                              : task.status ===
+                                  'completed'
+                                ? 'Tamamlandı'
+                                : 'İptal'}
+                        </Badge>
+
+                      </div>
+
+                    </Link>
+                  )
+                )}
+
+              </div>
+            )}
+
+          </Card.Body>
+
+        </Card>
+
+      </div>
+
+      {/* ==================================================
+          HEARINGS
+      ================================================== */}
+
       <Card>
-        <Card.Header className="flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900 dark:text-white">
-            📅 Duruşmalar
-          </h2>
 
-          <Link
-            to={`/events/create?case=${caseItem.id}`}
-          >
-            <Button size="sm">
-              + Duruşma Ekle
-            </Button>
-          </Link>
+        <Card.Header>
+
+          <div className="flex items-center justify-between gap-3">
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-red-50
+                  text-red-600
+                  dark:bg-red-500/[0.08]
+                  dark:text-red-400
+                "
+              >
+                <CalendarDays size={17} />
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Duruşmalar
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Dosyaya bağlı duruşma ve etkinlikler
+                </p>
+
+              </div>
+
+            </div>
+
+            <Link
+              to={`/events/create?case=${caseItem.id}`}
+            >
+              <Button size="sm">
+                <Plus className="mr-2 h-4 w-4" />
+                Duruşma
+              </Button>
+            </Link>
+
+          </div>
+
         </Card.Header>
 
         <Card.Body>
+
           {!caseItem.events ||
           caseItem.events.length ===
             0 ? (
-            <p className="text-gray-500">
-              Henüz duruşma eklenmemiş
-            </p>
+            <div className="py-8 text-center">
+
+              <CalendarDays className="mx-auto h-7 w-7 text-gray-300 dark:text-slate-600" />
+
+              <p className="mt-3 text-sm text-gray-500">
+                Henüz duruşma eklenmemiş
+              </p>
+
+            </div>
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+
               {caseItem.events.map(
                 (event) => (
                   <Link
                     key={event.id}
                     to={`/events/${event.id}`}
-                    className="flex items-center justify-between rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600"
+                    className="
+                      rounded-xl
+                      border
+                      border-gray-100
+                      p-4
+                      transition
+                      hover:border-blue-200
+                      hover:bg-blue-50/20
+                      dark:border-white/[0.05]
+                      dark:hover:border-blue-500/20
+                      dark:hover:bg-blue-500/[0.02]
+                    "
                   >
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">
-                        {event.title}
-                      </p>
 
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {formatDateTimeUTC(
-                          event.start_date
+                    <div className="flex items-start justify-between gap-3">
+
+                      <div className="min-w-0">
+
+                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                          {event.title}
+                        </p>
+
+                        <div className="mt-2 flex items-center gap-1.5 text-xs text-gray-500 dark:text-slate-500">
+
+                          <Clock3 className="h-3.5 w-3.5" />
+
+                          {formatDateTimeUTC(
+                            event.start_date
+                          )}
+
+                        </div>
+
+                        {event.location && (
+                          <p className="mt-1 truncate text-xs text-gray-400 dark:text-slate-600">
+                            {event.location}
+                          </p>
                         )}
-                        {' - '}
-                        {event.location ||
-                          'Yer belirtilmemiş'}
-                      </p>
-                    </div>
 
-                    <Badge
-                      variant={
-                        event.status ===
-                        'completed'
-                          ? 'success'
+                      </div>
+
+                      <Badge
+                        variant={
+                          event.status ===
+                          'completed'
+                            ? 'success'
+                            : event.status ===
+                                'ongoing'
+                              ? 'info'
+                              : event.status ===
+                                  'cancelled'
+                                ? 'danger'
+                                : 'warning'
+                        }
+                      >
+                        {event.status ===
+                        'scheduled'
+                          ? 'Planlandı'
                           : event.status ===
                               'ongoing'
-                            ? 'warning'
+                            ? 'Devam Ediyor'
                             : event.status ===
-                                'cancelled'
-                              ? 'danger'
-                              : 'default'
-                      }
-                    >
-                      {event.status ===
-                      'scheduled'
-                        ? 'Planlandı'
-                        : event.status ===
-                            'ongoing'
-                          ? 'Devam Ediyor'
-                          : event.status ===
-                              'completed'
-                            ? 'Tamamlandı'
-                            : 'İptal'}
-                    </Badge>
+                                'completed'
+                              ? 'Tamamlandı'
+                              : 'İptal'}
+                      </Badge>
+
+                    </div>
+
                   </Link>
                 )
               )}
+
             </div>
           )}
+
         </Card.Body>
+
       </Card>
+
     </div>
   );
 };
 
-export default CaseDetail;
+export default CaseDetail;  
