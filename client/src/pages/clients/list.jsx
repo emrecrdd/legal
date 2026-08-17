@@ -22,12 +22,18 @@ import {
 import Button from '../../components/ui/Button.jsx';
 import Table from '../../components/ui/Table.jsx';
 import Badge from '../../components/ui/Badge.jsx';
+import Card from '../../components/ui/Card.jsx';
+
+import Loader from '../../components/shared/Loader.jsx';
+import Error from '../../components/shared/Error.jsx';
+import Empty from '../../components/shared/Empty.jsx';
 
 import {
+  ArrowLeft,
+  ArrowRight,
   Building2,
-  ChevronLeft,
-  ChevronRight,
   FileText,
+  MapPin,
   Plus,
   Search,
   UserRound,
@@ -80,44 +86,38 @@ const CLIENT_TYPE_OPTIONS = [
 const getStatusLabel = (
   status
 ) => {
-  switch (status) {
-    case 'active':
-      return 'Aktif';
+  const labels = {
+    active: 'Aktif',
+    passive: 'Pasif',
+    archived: 'Arşiv',
+  };
 
-    case 'passive':
-      return 'Pasif';
-
-    case 'archived':
-      return 'Arşiv';
-
-    default:
-      return status || '-';
-  }
+  return (
+    labels[status] ||
+    status ||
+    '-'
+  );
 };
 
 const getStatusVariant = (
   status
 ) => {
-  switch (status) {
-    case 'active':
-      return 'success';
+  const variants = {
+    active: 'success',
+    passive: 'warning',
+    archived: 'default',
+  };
 
-    case 'passive':
-      return 'warning';
-
-    case 'archived':
-      return 'default';
-
-    default:
-      return 'default';
-  }
+  return (
+    variants[status] ||
+    'default'
+  );
 };
 
 const getClientTypeLabel = (
   type
 ) => {
-  return type ===
-    'corporate'
+  return type === 'corporate'
     ? 'Kurumsal'
     : 'Bireysel';
 };
@@ -125,10 +125,17 @@ const getClientTypeLabel = (
 const getClientTypeIcon = (
   type
 ) => {
-  return type ===
-    'corporate'
+  return type === 'corporate'
     ? Building2
     : UserRound;
+};
+
+const getClientIconClass = (
+  type
+) => {
+  return type === 'corporate'
+    ? 'bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400'
+    : 'bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400';
 };
 
 const getPersonName = (
@@ -145,8 +152,9 @@ const getPersonName = (
 // ======================================================
 
 const ClientsList = () => {
-  const { user } =
-    useAuth();
+  const {
+    user,
+  } = useAuth();
 
   const [
     search,
@@ -210,8 +218,7 @@ const ClientsList = () => {
   } = useClients({
     page,
 
-    limit:
-      10,
+    limit: 10,
 
     search:
       debouncedSearch,
@@ -259,9 +266,7 @@ const ClientsList = () => {
   // ======================================================
 
   useEffect(() => {
-    if (
-      !pagination
-    ) {
+    if (!pagination) {
       return;
     }
 
@@ -310,18 +315,8 @@ const ClientsList = () => {
 
   if (isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-
-        <div className="text-center">
-
-          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600" />
-
-          <p className="mt-4 text-sm text-gray-500">
-            Müvekkiller yükleniyor...
-          </p>
-
-        </div>
-
+      <div className="flex min-h-[420px] items-center justify-center">
+        <Loader text="Müvekkiller yükleniyor..." />
       </div>
     );
   }
@@ -332,33 +327,14 @@ const ClientsList = () => {
 
   if (error) {
     return (
-      <div className="py-12 text-center">
-
-        <div className="mb-4 text-4xl">
-          ⚠️
-        </div>
-
-        <h2 className="text-xl font-bold text-red-600">
-          Müvekkiller yüklenirken hata oluştu
-        </h2>
-
-        <p className="mt-2 text-sm text-gray-500">
-          {error?.response
-            ?.data?.message ||
-            error?.message ||
-            'Bilinmeyen hata'}
-        </p>
-
-        <Button
-          className="mt-4"
-          onClick={() =>
-            refetch()
-          }
-        >
-          Yeniden Dene
-        </Button>
-
-      </div>
+      <Error
+        title="Müvekkiller yüklenemedi"
+        message="Müvekkil kayıtları alınırken bir hata oluştu."
+        error={error}
+        onRetry={() =>
+          refetch?.()
+        }
+      />
     );
   }
 
@@ -375,52 +351,91 @@ const ClientsList = () => {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 
-        <div>
+        <div className="flex items-start gap-3">
 
-          <div className="flex items-center gap-2">
+          <div
+            className="
+              flex
+              h-11
+              w-11
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-blue-50
+              text-blue-600
+              dark:bg-blue-500/[0.08]
+              dark:text-blue-400
+            "
+          >
+            <Users size={21} />
+          </div>
 
-            <Users className="h-6 w-6 text-blue-600" />
+          <div>
 
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            <h1
+              className="
+                text-2xl
+                font-semibold
+                tracking-[-0.035em]
+                text-gray-900
+                dark:text-white
+              "
+            >
               Müvekkiller
             </h1>
 
+            <p
+              className="
+                mt-1
+                max-w-2xl
+                text-sm
+                leading-6
+                text-gray-500
+                dark:text-slate-400
+              "
+            >
+              Bireysel ve kurumsal müvekkilleri,
+              ilişkili davaları ve iletişim bilgilerini yönetin.
+            </p>
+
+            <p
+              className="
+                mt-1
+                text-xs
+                text-gray-400
+                dark:text-slate-500
+              "
+            >
+              Toplam{' '}
+              <span className="font-semibold text-gray-600 dark:text-slate-300">
+                {pagination?.total || 0}
+              </span>{' '}
+              müvekkil
+            </p>
+
           </div>
-
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Bireysel ve kurumsal müvekkilleri, ilişkili davaları ve iletişim bilgilerini yönetin.
-          </p>
-
-          <p className="mt-1 text-xs text-gray-400">
-            Toplam{' '}
-            {pagination?.total ||
-              0}{' '}
-            müvekkil
-          </p>
 
         </div>
 
         {canCreate && (
           <Link to="/clients/create">
-
             <Button>
-              <Plus className="mr-2 h-4 w-4" />
-
+              <Plus className="h-4 w-4" />
               Yeni Müvekkil
             </Button>
-
           </Link>
         )}
 
       </div>
 
       {/* ==================================================
-          FILTER CARD
+          FILTERS
       ================================================== */}
 
-      <div className="overflow-hidden rounded-xl bg-white shadow dark:bg-gray-800">
+      <Card>
 
-        <div className="border-b border-gray-200 p-4 dark:border-gray-700">
+        <Card.Body>
 
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
 
@@ -428,20 +443,54 @@ const ClientsList = () => {
 
             <div className="relative xl:col-span-5">
 
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search
+                size={16}
+                className="
+                  pointer-events-none
+                  absolute
+                  left-3.5
+                  top-1/2
+                  -translate-y-1/2
+                  text-gray-400
+                  dark:text-slate-500
+                "
+              />
 
               <input
-                type="text"
-                value={
-                  search
-                }
+                type="search"
+                value={search}
                 onChange={(event) =>
                   setSearch(
                     event.target.value
                   )
                 }
-                placeholder="Ad, TCKNO/VKN, e-posta veya telefon ara..."
-                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-10 pr-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                placeholder="Ad, TCKN/VKN, e-posta veya telefon ara..."
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  pl-10
+                  pr-3.5
+                  text-sm
+                  text-gray-900
+                  shadow-sm
+                  outline-none
+                  transition
+                  placeholder:text-gray-400
+                  hover:border-gray-300
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-white
+                  dark:placeholder:text-slate-500
+                  dark:hover:border-white/[0.14]
+                  dark:focus:border-blue-500/60
+                "
               />
 
             </div>
@@ -451,39 +500,53 @@ const ClientsList = () => {
             <div className="xl:col-span-2">
 
               <select
-                value={
-                  statusFilter
-                }
+                value={statusFilter}
                 onChange={(event) =>
                   setStatusFilter(
                     event.target.value
                   )
                 }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  text-sm
+                  text-gray-700
+                  shadow-sm
+                  outline-none
+                  transition
+                  hover:border-gray-300
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                  dark:hover:border-white/[0.14]
+                  dark:focus:border-blue-500/60
+                "
               >
-
                 {STATUS_OPTIONS.map(
-                  (option) => (
+                  (
+                    option
+                  ) => (
                     <option
-                      key={
-                        option.value
-                      }
-                      value={
-                        option.value
-                      }
+                      key={option.value}
+                      value={option.value}
                     >
-                      {
-                        option.label
-                      }
+                      {option.label}
                     </option>
                   )
                 )}
-
               </select>
 
             </div>
 
-            {/* CLIENT TYPE */}
+            {/* TYPE */}
 
             <div className="xl:col-span-2">
 
@@ -496,46 +559,96 @@ const ClientsList = () => {
                     event.target.value
                   )
                 }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  text-sm
+                  text-gray-700
+                  shadow-sm
+                  outline-none
+                  transition
+                  hover:border-gray-300
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                  dark:hover:border-white/[0.14]
+                  dark:focus:border-blue-500/60
+                "
               >
-
                 {CLIENT_TYPE_OPTIONS.map(
-                  (option) => (
+                  (
+                    option
+                  ) => (
                     <option
-                      key={
-                        option.value
-                      }
-                      value={
-                        option.value
-                      }
+                      key={option.value}
+                      value={option.value}
                     >
-                      {
-                        option.label
-                      }
+                      {option.label}
                     </option>
                   )
                 )}
-
               </select>
 
             </div>
 
             {/* CITY */}
 
-            <div className="xl:col-span-2">
+            <div className="relative xl:col-span-2">
+
+              <MapPin
+                size={15}
+                className="
+                  pointer-events-none
+                  absolute
+                  left-3
+                  top-1/2
+                  -translate-y-1/2
+                  text-gray-400
+                  dark:text-slate-500
+                "
+              />
 
               <input
                 type="text"
-                value={
-                  cityFilter
-                }
+                value={cityFilter}
                 onChange={(event) =>
                   setCityFilter(
                     event.target.value
                   )
                 }
                 placeholder="Şehir"
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  pl-9
+                  pr-3
+                  text-sm
+                  text-gray-700
+                  shadow-sm
+                  outline-none
+                  transition
+                  placeholder:text-gray-400
+                  hover:border-gray-300
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                  dark:placeholder:text-slate-500
+                "
               />
 
             </div>
@@ -546,7 +659,7 @@ const ClientsList = () => {
 
               {hasFilters && (
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   onClick={
                     handleClearFilters
                   }
@@ -563,24 +676,60 @@ const ClientsList = () => {
 
           {isFetching &&
             !isLoading && (
-              <p className="mt-2 text-xs text-gray-400">
+              <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
                 Liste güncelleniyor...
               </p>
             )}
 
-        </div>
+        </Card.Body>
 
-        {/* ==================================================
-            TABLE
-        ================================================== */}
+      </Card>
 
-        <div className="overflow-x-auto">
+      {/* ==================================================
+          EMPTY / TABLE
+      ================================================== */}
+
+      {clients.length === 0 ? (
+        <Empty
+          icon={Users}
+          title={
+            hasFilters
+              ? 'Eşleşen müvekkil bulunamadı'
+              : 'Henüz müvekkil kaydı yok'
+          }
+          description={
+            hasFilters
+              ? 'Arama veya filtre kriterlerini değiştirerek tekrar deneyin.'
+              : 'İlk müvekkil kaydınızı oluşturarak çalışmaya başlayabilirsiniz.'
+          }
+          action={
+            hasFilters ? (
+              <Button
+                variant="secondary"
+                onClick={
+                  handleClearFilters
+                }
+              >
+                Filtreleri Temizle
+              </Button>
+            ) : canCreate ? (
+              <Link to="/clients/create">
+                <Button>
+                  <Plus className="h-4 w-4" />
+                  İlk Müvekkili Oluştur
+                </Button>
+              </Link>
+            ) : null
+          }
+        />
+      ) : (
+        <>
 
           <Table>
 
             <Table.Head>
 
-              <Table.Row>
+              <Table.Row hover={false}>
 
                 <Table.HeadCell>
                   Müvekkil
@@ -602,7 +751,7 @@ const ClientsList = () => {
                   Durum
                 </Table.HeadCell>
 
-                <Table.HeadCell>
+                <Table.HeadCell className="text-right">
                   İşlem
                 </Table.HeadCell>
 
@@ -612,299 +761,348 @@ const ClientsList = () => {
 
             <Table.Body>
 
-              {clients.length ===
-              0 ? (
-                <Table.Row>
+              {clients.map(
+                (
+                  client
+                ) => {
+                  const ClientIcon =
+                    getClientTypeIcon(
+                      client.client_type
+                    );
 
-                  <Table.Cell
-                    colSpan="6"
-                    className="py-12 text-center text-gray-500"
-                  >
+                  return (
+                    <Table.Row
+                      key={
+                        client.id
+                      }
+                    >
 
-                    <div className="mb-3 text-4xl">
-                      👤
-                    </div>
+                      {/* CLIENT */}
 
-                    <p className="font-medium">
-                      {hasFilters
-                        ? 'Filtrelere uygun müvekkil bulunamadı'
-                        : 'Henüz müvekkil kaydı bulunmuyor'}
-                    </p>
+                      <Table.Cell>
 
-                    {canCreate &&
-                      !hasFilters && (
-                        <Link
-                          to="/clients/create"
-                          className="mt-3 inline-block text-blue-600 hover:underline"
-                        >
-                          İlk müvekkili oluştur
-                        </Link>
-                      )}
+                        <div className="flex min-w-[15rem] items-start gap-3">
 
-                  </Table.Cell>
+                          <div
+                            className={`
+                              flex
+                              h-10
+                              w-10
+                              shrink-0
+                              items-center
+                              justify-center
+                              rounded-xl
+                              ${getClientIconClass(
+                                client.client_type
+                              )}
+                            `}
+                          >
+                            <ClientIcon size={18} />
+                          </div>
 
-                </Table.Row>
-              ) : (
-                clients.map(
-                  (client) => {
-                    const ClientIcon =
-                      getClientTypeIcon(
-                        client.client_type
-                      );
+                          <div className="min-w-0">
 
-                    return (
-                      <Table.Row
-                        key={
-                          client.id
-                        }
-                      >
-
-                        {/* CLIENT */}
-
-                        <Table.Cell>
-
-                          <div className="flex min-w-[15rem] items-start gap-3">
-
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700">
-
-                              <ClientIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
-
-                            </div>
-
-                            <div className="min-w-0">
-
-                              <Link
-                                to={`/clients/${client.id}`}
-                                className="block max-w-xs truncate font-medium text-blue-600 hover:underline dark:text-blue-400"
-                                title={
-                                  getPersonName(
-                                    client
-                                  )
-                                }
-                              >
-                                {getPersonName(
+                            <Link
+                              to={`/clients/${client.id}`}
+                              className="
+                                block
+                                max-w-xs
+                                truncate
+                                font-semibold
+                                text-gray-900
+                                transition
+                                hover:text-blue-600
+                                dark:text-white
+                                dark:hover:text-blue-400
+                              "
+                              title={
+                                getPersonName(
                                   client
-                                )}
-                              </Link>
+                                )
+                              }
+                            >
+                              {getPersonName(
+                                client
+                              )}
+                            </Link>
 
-                              <p className="mt-1 text-xs text-gray-500">
+                            <div className="mt-1 flex items-center gap-2">
+
+                              <span className="text-xs text-gray-500 dark:text-slate-500">
                                 {getClientTypeLabel(
                                   client.client_type
                                 )}
-                              </p>
+                              </span>
 
                               {client.identification_number && (
-                                <p className="mt-1 text-xs text-gray-400">
-                                  Kimlik/VKN: ••••
-                                  {String(
-                                    client.identification_number
-                                  ).slice(
-                                    -4
-                                  )}
-                                </p>
+                                <>
+                                  <span className="text-gray-300 dark:text-slate-700">
+                                    ·
+                                  </span>
+
+                                  <span className="text-[10px] text-gray-400 dark:text-slate-500">
+                                    Kimlik/VKN ••••
+                                    {String(
+                                      client.identification_number
+                                    ).slice(
+                                      -4
+                                    )}
+                                  </span>
+                                </>
                               )}
 
                             </div>
 
                           </div>
 
-                        </Table.Cell>
+                        </div>
 
-                        {/* CONTACT */}
+                      </Table.Cell>
 
-                        <Table.Cell>
+                      {/* CONTACT */}
 
-                          <div className="min-w-[11rem] space-y-1">
+                      <Table.Cell>
 
-                            <p className="text-sm text-gray-900 dark:text-white">
-                              {client.phone ||
-                                '-'}
+                        <div className="min-w-[11rem]">
+
+                          <p className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                            {client.phone || '-'}
+                          </p>
+
+                          {client.email && (
+                            <p
+                              className="
+                                mt-1
+                                max-w-[14rem]
+                                truncate
+                                text-xs
+                                text-gray-500
+                                dark:text-slate-500
+                              "
+                              title={
+                                client.email
+                              }
+                            >
+                              {client.email}
                             </p>
+                          )}
 
-                            {client.email && (
-                              <p
-                                className="max-w-[14rem] truncate text-xs text-gray-500"
-                                title={
-                                  client.email
-                                }
-                              >
-                                {
-                                  client.email
-                                }
-                              </p>
-                            )}
+                        </div>
 
-                          </div>
+                      </Table.Cell>
 
-                        </Table.Cell>
+                      {/* LOCATION */}
 
-                        {/* LOCATION */}
+                      <Table.Cell>
 
-                        <Table.Cell>
+                        {client.city ||
+                        client.district ? (
+                          <div className="flex items-start gap-2">
 
-                          {client.city ||
-                          client.district ? (
-                            <div className="text-sm">
+                            <MapPin
+                              size={14}
+                              className="mt-0.5 shrink-0 text-gray-400 dark:text-slate-500"
+                            />
 
-                              <p className="text-gray-900 dark:text-white">
-                                {client.city ||
-                                  '-'}
+                            <div>
+
+                              <p className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                                {client.city || '-'}
                               </p>
 
                               {client.district && (
-                                <p className="text-xs text-gray-500">
-                                  {
-                                    client.district
-                                  }
+                                <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-500">
+                                  {client.district}
                                 </p>
                               )}
 
                             </div>
-                          ) : (
-                            <span className="text-sm text-gray-400">
-                              -
-                            </span>
+
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 dark:text-slate-600">
+                            -
+                          </span>
+                        )}
+
+                      </Table.Cell>
+
+                      {/* CASE COUNT */}
+
+                      <Table.Cell>
+
+                        <Link
+                          to={`/clients/${client.id}`}
+                          className="
+                            inline-flex
+                            items-center
+                            gap-2
+                            rounded-lg
+                            px-2
+                            py-1
+                            text-sm
+                            font-medium
+                            text-gray-600
+                            transition
+                            hover:bg-blue-50
+                            hover:text-blue-600
+                            dark:text-slate-400
+                            dark:hover:bg-blue-500/[0.06]
+                            dark:hover:text-blue-400
+                          "
+                        >
+                          <FileText size={14} />
+
+                          <span>
+                            {Number(
+                              client.case_count
+                            ) || 0}
+                          </span>
+                        </Link>
+
+                      </Table.Cell>
+
+                      {/* STATUS */}
+
+                      <Table.Cell>
+
+                        <Badge
+                          variant={
+                            getStatusVariant(
+                              client.status
+                            )
+                          }
+                          dot
+                        >
+                          {getStatusLabel(
+                            client.status
                           )}
+                        </Badge>
 
-                        </Table.Cell>
+                      </Table.Cell>
 
-                        {/* CASE COUNT */}
+                      {/* ACTION */}
 
-                        <Table.Cell>
+                      <Table.Cell className="text-right">
 
-                          <Link
-                            to={`/clients/${client.id}`}
-                            className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-blue-600 dark:text-gray-300"
+                        <Link
+                          to={`/clients/${client.id}`}
+                        >
+                          <Button
+                            variant="ghost"
+                            size="sm"
                           >
-                            <FileText className="h-4 w-4" />
+                            İncele
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
 
-                            <span className="font-medium">
-                              {Number(
-                                client.case_count
-                              ) || 0}
-                            </span>
-                          </Link>
+                      </Table.Cell>
 
-                        </Table.Cell>
-
-                        {/* STATUS */}
-
-                        <Table.Cell>
-
-                          <Badge
-                            variant={getStatusVariant(
-                              client.status
-                            )}
-                          >
-                            {getStatusLabel(
-                              client.status
-                            )}
-                          </Badge>
-
-                        </Table.Cell>
-
-                        {/* ACTION */}
-
-                        <Table.Cell>
-
-                          <Link
-                            to={`/clients/${client.id}`}
-                            className="whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
-                          >
-                            Görüntüle
-                          </Link>
-
-                        </Table.Cell>
-
-                      </Table.Row>
-                    );
-                  }
-                )
+                    </Table.Row>
+                  );
+                }
               )}
 
             </Table.Body>
 
           </Table>
 
-        </div>
+          {/* ==================================================
+              PAGINATION
+          ================================================== */}
 
-        {/* ==================================================
-            PAGINATION
-        ================================================== */}
+          {pagination &&
+            pagination.totalPages >
+              1 && (
+              <div
+                className="
+                  flex
+                  flex-col
+                  gap-3
+                  rounded-xl
+                  border
+                  border-gray-200
+                  bg-white
+                  px-4
+                  py-3
+                  dark:border-white/[0.07]
+                  dark:bg-[#0b1b33]
+                  sm:flex-row
+                  sm:items-center
+                  sm:justify-between
+                "
+              >
 
-        {pagination &&
-          pagination.totalPages >
-            1 && (
-            <div className="flex flex-col gap-3 border-t border-gray-200 px-6 py-4 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-gray-500 dark:text-slate-400">
+                  Toplam{' '}
+                  <span className="font-semibold text-gray-700 dark:text-slate-300">
+                    {pagination.total}
+                  </span>{' '}
+                  müvekkil
+                </p>
 
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Toplam{' '}
-                {
-                  pagination.total
-                }{' '}
-                müvekkil
-              </p>
+                <div className="flex items-center gap-2">
 
-              <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      page <= 1 ||
+                      isFetching
+                    }
+                    onClick={() =>
+                      setPage(
+                        (
+                          current
+                        ) =>
+                          Math.max(
+                            1,
+                            current - 1
+                          )
+                      )
+                    }
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Önceki
+                  </Button>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    page <= 1 ||
-                    isFetching
-                  }
-                  onClick={() =>
-                    setPage(
-                      (current) =>
-                        Math.max(
-                          1,
-                          current - 1
-                        )
-                    )
-                  }
-                >
-                  <ChevronLeft className="mr-1 h-4 w-4" />
+                  <span className="min-w-[70px] text-center text-xs font-semibold text-gray-600 dark:text-slate-400">
+                    {page} /{' '}
+                    {pagination.totalPages}
+                  </span>
 
-                  Önceki
-                </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      page >=
+                        pagination.totalPages ||
+                      isFetching
+                    }
+                    onClick={() =>
+                      setPage(
+                        (
+                          current
+                        ) =>
+                          Math.min(
+                            pagination.totalPages,
+                            current + 1
+                          )
+                      )
+                    }
+                  >
+                    Sonraki
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
 
-                <span className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400">
-                  {page} /{' '}
-                  {
-                    pagination.totalPages
-                  }
-                </span>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    page >=
-                      pagination.totalPages ||
-                    isFetching
-                  }
-                  onClick={() =>
-                    setPage(
-                      (current) =>
-                        Math.min(
-                          pagination.totalPages,
-                          current + 1
-                        )
-                    )
-                  }
-                >
-                  Sonraki
-
-                  <ChevronRight className="ml-1 h-4 w-4" />
-                </Button>
+                </div>
 
               </div>
+            )}
 
-            </div>
-          )}
-
-      </div>
+        </>
+      )}
 
     </div>
   );

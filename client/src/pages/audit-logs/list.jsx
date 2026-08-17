@@ -1,504 +1,1747 @@
-import { useState, useEffect } from 'react';
+import {
+  useEffect,
+  useState,
+} from 'react';
+
 import auditLogApi from '../../features/audit-log/auditLog.api.js';
-import { useAuth } from '../../app/providers/auth.provider.jsx';
+
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
-import { format } from 'date-fns';
-import { tr } from 'date-fns/locale/tr';
-import { Eye, Search, X, Trash2, CheckSquare, Square } from 'lucide-react';
+import Table from '../../components/ui/Table.jsx';
+import Modal from '../../components/ui/Modal.jsx';
+
+import Loader from '../../components/shared/Loader.jsx';
+import Error from '../../components/shared/Error.jsx';
+import Empty from '../../components/shared/Empty.jsx';
+
+import {
+  Activity,
+  ArrowLeft,
+  ArrowRight,
+  CheckSquare,
+  Eye,
+  Filter,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Square,
+  Trash2,
+  X,
+} from 'lucide-react';
+
+import {
+  format,
+} from 'date-fns';
+
+import {
+  tr,
+} from 'date-fns/locale/tr';
+
 import toast from 'react-hot-toast';
 
-const AuditLogList = () => {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+// ======================================================
+// CONSTANTS
+// ======================================================
 
-  const [filters, setFilters] = useState({
-    action: '',
-    entity_type: '',
-    startDate: '',
-    endDate: '',
-    search: '',
-  });
-  const [page, setPage] = useState(1);
-  const [selectedLog, setSelectedLog] = useState(null);
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [pagination, setPagination] = useState(null);
+const ACTION_OPTIONS = [
+  {
+    value: '',
+    label: 'Tüm İşlemler',
+  },
+  {
+    value: 'create',
+    label: 'Oluşturma',
+  },
+  {
+    value: 'update',
+    label: 'Güncelleme',
+  },
+  {
+    value: 'delete',
+    label: 'Silme',
+  },
+  {
+    value: 'view',
+    label: 'Görüntüleme',
+  },
+  {
+    value: 'login',
+    label: 'Giriş',
+  },
+  {
+    value: 'logout',
+    label: 'Çıkış',
+  },
+  {
+    value: 'upload',
+    label: 'Yükleme',
+  },
+  {
+    value: 'download',
+    label: 'İndirme',
+  },
+  {
+    value: 'share',
+    label: 'Paylaşma',
+  },
+];
 
-  const fetchLogs = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await auditLogApi.getAll({ ...filters, page, limit: 20 });
-      setLogs(response?.data?.data || []);
-      setPagination(response?.data?.pagination || null);
-    } catch (err) {
-      console.error('❌ API hatası:', err);
-      setError(err.message || 'Veri yüklenirken hata oluştu');
-    } finally {
-      setLoading(false);
-    }
+const ENTITY_OPTIONS = [
+  {
+    value: '',
+    label: 'Tüm Modüller',
+  },
+  {
+    value: 'case',
+    label: 'Dava',
+  },
+  {
+    value: 'client',
+    label: 'Müvekkil',
+  },
+  {
+    value: 'task',
+    label: 'Görev',
+  },
+  {
+    value: 'event',
+    label: 'Duruşma',
+  },
+  {
+    value: 'meeting',
+    label: 'Toplantı',
+  },
+  {
+    value: 'document',
+    label: 'Belge',
+  },
+  {
+    value: 'payment',
+    label: 'Ödeme',
+  },
+  {
+    value: 'user',
+    label: 'Kullanıcı',
+  },
+  {
+    value: 'case_party',
+    label: 'Taraf',
+  },
+  {
+    value: 'notification',
+    label: 'Bildirim',
+  },
+];
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const getActionVariant = (
+  action
+) => {
+  const variants = {
+    create: 'success',
+    update: 'warning',
+    delete: 'danger',
+    view: 'info',
+    login: 'primary',
+    logout: 'default',
+    upload: 'success',
+    download: 'info',
+    share: 'warning',
   };
 
-  useEffect(() => {
-    fetchLogs();
-  }, [filters, page]);
+  return (
+    variants[action] ||
+    'default'
+  );
+};
 
-  // ✅ Tekil sil
-  const handleDelete = async (id) => {
-    if (!isAdmin) {
-      toast.error('Bu işlem için yetkiniz yok');
-      return;
-    }
-    if (window.confirm('Bu log kaydını silmek istediğinize emin misiniz?')) {
-      try {
-        await auditLogApi.delete(id);
-        toast.success('Log silindi');
-        fetchLogs();
-      } catch (error) {
-        toast.error(error.response?.data?.message || 'Log silinemedi');
+const getActionLabel = (
+  action
+) => {
+  const labels = {
+    create: 'Oluşturdu',
+    update: 'Güncelledi',
+    delete: 'Sildi',
+    view: 'Görüntüledi',
+    login: 'Giriş Yaptı',
+    logout: 'Çıkış Yaptı',
+    upload: 'Yükledi',
+    download: 'İndirdi',
+    share: 'Paylaştı',
+  };
+
+  return (
+    labels[action] ||
+    action ||
+    '-'
+  );
+};
+
+const getEntityLabel = (
+  type
+) => {
+  const labels = {
+    case: 'Dava',
+    client: 'Müvekkil',
+    task: 'Görev',
+    event: 'Duruşma',
+    meeting: 'Toplantı',
+    document: 'Belge',
+    payment: 'Ödeme',
+    user: 'Kullanıcı',
+    case_party: 'Taraf',
+    notification: 'Bildirim',
+  };
+
+  return (
+    labels[type] ||
+    type ||
+    '-'
+  );
+};
+
+const getUserName = (
+  log
+) => {
+  const firstName =
+    log?.user?.first_name;
+
+  const lastName =
+    log?.user?.last_name;
+
+  const fullName = [
+    firstName,
+    lastName,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  return (
+    fullName ||
+    'Sistem'
+  );
+};
+
+const formatDate = (
+  date
+) => {
+  if (!date) {
+    return '-';
+  }
+
+  try {
+    return format(
+      new Date(date),
+      'dd.MM.yyyy HH:mm',
+      {
+        locale: tr,
       }
-    }
-  };
-
-  // ✅ Toplu sil
-  const handleBulkDelete = async () => {
-    if (!isAdmin) {
-      toast.error('Bu işlem için yetkiniz yok');
-      return;
-    }
-    if (selectedIds.length === 0) {
-      toast.error('Lütfen silinecek logları seçin');
-      return;
-    }
-    if (window.confirm(`${selectedIds.length} log kaydını silmek istediğinize emin misiniz?`)) {
-      try {
-        await Promise.all(selectedIds.map(id => auditLogApi.delete(id)));
-        toast.success(`${selectedIds.length} log silindi`);
-        setSelectedIds([]);
-        fetchLogs();
-      } catch (error) {
-        toast.error(error.response?.data?.message || 'Loglar silinemedi');
-      }
-    }
-  };
-
-  // ✅ Seçim işlemleri
-  const toggleSelect = (id) => {
-    setSelectedIds(prev =>
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
-  };
+  } catch {
+    return '-';
+  }
+};
 
-  const toggleSelectAll = () => {
-    if (selectedIds.length === logs.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(logs.map(l => l.id));
-    }
-  };
+// ======================================================
+// COMPONENT
+// ======================================================
 
-  const getActionVariant = (action) => {
-    const variants = {
-      create: 'success',
-      update: 'warning',
-      delete: 'danger',
-      view: 'info',
-      login: 'primary',
-      logout: 'secondary',
-      upload: 'success',
-      download: 'info',
-      share: 'warning',
-    };
-    return variants[action] || 'default';
-  };
+const AuditLogList = () => {
+  const {
+    user,
+  } =
+    useAuth();
 
-  const getActionLabel = (action) => {
-    const labels = {
-      create: 'Oluşturdu',
-      update: 'Güncelledi',
-      delete: 'Sildi',
-      view: 'Görüntüledi',
-      login: 'Giriş Yaptı',
-      logout: 'Çıkış Yaptı',
-      upload: 'Yükledi',
-      download: 'İndirdi',
-      share: 'Paylaştı',
-    };
-    return labels[action] || action;
-  };
+  const isAdmin =
+    user?.role ===
+    'admin';
 
-  const getEntityLabel = (type) => {
-    const labels = {
-      case: 'Dava',
-      client: 'Müvekkil',
-      task: 'Görev',
-      event: 'Duruşma',
-      meeting: 'Toplantı',
-      document: 'Belge',
-      payment: 'Ödeme',
-      user: 'Kullanıcı',
-      case_party: 'Taraf',
-      notification: 'Bildirim',
-    };
-    return labels[type] || type;
-  };
-
-  const resetFilters = () => {
-    setFilters({
+  const [
+    filters,
+    setFilters,
+  ] =
+    useState({
       action: '',
       entity_type: '',
       startDate: '',
       endDate: '',
       search: '',
     });
-    setPage(1);
-  };
 
-  const formatDate = (date) => {
-    if (!date) return '-';
-    return format(new Date(date), 'dd.MM.yyyy HH:mm', { locale: tr });
-  };
+  const [
+    page,
+    setPage,
+  ] =
+    useState(1);
 
-  if (loading) {
+  const [
+    selectedLog,
+    setSelectedLog,
+  ] =
+    useState(null);
+
+  const [
+    selectedIds,
+    setSelectedIds,
+  ] =
+    useState([]);
+
+  const [
+    logs,
+    setLogs,
+  ] =
+    useState([]);
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(true);
+
+  const [
+    error,
+    setError,
+  ] =
+    useState(null);
+
+  const [
+    pagination,
+    setPagination,
+  ] =
+    useState(null);
+
+  const [
+    isDeleting,
+    setIsDeleting,
+  ] =
+    useState(false);
+
+  // ====================================================
+  // FETCH
+  // ====================================================
+
+  const fetchLogs =
+    async () => {
+      setLoading(
+        true
+      );
+
+      setError(
+        null
+      );
+
+      try {
+        const response =
+          await auditLogApi.getAll({
+            ...filters,
+            page,
+            limit: 20,
+          });
+
+        setLogs(
+          Array.isArray(
+            response
+              ?.data
+              ?.data
+          )
+            ? response
+                .data
+                .data
+            : []
+        );
+
+        setPagination(
+          response
+            ?.data
+            ?.pagination ||
+            null
+        );
+      } catch (
+        requestError
+      ) {
+        console.error(
+          'Audit log API error:',
+          requestError
+        );
+
+        setError(
+          requestError
+            ?.response
+            ?.data
+            ?.message ||
+            requestError
+              ?.message ||
+            'Veri yüklenirken hata oluştu'
+        );
+      } finally {
+        setLoading(
+          false
+        );
+      }
+    };
+
+  useEffect(() => {
+    fetchLogs();
+  }, [
+    filters,
+    page,
+  ]);
+
+  useEffect(() => {
+    setSelectedIds(
+      []
+    );
+  }, [
+    filters,
+    page,
+  ]);
+
+  // ====================================================
+  // DELETE
+  // ====================================================
+
+  const handleDelete =
+    async (
+      id
+    ) => {
+      if (
+        !isAdmin
+      ) {
+        toast.error(
+          'Bu işlem için yetkiniz yok'
+        );
+
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          'Bu log kaydını silmek istediğinize emin misiniz?'
+        );
+
+      if (
+        !confirmed
+      ) {
+        return;
+      }
+
+      try {
+        setIsDeleting(
+          true
+        );
+
+        await auditLogApi.delete(
+          id
+        );
+
+        toast.success(
+          'Log kaydı silindi'
+        );
+
+        setSelectedIds(
+          (
+            current
+          ) =>
+            current.filter(
+              (
+                selectedId
+              ) =>
+                selectedId !==
+                id
+            )
+        );
+
+        await fetchLogs();
+      } catch (
+        deleteError
+      ) {
+        toast.error(
+          deleteError
+            ?.response
+            ?.data
+            ?.message ||
+            'Log silinemedi'
+        );
+      } finally {
+        setIsDeleting(
+          false
+        );
+      }
+    };
+
+  const handleBulkDelete =
+    async () => {
+      if (
+        !isAdmin
+      ) {
+        toast.error(
+          'Bu işlem için yetkiniz yok'
+        );
+
+        return;
+      }
+
+      if (
+        selectedIds.length ===
+        0
+      ) {
+        toast.error(
+          'Silinecek logları seçin'
+        );
+
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          `${selectedIds.length} log kaydını silmek istediğinize emin misiniz?`
+        );
+
+      if (
+        !confirmed
+      ) {
+        return;
+      }
+
+      try {
+        setIsDeleting(
+          true
+        );
+
+        await Promise.all(
+          selectedIds.map(
+            (
+              id
+            ) =>
+              auditLogApi.delete(
+                id
+              )
+          )
+        );
+
+        toast.success(
+          `${selectedIds.length} log kaydı silindi`
+        );
+
+        setSelectedIds(
+          []
+        );
+
+        await fetchLogs();
+      } catch (
+        bulkError
+      ) {
+        toast.error(
+          bulkError
+            ?.response
+            ?.data
+            ?.message ||
+            'Loglar silinemedi'
+        );
+      } finally {
+        setIsDeleting(
+          false
+        );
+      }
+    };
+
+  // ====================================================
+  // SELECTION
+  // ====================================================
+
+  const toggleSelect =
+    (
+      id
+    ) => {
+      setSelectedIds(
+        (
+          current
+        ) =>
+          current.includes(
+            id
+          )
+            ? current.filter(
+                (
+                  selectedId
+                ) =>
+                  selectedId !==
+                  id
+              )
+            : [
+                ...current,
+                id,
+              ]
+      );
+    };
+
+  const allSelected =
+    logs.length >
+      0 &&
+    logs.every(
+      (
+        log
+      ) =>
+        selectedIds.includes(
+          log.id
+        )
+    );
+
+  const toggleSelectAll =
+    () => {
+      if (
+        allSelected
+      ) {
+        setSelectedIds(
+          []
+        );
+
+        return;
+      }
+
+      setSelectedIds(
+        logs.map(
+          (
+            log
+          ) =>
+            log.id
+        )
+      );
+    };
+
+  // ====================================================
+  // FILTERS
+  // ====================================================
+
+  const updateFilter =
+    (
+      name,
+      value
+    ) => {
+      setFilters(
+        (
+          current
+        ) => ({
+          ...current,
+          [name]:
+            value,
+        })
+      );
+
+      setPage(
+        1
+      );
+    };
+
+  const resetFilters =
+    () => {
+      setFilters({
+        action: '',
+        entity_type: '',
+        startDate: '',
+        endDate: '',
+        search: '',
+      });
+
+      setPage(
+        1
+      );
+    };
+
+  const hasFilters =
+    Boolean(
+      filters.action ||
+      filters.entity_type ||
+      filters.startDate ||
+      filters.endDate ||
+      filters.search
+    );
+
+  // ====================================================
+  // LOADING
+  // ====================================================
+
+  if (
+    loading &&
+    logs.length ===
+      0
+  ) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex min-h-[420px] items-center justify-center">
+        <Loader text="Denetim kayıtları yükleniyor..." />
       </div>
     );
   }
 
-  if (error) {
+  // ====================================================
+  // ERROR
+  // ====================================================
+
+  if (
+    error &&
+    logs.length ===
+      0
+  ) {
     return (
-      <div className="text-center py-12">
-        <p className="text-red-600">⚠️ Hata: {error}</p>
-        <button
-          onClick={fetchLogs}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-        >
-          Tekrar Dene
-        </button>
-      </div>
+      <Error
+        title="Denetim kayıtları yüklenemedi"
+        message={error}
+        onRetry={
+          fetchLogs
+        }
+      />
     );
   }
+
+  // ====================================================
+  // RENDER
+  // ====================================================
 
   return (
     <div className="space-y-6">
-      {/* Başlık */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            📋 Denetim Logları
-          </h1>
-          <p className="text-sm text-gray-500">
-            Sistemde yapılan tüm işlemlerin kayıtları
-          </p>
+
+      {/* HEADER */}
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+
+        <div className="flex items-start gap-3">
+
+          <div
+            className="
+              flex
+              h-11
+              w-11
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-violet-50
+              text-violet-600
+              dark:bg-violet-500/[0.08]
+              dark:text-violet-400
+            "
+          >
+            <ShieldCheck size={21} />
+          </div>
+
+          <div>
+
+            <h1
+              className="
+                text-2xl
+                font-semibold
+                tracking-[-0.035em]
+                text-gray-900
+                dark:text-white
+              "
+            >
+              Denetim Logları
+            </h1>
+
+            <p
+              className="
+                mt-1
+                max-w-2xl
+                text-sm
+                leading-6
+                text-gray-500
+                dark:text-slate-400
+              "
+            >
+              Sistemde gerçekleşen işlemleri, kullanıcı aktivitelerini ve güvenlik kayıtlarını inceleyin.
+            </p>
+
+            <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+              Toplam{' '}
+              <span className="font-semibold text-gray-600 dark:text-slate-300">
+                {pagination?.total ||
+                  0}
+              </span>{' '}
+              kayıt
+            </p>
+
+          </div>
+
         </div>
-        <div className="flex gap-2">
-          {isAdmin && selectedIds.length > 0 && (
-            <Button variant="danger" onClick={handleBulkDelete}>
-              <Trash2 className="w-4 h-4 mr-1" />
-              Seçilenleri Sil ({selectedIds.length})
-            </Button>
-          )}
-          <Button variant="outline" onClick={fetchLogs}>
-            🔄 Yenile
+
+        <div className="flex flex-wrap gap-2">
+
+          {isAdmin &&
+            selectedIds.length >
+              0 && (
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={
+                  handleBulkDelete
+                }
+                disabled={
+                  isDeleting
+                }
+              >
+                <Trash2 className="h-4 w-4" />
+                Seçilileri Sil ({selectedIds.length})
+              </Button>
+            )}
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={
+              fetchLogs
+            }
+            disabled={
+              loading
+            }
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${
+                loading
+                  ? 'animate-spin'
+                  : ''
+              }`}
+            />
+
+            Yenile
           </Button>
+
         </div>
+
       </div>
 
-      {/* Filtreler */}
+      {/* FILTERS */}
+
       <Card>
-        <div className="p-4 grid grid-cols-1 md:grid-cols-5 gap-3">
-          <input
-            type="text"
-            placeholder="🔍 Ara..."
-            value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-            className="px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
-          />
-          <select
-            value={filters.action}
-            onChange={(e) => setFilters({ ...filters, action: e.target.value })}
-            className="px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
-          >
-            <option value="">Tüm İşlemler</option>
-            <option value="create">Oluşturma</option>
-            <option value="update">Güncelleme</option>
-            <option value="delete">Silme</option>
-            <option value="login">Giriş</option>
-            <option value="logout">Çıkış</option>
-            <option value="upload">Yükleme</option>
-            <option value="download">İndirme</option>
-          </select>
-          <select
-            value={filters.entity_type}
-            onChange={(e) => setFilters({ ...filters, entity_type: e.target.value })}
-            className="px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
-          >
-            <option value="">Tüm Modüller</option>
-            <option value="case">Dava</option>
-            <option value="client">Müvekkil</option>
-            <option value="task">Görev</option>
-            <option value="event">Duruşma</option>
-            <option value="meeting">Toplantı</option>
-            <option value="document">Belge</option>
-            <option value="user">Kullanıcı</option>
-            <option value="case_party">Taraf</option>
-          </select>
-          <input
-            type="date"
-            value={filters.startDate}
-            onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-            className="px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
-          />
-          <input
-            type="date"
-            value={filters.endDate}
-            onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-            className="px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
-          />
-        </div>
-        <div className="px-4 pb-4 flex gap-2">
-          <Button size="sm" onClick={() => setPage(1)}>Filtrele</Button>
-          <Button variant="outline" size="sm" onClick={resetFilters}>
-            <X className="w-4 h-4 mr-1" /> Temizle
-          </Button>
-        </div>
+
+        <Card.Body>
+
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+
+            <div className="relative xl:col-span-4">
+
+              <Search
+                size={16}
+                className="
+                  pointer-events-none
+                  absolute
+                  left-3.5
+                  top-1/2
+                  -translate-y-1/2
+                  text-gray-400
+                  dark:text-slate-500
+                "
+              />
+
+              <input
+                type="search"
+                value={
+                  filters.search
+                }
+                onChange={(
+                  event
+                ) =>
+                  updateFilter(
+                    'search',
+                    event.target.value
+                  )
+                }
+                placeholder="Kullanıcı, açıklama veya işlem ara..."
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  pl-10
+                  pr-3.5
+                  text-sm
+                  text-gray-900
+                  shadow-sm
+                  outline-none
+                  transition
+                  placeholder:text-gray-400
+                  hover:border-gray-300
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-white
+                  dark:placeholder:text-slate-500
+                "
+              />
+
+            </div>
+
+            <div className="xl:col-span-2">
+
+              <select
+                value={
+                  filters.action
+                }
+                onChange={(
+                  event
+                ) =>
+                  updateFilter(
+                    'action',
+                    event.target.value
+                  )
+                }
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  text-sm
+                  text-gray-700
+                  shadow-sm
+                  outline-none
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                "
+              >
+                {ACTION_OPTIONS.map(
+                  (
+                    option
+                  ) => (
+                    <option
+                      key={
+                        option.value
+                      }
+                      value={
+                        option.value
+                      }
+                    >
+                      {option.label}
+                    </option>
+                  )
+                )}
+              </select>
+
+            </div>
+
+            <div className="xl:col-span-2">
+
+              <select
+                value={
+                  filters.entity_type
+                }
+                onChange={(
+                  event
+                ) =>
+                  updateFilter(
+                    'entity_type',
+                    event.target.value
+                  )
+                }
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  text-sm
+                  text-gray-700
+                  shadow-sm
+                  outline-none
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                "
+              >
+                {ENTITY_OPTIONS.map(
+                  (
+                    option
+                  ) => (
+                    <option
+                      key={
+                        option.value
+                      }
+                      value={
+                        option.value
+                      }
+                    >
+                      {option.label}
+                    </option>
+                  )
+                )}
+              </select>
+
+            </div>
+
+            <div className="xl:col-span-2">
+
+              <input
+                type="date"
+                value={
+                  filters.startDate
+                }
+                onChange={(
+                  event
+                ) =>
+                  updateFilter(
+                    'startDate',
+                    event.target.value
+                  )
+                }
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3
+                  text-sm
+                  text-gray-700
+                  shadow-sm
+                  outline-none
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                "
+              />
+
+            </div>
+
+            <div className="xl:col-span-2">
+
+              <input
+                type="date"
+                value={
+                  filters.endDate
+                }
+                onChange={(
+                  event
+                ) =>
+                  updateFilter(
+                    'endDate',
+                    event.target.value
+                  )
+                }
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3
+                  text-sm
+                  text-gray-700
+                  shadow-sm
+                  outline-none
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                "
+              />
+
+            </div>
+
+          </div>
+
+          <div className="mt-3 flex items-center justify-between">
+
+            <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-slate-500">
+              <Filter size={13} />
+              Filtreler değiştiğinde liste otomatik güncellenir.
+            </div>
+
+            {hasFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={
+                  resetFilters
+                }
+              >
+                <X className="h-4 w-4" />
+                Temizle
+              </Button>
+            )}
+
+          </div>
+
+        </Card.Body>
+
       </Card>
 
-      {/* Log Listesi */}
-      <Card>
-        <Card.Body>
-          {logs.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">Log kaydı bulunamadı</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-700">
-                  <tr>
+      {/* TABLE */}
+
+      {logs.length ===
+      0 ? (
+        <Empty
+          icon={
+            Activity
+          }
+          title={
+            hasFilters
+              ? 'Eşleşen denetim kaydı bulunamadı'
+              : 'Henüz denetim kaydı yok'
+          }
+          description={
+            hasFilters
+              ? 'Filtre kriterlerini değiştirerek tekrar deneyin.'
+              : 'Sistem aktiviteleri oluştukça kayıtlar burada görüntülenecek.'
+          }
+          action={
+            hasFilters ? (
+              <Button
+                variant="secondary"
+                onClick={
+                  resetFilters
+                }
+              >
+                Filtreleri Temizle
+              </Button>
+            ) : null
+          }
+        />
+      ) : (
+        <>
+
+          <Table>
+
+            <Table.Head>
+
+              <Table.Row hover={false}>
+
+                {isAdmin && (
+                  <Table.HeadCell className="w-10 text-center">
+
+                    <button
+                      type="button"
+                      onClick={
+                        toggleSelectAll
+                      }
+                      className="inline-flex"
+                      aria-label="Tüm kayıtları seç"
+                    >
+                      {allSelected ? (
+                        <CheckSquare className="h-4 w-4 text-blue-600" />
+                      ) : (
+                        <Square className="h-4 w-4 text-gray-400" />
+                      )}
+                    </button>
+
+                  </Table.HeadCell>
+                )}
+
+                <Table.HeadCell>
+                  İşlem
+                </Table.HeadCell>
+
+                <Table.HeadCell>
+                  Modül
+                </Table.HeadCell>
+
+                <Table.HeadCell>
+                  Açıklama
+                </Table.HeadCell>
+
+                <Table.HeadCell>
+                  Kullanıcı
+                </Table.HeadCell>
+
+                <Table.HeadCell>
+                  Tarih
+                </Table.HeadCell>
+
+                <Table.HeadCell>
+                  IP
+                </Table.HeadCell>
+
+                <Table.HeadCell className="text-right">
+                  İşlem
+                </Table.HeadCell>
+
+              </Table.Row>
+
+            </Table.Head>
+
+            <Table.Body>
+
+              {logs.map(
+                (
+                  log
+                ) => (
+                  <Table.Row
+                    key={
+                      log.id
+                    }
+                  >
+
                     {isAdmin && (
-                      <th className="px-2 py-2 text-center">
-                        <button onClick={toggleSelectAll}>
-                          {selectedIds.length === logs.length ? (
-                            <CheckSquare className="w-4 h-4 text-blue-600" />
+                      <Table.Cell className="text-center">
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toggleSelect(
+                              log.id
+                            )
+                          }
+                          className="inline-flex"
+                          aria-label="Kaydı seç"
+                        >
+                          {selectedIds.includes(
+                            log.id
+                          ) ? (
+                            <CheckSquare className="h-4 w-4 text-blue-600" />
                           ) : (
-                            <Square className="w-4 h-4 text-gray-400" />
+                            <Square className="h-4 w-4 text-gray-400" />
                           )}
                         </button>
-                      </th>
+
+                      </Table.Cell>
                     )}
-                    <th className="px-4 py-2 text-left">İşlem</th>
-                    <th className="px-4 py-2 text-left">Modül</th>
-                    <th className="px-4 py-2 text-left">Açıklama</th>
-                    <th className="px-4 py-2 text-left">Kullanıcı</th>
-                    <th className="px-4 py-2 text-left">Tarih</th>
-                    <th className="px-4 py-2 text-left">IP</th>
-                    <th className="px-4 py-2 text-center">Detay</th>
-                    {isAdmin && (
-                      <th className="px-4 py-2 text-center">Sil</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map((log) => (
-                    <tr key={log.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
-                      {isAdmin && (
-                        <td className="px-2 py-2 text-center">
-                          <button onClick={() => toggleSelect(log.id)}>
-                            {selectedIds.includes(log.id) ? (
-                              <CheckSquare className="w-4 h-4 text-blue-600" />
-                            ) : (
-                              <Square className="w-4 h-4 text-gray-400" />
-                            )}
-                          </button>
-                        </td>
-                      )}
-                      <td className="px-4 py-2">
-                        <Badge variant={getActionVariant(log.action)}>
-                          {getActionLabel(log.action)}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-2">
-                        <span className="text-gray-600 dark:text-gray-300">
-                          {getEntityLabel(log.entity_type)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 max-w-xs truncate text-gray-700 dark:text-gray-200">
-                        {log.description || '-'}
-                      </td>
-                      <td className="px-4 py-2 text-gray-600 dark:text-gray-300">
-                        {log.user?.first_name} {log.user?.last_name}
-                      </td>
-                      <td className="px-4 py-2 text-xs text-gray-500">
-                        {formatDate(log.created_at)}
-                      </td>
-                      <td className="px-4 py-2 text-xs text-gray-400">
-                        {log.ip_address || '-'}
-                      </td>
-                      <td className="px-4 py-2 text-center">
+
+                    <Table.Cell>
+
+                      <Badge
+                        variant={
+                          getActionVariant(
+                            log.action
+                          )
+                        }
+                        dot
+                      >
+                        {getActionLabel(
+                          log.action
+                        )}
+                      </Badge>
+
+                    </Table.Cell>
+
+                    <Table.Cell>
+
+                      <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                        {getEntityLabel(
+                          log.entity_type
+                        )}
+                      </span>
+
+                    </Table.Cell>
+
+                    <Table.Cell>
+
+                      <p
+                        className="
+                          max-w-[320px]
+                          truncate
+                          text-sm
+                          text-gray-600
+                          dark:text-slate-400
+                        "
+                        title={
+                          log.description ||
+                          ''
+                        }
+                      >
+                        {log.description ||
+                          '-'}
+                      </p>
+
+                    </Table.Cell>
+
+                    <Table.Cell>
+
+                      <div className="min-w-[130px]">
+
+                        <p className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                          {getUserName(
+                            log
+                          )}
+                        </p>
+
+                        {log.user?.email && (
+                          <p className="mt-0.5 max-w-[180px] truncate text-[10px] text-gray-400 dark:text-slate-500">
+                            {log.user.email}
+                          </p>
+                        )}
+
+                      </div>
+
+                    </Table.Cell>
+
+                    <Table.Cell>
+
+                      <span className="whitespace-nowrap text-xs text-gray-500 dark:text-slate-500">
+                        {formatDate(
+                          log.created_at
+                        )}
+                      </span>
+
+                    </Table.Cell>
+
+                    <Table.Cell>
+
+                      <code className="whitespace-nowrap text-[11px] text-gray-500 dark:text-slate-500">
+                        {log.ip_address ||
+                          '-'}
+                      </code>
+
+                    </Table.Cell>
+
+                    <Table.Cell className="text-right">
+
+                      <div className="flex items-center justify-end gap-1">
+
                         <button
-                          onClick={() => setSelectedLog(log)}
-                          className="text-blue-600 hover:text-blue-800"
+                          type="button"
+                          onClick={() =>
+                            setSelectedLog(
+                              log
+                            )
+                          }
+                          className="
+                            inline-flex
+                            h-8
+                            w-8
+                            items-center
+                            justify-center
+                            rounded-lg
+                            text-gray-400
+                            transition
+                            hover:bg-blue-50
+                            hover:text-blue-600
+                            dark:text-slate-500
+                            dark:hover:bg-blue-500/[0.08]
+                            dark:hover:text-blue-400
+                          "
+                          title="Log detayını incele"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="h-4 w-4" />
                         </button>
-                      </td>
-                      {isAdmin && (
-                        <td className="px-4 py-2 text-center">
+
+                        {isAdmin && (
                           <button
-                            onClick={() => handleDelete(log.id)}
-                            className="text-red-500 hover:text-red-700"
+                            type="button"
+                            onClick={() =>
+                              handleDelete(
+                                log.id
+                              )
+                            }
+                            disabled={
+                              isDeleting
+                            }
+                            className="
+                              inline-flex
+                              h-8
+                              w-8
+                              items-center
+                              justify-center
+                              rounded-lg
+                              text-gray-400
+                              transition
+                              hover:bg-red-50
+                              hover:text-red-600
+                              disabled:opacity-50
+                              dark:text-slate-500
+                              dark:hover:bg-red-500/[0.08]
+                              dark:hover:text-red-400
+                            "
+                            title="Log kaydını sil"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="h-4 w-4" />
                           </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                        )}
 
-          {/* Pagination */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4">
-              <span className="text-sm text-gray-500">
-                Toplam {pagination.total} kayıt
-              </span>
-              <div className="flex gap-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page <= 1}
-                  onClick={() => setPage(page - 1)}
-                >
-                  Önceki
-                </Button>
-                <span className="px-3 py-1 text-sm">
-                  {page} / {pagination.totalPages}
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page >= pagination.totalPages}
-                  onClick={() => setPage(page + 1)}
-                >
-                  Sonraki
-                </Button>
-              </div>
-            </div>
-          )}
-        </Card.Body>
-      </Card>
+                      </div>
 
-      {/* ✅ Detay Modalı */}
-      {selectedLog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">📋 Log Detayı</h2>
-              <button
-                onClick={() => setSelectedLog(null)}
-                className="text-gray-500 hover:text-gray-700"
+                    </Table.Cell>
+
+                  </Table.Row>
+                )
+              )}
+
+            </Table.Body>
+
+          </Table>
+
+          {/* PAGINATION */}
+
+          {pagination &&
+            pagination.totalPages >
+              1 && (
+              <div
+                className="
+                  flex
+                  flex-col
+                  gap-3
+                  rounded-xl
+                  border
+                  border-gray-200
+                  bg-white
+                  px-4
+                  py-3
+                  dark:border-white/[0.07]
+                  dark:bg-[#0b1b33]
+                  sm:flex-row
+                  sm:items-center
+                  sm:justify-between
+                "
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">İşlem</p>
-                  <Badge variant={getActionVariant(selectedLog.action)}>
-                    {getActionLabel(selectedLog.action)}
+                <p className="text-xs text-gray-500 dark:text-slate-400">
+                  Toplam{' '}
+                  <span className="font-semibold text-gray-700 dark:text-slate-300">
+                    {pagination.total}
+                  </span>{' '}
+                  kayıt
+                </p>
+
+                <div className="flex items-center gap-2">
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      page <= 1 ||
+                      loading
+                    }
+                    onClick={() =>
+                      setPage(
+                        (
+                          current
+                        ) =>
+                          Math.max(
+                            1,
+                            current -
+                              1
+                          )
+                      )
+                    }
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Önceki
+                  </Button>
+
+                  <span className="min-w-[70px] text-center text-xs font-semibold text-gray-600 dark:text-slate-400">
+                    {page} /{' '}
+                    {pagination.totalPages}
+                  </span>
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      page >=
+                        pagination.totalPages ||
+                      loading
+                    }
+                    onClick={() =>
+                      setPage(
+                        (
+                          current
+                        ) =>
+                          Math.min(
+                            pagination.totalPages,
+                            current +
+                              1
+                          )
+                      )
+                    }
+                  >
+                    Sonraki
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+
+                </div>
+
+              </div>
+            )}
+
+        </>
+      )}
+
+      {/* DETAIL MODAL */}
+
+      <Modal
+        isOpen={
+          Boolean(
+            selectedLog
+          )
+        }
+        onClose={() =>
+          setSelectedLog(
+            null
+          )
+        }
+        title="Denetim Kaydı Detayı"
+        size="lg"
+        footer={
+          <Button
+            variant="secondary"
+            onClick={() =>
+              setSelectedLog(
+                null
+              )
+            }
+          >
+            Kapat
+          </Button>
+        }
+      >
+        {selectedLog && (
+          <div className="space-y-6">
+
+            <div className="grid gap-4 sm:grid-cols-2">
+
+              <div>
+
+                <p className="text-xs font-medium text-gray-400 dark:text-slate-500">
+                  İşlem
+                </p>
+
+                <div className="mt-2">
+                  <Badge
+                    variant={
+                      getActionVariant(
+                        selectedLog.action
+                      )
+                    }
+                    dot
+                  >
+                    {getActionLabel(
+                      selectedLog.action
+                    )}
                   </Badge>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">Modül</p>
-                  <p className="font-medium text-gray-900 dark:text-white">
-                    {getEntityLabel(selectedLog.entity_type)}
-                  </p>
-                </div>
+
               </div>
 
               <div>
-                <p className="text-sm text-gray-500">Açıklama</p>
-                <p className="text-gray-900 dark:text-white">
-                  {selectedLog.description || '-'}
+
+                <p className="text-xs font-medium text-gray-400 dark:text-slate-500">
+                  Modül
                 </p>
+
+                <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">
+                  {getEntityLabel(
+                    selectedLog.entity_type
+                  )}
+                </p>
+
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Kullanıcı</p>
-                  <p className="font-medium text-gray-900 dark:text-white">
-                    {selectedLog.user?.first_name} {selectedLog.user?.last_name}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Email</p>
-                  <p className="text-gray-600 dark:text-gray-300">
-                    {selectedLog.user?.email || '-'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Tarih</p>
-                  <p className="font-medium text-gray-900 dark:text-white">
-                    {formatDate(selectedLog.created_at)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">IP Adresi</p>
-                  <p className="text-gray-600 dark:text-gray-300">
-                    {selectedLog.ip_address || '-'}
-                  </p>
-                </div>
-              </div>
-
-              {selectedLog.metadata && Object.keys(selectedLog.metadata).length > 0 && (
-                <div>
-                  <p className="text-sm text-gray-500">Metadata</p>
-                  <pre className="bg-gray-100 dark:bg-gray-700 p-3 rounded-md text-xs overflow-auto max-h-40">
-                    {JSON.stringify(selectedLog.metadata, null, 2)}
-                  </pre>
-                </div>
-              )}
-
-              {selectedLog.old_values && (
-                <div>
-                  <p className="text-sm text-gray-500">Eski Değerler</p>
-                  <pre className="bg-gray-100 dark:bg-gray-700 p-3 rounded-md text-xs overflow-auto max-h-40">
-                    {JSON.stringify(selectedLog.old_values, null, 2)}
-                  </pre>
-                </div>
-              )}
-
-              {selectedLog.new_values && (
-                <div>
-                  <p className="text-sm text-gray-500">Yeni Değerler</p>
-                  <pre className="bg-gray-100 dark:bg-gray-700 p-3 rounded-md text-xs overflow-auto max-h-40">
-                    {JSON.stringify(selectedLog.new_values, null, 2)}
-                  </pre>
-                </div>
-              )}
             </div>
 
-            <div className="mt-6 flex justify-end">
-              <Button variant="secondary" onClick={() => setSelectedLog(null)}>
-                Kapat
-              </Button>
+            <div>
+
+              <p className="text-xs font-medium text-gray-400 dark:text-slate-500">
+                Açıklama
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-gray-700 dark:text-slate-300">
+                {selectedLog.description ||
+                  '-'}
+              </p>
+
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+
+              <div>
+
+                <p className="text-xs font-medium text-gray-400 dark:text-slate-500">
+                  Kullanıcı
+                </p>
+
+                <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">
+                  {getUserName(
+                    selectedLog
+                  )}
+                </p>
+
+                {selectedLog.user?.email && (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+                    {selectedLog.user.email}
+                  </p>
+                )}
+
+              </div>
+
+              <div>
+
+                <p className="text-xs font-medium text-gray-400 dark:text-slate-500">
+                  Tarih
+                </p>
+
+                <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">
+                  {formatDate(
+                    selectedLog.created_at
+                  )}
+                </p>
+
+              </div>
+
+              <div>
+
+                <p className="text-xs font-medium text-gray-400 dark:text-slate-500">
+                  IP Adresi
+                </p>
+
+                <code className="mt-2 block text-xs text-gray-600 dark:text-slate-400">
+                  {selectedLog.ip_address ||
+                    '-'}
+                </code>
+
+              </div>
+
+              <div>
+
+                <p className="text-xs font-medium text-gray-400 dark:text-slate-500">
+                  Kayıt Kimliği
+                </p>
+
+                <code className="mt-2 block break-all text-xs text-gray-600 dark:text-slate-400">
+                  {selectedLog.id ||
+                    '-'}
+                </code>
+
+              </div>
+
+            </div>
+
+            {selectedLog.metadata &&
+              Object.keys(
+                selectedLog.metadata
+              ).length >
+                0 && (
+                <div>
+
+                  <p className="mb-2 text-xs font-medium text-gray-400 dark:text-slate-500">
+                    Metadata
+                  </p>
+
+                  <pre
+                    className="
+                      max-h-56
+                      overflow-auto
+                      rounded-xl
+                      border
+                      border-gray-200
+                      bg-gray-50
+                      p-4
+                      text-xs
+                      leading-5
+                      text-gray-700
+                      dark:border-white/[0.07]
+                      dark:bg-white/[0.025]
+                      dark:text-slate-300
+                    "
+                  >
+                    {JSON.stringify(
+                      selectedLog.metadata,
+                      null,
+                      2
+                    )}
+                  </pre>
+
+                </div>
+              )}
+
+            {selectedLog.old_values && (
+              <div>
+
+                <p className="mb-2 text-xs font-medium text-gray-400 dark:text-slate-500">
+                  Eski Değerler
+                </p>
+
+                <pre
+                  className="
+                    max-h-56
+                    overflow-auto
+                    rounded-xl
+                    border
+                    border-red-100
+                    bg-red-50/40
+                    p-4
+                    text-xs
+                    leading-5
+                    text-gray-700
+                    dark:border-red-500/10
+                    dark:bg-red-500/[0.025]
+                    dark:text-slate-300
+                  "
+                >
+                  {JSON.stringify(
+                    selectedLog.old_values,
+                    null,
+                    2
+                  )}
+                </pre>
+
+              </div>
+            )}
+
+            {selectedLog.new_values && (
+              <div>
+
+                <p className="mb-2 text-xs font-medium text-gray-400 dark:text-slate-500">
+                  Yeni Değerler
+                </p>
+
+                <pre
+                  className="
+                    max-h-56
+                    overflow-auto
+                    rounded-xl
+                    border
+                    border-emerald-100
+                    bg-emerald-50/40
+                    p-4
+                    text-xs
+                    leading-5
+                    text-gray-700
+                    dark:border-emerald-500/10
+                    dark:bg-emerald-500/[0.025]
+                    dark:text-slate-300
+                  "
+                >
+                  {JSON.stringify(
+                    selectedLog.new_values,
+                    null,
+                    2
+                  )}
+                </pre>
+
+              </div>
+            )}
+
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
+
     </div>
   );
 };
