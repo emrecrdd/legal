@@ -68,12 +68,17 @@ class Note extends Sequelize.Model {
         },
       },
       {
-        sequelize,
-        tableName: 'notes',
-        timestamps: true,
-        createdAt: 'created_at',
-        updatedAt: 'updated_at',
-      }
+  sequelize,
+  tableName: 'notes',
+
+  timestamps: true,
+
+  paranoid: true,
+
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
+  deletedAt: 'deleted_at',
+}
     );
   }
 
