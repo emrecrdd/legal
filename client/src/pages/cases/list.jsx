@@ -1,244 +1,876 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import {
+  useState,
+} from 'react';
+
+import {
+  Link,
+} from 'react-router-dom';
+
+import {
+  useQuery,
+} from '@tanstack/react-query';
+
+import {
+  ArrowLeft,
+  ArrowRight,
+  BriefcaseBusiness,
+  Plus,
+  Search,
+  Scale,
+} from 'lucide-react';
+
 import caseApi from '../../features/cases/case.api.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Table from '../../components/ui/Table.jsx';
 import Badge from '../../components/ui/Badge.jsx';
+import Card from '../../components/ui/Card.jsx';
+import Loader from '../../components/shared/Loader.jsx';
+import Error from '../../components/shared/Error.jsx';
+import Empty from '../../components/shared/Empty.jsx';
+
+// ======================================================
+// CONSTANTS
+// ======================================================
+
+const STATUSES = [
+  {
+    value: '',
+    label: 'Tüm Durumlar',
+  },
+  {
+    value: 'preparation',
+    label: 'Hazırlık',
+  },
+  {
+    value: 'active',
+    label: 'Devam Ediyor',
+  },
+  {
+    value: 'hearing',
+    label: 'Duruşmada',
+  },
+  {
+    value: 'appeal',
+    label: 'İstinaf',
+  },
+  {
+    value: 'cassation',
+    label: 'Temyiz',
+  },
+  {
+    value: 'concluded',
+    label: 'Sonuçlandı',
+  },
+  {
+    value: 'archived',
+    label: 'Arşivlendi',
+  },
+];
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const getStatusLabel = (
+  status
+) => {
+  return (
+    STATUSES.find(
+      (
+        item
+      ) =>
+        item.value ===
+        status
+    )?.label ||
+    status ||
+    '-'
+  );
+};
+
+const getStatusVariant = (
+  status
+) => {
+  const variants = {
+    preparation:
+      'warning',
+
+    active:
+      'success',
+
+    hearing:
+      'info',
+
+    appeal:
+      'warning',
+
+    cassation:
+      'default',
+
+    concluded:
+      'default',
+
+    archived:
+      'danger',
+  };
+
+  return (
+    variants[status] ||
+    'default'
+  );
+};
+
+// ======================================================
+// COMPONENT
+// ======================================================
 
 const CasesList = () => {
-  const [search, setSearch] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [page, setPage] = useState(1);
+  const [
+    search,
+    setSearch,
+  ] =
+    useState('');
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['cases', { page, search: searchQuery, status: statusFilter }],
-    queryFn: () => caseApi.getAll({ page, search: searchQuery, status: statusFilter }),
-    staleTime: 1000,
-    keepPreviousData: true,
-  });
+  const [
+    searchQuery,
+    setSearchQuery,
+  ] =
+    useState('');
 
-  const cases = data?.data?.data || [];
-  const pagination = data?.data?.pagination;
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] =
+    useState('');
 
-  const handleSearch = () => {
-    setSearchQuery(search);
-    setPage(1);
-  };
+  const [
+    page,
+    setPage,
+  ] =
+    useState(1);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
+  // ====================================================
+  // QUERY
+  // ====================================================
 
-  const handleStatusChange = (e) => {
-    setStatusFilter(e.target.value);
-    setPage(1);
-  };
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } =
+    useQuery({
+      queryKey: [
+        'cases',
+        {
+          page,
+          search:
+            searchQuery,
+          status:
+            statusFilter,
+        },
+      ],
 
-  const statuses = [
-    { value: '', label: 'Tümü' },
-    { value: 'preparation', label: 'Hazırlık' },
-    { value: 'active', label: 'Devam Ediyor' },
-    { value: 'hearing', label: 'Duruşmada' },
-    { value: 'appeal', label: 'İstinaf' },
-    { value: 'cassation', label: 'Temyiz' },
-    { value: 'concluded', label: 'Sonuçlandı' },
-    { value: 'archived', label: 'Arşivlendi' },
-  ];
+      queryFn: () =>
+        caseApi.getAll({
+          page,
 
-  const getStatusVariant = (status) => {
-    switch (status) {
-      case 'preparation': return 'warning';
-      case 'active': return 'success';
-      case 'hearing': return 'info';
-      case 'appeal': return 'warning';
-      case 'cassation': return 'default';
-      case 'concluded': return 'default';
-      case 'archived': return 'danger';
-      default: return 'default';
-    }
-  };
+          search:
+            searchQuery,
 
-  if (isLoading) {
+          status:
+            statusFilter,
+        }),
+
+      staleTime:
+        1000,
+
+      keepPreviousData:
+        true,
+    });
+
+  const cases =
+    Array.isArray(
+      data?.data?.data
+    )
+      ? data.data.data
+      : [];
+
+  const pagination =
+    data?.data
+      ?.pagination;
+
+  // ====================================================
+  // ACTIONS
+  // ====================================================
+
+  const handleSearch =
+    () => {
+      setSearchQuery(
+        search.trim()
+      );
+
+      setPage(
+        1
+      );
+    };
+
+  const handleKeyDown =
+    (
+      event
+    ) => {
+      if (
+        event.key ===
+        'Enter'
+      ) {
+        handleSearch();
+      }
+    };
+
+  const handleStatusChange =
+    (
+      event
+    ) => {
+      setStatusFilter(
+        event.target.value
+      );
+
+      setPage(
+        1
+      );
+    };
+
+  const clearFilters =
+    () => {
+      setSearch('');
+      setSearchQuery('');
+      setStatusFilter('');
+      setPage(1);
+    };
+
+  const hasFilters =
+    Boolean(
+      searchQuery ||
+      statusFilter
+    );
+
+  // ====================================================
+  // LOADING
+  // ====================================================
+
+  if (
+    isLoading
+  ) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+      <div className="flex min-h-[420px] items-center justify-center">
+        <Loader text="Davalar yükleniyor..." />
       </div>
     );
   }
 
-  if (error) {
+  // ====================================================
+  // ERROR
+  // ====================================================
+
+  if (
+    error
+  ) {
     return (
-      <div className="text-center py-12">
-        <div className="text-4xl mb-4">⚠️</div>
-        <h2 className="text-xl font-bold text-red-600">Davalar yüklenirken hata oluştu</h2>
-        <p className="text-gray-500">{error.message}</p>
-        <Button className="mt-4" onClick={() => window.location.reload()}>
-          Yeniden Dene
-        </Button>
-      </div>
+      <Error
+        title="Davalar yüklenemedi"
+        message="Dava kayıtları alınırken bir hata oluştu."
+        error={error}
+        onRetry={() =>
+          refetch()
+        }
+      />
     );
   }
+
+  // ====================================================
+  // RENDER
+  // ====================================================
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          📁 Davalar
-        </h1>
+
+      {/* ==================================================
+          HEADER
+      ================================================== */}
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+
+        <div>
+
+          <div className="flex items-center gap-3">
+
+            <div
+              className="
+                flex
+                h-11
+                w-11
+                items-center
+                justify-center
+                rounded-xl
+                bg-blue-50
+                text-blue-600
+                dark:bg-blue-500/[0.08]
+                dark:text-blue-400
+              "
+            >
+              <BriefcaseBusiness size={21} />
+            </div>
+
+            <div>
+
+              <h1
+                className="
+                  text-2xl
+                  font-semibold
+                  tracking-[-0.035em]
+                  text-gray-900
+                  dark:text-white
+                "
+              >
+                Davalar
+              </h1>
+
+              <p
+                className="
+                  mt-1
+                  text-sm
+                  text-gray-500
+                  dark:text-slate-400
+                "
+              >
+                Büroya kayıtlı dava dosyalarını görüntüleyin ve yönetin.
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
         <Link to="/cases/create">
-          <Button>+ Yeni Dava</Button>
+          <Button>
+            <Plus className="h-4 w-4" />
+            Yeni Dava
+          </Button>
         </Link>
+
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 flex gap-2">
+      {/* ==================================================
+          FILTERS
+      ================================================== */}
+
+      <Card>
+
+        <Card.Body>
+
+          <div className="flex flex-col gap-3 lg:flex-row">
+
+            <div className="flex flex-1 flex-col gap-2 sm:flex-row">
+
               <Input
-                placeholder="Dava ara... (Enter ile ara)"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={handleKeyDown}
-                icon="🔍"
+                value={
+                  search
+                }
+                onChange={(
+                  event
+                ) =>
+                  setSearch(
+                    event.target.value
+                  )
+                }
+                onKeyDown={
+                  handleKeyDown
+                }
+                placeholder="Dosya no, mahkeme, konu veya yargı birimi ara..."
+                icon={
+                  <Search size={16} />
+                }
               />
-              <Button 
-                variant="primary" 
-                onClick={handleSearch}
-                className="shrink-0"
+
+              <Button
+                onClick={
+                  handleSearch
+                }
+                className="sm:w-auto"
               >
+                <Search className="h-4 w-4" />
                 Ara
               </Button>
-            </div>
-            <div className="sm:w-48">
-              <select
-                value={statusFilter}
-                onChange={handleStatusChange}
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {statuses.map((status) => (
-                  <option key={status.value} value={status.value}>
-                    {status.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
 
-        <div className="overflow-x-auto">
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row lg:w-auto">
+
+              <div className="min-w-[200px]">
+
+                <select
+                  value={
+                    statusFilter
+                  }
+                  onChange={
+                    handleStatusChange
+                  }
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    text-sm
+                    text-gray-700
+                    shadow-sm
+                    outline-none
+                    transition
+                    hover:border-gray-300
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                    dark:hover:border-white/[0.14]
+                    dark:focus:border-blue-500/60
+                  "
+                >
+                  {STATUSES.map(
+                    (
+                      status
+                    ) => (
+                      <option
+                        key={
+                          status.value
+                        }
+                        value={
+                          status.value
+                        }
+                      >
+                        {status.label}
+                      </option>
+                    )
+                  )}
+                </select>
+
+              </div>
+
+              {hasFilters && (
+                <Button
+                  variant="ghost"
+                  onClick={
+                    clearFilters
+                  }
+                >
+                  Filtreleri Temizle
+                </Button>
+              )}
+
+            </div>
+
+          </div>
+
+          {isFetching && (
+            <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
+              Liste güncelleniyor...
+            </p>
+          )}
+
+        </Card.Body>
+
+      </Card>
+
+      {/* ==================================================
+          TABLE
+      ================================================== */}
+
+      {cases.length ===
+      0 ? (
+        <Empty
+          icon={Scale}
+          title={
+            hasFilters
+              ? 'Eşleşen dava bulunamadı'
+              : 'Henüz dava kaydı yok'
+          }
+          description={
+            hasFilters
+              ? 'Arama veya filtre kriterlerinizi değiştirerek tekrar deneyin.'
+              : 'İlk dava kaydınızı oluşturarak dosya yönetimine başlayabilirsiniz.'
+          }
+          action={
+            hasFilters ? (
+              <Button
+                variant="secondary"
+                onClick={
+                  clearFilters
+                }
+              >
+                Filtreleri Temizle
+              </Button>
+            ) : (
+              <Link to="/cases/create">
+                <Button>
+                  <Plus className="h-4 w-4" />
+                  İlk Davayı Oluştur
+                </Button>
+              </Link>
+            )
+          }
+        />
+      ) : (
+        <>
+
           <Table>
+
             <Table.Head>
-              <Table.Row>
-                <Table.HeadCell>Yargı Türü</Table.HeadCell>
-                <Table.HeadCell>Yargı Birimi</Table.HeadCell>
-                <Table.HeadCell>Mahkeme</Table.HeadCell>
-                <Table.HeadCell>Müvekkil</Table.HeadCell>
-                <Table.HeadCell>Durum</Table.HeadCell>
-                <Table.HeadCell>İşlem</Table.HeadCell>
+              <Table.Row hover={false}>
+                <Table.HeadCell>
+                  Dosya
+                </Table.HeadCell>
+
+                <Table.HeadCell>
+                  Yargı Birimi
+                </Table.HeadCell>
+
+                <Table.HeadCell>
+                  Mahkeme
+                </Table.HeadCell>
+
+                <Table.HeadCell>
+                  Müvekkiller
+                </Table.HeadCell>
+
+                <Table.HeadCell>
+                  Durum
+                </Table.HeadCell>
+
+                <Table.HeadCell className="text-right">
+                  İşlem
+                </Table.HeadCell>
               </Table.Row>
             </Table.Head>
+
             <Table.Body>
-              {cases.length === 0 ? (
-                <Table.Row>
-                  <Table.Cell colSpan="6" className="text-center py-8 text-gray-500">
-                    {searchQuery ? 'Aramanıza uygun dava bulunamadı' : 'Henüz dava bulunmuyor'}
-                  </Table.Cell>
-                </Table.Row>
-              ) : (
-                cases.map((caseItem) => (
-                  <Table.Row key={caseItem.id}>
-                    {/* ✅ YARGI TÜRÜ */}
+
+              {cases.map(
+                (
+                  caseItem
+                ) => (
+                  <Table.Row
+                    key={
+                      caseItem.id
+                    }
+                  >
+
+                    {/* DOSYA */}
+
                     <Table.Cell>
-                      <div className="font-medium">{caseItem.judiciary_type || '-'}</div>
-                      <div className="text-sm text-gray-500">{caseItem.case_number || '-'}</div>
+
+                      <div className="min-w-[150px]">
+
+                        <Link
+                          to={`/cases/${caseItem.id}`}
+                          className="
+                            font-semibold
+                            text-gray-900
+                            transition
+                            hover:text-blue-600
+                            dark:text-white
+                            dark:hover:text-blue-400
+                          "
+                        >
+                          {caseItem.judiciary_type ||
+                            caseItem.title ||
+                            'Dava Dosyası'}
+                        </Link>
+
+                        <p className="mt-1 text-xs font-medium text-gray-400 dark:text-slate-500">
+                          {caseItem.case_number ||
+                            'Dosya no belirtilmemiş'}
+                        </p>
+
+                      </div>
+
                     </Table.Cell>
-                    {/* ✅ YARGI BİRİMİ */}
+
+                    {/* YARGI BİRİMİ */}
+
                     <Table.Cell>
-                      {caseItem.judiciary_unit || '-'}
+
+                      <div className="min-w-[130px]">
+
+                        <p className="font-medium text-gray-700 dark:text-slate-300">
+                          {caseItem.judiciary_unit ||
+                            '-'}
+                        </p>
+
+                      </div>
+
                     </Table.Cell>
-                    {/* ✅ MAHKEME */}
+
+                    {/* MAHKEME */}
+
                     <Table.Cell>
-                      {caseItem.court_name || '-'}
+
+                      <div className="max-w-[220px]">
+
+                        <p className="text-gray-700 dark:text-slate-300">
+                          {caseItem.court_name ||
+                            '-'}
+                        </p>
+
+                      </div>
+
                     </Table.Cell>
-                    {/* ✅ MÜVEKKİL (ÇOKLU) */}
+
+                    {/* CLIENTS */}
+
                     <Table.Cell>
-                      {caseItem.clients && caseItem.clients.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {caseItem.clients.slice(0, 2).map((client) => (
-                            <Link
-                              key={client.id}
-                              to={`/clients/${client.id}`}
-                              className="text-blue-600 hover:underline text-sm"
+
+                      {caseItem.clients &&
+                      caseItem.clients
+                        .length >
+                        0 ? (
+                        <div className="flex max-w-[260px] flex-wrap gap-1.5">
+
+                          {caseItem.clients
+                            .slice(
+                              0,
+                              2
+                            )
+                            .map(
+                              (
+                                client
+                              ) => (
+                                <Link
+                                  key={
+                                    client.id
+                                  }
+                                  to={`/clients/${client.id}`}
+                                  className="
+                                    rounded-md
+                                    border
+                                    border-gray-200
+                                    bg-gray-50
+                                    px-2
+                                    py-1
+                                    text-[11px]
+                                    font-semibold
+                                    text-gray-600
+                                    transition
+                                    hover:border-blue-200
+                                    hover:bg-blue-50
+                                    hover:text-blue-600
+                                    dark:border-white/[0.07]
+                                    dark:bg-white/[0.03]
+                                    dark:text-slate-300
+                                    dark:hover:border-blue-500/20
+                                    dark:hover:bg-blue-500/[0.05]
+                                    dark:hover:text-blue-400
+                                  "
+                                >
+                                  {client.name}
+                                </Link>
+                              )
+                            )}
+
+                          {caseItem.clients
+                            .length >
+                            2 && (
+                            <span
+                              className="
+                                rounded-md
+                                bg-gray-100
+                                px-2
+                                py-1
+                                text-[11px]
+                                font-semibold
+                                text-gray-500
+                                dark:bg-white/[0.04]
+                                dark:text-slate-400
+                              "
                             >
-                              {client.name}
-                            </Link>
-                          ))}
-                          {caseItem.clients.length > 2 && (
-                            <span className="text-sm text-gray-500">
-                              +{caseItem.clients.length - 2}
+                              +
+                              {caseItem.clients
+                                .length -
+                                2}
                             </span>
                           )}
+
                         </div>
                       ) : (
-                        '-'
+                        <span className="text-gray-400 dark:text-slate-600">
+                          -
+                        </span>
                       )}
+
                     </Table.Cell>
-                    {/* ✅ DURUM */}
+
+                    {/* STATUS */}
+
                     <Table.Cell>
-                      <Badge variant={getStatusVariant(caseItem.status)}>
-                        {statuses.find(s => s.value === caseItem.status)?.label || caseItem.status}
+
+                      <Badge
+                        variant={
+                          getStatusVariant(
+                            caseItem.status
+                          )
+                        }
+                        dot
+                      >
+                        {getStatusLabel(
+                          caseItem.status
+                        )}
                       </Badge>
+
                     </Table.Cell>
-                    {/* ✅ İŞLEM */}
-                    <Table.Cell>
+
+                    {/* ACTION */}
+
+                    <Table.Cell className="text-right">
+
                       <Link
                         to={`/cases/${caseItem.id}`}
-                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                       >
-                        Görüntüle
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                        >
+                          İncele
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Button>
                       </Link>
-                    </Table.Cell>
-                  </Table.Row>
-                ))
-              )}
-            </Table.Body>
-          </Table>
-        </div>
 
-        {pagination && pagination.totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Toplam {pagination.total} dava
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === 1}
-                onClick={() => setPage(page - 1)}
+                    </Table.Cell>
+
+                  </Table.Row>
+                )
+              )}
+
+            </Table.Body>
+
+          </Table>
+
+          {/* ================================================
+              PAGINATION
+          ================================================ */}
+
+          {pagination &&
+            pagination.totalPages >
+              1 && (
+              <div
+                className="
+                  flex
+                  flex-col
+                  gap-3
+                  rounded-xl
+                  border
+                  border-gray-200
+                  bg-white
+                  px-4
+                  py-3
+                  dark:border-white/[0.07]
+                  dark:bg-[#0b1b33]
+                  sm:flex-row
+                  sm:items-center
+                  sm:justify-between
+                "
               >
-                Önceki
-              </Button>
-              <span className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400">
-                {page} / {pagination.totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === pagination.totalPages}
-                onClick={() => setPage(page + 1)}
-              >
-                Sonraki
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
+
+                <p
+                  className="
+                    text-xs
+                    text-gray-500
+                    dark:text-slate-400
+                  "
+                >
+                  Toplam{' '}
+                  <span className="font-semibold text-gray-700 dark:text-slate-300">
+                    {pagination.total}
+                  </span>{' '}
+                  dava
+                </p>
+
+                <div className="flex items-center gap-2">
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      page ===
+                      1
+                    }
+                    onClick={() =>
+                      setPage(
+                        (
+                          current
+                        ) =>
+                          Math.max(
+                            current -
+                              1,
+                            1
+                          )
+                      )
+                    }
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Önceki
+                  </Button>
+
+                  <span
+                    className="
+                      min-w-[70px]
+                      text-center
+                      text-xs
+                      font-semibold
+                      text-gray-600
+                      dark:text-slate-400
+                    "
+                  >
+                    {page} /{' '}
+                    {pagination.totalPages}
+                  </span>
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      page ===
+                      pagination.totalPages
+                    }
+                    onClick={() =>
+                      setPage(
+                        (
+                          current
+                        ) =>
+                          Math.min(
+                            current +
+                              1,
+                            pagination.totalPages
+                          )
+                      )
+                    }
+                  >
+                    Sonraki
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+
+                </div>
+
+              </div>
+            )}
+
+        </>
+      )}
+
     </div>
   );
 };

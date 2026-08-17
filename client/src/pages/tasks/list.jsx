@@ -19,13 +19,22 @@ import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Table from '../../components/ui/Table.jsx';
 import Badge from '../../components/ui/Badge.jsx';
+import Card from '../../components/ui/Card.jsx';
+import Loader from '../../components/shared/Loader.jsx';
+import Error from '../../components/shared/Error.jsx';
+import Empty from '../../components/shared/Empty.jsx';
 
 import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
   CheckCircle2,
+  CheckSquare2,
   Clock3,
   Filter,
   Plus,
   Search,
+  X,
 } from 'lucide-react';
 
 // ======================================================
@@ -35,7 +44,7 @@ import {
 const STATUS_OPTIONS = [
   {
     value: '',
-    label: 'Tümü',
+    label: 'Tüm Durumlar',
   },
   {
     value: 'pending',
@@ -58,7 +67,7 @@ const STATUS_OPTIONS = [
 const PRIORITY_OPTIONS = [
   {
     value: '',
-    label: 'Tümü',
+    label: 'Tüm Öncelikler',
   },
   {
     value: 'low',
@@ -89,44 +98,65 @@ const PRIORITY_LABELS = {
 // STATUS HELPERS
 // ======================================================
 
-const getTaskDisplayStatus = (task) => {
+const getTaskDisplayStatus = (
+  task
+) => {
   if (
-    task?.status === 'completed' &&
+    task?.status ===
+      'completed' &&
     !task?.approved_at
   ) {
     return {
-      label: 'Onay Bekliyor',
-      variant: 'warning',
+      label:
+        'Onay Bekliyor',
+
+      variant:
+        'warning',
     };
   }
 
   if (
-    task?.status === 'completed' &&
+    task?.status ===
+      'completed' &&
     task?.approved_at
   ) {
     return {
-      label: 'Tamamlandı',
-      variant: 'success',
+      label:
+        'Tamamlandı',
+
+      variant:
+        'success',
     };
   }
 
-  switch (task?.status) {
+  switch (
+    task?.status
+  ) {
     case 'pending':
       return {
-        label: 'Bekliyor',
-        variant: 'warning',
+        label:
+          'Bekliyor',
+
+        variant:
+          'warning',
       };
 
     case 'in_progress':
       return {
-        label: 'Devam Ediyor',
-        variant: 'info',
+        label:
+          'Devam Ediyor',
+
+        variant:
+          'info',
       };
 
     case 'cancelled':
       return {
-        label: 'İptal',
-        variant: 'danger',
+        label:
+          'İptal',
+
+        variant:
+          'danger',
       };
 
     default:
@@ -134,7 +164,9 @@ const getTaskDisplayStatus = (task) => {
         label:
           task?.status ||
           'Bilinmiyor',
-        variant: 'default',
+
+        variant:
+          'default',
       };
   }
 };
@@ -142,36 +174,44 @@ const getTaskDisplayStatus = (task) => {
 const getPriorityVariant = (
   priority
 ) => {
-  switch (priority) {
-    case 'critical':
-      return 'danger';
+  const variants = {
+    critical:
+      'danger',
 
-    case 'high':
-      return 'warning';
+    high:
+      'warning',
 
-    case 'normal':
-      return 'default';
+    normal:
+      'primary',
 
-    case 'low':
-      return 'default';
+    low:
+      'default',
+  };
 
-    default:
-      return 'default';
-  }
+  return (
+    variants[
+      priority
+    ] ||
+    'default'
+  );
 };
 
 // ======================================================
 // DATE HELPERS
 // ======================================================
 
-const formatDateTime = (date) => {
+const formatDateTime = (
+  date
+) => {
   if (!date) {
     return '-';
   }
 
   try {
     const parsed =
-      new Date(date);
+      new Date(
+        date
+      );
 
     if (
       Number.isNaN(
@@ -196,7 +236,9 @@ const formatDateTime = (date) => {
 
         hour12: false,
       }
-    ).format(parsed);
+    ).format(
+      parsed
+    );
   } catch {
     return '-';
   }
@@ -218,7 +260,9 @@ const getUserName = (
     person.first_name,
     person.last_name,
   ]
-    .filter(Boolean)
+    .filter(
+      Boolean
+    )
     .join(' ')
     .trim();
 
@@ -233,37 +277,44 @@ const getUserName = (
 // ======================================================
 
 const TasksList = () => {
-  const { user } =
+  const {
+    user,
+  } =
     useAuth();
 
   const [
     search,
     setSearch,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     searchQuery,
     setSearchQuery,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     statusFilter,
     setStatusFilter,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     priorityFilter,
     setPriorityFilter,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     page,
     setPage,
-  ] = useState(1);
+  ] =
+    useState(1);
 
-  // ======================================================
+  // ====================================================
   // PERMISSIONS
-  // ======================================================
+  // ====================================================
 
   const canCreateTask =
     [
@@ -275,180 +326,216 @@ const TasksList = () => {
     );
 
   const isAdmin =
-    user?.role === 'admin';
+    user?.role ===
+    'admin';
 
-  // ======================================================
+  // ====================================================
   // QUERY
-  // ======================================================
+  // ====================================================
 
   const {
     data,
     isLoading,
+    isFetching,
     error,
-  } = useTasks({
-    page,
-    search:
-      searchQuery,
-    status:
-      statusFilter,
-    priority:
-      priorityFilter,
-  });
+    refetch,
+  } =
+    useTasks({
+      page,
+
+      search:
+        searchQuery,
+
+      status:
+        statusFilter,
+
+      priority:
+        priorityFilter,
+    });
 
   const tasks =
-    data?.data?.data ||
-    [];
+    Array.isArray(
+      data?.data
+        ?.data
+    )
+      ? data.data.data
+      : [];
 
   const pagination =
     data?.data
       ?.pagination;
 
-  // ======================================================
+  // ====================================================
   // DERIVED DATA
-  // ======================================================
+  // ====================================================
 
   const enrichedTasks =
-    useMemo(() => {
-      return tasks.map(
-        (task) => {
-          const displayStatus =
-            getTaskDisplayStatus(
-              task
-            );
+    useMemo(
+      () =>
+        tasks.map(
+          (
+            task
+          ) => {
+            const displayStatus =
+              getTaskDisplayStatus(
+                task
+              );
 
-          const isOverdue =
-            Boolean(
+            const dueDate =
               task.due_date
-            ) &&
-            new Date(
-              task.due_date
-            ) <
-              new Date() &&
-            ![
-              'completed',
-              'cancelled',
-            ].includes(
-              task.status
-            );
+                ? new Date(
+                    task.due_date
+                  )
+                : null;
 
-          return {
-            ...task,
-            displayStatus,
-            isOverdue,
-          };
-        }
-      );
-    }, [tasks]);
+            const isOverdue =
+              Boolean(
+                dueDate
+              ) &&
+              dueDate <
+                new Date() &&
+              ![
+                'completed',
+                'cancelled',
+              ].includes(
+                task.status
+              );
+
+            return {
+              ...task,
+              displayStatus,
+              isOverdue,
+            };
+          }
+        ),
+      [
+        tasks,
+      ]
+    );
 
   const awaitingApprovalCount =
-    useMemo(() => {
-      return enrichedTasks.filter(
-        (task) =>
-          task.status ===
-            'completed' &&
-          !task.approved_at
-      ).length;
-    }, [
-      enrichedTasks,
-    ]);
-
-  // ======================================================
-  // HANDLERS
-  // ======================================================
-
-  const handleSearch = () => {
-    setSearchQuery(
-      search.trim()
+    useMemo(
+      () =>
+        enrichedTasks.filter(
+          (
+            task
+          ) =>
+            task.status ===
+              'completed' &&
+            !task.approved_at
+        ).length,
+      [
+        enrichedTasks,
+      ]
     );
 
-    setPage(1);
-  };
+  const hasFilters =
+    Boolean(
+      searchQuery ||
+      statusFilter ||
+      priorityFilter
+    );
 
-  const handleClearSearch =
+  // ====================================================
+  // HANDLERS
+  // ====================================================
+
+  const handleSearch =
     () => {
-      setSearch('');
-      setSearchQuery('');
-      setPage(1);
+      setSearchQuery(
+        search.trim()
+      );
+
+      setPage(
+        1
+      );
     };
 
-  const handleKeyDown = (
-    event
-  ) => {
-    if (
-      event.key ===
-      'Enter'
-    ) {
-      handleSearch();
-    }
-  };
+  const handleKeyDown =
+    (
+      event
+    ) => {
+      if (
+        event.key ===
+        'Enter'
+      ) {
+        handleSearch();
+      }
+    };
 
-  const handleStatusChange = (
-    event
-  ) => {
-    setStatusFilter(
-      event.target.value
-    );
+  const handleStatusChange =
+    (
+      event
+    ) => {
+      setStatusFilter(
+        event.target.value
+      );
 
-    setPage(1);
-  };
+      setPage(
+        1
+      );
+    };
 
   const handlePriorityChange =
-    (event) => {
+    (
+      event
+    ) => {
       setPriorityFilter(
         event.target.value
       );
 
+      setPage(
+        1
+      );
+    };
+
+  const handleClearFilters =
+    () => {
+      setSearch('');
+      setSearchQuery('');
+      setStatusFilter('');
+      setPriorityFilter('');
       setPage(1);
     };
 
-  // ======================================================
+  // ====================================================
   // LOADING
-  // ======================================================
+  // ====================================================
 
-  if (isLoading) {
+  if (
+    isLoading
+  ) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600" />
+      <div className="flex min-h-[420px] items-center justify-center">
+        <Loader text="Görevler yükleniyor..." />
       </div>
     );
   }
 
-  // ======================================================
+  // ====================================================
   // ERROR
-  // ======================================================
+  // ====================================================
 
-  if (error) {
+  if (
+    error
+  ) {
     return (
-      <div className="py-12 text-center">
-
-        <div className="mb-4 text-4xl">
-          ⚠️
-        </div>
-
-        <h2 className="text-xl font-bold text-red-600">
-          Görevler yüklenirken hata oluştu
-        </h2>
-
-        <p className="mt-2 text-gray-500">
-          {error.message}
-        </p>
-
-        <Button
-          className="mt-4"
-          onClick={() =>
-            window.location.reload()
-          }
-        >
-          Yeniden Dene
-        </Button>
-
-      </div>
+      <Error
+        title="Görevler yüklenemedi"
+        message="Görev kayıtları alınırken bir hata oluştu."
+        error={
+          error
+        }
+        onRetry={() =>
+          refetch?.()
+        }
+      />
     );
   }
 
-  // ======================================================
+  // ====================================================
   // RENDER
-  // ======================================================
+  // ====================================================
 
   return (
     <div className="space-y-6">
@@ -459,27 +546,75 @@ const TasksList = () => {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 
-        <div>
+        <div className="flex items-start gap-3">
 
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            ✅ Görevler
-          </h1>
+          <div
+            className="
+              flex
+              h-11
+              w-11
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-amber-50
+              text-amber-600
+              dark:bg-amber-500/[0.08]
+              dark:text-amber-400
+            "
+          >
+            <CheckSquare2 size={21} />
+          </div>
 
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Atanan işleri, ilerleme durumlarını,
-            son tarihleri ve yönetici onay süreçlerini takip edin.
-          </p>
+          <div>
+
+            <h1
+              className="
+                text-2xl
+                font-semibold
+                tracking-[-0.035em]
+                text-gray-900
+                dark:text-white
+              "
+            >
+              Görevler
+            </h1>
+
+            <p
+              className="
+                mt-1
+                max-w-2xl
+                text-sm
+                leading-6
+                text-gray-500
+                dark:text-slate-400
+              "
+            >
+              Atanan işleri, ilerleme durumlarını,
+              son tarihleri ve yönetici onay süreçlerini takip edin.
+            </p>
+
+            {pagination?.total !==
+              undefined && (
+              <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                Toplam{' '}
+                <span className="font-semibold text-gray-600 dark:text-slate-300">
+                  {pagination.total}
+                </span>{' '}
+                görev
+              </p>
+            )}
+
+          </div>
 
         </div>
 
         {canCreateTask && (
           <Link to="/tasks/create">
-
             <Button>
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="h-4 w-4" />
               Yeni Görev
             </Button>
-
           </Link>
         )}
 
@@ -492,33 +627,56 @@ const TasksList = () => {
       {isAdmin &&
         awaitingApprovalCount >
           0 && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
-
+          <div
+            className="
+              rounded-2xl
+              border
+              border-amber-200/80
+              bg-amber-50/60
+              p-4
+              dark:border-amber-500/15
+              dark:bg-amber-500/[0.04]
+            "
+          >
             <div className="flex items-start gap-3">
 
-              <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  shrink-0
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-amber-100
+                  text-amber-600
+                  dark:bg-amber-500/[0.08]
+                  dark:text-amber-400
+                "
+              >
+                <Clock3 size={17} />
+              </div>
 
               <div>
 
-                <p className="font-medium text-amber-900 dark:text-amber-200">
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
                   Yönetici onayı bekleyen görevler var
                 </p>
 
-                <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-                  Bu sayfada şu anda{' '}
+                <p className="mt-1 text-xs leading-5 text-amber-800/80 dark:text-amber-300/80">
+                  Bu listede{' '}
                   <strong>
                     {
                       awaitingApprovalCount
                     }
                   </strong>{' '}
-                  görev çalışan tarafından tamamlanmış ve
-                  yönetici incelemesi bekliyor.
+                  görev çalışan tarafından tamamlandı ve incelemenizi bekliyor.
                 </p>
 
               </div>
 
             </div>
-
           </div>
         )}
 
@@ -526,72 +684,65 @@ const TasksList = () => {
           FILTERS
       ================================================== */}
 
-      <div className="overflow-hidden rounded-xl bg-white shadow dark:bg-gray-800">
+      <Card>
 
-        <div className="border-b border-gray-200 p-4 dark:border-gray-700">
+        <Card.Body>
 
-          <div className="flex flex-col gap-4 xl:flex-row">
+          <div className="flex flex-col gap-3 xl:flex-row">
 
             {/* SEARCH */}
 
-            <div className="flex flex-1 gap-2">
+            <div className="flex flex-1 flex-col gap-2 sm:flex-row">
 
-              <div className="flex-1">
-
-                <Input
-                  placeholder="Görev ara..."
-                  value={
-                    search
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setSearch(
-                      event.target
-                        .value
-                    )
-                  }
-                  onKeyDown={
-                    handleKeyDown
-                  }
-                  icon="🔍"
-                />
-
-              </div>
+              <Input
+                placeholder="Görev adı veya açıklamada ara..."
+                value={
+                  search
+                }
+                onChange={(
+                  event
+                ) =>
+                  setSearch(
+                    event.target.value
+                  )
+                }
+                onKeyDown={
+                  handleKeyDown
+                }
+                icon={
+                  <Search size={16} />
+                }
+              />
 
               <Button
-                variant="primary"
                 onClick={
                   handleSearch
                 }
-                className="shrink-0"
               >
-                <Search className="mr-2 h-4 w-4" />
+                <Search className="h-4 w-4" />
                 Ara
               </Button>
-
-              {(search ||
-                searchQuery) && (
-                <Button
-                  variant="outline"
-                  onClick={
-                    handleClearSearch
-                  }
-                  className="shrink-0"
-                >
-                  Temizle
-                </Button>
-              )}
 
             </div>
 
             {/* FILTERS */}
 
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex flex-col gap-2 sm:flex-row">
 
-              <div className="flex items-center gap-2 sm:w-48">
+              <div className="relative min-w-[190px]">
 
-                <Filter className="h-4 w-4 shrink-0 text-gray-400" />
+                <Filter
+                  size={15}
+                  className="
+                    pointer-events-none
+                    absolute
+                    left-3
+                    top-1/2
+                    -translate-y-1/2
+                    text-gray-400
+                    dark:text-slate-500
+                  "
+                />
 
                 <select
                   value={
@@ -600,10 +751,35 @@ const TasksList = () => {
                   onChange={
                     handleStatusChange
                   }
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    pl-9
+                    pr-3
+                    text-sm
+                    text-gray-700
+                    shadow-sm
+                    outline-none
+                    transition
+                    hover:border-gray-300
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                    dark:hover:border-white/[0.14]
+                    dark:focus:border-blue-500/60
+                  "
                 >
                   {STATUS_OPTIONS.map(
-                    (status) => (
+                    (
+                      status
+                    ) => (
                       <option
                         key={
                           status.value
@@ -612,10 +788,7 @@ const TasksList = () => {
                           status.value
                         }
                       >
-                        Durum:{' '}
-                        {
-                          status.label
-                        }
+                        {status.label}
                       </option>
                     )
                   )}
@@ -623,7 +796,7 @@ const TasksList = () => {
 
               </div>
 
-              <div className="sm:w-48">
+              <div className="min-w-[190px]">
 
                 <select
                   value={
@@ -632,7 +805,29 @@ const TasksList = () => {
                   onChange={
                     handlePriorityChange
                   }
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    text-sm
+                    text-gray-700
+                    shadow-sm
+                    outline-none
+                    transition
+                    hover:border-gray-300
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                    dark:hover:border-white/[0.14]
+                    dark:focus:border-blue-500/60
+                  "
                 >
                   {PRIORITY_OPTIONS.map(
                     (
@@ -646,10 +841,7 @@ const TasksList = () => {
                           priority.value
                         }
                       >
-                        Öncelik:{' '}
-                        {
-                          priority.label
-                        }
+                        {priority.label}
                       </option>
                     )
                   )}
@@ -657,22 +849,80 @@ const TasksList = () => {
 
               </div>
 
+              {hasFilters && (
+                <Button
+                  variant="ghost"
+                  onClick={
+                    handleClearFilters
+                  }
+                >
+                  <X className="h-4 w-4" />
+                  Temizle
+                </Button>
+              )}
+
             </div>
 
           </div>
-        </div>
 
-        {/* ==================================================
-            TABLE
-        ================================================== */}
+          {isFetching && (
+            <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
+              Liste güncelleniyor...
+            </p>
+          )}
 
-        <div className="overflow-x-auto">
+        </Card.Body>
+
+      </Card>
+
+      {/* ==================================================
+          EMPTY / TABLE
+      ================================================== */}
+
+      {enrichedTasks.length ===
+      0 ? (
+        <Empty
+          icon={
+            CheckSquare2
+          }
+          title={
+            hasFilters
+              ? 'Eşleşen görev bulunamadı'
+              : 'Henüz görev bulunmuyor'
+          }
+          description={
+            hasFilters
+              ? 'Arama veya filtre kriterlerini değiştirerek tekrar deneyin.'
+              : 'Yeni görev oluşturarak iş takibine başlayabilirsiniz.'
+          }
+          action={
+            hasFilters ? (
+              <Button
+                variant="secondary"
+                onClick={
+                  handleClearFilters
+                }
+              >
+                Filtreleri Temizle
+              </Button>
+            ) : canCreateTask ? (
+              <Link to="/tasks/create">
+                <Button>
+                  <Plus className="h-4 w-4" />
+                  İlk Görevi Oluştur
+                </Button>
+              </Link>
+            ) : null
+          }
+        />
+      ) : (
+        <>
 
           <Table>
 
             <Table.Head>
 
-              <Table.Row>
+              <Table.Row hover={false}>
 
                 <Table.HeadCell>
                   Görev
@@ -702,7 +952,7 @@ const TasksList = () => {
                   Son Tarih
                 </Table.HeadCell>
 
-                <Table.HeadCell>
+                <Table.HeadCell className="text-right">
                   İşlem
                 </Table.HeadCell>
 
@@ -712,228 +962,293 @@ const TasksList = () => {
 
             <Table.Body>
 
-              {enrichedTasks.length ===
-              0 ? (
-                <Table.Row>
-
-                  <Table.Cell
-                    colSpan="8"
-                    className="py-10 text-center text-gray-500"
+              {enrichedTasks.map(
+                (
+                  task
+                ) => (
+                  <Table.Row
+                    key={
+                      task.id
+                    }
                   >
-                    {searchQuery
-                      ? 'Aramanıza uygun görev bulunamadı'
-                      : 'Henüz görev bulunmuyor'}
-                  </Table.Cell>
 
-                </Table.Row>
-              ) : (
-                enrichedTasks.map(
-                  (task) => (
-                    <Table.Row
-                      key={
-                        task.id
-                      }
-                    >
+                    {/* TASK */}
 
-                      {/* TASK */}
+                    <Table.Cell>
 
-                      <Table.Cell>
-
-                        <div className="min-w-[16rem]">
-
-                          <Link
-                            to={`/tasks/${task.id}`}
-                            className="font-medium text-gray-900 hover:text-blue-600 dark:text-white dark:hover:text-blue-400"
-                          >
-                            {
-                              task.title
-                            }
-                          </Link>
-
-                          {task.description && (
-                            <div className="mt-1 max-w-sm truncate text-sm text-gray-500">
-                              {
-                                task.description
-                              }
-                            </div>
-                          )}
-
-                          <div className="mt-2 flex flex-wrap gap-1">
-
-                            {task.isOverdue && (
-                              <Badge variant="danger">
-                                ⚠️ Gecikti
-                              </Badge>
-                            )}
-
-                            {task.approved_at && (
-                              <Badge variant="success">
-                                ✅ Onaylandı
-                              </Badge>
-                            )}
-
-                          </div>
-
-                        </div>
-
-                      </Table.Cell>
-
-                      {/* ASSIGNEE */}
-
-                      <Table.Cell>
-
-                        <span className="whitespace-nowrap">
-                          {getUserName(
-                            task.assignee
-                          )}
-                        </span>
-
-                      </Table.Cell>
-
-                      {/* CASE */}
-
-                      <Table.Cell>
-
-                        {task.case ? (
-                          <Link
-                            to={`/cases/${task.case.id}`}
-                            className="block max-w-[14rem] truncate text-blue-600 hover:underline dark:text-blue-400"
-                            title={
-                              task.case
-                                .title
-                            }
-                          >
-                            {
-                              task.case
-                                .title
-                            }
-                          </Link>
-                        ) : (
-                          <span className="text-gray-400">
-                            -
-                          </span>
-                        )}
-
-                      </Table.Cell>
-
-                      {/* PRIORITY */}
-
-                      <Table.Cell>
-
-                        <Badge
-                          variant={getPriorityVariant(
-                            task.priority
-                          )}
-                        >
-                          {PRIORITY_LABELS[
-                            task.priority
-                          ] ||
-                            task.priority}
-                        </Badge>
-
-                      </Table.Cell>
-
-                      {/* STATUS */}
-
-                      <Table.Cell>
-
-                        <Badge
-                          variant={
-                            task
-                              .displayStatus
-                              .variant
-                          }
-                        >
-                          {
-                            task
-                              .displayStatus
-                              .label
-                          }
-                        </Badge>
-
-                      </Table.Cell>
-
-                      {/* PROGRESS */}
-
-                      <Table.Cell>
-
-                        <div className="min-w-[7rem]">
-
-                          <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
-
-                            <span>
-                              İlerleme
-                            </span>
-
-                            <span className="font-medium text-gray-700 dark:text-gray-300">
-                              {task.progress ||
-                                0}
-                              %
-                            </span>
-
-                          </div>
-
-                          <div className="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-
-                            <div
-                              className="h-full rounded-full bg-blue-600"
-                              style={{
-                                width: `${Math.min(
-                                  100,
-                                  Math.max(
-                                    0,
-                                    task.progress ||
-                                      0
-                                  )
-                                )}%`,
-                              }}
-                            />
-
-                          </div>
-
-                        </div>
-
-                      </Table.Cell>
-
-                      {/* DUE DATE */}
-
-                      <Table.Cell>
-
-                        <div className="whitespace-nowrap">
-
-                          <span
-                            className={
-                              task.isOverdue
-                                ? 'font-medium text-red-600'
-                                : ''
-                            }
-                          >
-                            {task.due_date
-                              ? formatDateTime(
-                                  task.due_date
-                                )
-                              : '-'}
-                          </span>
-
-                        </div>
-
-                      </Table.Cell>
-
-                      {/* ACTION */}
-
-                      <Table.Cell>
+                      <div className="min-w-[16rem]">
 
                         <Link
                           to={`/tasks/${task.id}`}
-                          className="font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                          className="
+                            font-semibold
+                            text-gray-900
+                            transition
+                            hover:text-blue-600
+                            dark:text-white
+                            dark:hover:text-blue-400
+                          "
                         >
-                          Görüntüle
+                          {task.title}
                         </Link>
 
-                      </Table.Cell>
+                        {task.description && (
+                          <p
+                            className="
+                              mt-1
+                              max-w-sm
+                              truncate
+                              text-xs
+                              text-gray-500
+                              dark:text-slate-500
+                            "
+                            title={
+                              task.description
+                            }
+                          >
+                            {task.description}
+                          </p>
+                        )}
 
-                    </Table.Row>
-                  )
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+
+                          {task.isOverdue && (
+                            <Badge
+                              variant="danger"
+                              dot
+                            >
+                              Gecikti
+                            </Badge>
+                          )}
+
+                          {task.approved_at && (
+                            <Badge
+                              variant="success"
+                              dot
+                            >
+                              Onaylandı
+                            </Badge>
+                          )}
+
+                        </div>
+
+                      </div>
+
+                    </Table.Cell>
+
+                    {/* ASSIGNEE */}
+
+                    <Table.Cell>
+
+                      <span className="whitespace-nowrap text-sm text-gray-700 dark:text-slate-300">
+                        {getUserName(
+                          task.assignee
+                        )}
+                      </span>
+
+                    </Table.Cell>
+
+                    {/* CASE */}
+
+                    <Table.Cell>
+
+                      {task.case ? (
+                        <Link
+                          to={`/cases/${task.case.id}`}
+                          className="
+                            block
+                            max-w-[14rem]
+                            truncate
+                            text-sm
+                            font-medium
+                            text-gray-700
+                            transition
+                            hover:text-blue-600
+                            dark:text-slate-300
+                            dark:hover:text-blue-400
+                          "
+                          title={
+                            task.case
+                              .title
+                          }
+                        >
+                          {task.case
+                            .title}
+                        </Link>
+                      ) : (
+                        <span className="text-gray-400 dark:text-slate-600">
+                          -
+                        </span>
+                      )}
+
+                    </Table.Cell>
+
+                    {/* PRIORITY */}
+
+                    <Table.Cell>
+
+                      <Badge
+                        variant={
+                          getPriorityVariant(
+                            task.priority
+                          )
+                        }
+                        dot
+                      >
+                        {PRIORITY_LABELS[
+                          task.priority
+                        ] ||
+                          task.priority}
+                      </Badge>
+
+                    </Table.Cell>
+
+                    {/* STATUS */}
+
+                    <Table.Cell>
+
+                      <Badge
+                        variant={
+                          task
+                            .displayStatus
+                            .variant
+                        }
+                        dot
+                      >
+                        {
+                          task
+                            .displayStatus
+                            .label
+                        }
+                      </Badge>
+
+                    </Table.Cell>
+
+                    {/* PROGRESS */}
+
+                    <Table.Cell>
+
+                      <div className="min-w-[110px]">
+
+                        <div className="mb-1.5 flex items-center justify-between">
+
+                          <span className="text-[10px] font-medium text-gray-400 dark:text-slate-500">
+                            İlerleme
+                          </span>
+
+                          <span className="text-[10px] font-semibold text-gray-600 dark:text-slate-300">
+                            {task.progress ||
+                              0}
+                            %
+                          </span>
+
+                        </div>
+
+                        <div
+                          className="
+                            h-1.5
+                            overflow-hidden
+                            rounded-full
+                            bg-gray-100
+                            dark:bg-white/[0.05]
+                          "
+                        >
+                          <div
+                            className={`
+                              h-full
+                              rounded-full
+                              transition-all
+                              ${
+                                task.status ===
+                                  'completed'
+                                  ? 'bg-emerald-500'
+                                  : task.isOverdue
+                                    ? 'bg-red-500'
+                                    : 'bg-blue-500'
+                              }
+                            `}
+                            style={{
+                              width:
+                                `${Math.min(
+                                  100,
+                                  Math.max(
+                                    0,
+                                    Number(
+                                      task.progress
+                                    ) ||
+                                      0
+                                  )
+                                )}%`,
+                            }}
+                          />
+                        </div>
+
+                      </div>
+
+                    </Table.Cell>
+
+                    {/* DUE DATE */}
+
+                    <Table.Cell>
+
+                      {task.due_date ? (
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+
+                          {task.isOverdue ? (
+                            <AlertTriangle
+                              size={14}
+                              className="text-red-500"
+                            />
+                          ) : (
+                            <Clock3
+                              size={14}
+                              className="text-gray-400 dark:text-slate-500"
+                            />
+                          )}
+
+                          <span
+                            className={`
+                              text-xs
+                              ${
+                                task.isOverdue
+                                  ? 'font-semibold text-red-600 dark:text-red-400'
+                                  : 'text-gray-500 dark:text-slate-400'
+                              }
+                            `}
+                          >
+                            {formatDateTime(
+                              task.due_date
+                            )}
+                          </span>
+
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 dark:text-slate-600">
+                          -
+                        </span>
+                      )}
+
+                    </Table.Cell>
+
+                    {/* ACTION */}
+
+                    <Table.Cell className="text-right">
+
+                      <Link
+                        to={`/tasks/${task.id}`}
+                      >
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                        >
+                          İncele
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Button>
+                      </Link>
+
+                    </Table.Cell>
+
+                  </Table.Row>
                 )
               )}
 
@@ -941,85 +1256,103 @@ const TasksList = () => {
 
           </Table>
 
-        </div>
+          {/* ==================================================
+              PAGINATION
+          ================================================== */}
 
-        {/* ==================================================
-            PAGINATION
-        ================================================== */}
+          {pagination &&
+            pagination.totalPages >
+              1 && (
+              <div
+                className="
+                  flex
+                  flex-col
+                  gap-3
+                  rounded-xl
+                  border
+                  border-gray-200
+                  bg-white
+                  px-4
+                  py-3
+                  dark:border-white/[0.07]
+                  dark:bg-[#0b1b33]
+                  sm:flex-row
+                  sm:items-center
+                  sm:justify-between
+                "
+              >
 
-        {pagination &&
-          pagination.totalPages >
-            1 && (
-            <div className="flex flex-col gap-3 border-t border-gray-200 px-6 py-4 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-gray-500 dark:text-slate-400">
+                  Toplam{' '}
+                  <span className="font-semibold text-gray-700 dark:text-slate-300">
+                    {pagination.total}
+                  </span>{' '}
+                  görev
+                </p>
 
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Toplam{' '}
-                {
-                  pagination.total
-                }{' '}
-                görev
-              </p>
+                <div className="flex items-center gap-2">
 
-              <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      page <= 1 ||
+                      isFetching
+                    }
+                    onClick={() =>
+                      setPage(
+                        (
+                          current
+                        ) =>
+                          Math.max(
+                            1,
+                            current -
+                              1
+                          )
+                      )
+                    }
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Önceki
+                  </Button>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    page <= 1
-                  }
-                  onClick={() =>
-                    setPage(
-                      (
-                        current
-                      ) =>
-                        Math.max(
-                          1,
-                          current -
-                            1
-                        )
-                    )
-                  }
-                >
-                  Önceki
-                </Button>
+                  <span className="min-w-[70px] text-center text-xs font-semibold text-gray-600 dark:text-slate-400">
+                    {page} /{' '}
+                    {pagination.totalPages}
+                  </span>
 
-                <span className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400">
-                  {page} /{' '}
-                  {
-                    pagination.totalPages
-                  }
-                </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      page >=
+                        pagination.totalPages ||
+                      isFetching
+                    }
+                    onClick={() =>
+                      setPage(
+                        (
+                          current
+                        ) =>
+                          Math.min(
+                            pagination.totalPages,
+                            current +
+                              1
+                          )
+                      )
+                    }
+                  >
+                    Sonraki
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    page >=
-                    pagination.totalPages
-                  }
-                  onClick={() =>
-                    setPage(
-                      (
-                        current
-                      ) =>
-                        Math.min(
-                          pagination.totalPages,
-                          current +
-                            1
-                        )
-                    )
-                  }
-                >
-                  Sonraki
-                </Button>
+                </div>
 
               </div>
+            )}
 
-            </div>
-          )}
-
-      </div>
+        </>
+      )}
 
     </div>
   );

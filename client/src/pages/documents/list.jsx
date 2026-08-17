@@ -23,11 +23,24 @@ import {
 import Button from '../../components/ui/Button.jsx';
 import Table from '../../components/ui/Table.jsx';
 import Badge from '../../components/ui/Badge.jsx';
+import Card from '../../components/ui/Card.jsx';
+import Loader from '../../components/shared/Loader.jsx';
+import Error from '../../components/shared/Error.jsx';
+import Empty from '../../components/shared/Empty.jsx';
 
 import {
   Archive,
+  ArrowLeft,
+  ArrowRight,
   Eye,
+  File,
+  FileArchive,
+  FileImage,
   FilePlus2,
+  FileSpreadsheet,
+  FileText,
+  Files,
+  FileType2,
   Pencil,
   Search,
   Trash2,
@@ -59,71 +72,103 @@ const CATEGORY_LABELS = {
 // HELPERS
 // ======================================================
 
-const getCategoryLabel = (category) => {
+const getCategoryLabel = (
+  category
+) => {
   return (
-    CATEGORY_LABELS[category] ||
+    CATEGORY_LABELS[
+      category
+    ] ||
     category ||
     'Genel'
   );
 };
 
-const getCategoryColor = (category) => {
-  const colors = {
-    general:
-      'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-
-    petition:
-      'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-
-    expert_report:
-      'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-
-    court_decision:
-      'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-
-    notification:
-      'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-
-    evidence:
-      'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-
-    correspondence:
-      'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
-
-    other:
-      'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+const getCategoryVariant = (
+  category
+) => {
+  const variants = {
+    general: 'default',
+    petition: 'primary',
+    expert_report: 'info',
+    court_decision: 'success',
+    notification: 'warning',
+    evidence: 'danger',
+    correspondence: 'primary',
+    other: 'default',
   };
 
   return (
-    colors[category] ||
-    colors.general
+    variants[
+      category
+    ] ||
+    'default'
   );
 };
 
-const getFileIcon = (fileType) => {
-  switch (fileType) {
+const getFileIcon = (
+  fileType
+) => {
+  switch (
+    fileType
+  ) {
     case 'pdf':
-      return '📄';
+      return FileText;
 
     case 'word':
-      return '📝';
+      return FileType2;
 
     case 'excel':
-      return '📊';
+      return FileSpreadsheet;
 
     case 'image':
-      return '🖼️';
+      return FileImage;
+
+    case 'archive':
+      return FileArchive;
 
     default:
-      return '📎';
+      return File;
   }
 };
 
-const formatFileSize = (bytes) => {
-  const size =
-    Number(bytes) || 0;
+const getFileIconClasses = (
+  fileType
+) => {
+  switch (
+    fileType
+  ) {
+    case 'pdf':
+      return 'bg-red-50 text-red-600 dark:bg-red-500/[0.08] dark:text-red-400';
 
-  if (size <= 0) {
+    case 'word':
+      return 'bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400';
+
+    case 'excel':
+      return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400';
+
+    case 'image':
+      return 'bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400';
+
+    case 'archive':
+      return 'bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400';
+
+    default:
+      return 'bg-gray-50 text-gray-500 dark:bg-white/[0.04] dark:text-slate-400';
+  }
+};
+
+const formatFileSize = (
+  bytes
+) => {
+  const size =
+    Number(
+      bytes
+    ) || 0;
+
+  if (
+    size <= 0
+  ) {
     return '0 B';
   }
 
@@ -134,31 +179,46 @@ const formatFileSize = (bytes) => {
     'GB',
   ];
 
-  const index = Math.min(
-    Math.floor(
-      Math.log(size) /
-        Math.log(1024)
-    ),
-    units.length - 1
-  );
+  const index =
+    Math.min(
+      Math.floor(
+        Math.log(
+          size
+        ) /
+          Math.log(
+            1024
+          )
+      ),
+      units.length -
+        1
+    );
 
   const value =
     size /
-    1024 ** index;
+    1024 **
+      index;
 
   return `${Number(
-    value.toFixed(2)
-  )} ${units[index]}`;
+    value.toFixed(
+      2
+    )
+  )} ${
+    units[index]
+  }`;
 };
 
-const formatDateTime = (date) => {
+const formatDateTime = (
+  date
+) => {
   if (!date) {
     return '-';
   }
 
   try {
     const parsed =
-      new Date(date);
+      new Date(
+        date
+      );
 
     if (
       Number.isNaN(
@@ -183,7 +243,9 @@ const formatDateTime = (date) => {
 
         hour12: false,
       }
-    ).format(parsed);
+    ).format(
+      parsed
+    );
   } catch {
     return '-';
   }
@@ -201,7 +263,9 @@ const getPersonName = (
     person.first_name,
     person.last_name,
   ]
-    .filter(Boolean)
+    .filter(
+      Boolean
+    )
     .join(' ')
     .trim();
 
@@ -215,7 +279,8 @@ const unwrapResponseData = (
   response
 ) => {
   return (
-    response?.data?.data ??
+    response?.data
+      ?.data ??
     response?.data ??
     null
   );
@@ -229,28 +294,34 @@ const DocumentsList = () => {
   const navigate =
     useNavigate();
 
-  const { user } =
+  const {
+    user,
+  } =
     useAuth();
 
   const [
     search,
     setSearch,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     categoryFilter,
     setCategoryFilter,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     page,
     setPage,
-  ] = useState(1);
+  ] =
+    useState(1);
 
   const [
     selectedDocs,
     setSelectedDocs,
-  ] = useState([]);
+  ] =
+    useState([]);
 
   const debouncedSearch =
     useDebounce(
@@ -258,9 +329,9 @@ const DocumentsList = () => {
       500
     );
 
-  // ======================================================
+  // ====================================================
   // PERMISSIONS
-  // ======================================================
+  // ====================================================
 
   const canUpload = [
     'admin',
@@ -280,22 +351,26 @@ const DocumentsList = () => {
     user?.role
   );
 
-  // ======================================================
+  // ====================================================
   // QUERIES
-  // ======================================================
+  // ====================================================
 
   const {
     data,
     isLoading,
     isFetching,
     error,
-  } = useDocuments({
-    page,
-    search:
-      debouncedSearch,
-    category:
-      categoryFilter,
-  });
+    refetch,
+  } =
+    useDocuments({
+      page,
+
+      search:
+        debouncedSearch,
+
+      category:
+        categoryFilter,
+    });
 
   const {
     data:
@@ -303,9 +378,9 @@ const DocumentsList = () => {
   } =
     useDocumentCategories();
 
-  // ======================================================
+  // ====================================================
   // MUTATIONS
-  // ======================================================
+  // ====================================================
 
   const deleteMutation =
     useDeleteDocument();
@@ -313,87 +388,113 @@ const DocumentsList = () => {
   const bulkDeleteMutation =
     useBulkDeleteDocuments();
 
-  // ======================================================
+  // ====================================================
   // DATA
-  // ======================================================
+  // ====================================================
 
   const documents =
-    data?.data?.data ||
-    [];
+    Array.isArray(
+      data?.data
+        ?.data
+    )
+      ? data.data.data
+      : [];
 
   const pagination =
     data?.data
       ?.pagination;
 
   const categories =
-    useMemo(() => {
-      const raw =
-        unwrapResponseData(
-          categoriesData
-        );
+    useMemo(
+      () => {
+        const raw =
+          unwrapResponseData(
+            categoriesData
+          );
 
-      if (
-        !Array.isArray(
-          raw
-        )
-      ) {
-        return [];
-      }
-
-      return [
-        ...new Set(
-          raw.filter(Boolean)
-        ),
-      ].sort(
-        (a, b) =>
-          getCategoryLabel(
-            a
-          ).localeCompare(
-            getCategoryLabel(
-              b
-            ),
-            'tr'
+        if (
+          !Array.isArray(
+            raw
           )
-      );
-    }, [
-      categoriesData,
-    ]);
+        ) {
+          return [];
+        }
 
-  // ======================================================
+        return [
+          ...new Set(
+            raw.filter(
+              Boolean
+            )
+          ),
+        ].sort(
+          (
+            a,
+            b
+          ) =>
+            getCategoryLabel(
+              a
+            ).localeCompare(
+              getCategoryLabel(
+                b
+              ),
+              'tr'
+            )
+        );
+      },
+      [
+        categoriesData,
+      ]
+    );
+
+  const hasFilters =
+    Boolean(
+      debouncedSearch ||
+      categoryFilter
+    );
+
+  // ====================================================
   // SELECTION CLEANUP
-  // ======================================================
+  // ====================================================
 
   useEffect(() => {
-    setSelectedDocs([]);
+    setSelectedDocs(
+      []
+    );
   }, [
     page,
     debouncedSearch,
     categoryFilter,
   ]);
 
-  // ======================================================
+  // ====================================================
   // HANDLERS
-  // ======================================================
+  // ====================================================
 
-  const handleCategoryChange = (
-    event
-  ) => {
-    setCategoryFilter(
-      event.target.value
-    );
+  const handleCategoryChange =
+    (
+      event
+    ) => {
+      setCategoryFilter(
+        event.target.value
+      );
 
-    setPage(1);
-  };
+      setPage(
+        1
+      );
+    };
 
-  const handleSearchChange = (
-    event
-  ) => {
-    setSearch(
-      event.target.value
-    );
+  const handleSearchChange =
+    (
+      event
+    ) => {
+      setSearch(
+        event.target.value
+      );
 
-    setPage(1);
-  };
+      setPage(
+        1
+      );
+    };
 
   const handleClearFilters =
     () => {
@@ -402,50 +503,62 @@ const DocumentsList = () => {
       setPage(1);
     };
 
-  const handleDelete = (
-    doc
-  ) => {
-    if (!canDelete) {
-      toast.error(
-        'Bu işlem için yetkiniz bulunmuyor.'
-      );
+  const handleDelete =
+    (
+      doc
+    ) => {
+      if (
+        !canDelete
+      ) {
+        toast.error(
+          'Bu işlem için yetkiniz bulunmuyor.'
+        );
 
-      return;
-    }
-
-    if (!doc?.id) {
-      toast.error(
-        'Geçersiz belge kaydı'
-      );
-
-      return;
-    }
-
-    const confirmed =
-      window.confirm(
-        `"${doc.name}" belgesini kayıt listesinden kaldırmak istediğinize emin misiniz?\n\nBelge fiziksel depolamadan hemen silinmez; kayıt soft-delete olarak işaretlenir.`
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
-    deleteMutation.mutate(
-      doc.id,
-      {
-        onSuccess: () => {
-          setSelectedDocs(
-            (current) =>
-              current.filter(
-                (id) =>
-                  id !==
-                  doc.id
-              )
-          );
-        },
+        return;
       }
-    );
-  };
+
+      if (
+        !doc?.id
+      ) {
+        toast.error(
+          'Geçersiz belge kaydı'
+        );
+
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          `"${doc.name}" belgesini kayıt listesinden kaldırmak istediğinize emin misiniz?\n\nBelge fiziksel depolamadan hemen silinmez; kayıt soft-delete olarak işaretlenir.`
+        );
+
+      if (
+        !confirmed
+      ) {
+        return;
+      }
+
+      deleteMutation.mutate(
+        doc.id,
+        {
+          onSuccess:
+            () => {
+              setSelectedDocs(
+                (
+                  current
+                ) =>
+                  current.filter(
+                    (
+                      id
+                    ) =>
+                      id !==
+                      doc.id
+                  )
+              );
+            },
+        }
+      );
+    };
 
   const handleBulkDelete =
     () => {
@@ -462,48 +575,57 @@ const DocumentsList = () => {
           `${selectedDocs.length} belgeyi kayıt listesinden kaldırmak istediğinize emin misiniz?\n\nBelgeler fiziksel depolamadan hemen silinmez.`
         );
 
-      if (!confirmed) {
+      if (
+        !confirmed
+      ) {
         return;
       }
 
       bulkDeleteMutation.mutate(
         selectedDocs,
         {
-          onSuccess: () => {
-            setSelectedDocs(
-              []
-            );
-          },
+          onSuccess:
+            () => {
+              setSelectedDocs(
+                []
+              );
+            },
         }
       );
     };
 
-  const toggleSelect = (
-    id
-  ) => {
-    setSelectedDocs(
-      (current) =>
-        current.includes(
-          id
-        )
-          ? current.filter(
-              (
-                documentId
-              ) =>
-                documentId !==
-                id
-            )
-          : [
-              ...current,
-              id,
-            ]
-    );
-  };
+  const toggleSelect =
+    (
+      id
+    ) => {
+      setSelectedDocs(
+        (
+          current
+        ) =>
+          current.includes(
+            id
+          )
+            ? current.filter(
+                (
+                  documentId
+                ) =>
+                  documentId !==
+                  id
+              )
+            : [
+                ...current,
+                id,
+              ]
+      );
+    };
 
   const allCurrentPageSelected =
-    documents.length > 0 &&
+    documents.length >
+      0 &&
     documents.every(
-      (doc) =>
+      (
+        doc
+      ) =>
         selectedDocs.includes(
           doc.id
         )
@@ -513,7 +635,9 @@ const DocumentsList = () => {
     () => {
       const currentPageIds =
         documents.map(
-          (doc) =>
+          (
+            doc
+          ) =>
             doc.id
         );
 
@@ -521,9 +645,13 @@ const DocumentsList = () => {
         allCurrentPageSelected
       ) {
         setSelectedDocs(
-          (current) =>
+          (
+            current
+          ) =>
             current.filter(
-              (id) =>
+              (
+                id
+              ) =>
                 !currentPageIds.includes(
                   id
                 )
@@ -534,7 +662,9 @@ const DocumentsList = () => {
       }
 
       setSelectedDocs(
-        (current) => [
+        (
+          current
+        ) => [
           ...new Set([
             ...current,
             ...currentPageIds,
@@ -543,9 +673,9 @@ const DocumentsList = () => {
       );
     };
 
-  // ======================================================
+  // ====================================================
   // PAGINATION SAFETY
-  // ======================================================
+  // ====================================================
 
   useEffect(() => {
     if (
@@ -564,83 +694,119 @@ const DocumentsList = () => {
     page,
   ]);
 
-  // ======================================================
+  // ====================================================
   // LOADING
-  // ======================================================
+  // ====================================================
 
-  if (isLoading) {
+  if (
+    isLoading
+  ) {
     return (
-      <div className="flex h-64 items-center justify-center">
-
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600" />
-
+      <div className="flex min-h-[420px] items-center justify-center">
+        <Loader text="Belgeler yükleniyor..." />
       </div>
     );
   }
 
-  // ======================================================
+  // ====================================================
   // ERROR
-  // ======================================================
+  // ====================================================
 
-  if (error) {
+  if (
+    error
+  ) {
     return (
-      <div className="py-12 text-center">
-
-        <div className="mb-4 text-4xl">
-          ⚠️
-        </div>
-
-        <h2 className="text-xl font-bold text-red-600">
-          Belgeler yüklenirken hata oluştu
-        </h2>
-
-        <p className="mt-2 text-gray-500">
-          {error?.response
-            ?.data?.message ||
-            error?.message ||
-            'Bilinmeyen hata'}
-        </p>
-
-        <Button
-          className="mt-4"
-          onClick={() =>
-            window.location.reload()
-          }
-        >
-          Yeniden Dene
-        </Button>
-
-      </div>
+      <Error
+        title="Belgeler yüklenemedi"
+        message="Belge kayıtları alınırken bir hata oluştu."
+        error={
+          error
+        }
+        onRetry={() =>
+          refetch?.()
+        }
+      />
     );
   }
 
-  // ======================================================
+  // ====================================================
   // RENDER
-  // ======================================================
+  // ====================================================
 
   return (
     <div className="space-y-6">
 
-      {/* HEADER */}
+      {/* ==================================================
+          HEADER
+      ================================================== */}
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 
-        <div>
+        <div className="flex items-start gap-3">
 
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            📄 Belgeler
-          </h1>
+          <div
+            className="
+              flex
+              h-11
+              w-11
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-violet-50
+              text-violet-600
+              dark:bg-violet-500/[0.08]
+              dark:text-violet-400
+            "
+          >
+            <Files size={21} />
+          </div>
 
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Dava ve müvekkillere bağlı belgeleri, belge ailelerini ve versiyon geçmişlerini yönetin.
-          </p>
+          <div>
 
-          <p className="mt-1 text-xs text-gray-400">
-            Toplam{' '}
-            {pagination?.total ||
-              0}{' '}
-            belge kaydı
-          </p>
+            <h1
+              className="
+                text-2xl
+                font-semibold
+                tracking-[-0.035em]
+                text-gray-900
+                dark:text-white
+              "
+            >
+              Belgeler
+            </h1>
+
+            <p
+              className="
+                mt-1
+                max-w-2xl
+                text-sm
+                leading-6
+                text-gray-500
+                dark:text-slate-400
+              "
+            >
+              Dava ve müvekkillere bağlı belgeleri,
+              belge ailelerini ve versiyon geçmişlerini yönetin.
+            </p>
+
+            <p
+              className="
+                mt-1
+                text-xs
+                text-gray-400
+                dark:text-slate-500
+              "
+            >
+              Toplam{' '}
+              <span className="font-semibold text-gray-600 dark:text-slate-300">
+                {pagination?.total ||
+                  0}
+              </span>{' '}
+              belge kaydı
+            </p>
+
+          </div>
 
         </div>
 
@@ -662,24 +828,19 @@ const DocumentsList = () => {
                   bulkDeleteMutation.isPending
                 }
               >
-                <Trash2 className="mr-2 h-4 w-4" />
+                <Trash2 className="h-4 w-4" />
 
                 Seçilileri Kaldır (
-                {
-                  selectedDocs.length
-                })
+                {selectedDocs.length})
               </Button>
             )}
 
           {canUpload && (
             <Link to="/documents/upload">
-
               <Button>
-                <FilePlus2 className="mr-2 h-4 w-4" />
-
+                <FilePlus2 className="h-4 w-4" />
                 Belge Yükle
               </Button>
-
             </Link>
           )}
 
@@ -687,33 +848,71 @@ const DocumentsList = () => {
 
       </div>
 
-      {/* FILTERS */}
+      {/* ==================================================
+          FILTERS
+      ================================================== */}
 
-      <div className="overflow-hidden rounded-xl bg-white shadow dark:bg-gray-800">
+      <Card>
 
-        <div className="border-b border-gray-200 p-4 dark:border-gray-700">
+        <Card.Body>
 
-          <div className="flex flex-col gap-4 sm:flex-row">
+          <div className="flex flex-col gap-3 lg:flex-row">
 
             <div className="relative flex-1">
 
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search
+                size={16}
+                className="
+                  pointer-events-none
+                  absolute
+                  left-3.5
+                  top-1/2
+                  -translate-y-1/2
+                  text-gray-400
+                  dark:text-slate-500
+                "
+              />
 
               <input
-                type="text"
-                placeholder="Belge adı, dosya adı veya açıklamada ara..."
+                type="search"
                 value={
                   search
                 }
                 onChange={
                   handleSearchChange
                 }
-                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-10 pr-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                placeholder="Belge adı, dosya adı veya açıklamada ara..."
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  pl-10
+                  pr-3.5
+                  text-sm
+                  text-gray-900
+                  shadow-sm
+                  outline-none
+                  transition-all
+                  placeholder:text-gray-400
+                  hover:border-gray-300
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-white
+                  dark:placeholder:text-slate-500
+                  dark:hover:border-white/[0.14]
+                  dark:focus:border-blue-500/60
+                "
               />
 
             </div>
 
-            <div className="sm:w-56">
+            <div className="min-w-[220px]">
 
               <select
                 value={
@@ -722,14 +921,38 @@ const DocumentsList = () => {
                 onChange={
                   handleCategoryChange
                 }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  text-sm
+                  text-gray-700
+                  shadow-sm
+                  outline-none
+                  transition
+                  hover:border-gray-300
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                  dark:hover:border-white/[0.14]
+                  dark:focus:border-blue-500/60
+                "
               >
                 <option value="">
                   Tüm Kategoriler
                 </option>
 
                 {categories.map(
-                  (category) => (
+                  (
+                    category
+                  ) => (
                     <option
                       key={
                         category
@@ -749,17 +972,15 @@ const DocumentsList = () => {
 
             </div>
 
-            {(search ||
-              categoryFilter) && (
+            {hasFilters && (
               <Button
-                variant="outline"
+                variant="ghost"
                 onClick={
                   handleClearFilters
                 }
               >
-                <X className="mr-2 h-4 w-4" />
-
-                Temizle
+                <X className="h-4 w-4" />
+                Filtreleri Temizle
               </Button>
             )}
 
@@ -767,25 +988,66 @@ const DocumentsList = () => {
 
           {isFetching &&
             !isLoading && (
-              <p className="mt-2 text-xs text-gray-400">
+              <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
                 Liste güncelleniyor...
               </p>
             )}
 
-        </div>
+        </Card.Body>
 
-        {/* TABLE */}
+      </Card>
 
-        <div className="overflow-x-auto">
+      {/* ==================================================
+          EMPTY / TABLE
+      ================================================== */}
+
+      {documents.length ===
+      0 ? (
+        <Empty
+          icon={
+            Files
+          }
+          title={
+            hasFilters
+              ? 'Eşleşen belge bulunamadı'
+              : 'Henüz belge kaydı yok'
+          }
+          description={
+            hasFilters
+              ? 'Arama veya kategori filtresini değiştirerek tekrar deneyin.'
+              : 'İlk belgenizi yükleyerek belge yönetimine başlayabilirsiniz.'
+          }
+          action={
+            hasFilters ? (
+              <Button
+                variant="secondary"
+                onClick={
+                  handleClearFilters
+                }
+              >
+                Filtreleri Temizle
+              </Button>
+            ) : canUpload ? (
+              <Link to="/documents/upload">
+                <Button>
+                  <FilePlus2 className="h-4 w-4" />
+                  İlk Belgeyi Yükle
+                </Button>
+              </Link>
+            ) : null
+          }
+        />
+      ) : (
+        <>
 
           <Table>
 
             <Table.Head>
 
-              <Table.Row>
+              <Table.Row hover={false}>
 
                 {canDelete && (
-                  <Table.HeadCell className="w-8">
+                  <Table.HeadCell className="w-10">
 
                     <input
                       type="checkbox"
@@ -795,7 +1057,16 @@ const DocumentsList = () => {
                       onChange={
                         toggleSelectAll
                       }
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="
+                        h-4
+                        w-4
+                        rounded
+                        border-gray-300
+                        text-blue-600
+                        focus:ring-blue-500
+                        dark:border-white/[0.15]
+                        dark:bg-white/[0.04]
+                      "
                       aria-label="Sayfadaki tüm belgeleri seç"
                     />
 
@@ -826,7 +1097,7 @@ const DocumentsList = () => {
                   Tarih
                 </Table.HeadCell>
 
-                <Table.HeadCell>
+                <Table.HeadCell className="text-right">
                   İşlemler
                 </Table.HeadCell>
 
@@ -836,51 +1107,16 @@ const DocumentsList = () => {
 
             <Table.Body>
 
-              {documents.length ===
-              0 ? (
-                <Table.Row>
+              {documents.map(
+                (
+                  doc
+                ) => {
+                  const FileIcon =
+                    getFileIcon(
+                      doc.file_type
+                    );
 
-                  <Table.Cell
-                    colSpan={
-                      canDelete
-                        ? 8
-                        : 7
-                    }
-                    className="py-12 text-center text-gray-500"
-                  >
-
-                    <div className="mb-2 text-4xl">
-                      📭
-                    </div>
-
-                    <p className="font-medium">
-                      {debouncedSearch ||
-                      categoryFilter
-                        ? 'Filtrelere uygun belge bulunamadı'
-                        : 'Henüz belge bulunmuyor'}
-                    </p>
-
-                    {canUpload &&
-                      !debouncedSearch &&
-                      !categoryFilter && (
-                        <div className="mt-3">
-
-                          <Link
-                            to="/documents/upload"
-                            className="text-blue-600 hover:underline"
-                          >
-                            İlk belgeyi yükle
-                          </Link>
-
-                        </div>
-                      )}
-
-                  </Table.Cell>
-
-                </Table.Row>
-              ) : (
-                documents.map(
-                  (doc) => (
+                  return (
                     <Table.Row
                       key={
                         doc.id
@@ -894,15 +1130,26 @@ const DocumentsList = () => {
 
                           <input
                             type="checkbox"
-                            checked={selectedDocs.includes(
-                              doc.id
-                            )}
+                            checked={
+                              selectedDocs.includes(
+                                doc.id
+                              )
+                            }
                             onChange={() =>
                               toggleSelect(
                                 doc.id
                               )
                             }
-                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="
+                              h-4
+                              w-4
+                              rounded
+                              border-gray-300
+                              text-blue-600
+                              focus:ring-blue-500
+                              dark:border-white/[0.15]
+                              dark:bg-white/[0.04]
+                            "
                             aria-label={`${doc.name} seç`}
                           />
 
@@ -915,62 +1162,82 @@ const DocumentsList = () => {
 
                         <div className="flex min-w-[18rem] items-start gap-3">
 
-                          <span className="mt-0.5 text-2xl">
-                            {getFileIcon(
-                              doc.file_type
-                            )}
-                          </span>
+                          <div
+                            className={`
+                              flex
+                              h-10
+                              w-10
+                              shrink-0
+                              items-center
+                              justify-center
+                              rounded-xl
+                              ${getFileIconClasses(
+                                doc.file_type
+                              )}
+                            `}
+                          >
+                            <FileIcon size={19} />
+                          </div>
 
                           <div className="min-w-0">
 
                             <Link
                               to={`/documents/${doc.id}`}
-                              className="block max-w-sm truncate font-medium text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400"
+                              className="
+                                block
+                                max-w-sm
+                                truncate
+                                font-semibold
+                                text-gray-900
+                                transition
+                                hover:text-blue-600
+                                dark:text-white
+                                dark:hover:text-blue-400
+                              "
                               title={
                                 doc.name
                               }
                             >
-                              {
-                                doc.name
-                              }
+                              {doc.name}
                             </Link>
 
                             <p
-                              className="mt-1 max-w-sm truncate text-xs text-gray-500"
+                              className="
+                                mt-1
+                                max-w-sm
+                                truncate
+                                text-xs
+                                text-gray-400
+                                dark:text-slate-500
+                              "
                               title={
                                 doc.original_name
                               }
                             >
-                              {
-                                doc.original_name
-                              }
+                              {doc.original_name}
                             </p>
 
-                            <div className="mt-2 flex flex-wrap gap-1">
+                            <div className="mt-2 flex flex-wrap gap-1.5">
 
                               {doc.is_public ? (
                                 <Badge
                                   variant="success"
-                                  className="text-xs"
+                                  dot
                                 >
-                                  Büro içi genel erişim
+                                  Genel Erişim
                                 </Badge>
                               ) : (
                                 <Badge
                                   variant="default"
-                                  className="text-xs"
+                                  dot
                                 >
                                   Kısıtlı
                                 </Badge>
                               )}
 
                               {doc.is_archived && (
-                                <Badge
-                                  variant="warning"
-                                  className="text-xs"
-                                >
-                                  <Archive className="mr-1 h-3 w-3" />
-
+                                <Badge variant="warning">
+                                  <Archive className="h-3 w-3" />
                                   Arşiv
                                 </Badge>
                               )}
@@ -988,10 +1255,11 @@ const DocumentsList = () => {
                       <Table.Cell>
 
                         <Badge
-                          variant="default"
-                          className={getCategoryColor(
-                            doc.category
-                          )}
+                          variant={
+                            getCategoryVariant(
+                              doc.category
+                            )
+                          }
                         >
                           {getCategoryLabel(
                             doc.category
@@ -1007,17 +1275,28 @@ const DocumentsList = () => {
                         {doc.case ? (
                           <Link
                             to={`/cases/${doc.case.id}`}
-                            className="block max-w-[14rem] truncate text-sm text-blue-600 hover:underline dark:text-blue-400"
+                            className="
+                              block
+                              max-w-[14rem]
+                              truncate
+                              text-sm
+                              font-medium
+                              text-gray-700
+                              transition
+                              hover:text-blue-600
+                              dark:text-slate-300
+                              dark:hover:text-blue-400
+                            "
                             title={
-                              doc.case.title
+                              doc.case
+                                .title
                             }
                           >
-                            {
-                              doc.case.title
-                            }
+                            {doc.case
+                              .title}
                           </Link>
                         ) : (
-                          <span className="text-sm text-gray-400">
+                          <span className="text-sm text-gray-400 dark:text-slate-600">
                             -
                           </span>
                         )}
@@ -1028,7 +1307,7 @@ const DocumentsList = () => {
 
                       <Table.Cell>
 
-                        <span className="whitespace-nowrap text-sm">
+                        <span className="whitespace-nowrap text-sm text-gray-600 dark:text-slate-400">
                           {formatFileSize(
                             doc.file_size
                           )}
@@ -1040,7 +1319,7 @@ const DocumentsList = () => {
 
                       <Table.Cell>
 
-                        <span className="whitespace-nowrap text-sm">
+                        <span className="whitespace-nowrap text-sm text-gray-700 dark:text-slate-300">
                           {getPersonName(
                             doc.uploader
                           )}
@@ -1052,7 +1331,7 @@ const DocumentsList = () => {
 
                       <Table.Cell>
 
-                        <span className="whitespace-nowrap text-sm text-gray-500">
+                        <span className="whitespace-nowrap text-xs text-gray-500 dark:text-slate-500">
                           {formatDateTime(
                             doc.created_at
                           )}
@@ -1062,9 +1341,9 @@ const DocumentsList = () => {
 
                       {/* ACTIONS */}
 
-                      <Table.Cell>
+                      <Table.Cell className="text-right">
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center justify-end gap-1">
 
                           <button
                             type="button"
@@ -1073,8 +1352,22 @@ const DocumentsList = () => {
                                 `/documents/${doc.id}`
                               )
                             }
-                            className="rounded-md p-2 text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/20"
-                            title="Belge detayını ve güncel versiyonu aç"
+                            className="
+                              inline-flex
+                              h-8
+                              w-8
+                              items-center
+                              justify-center
+                              rounded-lg
+                              text-gray-400
+                              transition
+                              hover:bg-blue-50
+                              hover:text-blue-600
+                              dark:text-slate-500
+                              dark:hover:bg-blue-500/[0.08]
+                              dark:hover:text-blue-400
+                            "
+                            title="Belgeyi görüntüle"
                           >
                             <Eye className="h-4 w-4" />
                           </button>
@@ -1087,7 +1380,21 @@ const DocumentsList = () => {
                                   `/documents/${doc.id}/edit`
                                 )
                               }
-                              className="rounded-md p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700"
+                              className="
+                                inline-flex
+                                h-8
+                                w-8
+                                items-center
+                                justify-center
+                                rounded-lg
+                                text-gray-400
+                                transition
+                                hover:bg-gray-100
+                                hover:text-gray-700
+                                dark:text-slate-500
+                                dark:hover:bg-white/[0.05]
+                                dark:hover:text-white
+                              "
                               title="Belge bilgilerini düzenle"
                             >
                               <Pencil className="h-4 w-4" />
@@ -1105,7 +1412,23 @@ const DocumentsList = () => {
                               disabled={
                                 deleteMutation.isPending
                               }
-                              className="rounded-md p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-900/20"
+                              className="
+                                inline-flex
+                                h-8
+                                w-8
+                                items-center
+                                justify-center
+                                rounded-lg
+                                text-gray-400
+                                transition
+                                hover:bg-red-50
+                                hover:text-red-600
+                                disabled:cursor-not-allowed
+                                disabled:opacity-50
+                                dark:text-slate-500
+                                dark:hover:bg-red-500/[0.08]
+                                dark:hover:text-red-400
+                              "
                               title="Belgeyi kaldır"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1117,95 +1440,133 @@ const DocumentsList = () => {
                       </Table.Cell>
 
                     </Table.Row>
-                  )
-                )
+                  );
+                }
               )}
 
             </Table.Body>
 
           </Table>
 
-        </div>
+          {/* ==================================================
+              PAGINATION
+          ================================================== */}
 
-        {/* PAGINATION */}
+          {pagination &&
+            pagination.totalPages >
+              1 && (
+              <div
+                className="
+                  flex
+                  flex-col
+                  gap-3
+                  rounded-xl
+                  border
+                  border-gray-200
+                  bg-white
+                  px-4
+                  py-3
+                  dark:border-white/[0.07]
+                  dark:bg-[#0b1b33]
+                  sm:flex-row
+                  sm:items-center
+                  sm:justify-between
+                "
+              >
 
-        {pagination &&
-          pagination.totalPages >
-            1 && (
-            <div className="flex flex-col gap-3 border-t border-gray-200 px-6 py-4 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-gray-500 dark:text-slate-400">
 
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Toplam{' '}
-                {
-                  pagination.total
-                }{' '}
-                belge
+                  Toplam{' '}
+                  <span className="font-semibold text-gray-700 dark:text-slate-300">
+                    {pagination.total}
+                  </span>{' '}
+                  belge
 
-                {selectedDocs.length >
-                  0 &&
-                  ` · ${selectedDocs.length} seçili`}
-              </p>
+                  {selectedDocs.length >
+                    0 && (
+                    <>
+                      {' '}
+                      ·{' '}
+                      <span className="font-semibold text-blue-600 dark:text-blue-400">
+                        {selectedDocs.length} seçili
+                      </span>
+                    </>
+                  )}
 
-              <div className="flex items-center gap-2">
+                </p>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    page <= 1 ||
-                    isFetching
-                  }
-                  onClick={() =>
-                    setPage(
-                      (
-                        current
-                      ) =>
-                        Math.max(
-                          1,
-                          current - 1
-                        )
-                    )
-                  }
-                >
-                  Önceki
-                </Button>
+                <div className="flex items-center gap-2">
 
-                <span className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400">
-                  {page} /{' '}
-                  {
-                    pagination.totalPages
-                  }
-                </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      page <= 1 ||
+                      isFetching
+                    }
+                    onClick={() =>
+                      setPage(
+                        (
+                          current
+                        ) =>
+                          Math.max(
+                            1,
+                            current -
+                              1
+                          )
+                      )
+                    }
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Önceki
+                  </Button>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    page >=
-                      pagination.totalPages ||
-                    isFetching
-                  }
-                  onClick={() =>
-                    setPage(
-                      (
-                        current
-                      ) =>
-                        Math.min(
-                          pagination.totalPages,
-                          current + 1
-                        )
-                    )
-                  }
-                >
-                  Sonraki
-                </Button>
+                  <span
+                    className="
+                      min-w-[70px]
+                      text-center
+                      text-xs
+                      font-semibold
+                      text-gray-600
+                      dark:text-slate-400
+                    "
+                  >
+                    {page} /{' '}
+                    {pagination.totalPages}
+                  </span>
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      page >=
+                        pagination.totalPages ||
+                      isFetching
+                    }
+                    onClick={() =>
+                      setPage(
+                        (
+                          current
+                        ) =>
+                          Math.min(
+                            pagination.totalPages,
+                            current +
+                              1
+                          )
+                      )
+                    }
+                  >
+                    Sonraki
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+
+                </div>
 
               </div>
+            )}
 
-            </div>
-          )}
-
-      </div>
+        </>
+      )}
 
     </div>
   );
