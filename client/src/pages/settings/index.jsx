@@ -1236,7 +1236,7 @@ const Settings = () => {
                   </p>
 
                   <p className="mt-1 max-w-xl text-xs leading-5 text-gray-500 dark:text-slate-400">
-                    Hesap silme işlemi kullanıcı erişimini ve bağlantılı verileri etkileyebilir. Bu işlem için backend tarafında ayrıca güvenli bir hesap silme akışı oluşturulmalıdır.
+                    burayı sonra yapcam
                   </p>
 
                 </div>

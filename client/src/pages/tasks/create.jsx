@@ -1,27 +1,55 @@
 import {
-  useState,
   useEffect,
   useMemo,
+  useState,
 } from 'react';
 
 import {
-  useNavigate,
   Link,
+  useNavigate,
   useSearchParams,
 } from 'react-router-dom';
 
-import { useUsers } from '../../features/users/user.query.js';
-import { useCases } from '../../features/cases/case.query.js';
-import { useClients } from '../../features/clients/client.query.js';
-import { useCreateTask } from '../../features/tasks/task.query.js';
-import { useAuth } from '../../app/providers/auth.provider.jsx';
+import {
+  useUsers,
+} from '../../features/users/user.query.js';
+
+import {
+  useCases,
+} from '../../features/cases/case.query.js';
+
+import {
+  useClients,
+} from '../../features/clients/client.query.js';
+
+import {
+  useCreateTask,
+} from '../../features/tasks/task.query.js';
+
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
 
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
+import Badge from '../../components/ui/Badge.jsx';
+
+import {
+  ArrowLeft,
+  BriefcaseBusiness,
+  CalendarClock,
+  CheckSquare2,
+  Clock3,
+  FileText,
+  Save,
+  Sparkles,
+  UserRound,
+  Users,
+} from 'lucide-react';
 
 // ======================================================
-// SABİTLER
+// CONSTANTS
 // ======================================================
 
 const INITIAL_FORM = {
@@ -44,82 +72,244 @@ const VALID_PRIORITIES = new Set([
   'critical',
 ]);
 
+const STATUS_OPTIONS = [
+  {
+    value: 'pending',
+    label: 'Bekliyor',
+  },
+  {
+    value: 'in_progress',
+    label: 'Devam Ediyor',
+  },
+  {
+    value: 'completed',
+    label: 'Tamamlandı',
+  },
+  {
+    value: 'cancelled',
+    label: 'İptal',
+  },
+];
+
+const PRIORITY_OPTIONS = [
+  {
+    value: 'low',
+    label: 'Düşük',
+  },
+  {
+    value: 'normal',
+    label: 'Normal',
+  },
+  {
+    value: 'high',
+    label: 'Yüksek',
+  },
+  {
+    value: 'critical',
+    label: 'Kritik',
+  },
+];
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const normalizeDateTimeLocal = (
+  value
+) => {
+  if (!value) {
+    return '';
+  }
+
+  /*
+   * datetime-local:
+   * YYYY-MM-DDTHH:mm
+   *
+   * URL'den tam ISO gelirse:
+   * 2026-08-17T14:30:00.000Z
+   *
+   * input'a uygun hale getiriyoruz.
+   */
+  if (
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(
+      value
+    )
+  ) {
+    return value.slice(
+      0,
+      16
+    );
+  }
+
+  return value;
+};
+
+const getRoleLabel = (
+  role
+) => {
+  const labels = {
+    admin: 'Yönetici',
+    lawyer: 'Avukat',
+    intern: 'Stajyer',
+    secretary: 'Sekreter',
+  };
+
+  return (
+    labels[role] ||
+    role ||
+    'Kullanıcı'
+  );
+};
+
+const getPriorityVariant = (
+  priority
+) => {
+  const variants = {
+    low: 'default',
+    normal: 'primary',
+    high: 'warning',
+    critical: 'danger',
+  };
+
+  return (
+    variants[priority] ||
+    'default'
+  );
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
 
 const TaskCreate = () => {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const navigate =
+    useNavigate();
 
-  const { user } = useAuth();
+  const [
+    searchParams,
+  ] =
+    useSearchParams();
 
-  const [formData, setFormData] =
-    useState(INITIAL_FORM);
+  const {
+    user,
+  } =
+    useAuth();
 
-  const [errors, setErrors] =
+  const [
+    formData,
+    setFormData,
+  ] =
+    useState(
+      INITIAL_FORM
+    );
+
+  const [
+    errors,
+    setErrors,
+  ] =
     useState({});
 
-  // ======================================================
-  // QUERY PARAMETRELERİ
-  // AI veya başka bir ekrandan form prefill edilebilir
-  // ======================================================
+  // ====================================================
+  // QUERY PARAM PREFILL
+  // ====================================================
 
-  const prefillData = useMemo(() => {
-    const priority =
-      searchParams.get('priority');
-
-    return {
-      title:
-        searchParams.get('title') || '',
-
-      description:
-        searchParams.get('description') || '',
-
-      priority:
-        priority &&
-        VALID_PRIORITIES.has(priority)
-          ? priority
-          : 'normal',
-
-      due_date:
-        searchParams.get('due_date') || '',
-
-      estimated_hours:
+  const prefillData =
+    useMemo(() => {
+      const priority =
         searchParams.get(
-          'estimated_hours'
-        ) || '',
+          'priority'
+        );
 
-      case_id:
-        searchParams.get('case_id') || '',
+      const dueDate =
+        searchParams.get(
+          'due_date'
+        );
 
-      client_id:
-        searchParams.get('client_id') || '',
+      return {
+        title:
+          searchParams.get(
+            'title'
+          ) || '',
 
-      note:
-        searchParams.get('note') || '',
+        description:
+          searchParams.get(
+            'description'
+          ) || '',
 
-      source:
-        searchParams.get('source') || '',
-    };
-  }, [searchParams]);
+        priority:
+          priority &&
+          VALID_PRIORITIES.has(
+            priority
+          )
+            ? priority
+            : 'normal',
+
+        due_date:
+          normalizeDateTimeLocal(
+            dueDate
+          ),
+
+        estimated_hours:
+          searchParams.get(
+            'estimated_hours'
+          ) || '',
+
+        case_id:
+          searchParams.get(
+            'case_id'
+          ) || '',
+
+        client_id:
+          searchParams.get(
+            'client_id'
+          ) || '',
+
+        note:
+          searchParams.get(
+            'note'
+          ) || '',
+
+        source:
+          searchParams.get(
+            'source'
+          ) || '',
+      };
+    }, [
+      searchParams,
+    ]);
 
   const isAiPrefill =
-    prefillData.source === 'ai';
+    prefillData.source ===
+    'ai';
 
-  // ======================================================
-  // HOOK'LAR
-  // ======================================================
+  // ====================================================
+  // QUERIES
+  // ====================================================
 
-  const { data: usersData } =
+  const {
+    data:
+      usersData,
+    isLoading:
+      usersLoading,
+  } =
     useUsers();
 
-  const { data: casesData } =
+  const {
+    data:
+      casesData,
+    isLoading:
+      casesLoading,
+  } =
     useCases({
       limit: 100,
     });
 
-  const { data: clientsData } =
+  const {
+    data:
+      clientsData,
+    isLoading:
+      clientsLoading,
+  } =
     useClients({
       limit: 100,
     });
@@ -128,575 +318,1424 @@ const TaskCreate = () => {
     useCreateTask();
 
   const users =
-    usersData?.data?.data || [];
+    Array.isArray(
+      usersData?.data?.data
+    )
+      ? usersData.data.data
+      : [];
 
   const cases =
-    casesData?.data?.data || [];
+    Array.isArray(
+      casesData?.data?.data
+    )
+      ? casesData.data.data
+      : [];
 
   const clients =
-    clientsData?.data?.data || [];
+    Array.isArray(
+      clientsData?.data?.data
+    )
+      ? clientsData.data.data
+      : [];
 
-  // ======================================================
-  // AI / QUERY PARAM PREFILL
-  // ======================================================
+  // ====================================================
+  // PREFILL
+  // ====================================================
 
   useEffect(() => {
     const hasPrefill =
-      Boolean(prefillData.title) ||
-      Boolean(prefillData.description) ||
-      Boolean(prefillData.case_id) ||
-      Boolean(prefillData.client_id) ||
-      Boolean(prefillData.due_date) ||
+      Boolean(
+        prefillData.title
+      ) ||
+      Boolean(
+        prefillData.description
+      ) ||
+      Boolean(
+        prefillData.case_id
+      ) ||
+      Boolean(
+        prefillData.client_id
+      ) ||
+      Boolean(
+        prefillData.due_date
+      ) ||
       Boolean(
         prefillData.estimated_hours
       ) ||
-      Boolean(prefillData.note) ||
+      Boolean(
+        prefillData.note
+      ) ||
       isAiPrefill;
 
-    if (!hasPrefill) {
+    if (
+      !hasPrefill
+    ) {
       return;
     }
 
-    setFormData((prev) => ({
-      ...prev,
+    setFormData(
+      (
+        current
+      ) => ({
+        ...current,
 
-      title:
-        prefillData.title ||
-        prev.title,
+        title:
+          prefillData.title ||
+          current.title,
 
-      description:
-        prefillData.description ||
-        prev.description,
+        description:
+          prefillData.description ||
+          current.description,
 
-      priority:
-        prefillData.priority ||
-        prev.priority,
+        priority:
+          prefillData.priority ||
+          current.priority,
 
-      due_date:
-        prefillData.due_date ||
-        prev.due_date,
+        due_date:
+          prefillData.due_date ||
+          current.due_date,
 
-      estimated_hours:
-        prefillData.estimated_hours ||
-        prev.estimated_hours,
+        estimated_hours:
+          prefillData.estimated_hours ||
+          current.estimated_hours,
 
-      case_id:
-        prefillData.case_id ||
-        prev.case_id,
+        case_id:
+          prefillData.case_id ||
+          current.case_id,
 
-      client_id:
-        prefillData.client_id ||
-        prev.client_id,
+        client_id:
+          prefillData.client_id ||
+          current.client_id,
 
-      note:
-        prefillData.note ||
-        prev.note,
-    }));
+        note:
+          prefillData.note ||
+          current.note,
+      })
+    );
   }, [
     prefillData,
     isAiPrefill,
   ]);
 
-  // ======================================================
-  // ADMIN DEĞİLSE KENDİNE ATA
-  // ======================================================
+  // ====================================================
+  // NON-ADMIN => SELF ASSIGN
+  // ====================================================
 
   useEffect(() => {
     if (
-      user?.role !== 'admin' &&
+      user?.role !==
+        'admin' &&
       user?.id
     ) {
-      setFormData((prev) => ({
-        ...prev,
-        assigned_to: user.id,
-      }));
+      setFormData(
+        (
+          current
+        ) => ({
+          ...current,
+          assigned_to:
+            user.id,
+        })
+      );
     }
-  }, [user]);
+  }, [
+    user,
+  ]);
 
-  // ======================================================
-  // ATANABİLİR KULLANICILAR
-  // ======================================================
+  // ====================================================
+  // ASSIGNABLE USERS
+  // ====================================================
 
   const assignableUsers =
     useMemo(() => {
-      if (user?.role === 'admin') {
+      if (
+        user?.role ===
+        'admin'
+      ) {
         return users;
       }
 
       return users.filter(
-        (u) =>
-          u.id === user?.id
+        (
+          person
+        ) =>
+          person.id ===
+          user?.id
       );
-    }, [users, user]);
+    }, [
+      users,
+      user,
+    ]);
 
-  // ======================================================
+  // ====================================================
+  // SELECTED DATA
+  // ====================================================
+
+  const selectedCase =
+    useMemo(() => {
+      return cases.find(
+        (
+          item
+        ) =>
+          item.id ===
+          formData.case_id
+      );
+    }, [
+      cases,
+      formData.case_id,
+    ]);
+
+  const selectedClient =
+    useMemo(() => {
+      return clients.find(
+        (
+          item
+        ) =>
+          item.id ===
+          formData.client_id
+      );
+    }, [
+      clients,
+      formData.client_id,
+    ]);
+
+  // ====================================================
   // HANDLERS
-  // ======================================================
+  // ====================================================
 
-  const handleChange = (e) => {
-    const {
-      name,
-      value,
-    } = e.target;
+  const handleChange =
+    (
+      event
+    ) => {
+      const {
+        name,
+        value,
+      } =
+        event.target;
 
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+      setFormData(
+        (
+          current
+        ) => ({
+          ...current,
+          [name]:
+            value,
+        })
+      );
 
-    if (errors[name]) {
-      setErrors((prev) => ({
-        ...prev,
-        [name]: '',
-      }));
-    }
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
-    if (
-      !formData.title.trim()
-    ) {
-      setErrors({
-        title:
-          'Görev adı gereklidir',
-      });
-
-      return;
-    }
-
-    const assignedTo =
-      user?.role !== 'admin'
-        ? user?.id
-        : formData.assigned_to;
-
-    const submitData = {
-      ...formData,
-
-      title:
-        formData.title.trim(),
-
-      description:
-        formData.description?.trim() ||
-        null,
-
-      note:
-        formData.note?.trim() ||
-        '',
-
-      assigned_to:
-        assignedTo || null,
-
-      case_id:
-        formData.case_id || null,
-
-      client_id:
-        formData.client_id || null,
-
-      due_date:
-        formData.due_date || null,
-
-      estimated_hours:
-        formData.estimated_hours
-          ? parseFloat(
-              formData.estimated_hours
-            )
-          : null,
+      if (
+        errors[name]
+      ) {
+        setErrors(
+          (
+            current
+          ) => ({
+            ...current,
+            [name]:
+              '',
+          })
+        );
+      }
     };
 
-    createMutation.mutate(
-      submitData,
-      {
-        onSuccess: () => {
-          navigate('/tasks');
-        },
+  const handleSubmit =
+    (
+      event
+    ) => {
+      event.preventDefault();
+
+      const newErrors =
+        {};
+
+      if (
+        !formData.title.trim()
+      ) {
+        newErrors.title =
+          'Görev adı gereklidir';
       }
-    );
-  };
 
-  const handleCancel = () => {
-    if (formData.case_id) {
-      navigate(
-        `/cases/${formData.case_id}`
+      if (
+        formData.estimated_hours &&
+        Number(
+          formData.estimated_hours
+        ) <
+          0
+      ) {
+        newErrors.estimated_hours =
+          'Tahmini süre negatif olamaz';
+      }
+
+      if (
+        Object.keys(
+          newErrors
+        ).length >
+        0
+      ) {
+        setErrors(
+          newErrors
+        );
+
+        return;
+      }
+
+      const assignedTo =
+        user?.role !==
+        'admin'
+          ? user?.id
+          : formData.assigned_to;
+
+      const submitData = {
+        ...formData,
+
+        title:
+          formData.title.trim(),
+
+        description:
+          formData.description
+            ?.trim() ||
+          null,
+
+        note:
+          formData.note
+            ?.trim() ||
+          '',
+
+        assigned_to:
+          assignedTo ||
+          null,
+
+        case_id:
+          formData.case_id ||
+          null,
+
+        client_id:
+          formData.client_id ||
+          null,
+
+        due_date:
+          formData.due_date ||
+          null,
+
+        estimated_hours:
+          formData.estimated_hours
+            ? Number(
+                formData.estimated_hours
+              )
+            : null,
+      };
+
+      createMutation.mutate(
+        submitData,
+        {
+          onSuccess: (
+            response
+          ) => {
+            const taskId =
+              response?.data
+                ?.data?.id;
+
+            if (
+              taskId
+            ) {
+              navigate(
+                `/tasks/${taskId}`
+              );
+
+              return;
+            }
+
+            navigate(
+              '/tasks'
+            );
+          },
+        }
       );
+    };
 
-      return;
-    }
+  const handleCancel =
+    () => {
+      if (
+        formData.case_id
+      ) {
+        navigate(
+          `/cases/${formData.case_id}`
+        );
 
-    navigate('/tasks');
-  };
+        return;
+      }
 
-  // ======================================================
+      navigate(
+        '/tasks'
+      );
+    };
+
+  // ====================================================
   // RENDER
-  // ======================================================
+  // ====================================================
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link
-            to="/tasks"
-            className="text-blue-600 hover:underline"
+    <div className="mx-auto max-w-4xl space-y-6">
+
+      {/* ==================================================
+          HEADER
+      ================================================== */}
+
+      <div>
+
+        <Link
+          to="/tasks"
+          className="
+            inline-flex
+            items-center
+            gap-1.5
+            text-xs
+            font-medium
+            text-gray-500
+            transition
+            hover:text-blue-600
+            dark:text-slate-500
+            dark:hover:text-blue-400
+          "
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Görevler
+        </Link>
+
+        <div className="mt-3 flex items-start gap-3">
+
+          <div
+            className="
+              flex
+              h-11
+              w-11
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-blue-50
+              text-blue-600
+              dark:bg-blue-500/[0.08]
+              dark:text-blue-400
+            "
           >
-            ← Görevler
-          </Link>
+            <CheckSquare2 size={21} />
+          </div>
 
-          <h1 className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
-            ✅ Yeni Görev
-          </h1>
+          <div>
 
-          {isAiPrefill && (
-            <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
-              ✨ Bu görev AI dava
-              analizindeki bir öneriden
-              oluşturuluyor. Bilgileri
-              kontrol edip atanan kişiyi
-              ve son tarihi belirleyin.
-            </div>
-          )}
+            <h1
+              className="
+                text-2xl
+                font-semibold
+                tracking-[-0.035em]
+                text-gray-900
+                dark:text-white
+              "
+            >
+              Yeni Görev
+            </h1>
+
+            <p
+              className="
+                mt-1
+                max-w-2xl
+                text-sm
+                leading-6
+                text-gray-500
+                dark:text-slate-400
+              "
+            >
+              Yapılacak işi, sorumlu kişiyi, önceliği ve ilişkili dosyaları tanımlayın.
+            </p>
+
+          </div>
+
         </div>
+
       </div>
 
-      <Card>
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-6 p-6"
+      {/* ==================================================
+          AI PREFILL
+      ================================================== */}
+
+      {isAiPrefill && (
+        <div
+          className="
+            rounded-xl
+            border
+            border-blue-200
+            bg-blue-50/70
+            p-4
+            dark:border-blue-500/20
+            dark:bg-blue-500/[0.05]
+          "
         >
-          <Input
-            label="Görev Adı *"
-            name="title"
-            value={formData.title}
-            onChange={
-              handleChange
-            }
-            error={errors.title}
-            placeholder="Görev başlığı..."
-          />
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Açıklama
-            </label>
+          <div className="flex items-start gap-3">
 
-            <textarea
-              name="description"
+            <div
+              className="
+                flex
+                h-9
+                w-9
+                shrink-0
+                items-center
+                justify-center
+                rounded-lg
+                bg-blue-100
+                text-blue-600
+                dark:bg-blue-500/[0.1]
+                dark:text-blue-400
+              "
+            >
+              <Sparkles size={17} />
+            </div>
+
+            <div>
+
+              <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                AI önerisinden görev oluşturuluyor
+              </p>
+
+              <p className="mt-1 text-xs leading-5 text-blue-700/80 dark:text-blue-300/70">
+                Bazı alanlar dava analizindeki öneriden otomatik dolduruldu.
+                Kaydetmeden önce görev içeriğini, sorumlu kişiyi ve son tarihi kontrol edin.
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* ==================================================
+          FORM
+      ================================================== */}
+
+      <form
+        onSubmit={
+          handleSubmit
+        }
+        className="space-y-5"
+      >
+
+        {/* ==================================================
+            BASIC INFO
+        ================================================== */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-blue-50
+                  text-blue-600
+                  dark:bg-blue-500/[0.08]
+                  dark:text-blue-400
+                "
+              >
+                <FileText size={17} />
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Görev Bilgileri
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Görevin adı, açıklaması ve başlangıç notu
+                </p>
+
+              </div>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body className="space-y-5">
+
+            <Input
+              label="Görev Adı *"
+              name="title"
               value={
-                formData.description
+                formData.title
               }
               onChange={
                 handleChange
               }
-              rows="4"
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              placeholder="Görev açıklaması..."
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              📝 Başlangıç Notu
-            </label>
-
-            <textarea
-              name="note"
-              value={formData.note}
-              onChange={
-                handleChange
+              error={
+                errors.title
               }
-              rows="2"
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              placeholder="Görevle ilgili başlangıç notu..."
+              placeholder="Örn: Bilirkişi raporuna itiraz dilekçesi hazırla"
+              autoFocus
             />
 
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Bu not göreve eklenecek
-              ve herkes görebilecek
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Durum
+
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                Açıklama
               </label>
 
-              <select
-                name="status"
+              <textarea
+                name="description"
                 value={
-                  formData.status
+                  formData.description
                 }
                 onChange={
                   handleChange
                 }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
-                <option value="pending">
-                  Bekliyor
-                </option>
-
-                <option value="in_progress">
-                  Devam Ediyor
-                </option>
-
-                <option value="completed">
-                  Tamamlandı
-                </option>
-
-                <option value="cancelled">
-                  İptal
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Öncelik
-              </label>
-
-              <select
-                name="priority"
-                value={
-                  formData.priority
-                }
-                onChange={
-                  handleChange
-                }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
-                <option value="low">
-                  Düşük
-                </option>
-
-                <option value="normal">
-                  Normal
-                </option>
-
-                <option value="high">
-                  Yüksek
-                </option>
-
-                <option value="critical">
-                  Kritik
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Son Tarih
-              </label>
-
-              <input
-                type="datetime-local"
-                name="due_date"
-                value={
-                  formData.due_date
-                }
-                onChange={
-                  handleChange
-                }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                rows={4}
+                placeholder="Görevin kapsamını ve yapılması gerekenleri açıklayın..."
+                className="
+                  w-full
+                  resize-y
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  py-2.5
+                  text-sm
+                  leading-6
+                  text-gray-900
+                  outline-none
+                  transition
+                  placeholder:text-gray-400
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-white
+                  dark:placeholder:text-slate-500
+                "
               />
+
             </div>
-          </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              ⏱️ Tahmini Süre
-              (Saat)
-            </label>
+            <div>
 
-            <input
-              type="number"
-              name="estimated_hours"
-              value={
-                formData.estimated_hours
-              }
-              onChange={
-                handleChange
-              }
-              min="0"
-              step="0.5"
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              placeholder="Örn: 2.5"
-            />
-          </div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                Başlangıç Notu
+              </label>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              👤 Atanan Kişi
-            </label>
+              <textarea
+                name="note"
+                value={
+                  formData.note
+                }
+                onChange={
+                  handleChange
+                }
+                rows={3}
+                placeholder="Göreve ilişkin ilk not veya önemli hatırlatma..."
+                className="
+                  w-full
+                  resize-y
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  py-2.5
+                  text-sm
+                  leading-6
+                  text-gray-900
+                  outline-none
+                  transition
+                  placeholder:text-gray-400
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-white
+                  dark:placeholder:text-slate-500
+                "
+              />
+
+              <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                Bu not görev detayında ekip üyeleri tarafından görüntülenebilir.
+              </p>
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+        {/* ==================================================
+            PLANNING
+        ================================================== */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-amber-50
+                  text-amber-600
+                  dark:bg-amber-500/[0.08]
+                  dark:text-amber-400
+                "
+              >
+                <CalendarClock size={17} />
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Planlama
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Durum, öncelik, son tarih ve tahmini çalışma süresi
+                </p>
+
+              </div>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body className="space-y-5">
+
+            <div className="grid gap-4 md:grid-cols-3">
+
+              {/* STATUS */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Durum
+                </label>
+
+                <select
+                  name="status"
+                  value={
+                    formData.status
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    text-sm
+                    text-gray-700
+                    outline-none
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                  "
+                >
+                  {STATUS_OPTIONS.map(
+                    (
+                      option
+                    ) => (
+                      <option
+                        key={
+                          option.value
+                        }
+                        value={
+                          option.value
+                        }
+                      >
+                        {option.label}
+                      </option>
+                    )
+                  )}
+                </select>
+
+              </div>
+
+              {/* PRIORITY */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Öncelik
+                </label>
+
+                <select
+                  name="priority"
+                  value={
+                    formData.priority
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    text-sm
+                    text-gray-700
+                    outline-none
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                  "
+                >
+                  {PRIORITY_OPTIONS.map(
+                    (
+                      option
+                    ) => (
+                      <option
+                        key={
+                          option.value
+                        }
+                        value={
+                          option.value
+                        }
+                      >
+                        {option.label}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                <div className="mt-2">
+                  <Badge
+                    variant={
+                      getPriorityVariant(
+                        formData.priority
+                      )
+                    }
+                    dot
+                  >
+                    {PRIORITY_OPTIONS.find(
+                      (
+                        option
+                      ) =>
+                        option.value ===
+                        formData.priority
+                    )?.label ||
+                      formData.priority}
+                  </Badge>
+                </div>
+
+              </div>
+
+              {/* DUE DATE */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Son Tarih
+                </label>
+
+                <input
+                  type="datetime-local"
+                  name="due_date"
+                  value={
+                    formData.due_date
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    text-sm
+                    text-gray-700
+                    outline-none
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                  "
+                />
+
+              </div>
+
+            </div>
+
+            {/* ESTIMATED HOURS */}
+
+            <div className="max-w-xs">
+
+              <Input
+                label="Tahmini Süre (Saat)"
+                name="estimated_hours"
+                type="number"
+                value={
+                  formData.estimated_hours
+                }
+                onChange={
+                  handleChange
+                }
+                error={
+                  errors.estimated_hours
+                }
+                min="0"
+                step="0.5"
+                placeholder="Örn: 2.5"
+                icon={
+                  <Clock3 size={16} />
+                }
+              />
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+        {/* ==================================================
+            ASSIGNMENT
+        ================================================== */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-violet-50
+                  text-violet-600
+                  dark:bg-violet-500/[0.08]
+                  dark:text-violet-400
+                "
+              >
+                <Users size={17} />
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Görev Ataması
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Görevden sorumlu kullanıcıyı belirleyin
+                </p>
+
+              </div>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
 
             {user?.role ===
             'admin' ? (
-              <select
-                name="assigned_to"
-                value={
-                  formData.assigned_to
-                }
-                onChange={
-                  handleChange
-                }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
-                <option value="">
-                  Atanacak kişi seçin
-                </option>
+              <div>
 
-                {assignableUsers.map(
-                  (person) => (
-                    <option
-                      key={person.id}
-                      value={person.id}
-                    >
-                      {
-                        person.first_name
-                      }{' '}
-                      {
-                        person.last_name
-                      }
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Atanan Kişi
+                </label>
 
-                      {person.role ===
-                        'admin' &&
-                        ' (Admin)'}
+                <select
+                  name="assigned_to"
+                  value={
+                    formData.assigned_to
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    usersLoading
+                  }
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    text-sm
+                    text-gray-700
+                    outline-none
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                  "
+                >
+                  <option value="">
+                    {usersLoading
+                      ? 'Kullanıcılar yükleniyor...'
+                      : 'Atanacak kişi seçin'}
+                  </option>
 
-                      {person.role ===
-                        'lawyer' &&
-                        ' (Avukat)'}
+                  {assignableUsers.map(
+                    (
+                      person
+                    ) => (
+                      <option
+                        key={
+                          person.id
+                        }
+                        value={
+                          person.id
+                        }
+                      >
+                        {person.first_name}{' '}
+                        {person.last_name}
+                        {' · '}
+                        {getRoleLabel(
+                          person.role
+                        )}
+                      </option>
+                    )
+                  )}
+                </select>
 
-                      {person.role ===
-                        'intern' &&
-                        ' (Stajyer)'}
-
-                      {person.role ===
-                        'secretary' &&
-                        ' (Sekreter)'}
-                    </option>
-                  )
-                )}
-              </select>
+              </div>
             ) : (
-              <div className="w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                {user?.first_name}{' '}
-                {user?.last_name}{' '}
-                (Kendin)
+              <div
+                className="
+                  flex
+                  items-center
+                  justify-between
+                  rounded-xl
+                  border
+                  border-gray-100
+                  bg-gray-50
+                  p-4
+                  dark:border-white/[0.06]
+                  dark:bg-white/[0.025]
+                "
+              >
+
+                <div className="flex items-center gap-3">
+
+                  <div
+                    className="
+                      flex
+                      h-10
+                      w-10
+                      items-center
+                      justify-center
+                      rounded-full
+                      bg-blue-100
+                      font-semibold
+                      text-blue-700
+                      dark:bg-blue-500/[0.1]
+                      dark:text-blue-400
+                    "
+                  >
+                    {user?.first_name?.[0] ||
+                      ''}
+                    {user?.last_name?.[0] ||
+                      ''}
+                  </div>
+
+                  <div>
+
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {user?.first_name}{' '}
+                      {user?.last_name}
+                    </p>
+
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-500">
+                      {getRoleLabel(
+                        user?.role
+                      )}
+                    </p>
+
+                  </div>
+
+                </div>
+
+                <Badge
+                  variant="primary"
+                  dot
+                >
+                  Kendin
+                </Badge>
+
               </div>
             )}
-          </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                📁 İlişkili Dava
-              </label>
+          </Card.Body>
 
-              <select
-                name="case_id"
-                value={
-                  formData.case_id
-                }
-                onChange={
-                  handleChange
-                }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+        </Card>
+
+        {/* ==================================================
+            RELATIONS
+        ================================================== */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-emerald-50
+                  text-emerald-600
+                  dark:bg-emerald-500/[0.08]
+                  dark:text-emerald-400
+                "
               >
-                <option value="">
-                  Dava seçin
-                  (isteğe bağlı)
-                </option>
+                <BriefcaseBusiness size={17} />
+              </div>
 
-                {cases.map(
-                  (caseItem) => (
-                    <option
-                      key={
-                        caseItem.id
-                      }
-                      value={
-                        caseItem.id
-                      }
-                    >
-                      {
-                        caseItem.title
-                      }
-                    </option>
-                  )
-                )}
-              </select>
+              <div>
 
-              {isAiPrefill &&
-                formData.case_id && (
-                  <p className="mt-1 text-xs text-blue-600 dark:text-blue-300">
-                    AI önerisinin ait
-                    olduğu dava otomatik
-                    seçildi.
-                  </p>
-                )}
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  İlişkili Kayıtlar
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Görevi dava veya müvekkil kaydıyla ilişkilendirin
+                </p>
+
+              </div>
+
             </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                👤 İlişkili Müvekkil
-              </label>
+          </Card.Header>
 
-              <select
-                name="client_id"
-                value={
-                  formData.client_id
-                }
-                onChange={
-                  handleChange
-                }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
-                <option value="">
-                  Müvekkil seçin
-                  (isteğe bağlı)
-                </option>
+          <Card.Body>
 
-                {clients.map(
-                  (client) => (
-                    <option
-                      key={
-                        client.id
-                      }
-                      value={
-                        client.id
-                      }
-                    >
-                      {client.name}
+            <div className="grid gap-4 md:grid-cols-2">
 
-                      {client.company_name &&
-                        ` (${client.company_name})`}
-                    </option>
-                  )
+              {/* CASE */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  İlişkili Dava
+                </label>
+
+                <select
+                  name="case_id"
+                  value={
+                    formData.case_id
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    casesLoading
+                  }
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    text-sm
+                    text-gray-700
+                    outline-none
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                  "
+                >
+                  <option value="">
+                    {casesLoading
+                      ? 'Davalar yükleniyor...'
+                      : 'Dava seçin (isteğe bağlı)'}
+                  </option>
+
+                  {cases.map(
+                    (
+                      caseItem
+                    ) => (
+                      <option
+                        key={
+                          caseItem.id
+                        }
+                        value={
+                          caseItem.id
+                        }
+                      >
+                        {caseItem.title}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                {isAiPrefill &&
+                  formData.case_id && (
+                    <div className="mt-2 flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400">
+
+                      <Sparkles className="h-3.5 w-3.5" />
+
+                      AI önerisinin ilişkili davası otomatik seçildi.
+
+                    </div>
+                  )}
+
+                {selectedCase && (
+                  <div
+                    className="
+                      mt-3
+                      rounded-lg
+                      border
+                      border-gray-100
+                      bg-gray-50
+                      p-3
+                      dark:border-white/[0.05]
+                      dark:bg-white/[0.025]
+                    "
+                  >
+
+                    <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
+                      {selectedCase.title}
+                    </p>
+
+                    {selectedCase.case_number && (
+                      <p className="mt-1 text-[10px] text-gray-400 dark:text-slate-500">
+                        {selectedCase.case_number}
+                      </p>
+                    )}
+
+                  </div>
                 )}
-              </select>
+
+              </div>
+
+              {/* CLIENT */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  İlişkili Müvekkil
+                </label>
+
+                <select
+                  name="client_id"
+                  value={
+                    formData.client_id
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    clientsLoading
+                  }
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    text-sm
+                    text-gray-700
+                    outline-none
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                  "
+                >
+                  <option value="">
+                    {clientsLoading
+                      ? 'Müvekkiller yükleniyor...'
+                      : 'Müvekkil seçin (isteğe bağlı)'}
+                  </option>
+
+                  {clients.map(
+                    (
+                      client
+                    ) => (
+                      <option
+                        key={
+                          client.id
+                        }
+                        value={
+                          client.id
+                        }
+                      >
+                        {client.name}
+                        {client.company_name
+                          ? ` · ${client.company_name}`
+                          : ''}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                {selectedClient && (
+                  <div
+                    className="
+                      mt-3
+                      flex
+                      items-center
+                      gap-3
+                      rounded-lg
+                      border
+                      border-gray-100
+                      bg-gray-50
+                      p-3
+                      dark:border-white/[0.05]
+                      dark:bg-white/[0.025]
+                    "
+                  >
+
+                    <div
+                      className="
+                        flex
+                        h-8
+                        w-8
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-lg
+                        bg-blue-50
+                        text-blue-600
+                        dark:bg-blue-500/[0.08]
+                        dark:text-blue-400
+                      "
+                    >
+                      <UserRound size={15} />
+                    </div>
+
+                    <div className="min-w-0">
+
+                      <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
+                        {selectedClient.name}
+                      </p>
+
+                      {selectedClient.company_name && (
+                        <p className="mt-0.5 truncate text-[10px] text-gray-400 dark:text-slate-500">
+                          {selectedClient.company_name}
+                        </p>
+                      )}
+
+                    </div>
+
+                  </div>
+                )}
+
+              </div>
+
             </div>
-          </div>
 
-          <div className="flex gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
-            <Button
-              type="submit"
-              loading={
-                createMutation.isPending
-              }
-            >
-              ✅ Görev Oluştur
-            </Button>
+          </Card.Body>
 
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={
-                handleCancel
-              }
-            >
-              İptal
-            </Button>
-          </div>
-        </form>
-      </Card>
+        </Card>
+
+        {/* ==================================================
+            ACTIONS
+        ================================================== */}
+
+        <div
+          className="
+            flex
+            flex-col-reverse
+            gap-3
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            p-4
+            shadow-sm
+            dark:border-white/[0.07]
+            dark:bg-[#0b1b33]
+            sm:flex-row
+            sm:items-center
+            sm:justify-end
+          "
+        >
+
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={
+              handleCancel
+            }
+            disabled={
+              createMutation.isPending
+            }
+          >
+            İptal
+          </Button>
+
+          <Button
+            type="submit"
+            loading={
+              createMutation.isPending
+            }
+          >
+            <Save className="h-4 w-4" />
+            Görevi Oluştur
+          </Button>
+
+        </div>
+
+      </form>
+
     </div>
   );
 };
