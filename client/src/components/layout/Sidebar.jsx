@@ -1,164 +1,465 @@
-import { NavLink } from 'react-router-dom';
-import { useAuth } from '../../app/providers/auth.provider.jsx';
-import { ROLES } from '../../constants/roles.js';
 import {
-  LayoutDashboard,
-  Users,
-  Folder,
+  NavLink,
+} from 'react-router-dom';
+
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  ROLES,
+} from '../../constants/roles.js';
+
+import {
+  CalendarDays,
+  CheckSquare2,
+  ClipboardList,
   FileText,
   Files,
-  Calendar,
-  CheckSquare,
+  FolderKanban,
+  Gavel,
+  LayoutDashboard,
   Search,
   Settings,
+  ShieldCheck,
   Sparkles,
-  Wallet,
-  Shield,
-  ClipboardList,
-  Gavel,
+  Users,
+  WalletCards,
+  X,
 } from 'lucide-react';
 
-const Sidebar = ({ open, onClose }) => {
-  const { user } = useAuth();
+// ======================================================
+// NAVIGATION
+// ======================================================
 
-  const menuItems = [
-    { path: '/dashboard', label: 'Anasayfa', icon: LayoutDashboard },
-    { path: '/clients', label: 'Müvekkiller', icon: Users },
-    { path: '/cases', label: 'Davalar', icon: Folder },
-    { path: '/documents', label: 'Belgeler', icon: FileText },
-    { path: '/templates', label: 'Şablonlar', icon: Files },
-    { path: '/meetings', label: 'Toplantılar', icon: Calendar },
-    { path: '/tasks', label: 'Görevler', icon: CheckSquare },
-    { path: '/calendar', label: 'Takvim', icon: Calendar },
-    { path: '/finance', label: 'Finans', icon: Wallet },
-    { path: '/ai', label: 'AI Asistan', icon: Sparkles },
-    { path: '/search', label: 'Arama', icon: Search },
-    { path: '/settings', label: 'Ayarlar', icon: Settings },
-  ];
+const navigationGroups = [
+  {
+    label: 'Genel',
+    items: [
+      {
+        path: '/dashboard',
+        label: 'Genel Bakış',
+        icon: LayoutDashboard,
+      },
+    ],
+  },
 
-  const adminMenuItems = [
-    { path: '/users', label: 'Kullanıcılar', icon: Shield },
-    { path: '/audit-logs', label: 'Denetim Logları', icon: ClipboardList },
-  ];
+  {
+    label: 'Dosya Yönetimi',
+    items: [
+      {
+        path: '/clients',
+        label: 'Müvekkiller',
+        icon: Users,
+      },
+      {
+        path: '/cases',
+        label: 'Davalar',
+        icon: FolderKanban,
+      },
+      {
+        path: '/documents',
+        label: 'Belgeler',
+        icon: FileText,
+      },
+      {
+        path: '/templates',
+        label: 'Şablonlar',
+        icon: Files,
+      },
+    ],
+  },
 
-  const isAdmin = user?.role === ROLES.ADMIN;
+  {
+    label: 'Operasyon',
+    items: [
+      {
+        path: '/tasks',
+        label: 'Görevler',
+        icon: CheckSquare2,
+      },
+      {
+        path: '/calendar',
+        label: 'Takvim',
+        icon: CalendarDays,
+      },
+      {
+        path: '/meetings',
+        label: 'Toplantılar',
+        icon: Gavel,
+      },
+      {
+        path: '/finance',
+        label: 'Finans',
+        icon: WalletCards,
+      },
+    ],
+  },
 
-  const renderNavLink = (item, onClick) => {
-    const Icon = item.icon;
+  {
+    label: 'Araçlar',
+    items: [
+      {
+        path: '/ai',
+        label: 'AI Asistan',
+        icon: Sparkles,
+      },
+      {
+        path: '/search',
+        label: 'Global Arama',
+        icon: Search,
+      },
+      {
+        path: '/settings',
+        label: 'Ayarlar',
+        icon: Settings,
+      },
+    ],
+  },
+];
 
-    return (
-      <NavLink key={item.path} to={item.path} onClick={onClick}>
-        {({ isActive }) => (
-          <div
-            className={`flex items-center gap-3 mx-3 my-0.5 px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer ${
+const adminItems = [
+  {
+    path: '/users',
+    label: 'Kullanıcılar',
+    icon: ShieldCheck,
+  },
+  {
+    path: '/audit-logs',
+    label: 'Denetim Logları',
+    icon: ClipboardList,
+  },
+];
+
+// ======================================================
+// NAV ITEM
+// ======================================================
+
+const SidebarLink = ({
+  item,
+  onClick,
+}) => {
+  const Icon =
+    item.icon;
+
+  return (
+    <NavLink
+      to={item.path}
+      onClick={onClick}
+      className="block"
+    >
+      {({
+        isActive,
+      }) => (
+        <div
+          className={`
+            group relative mx-2 flex h-10 items-center gap-3
+            rounded-lg px-3 text-sm transition-all duration-150
+            ${
               isActive
-                ? 'bg-white/10 text-white shadow-lg'
-                : 'text-blue-100/70 hover:bg-white/5 hover:text-white'
-            }`}
+                ? 'bg-white/[0.09] text-white'
+                : 'text-slate-300/75 hover:bg-white/[0.05] hover:text-white'
+            }
+          `}
+        >
+          {isActive && (
+            <span className="absolute -left-2 h-5 w-[3px] rounded-r-full bg-amber-400" />
+          )}
+
+          <Icon
+            size={18}
+            strokeWidth={
+              isActive
+                ? 2.2
+                : 1.8
+            }
+            className={
+              isActive
+                ? 'text-amber-300'
+                : 'text-slate-400 transition-colors group-hover:text-slate-200'
+            }
+          />
+
+          <span
+            className={
+              isActive
+                ? 'font-semibold'
+                : 'font-medium'
+            }
           >
-            <Icon size={17} strokeWidth={2} />
-            <span className="text-sm font-medium">{item.label}</span>
+            {item.label}
+          </span>
+        </div>
+      )}
+    </NavLink>
+  );
+};
+
+// ======================================================
+// CONTENT
+// ======================================================
+
+const SidebarContent = ({
+  user,
+  onNavigate,
+  mobile = false,
+  onClose,
+}) => {
+  const isAdmin =
+    user?.role ===
+    ROLES.ADMIN;
+
+  return (
+    <div className="flex h-full flex-col">
+
+      {/* LOGO */}
+
+      <div className="flex h-[76px] shrink-0 items-center justify-between px-5">
+
+        <div className="flex items-center gap-3">
+
+          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-amber-400/20 bg-amber-400/[0.08]">
+
+            <Gavel
+              size={20}
+              strokeWidth={2}
+              className="text-amber-300"
+            />
+
+            <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full border-2 border-[#081b3d] bg-emerald-400" />
+
+          </div>
+
+          <div>
+
+            <h2 className="text-[19px] font-bold tracking-[-0.03em] text-white">
+              Derkenar
+            </h2>
+
+            <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Hukuk Büro Yönetimi
+            </p>
+
+          </div>
+
+        </div>
+
+        {mobile && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-400 transition hover:bg-white/[0.06] hover:text-white"
+            aria-label="Menüyü kapat"
+          >
+            <X size={18} />
+          </button>
+        )}
+
+      </div>
+
+      <div className="mx-5 border-t border-white/[0.06]" />
+
+      {/* NAV */}
+
+      <nav className="flex-1 overflow-y-auto px-1 py-4">
+
+        {navigationGroups.map(
+          (
+            group,
+            groupIndex
+          ) => (
+            <div
+              key={group.label}
+              className={
+                groupIndex === 0
+                  ? ''
+                  : 'mt-5'
+              }
+            >
+
+              <p className="mb-1.5 px-5 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                {group.label}
+              </p>
+
+              <div className="space-y-0.5">
+
+                {group.items.map(
+                  (
+                    item
+                  ) => (
+                    <SidebarLink
+                      key={item.path}
+                      item={item}
+                      onClick={
+                        onNavigate
+                      }
+                    />
+                  )
+                )}
+
+              </div>
+
+            </div>
+          )
+        )}
+
+        {isAdmin && (
+          <div className="mt-5">
+
+            <p className="mb-1.5 px-5 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              Yönetim
+            </p>
+
+            <div className="space-y-0.5">
+
+              {adminItems.map(
+                (
+                  item
+                ) => (
+                  <SidebarLink
+                    key={item.path}
+                    item={item}
+                    onClick={
+                      onNavigate
+                    }
+                  />
+                )
+              )}
+
+            </div>
+
           </div>
         )}
-      </NavLink>
-    );
-  };
+
+      </nav>
+
+      {/* FOOTER */}
+
+      <div className="shrink-0 p-4">
+
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+
+          <div className="flex items-center gap-2">
+
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+            </span>
+
+            <span className="text-[11px] font-medium text-slate-300">
+              Sistem aktif
+            </span>
+
+          </div>
+
+          <p className="mt-1 pl-4 text-[9px] text-slate-500">
+            Derkenar çalışma alanı
+          </p>
+
+        </div>
+
+      </div>
+
+    </div>
+  );
+};
+
+// ======================================================
+// COMPONENT
+// ======================================================
+
+const Sidebar = ({
+  open,
+  onClose,
+}) => {
+  const {
+    user,
+  } =
+    useAuth();
 
   return (
     <>
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col bg-gradient-to-b from-[#061942] via-[#08265f] to-[#061942] border-r border-[#1f3c7a] z-30">
-        {/* Logo - SADECE YAZI BÜYÜTÜLDÜ */}
-        <div className="flex-shrink-0 px-4 pt-3 pb-2">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-yellow-500/20 flex items-center justify-center">
-              <Gavel className="text-yellow-400" size={18} />
-            </div>
-            <div>
-              {/* ✅ Ana başlık büyütüldü */}
-              <h2 className="font-bold text-xl tracking-tight text-white">Derkenar</h2>
-              {/* ✅ Alt başlık büyütüldü */}
-              <p className="text-[11px] uppercase tracking-wider text-blue-300/40">
-                Hukuk Büro Yönetim
-              </p>
-            </div>
-          </div>
+
+      {/* DESKTOP */}
+
+      <aside
+        className="
+          fixed inset-y-0 left-0 z-30 hidden w-64
+          border-r border-white/[0.06]
+          bg-[#081b3d]
+          shadow-[8px_0_30px_rgba(2,12,27,0.08)]
+          lg:block
+        "
+      >
+        <div
+          className="
+            pointer-events-none absolute inset-0
+            bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.13),transparent_34%),radial-gradient(circle_at_bottom,rgba(245,158,11,0.04),transparent_30%)]
+          "
+        />
+
+        <div className="relative h-full">
+          <SidebarContent
+            user={user}
+          />
         </div>
 
-        <hr className="border-white/5 mx-4" />
-
-        <nav className="flex-1 px-2 py-1">
-          {menuItems.map((item) => renderNavLink(item))}
-
-          {isAdmin && (
-            <>
-              <div className="px-3 mt-2 mb-0.5">
-                <p className="text-[8px] uppercase tracking-[2px] text-blue-300/30 font-semibold">
-                  Yönetim
-                </p>
-              </div>
-              {adminMenuItems.map((item) => renderNavLink(item))}
-            </>
-          )}
-        </nav>
-
-        <div className="sidebar-pattern" />
       </aside>
 
-      {/* Mobile Sidebar */}
-      {open && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
-          onClick={onClose}
-        />
-      )}
+      {/* MOBILE OVERLAY */}
 
       <div
-        className={`fixed inset-y-0 left-0 w-72 bg-gradient-to-b from-[#061942] via-[#08265f] to-[#061942] text-white z-50 transform transition-transform duration-300 ease-in-out lg:hidden overflow-y-auto shadow-2xl ${
-          open ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        onClick={onClose}
+        className={`
+          fixed inset-0 z-40 bg-slate-950/55
+          backdrop-blur-[2px]
+          transition-opacity duration-200
+          lg:hidden
+          ${
+            open
+              ? 'pointer-events-auto opacity-100'
+              : 'pointer-events-none opacity-0'
+          }
+        `}
+      />
+
+      {/* MOBILE SIDEBAR */}
+
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-50 w-[286px]
+          border-r border-white/[0.06]
+          bg-[#081b3d]
+          shadow-2xl
+          transition-transform duration-300 ease-out
+          lg:hidden
+          ${
+            open
+              ? 'translate-x-0'
+              : '-translate-x-full'
+          }
+        `}
       >
-        <div className="p-4 pb-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-yellow-500/20 flex items-center justify-center">
-                <Gavel className="text-yellow-400" size={18} />
-              </div>
-              <div>
-                <h2 className="font-bold text-xl tracking-tight text-white">Derkenar</h2>
-                <p className="text-[11px] uppercase tracking-wider text-blue-300/40">
-                  Hukuk Büro Yönetim
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg text-white/40 hover:bg-white/5 hover:text-white transition-colors"
-            >
-              ✕
-            </button>
-          </div>
+        <div
+          className="
+            pointer-events-none absolute inset-0
+            bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.14),transparent_35%)]
+          "
+        />
+
+        <div className="relative h-full">
+          <SidebarContent
+            user={user}
+            mobile
+            onClose={onClose}
+            onNavigate={
+              onClose
+            }
+          />
         </div>
 
-        <hr className="border-white/5 mx-4" />
+      </aside>
 
-        <nav className="px-2 py-1">
-          {menuItems.map((item) => renderNavLink(item, onClose))}
-
-          {isAdmin && (
-            <>
-              <div className="px-3 mt-2 mb-0.5">
-                <p className="text-[8px] uppercase tracking-[2px] text-blue-300/30 font-semibold">
-                  Yönetim
-                </p>
-              </div>
-              {adminMenuItems.map((item) => renderNavLink(item, onClose))}
-            </>
-          )}
-        </nav>
-
-        <div className="sidebar-pattern" />
-      </div>
     </>
   );
 };
