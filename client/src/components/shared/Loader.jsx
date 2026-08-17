@@ -1,46 +1,46 @@
-import React from 'react';
-
+// Loader.jsx
 const Loader = ({
   size = 'md',
-  color = 'primary',
   fullScreen = false,
   text = 'Yükleniyor...',
   className = '',
 }) => {
   const sizes = {
-    sm: 'h-6 w-6',
-    md: 'h-12 w-12',
-    lg: 'h-16 w-16',
-    xl: 'h-24 w-24',
+    sm: 'h-5 w-5',
+    md: 'h-9 w-9',
+    lg: 'h-12 w-12',
+    xl: 'h-16 w-16',
   };
 
-  const colors = {
-    primary: 'border-blue-600',
-    secondary: 'border-gray-600',
-    success: 'border-green-600',
-    danger: 'border-red-600',
-    warning: 'border-yellow-600',
-    white: 'border-white',
-  };
-
-  const spinner = (
-    <div className={`flex flex-col items-center justify-center ${className}`}>
+  const content = (
+    <div
+      className={`flex flex-col items-center justify-center ${className}`}
+    >
       <div
-        className={`animate-spin rounded-full border-4 border-t-transparent ${sizes[size]} ${colors[color]}`}
-      />
-      {text && <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">{text}</p>}
+        className={`relative ${sizes[size]}`}
+      >
+        <div className="absolute inset-0 rounded-full border-2 border-gray-200 dark:border-white/[0.08]" />
+
+        <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-blue-600 dark:border-t-blue-400" />
+      </div>
+
+      {text && (
+        <p className="mt-3 text-sm font-medium text-gray-500 dark:text-slate-400">
+          {text}
+        </p>
+      )}
     </div>
   );
 
   if (fullScreen) {
     return (
-      <div className="fixed inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center z-50">
-        {spinner}
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm dark:bg-[#071426]/80">
+        {content}
       </div>
     );
   }
 
-  return spinner;
+  return content;
 };
 
 export default Loader;
