@@ -1,418 +1,1729 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
+import {
+  Link,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
+
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+
 import meetingApi from '../../features/meetings/meeting.api.js';
 import caseApi from '../../features/cases/case.api.js';
 import clientApi from '../../features/clients/client.api.js';
 import userApi from '../../features/users/user.api.js';
+
 import { useAuth } from '../../app/providers/auth.provider.jsx';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
+import Badge from '../../components/ui/Badge.jsx';
+
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CalendarDays,
+  Link2,
+  MapPin,
+  Plus,
+  Save,
+  Trash2,
+  UserRound,
+  UsersRound,
+  Video,
+  X,
+} from 'lucide-react';
+
 import toast from 'react-hot-toast';
 
+// ======================================================
+// CONSTANTS
+// ======================================================
+
+const INITIAL_FORM = {
+  title: '',
+  description: '',
+  start_date: '',
+  end_date: '',
+  location: '',
+  meeting_type: 'other',
+  case_id: '',
+  client_id: '',
+  assigned_to: '',
+  status: 'scheduled',
+  attendees: [],
+  meeting_link: '',
+  notes: '',
+};
+
+const STATUS_OPTIONS = [
+  {
+    value: 'scheduled',
+    label: 'Planlandı',
+  },
+  {
+    value: 'ongoing',
+    label: 'Devam Ediyor',
+  },
+  {
+    value: 'completed',
+    label: 'Tamamlandı',
+  },
+  {
+    value: 'cancelled',
+    label: 'İptal',
+  },
+];
+
+const MEETING_TYPE_OPTIONS = [
+  {
+    value: 'client',
+    label: 'Müvekkil Görüşmesi',
+  },
+  {
+    value: 'internal',
+    label: 'İç Toplantı',
+  },
+  {
+    value: 'phone',
+    label: 'Telefon Görüşmesi',
+  },
+  {
+    value: 'other',
+    label: 'Diğer',
+  },
+];
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const getStatusVariant = (status) => {
+  switch (status) {
+    case 'scheduled':
+      return 'warning';
+
+    case 'ongoing':
+      return 'info';
+
+    case 'completed':
+      return 'success';
+
+    case 'cancelled':
+      return 'danger';
+
+    default:
+      return 'default';
+  }
+};
+
+const getStatusLabel = (status) => {
+  return (
+    STATUS_OPTIONS.find(
+      (item) =>
+        item.value === status
+    )?.label ||
+    status ||
+    'Bilinmiyor'
+  );
+};
+
+const getMeetingTypeLabel = (type) => {
+  return (
+    MEETING_TYPE_OPTIONS.find(
+      (item) =>
+        item.value === type
+    )?.label ||
+    'Diğer'
+  );
+};
+
+// ======================================================
+// API DATE -> DATETIME LOCAL
+// Europe/Istanbul saatine çevir
+// ======================================================
+
+const formatForDateTimeLocal = (date) => {
+  if (!date) {
+    return '';
+  }
+
+  try {
+    const parsed =
+      new Date(date);
+
+    if (
+      Number.isNaN(
+        parsed.getTime()
+      )
+    ) {
+      return '';
+    }
+
+    const parts =
+      new Intl.DateTimeFormat(
+        'en-CA',
+        {
+          timeZone:
+            'Europe/Istanbul',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }
+      ).formatToParts(parsed);
+
+    const map = {};
+
+    parts.forEach(
+      (part) => {
+        if (
+          part.type !==
+          'literal'
+        ) {
+          map[part.type] =
+            part.value;
+        }
+      }
+    );
+
+    return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`;
+  } catch {
+    return '';
+  }
+};
+
+// ======================================================
+// DATETIME LOCAL -> ISO
+// Türkiye saati kabul ederek UTC gönder
+// ======================================================
+
+const localToUTC = (dateTime) => {
+  if (!dateTime) {
+    return null;
+  }
+
+  try {
+    const [date, time] =
+      dateTime.split('T');
+
+    if (!date || !time) {
+      return null;
+    }
+
+    const parsed =
+      new Date(
+        `${date}T${time}:00+03:00`
+      );
+
+    if (
+      Number.isNaN(
+        parsed.getTime()
+      )
+    ) {
+      return null;
+    }
+
+    return parsed.toISOString();
+  } catch {
+    return null;
+  }
+};
+
+// ======================================================
+// COMPONENT
+// ======================================================
+
 const MeetingEdit = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
+  const { id } =
+    useParams();
 
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    start_date: '',
-    end_date: '',
-    location: '',
-    meeting_type: 'other',
-    case_id: '',
-    client_id: '',
-    assigned_to: '',
-    status: 'scheduled',
-    attendees: [],
-    meeting_link: '',
-    notes: '',
+  const navigate =
+    useNavigate();
+
+  const { user } =
+    useAuth();
+
+  const queryClient =
+    useQueryClient();
+
+  const [
+    formData,
+    setFormData,
+  ] = useState(
+    INITIAL_FORM
+  );
+
+  const [
+    attendeeName,
+    setAttendeeName,
+  ] = useState('');
+
+  const [
+    attendeeRole,
+    setAttendeeRole,
+  ] = useState('');
+
+  const [
+    errors,
+    setErrors,
+  ] = useState({});
+
+  // ======================================================
+  // MEETING
+  // ======================================================
+
+  const {
+    data: meetingData,
+    isLoading:
+      meetingLoading,
+    error:
+      meetingError,
+  } = useQuery({
+    queryKey: [
+      'meeting',
+      id,
+    ],
+
+    queryFn: () =>
+      meetingApi.getOne(id),
+
+    enabled:
+      Boolean(id),
   });
-  const [attendeeName, setAttendeeName] = useState('');
-  const [attendeeRole, setAttendeeRole] = useState('');
+
+  // ======================================================
+  // RELATED DATA
+  // ======================================================
+
+  const {
+    data: casesData,
+  } = useQuery({
+    queryKey: [
+      'cases',
+      {
+        limit: 100,
+      },
+    ],
+
+    queryFn: () =>
+      caseApi.getAll({
+        limit: 100,
+      }),
+  });
+
+  const {
+    data: clientsData,
+  } = useQuery({
+    queryKey: [
+      'clients',
+      {
+        limit: 100,
+      },
+    ],
+
+    queryFn: () =>
+      clientApi.getAll({
+        limit: 100,
+      }),
+  });
+
+  const {
+    data: usersData,
+  } = useQuery({
+    queryKey: [
+      'users',
+    ],
+
+    queryFn: () =>
+      userApi.getAll(),
+  });
+
+  // ======================================================
+  // DATA
+  // ======================================================
+
+  const meeting =
+    meetingData?.data?.data ??
+    meetingData?.data ??
+    null;
+
+  const cases =
+    casesData?.data?.data ||
+    [];
+
+  const clients =
+    clientsData?.data?.data ||
+    [];
+
+  const users =
+    usersData?.data?.data ||
+    [];
+
+  // ======================================================
+  // PERMISSIONS
+  // ======================================================
+
+  const isAdmin =
+    user?.role ===
+    'admin';
+
+  const canDelete = [
+    'admin',
+    'lawyer',
+  ].includes(
+    user?.role
+  );
+
+  const assignableUsers =
+    useMemo(() => {
+      if (!isAdmin) {
+        return [];
+      }
+
+      return users.filter(
+        (person) =>
+          person?.is_active !==
+          false
+      );
+    }, [
+      users,
+      isAdmin,
+    ]);
+
+  // ======================================================
+  // FORM INITIALIZATION
+  // ======================================================
 
   useEffect(() => {
-    if (user?.role !== 'admin' && user?.id) {
-      setFormData(prev => ({
-        ...prev,
-        assigned_to: user.id
-      }));
+    if (!meeting) {
+      return;
     }
-  }, [user]);
 
-  const { data: meetingData, isLoading: meetingLoading } = useQuery({
-    queryKey: ['meeting', id],
-    queryFn: () => meetingApi.getOne(id),
-    enabled: !!id,
-  });
+    setFormData({
+      title:
+        meeting.title ||
+        '',
 
-  const { data: casesData } = useQuery({
-    queryKey: ['cases', { limit: 100 }],
-    queryFn: () => caseApi.getAll({ limit: 100 }),
-  });
+      description:
+        meeting.description ||
+        '',
 
-  const { data: clientsData } = useQuery({
-    queryKey: ['clients', { limit: 100 }],
-    queryFn: () => clientApi.getAll({ limit: 100 }),
-  });
+      start_date:
+        formatForDateTimeLocal(
+          meeting.start_date
+        ),
 
-  const { data: usersData } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => userApi.getAll(),
-  });
+      end_date:
+        formatForDateTimeLocal(
+          meeting.end_date
+        ),
 
-  const meeting = meetingData?.data;
-  const cases = casesData?.data?.data || [];
-  const clients = clientsData?.data?.data || [];
-  const users = usersData?.data?.data || [];
+      location:
+        meeting.location ||
+        '',
 
-  const assignableUsers = user?.role === 'admin'
-    ? users
-    : users.filter(u => u.id === user.id);
+      meeting_type:
+        meeting.meeting_type ||
+        'other',
 
-  useEffect(() => {
-    if (meeting) {
-      setFormData({
-        title: meeting.title || '',
-        description: meeting.description || '',
-        start_date: meeting.start_date ? new Date(meeting.start_date).toISOString().slice(0, 16) : '',
-        end_date: meeting.end_date ? new Date(meeting.end_date).toISOString().slice(0, 16) : '',
-        location: meeting.location || '',
-        meeting_type: meeting.meeting_type || 'other',
-        case_id: meeting.case_id || '',
-        client_id: meeting.client_id || '',
-        assigned_to: meeting.assigned_to || '',
-        status: meeting.status || 'scheduled',
-        attendees: meeting.attendees || [],
-        meeting_link: meeting.meeting_link || '',
-        notes: meeting.notes || '',
-      });
+      case_id:
+        meeting.case_id ||
+        meeting.case?.id ||
+        '',
+
+      client_id:
+        meeting.client_id ||
+        meeting.client?.id ||
+        '',
+
+      assigned_to:
+        meeting.assigned_to ||
+        meeting.assignee?.id ||
+        '',
+
+      status:
+        meeting.status ||
+        'scheduled',
+
+      attendees:
+        Array.isArray(
+          meeting.attendees
+        )
+          ? meeting.attendees
+          : [],
+
+      meeting_link:
+        meeting.meeting_link ||
+        '',
+
+      notes:
+        meeting.notes ||
+        '',
+    });
+  }, [
+    meeting,
+  ]);
+
+  // ======================================================
+  // MUTATIONS
+  // ======================================================
+
+  const updateMutation =
+    useMutation({
+      mutationFn: (data) =>
+        meetingApi.update(
+          id,
+          data
+        ),
+
+      onSuccess: async () => {
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: [
+              'meetings',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'meeting',
+              id,
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'calendar-meetings',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'dashboard-meetings',
+            ],
+          }),
+        ]);
+
+        toast.success(
+          'Toplantı başarıyla güncellendi'
+        );
+
+        navigate(
+          `/meetings/${id}`
+        );
+      },
+
+      onError: (error) => {
+        toast.error(
+          error?.response
+            ?.data?.message ||
+            'Toplantı güncellenemedi'
+        );
+      },
+    });
+
+  const deleteMutation =
+    useMutation({
+      mutationFn: () =>
+        meetingApi.delete(id),
+
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({
+          queryKey: [
+            'meetings',
+          ],
+        });
+
+        toast.success(
+          'Toplantı silindi'
+        );
+
+        navigate(
+          '/meetings'
+        );
+      },
+
+      onError: (error) => {
+        toast.error(
+          error?.response
+            ?.data?.message ||
+            'Toplantı silinemedi'
+        );
+      },
+    });
+
+  // ======================================================
+  // HANDLERS
+  // ======================================================
+
+  const handleChange = (
+    event
+  ) => {
+    const {
+      name,
+      value,
+    } = event.target;
+
+    setFormData(
+      (current) => ({
+        ...current,
+        [name]: value,
+      })
+    );
+
+    if (errors[name]) {
+      setErrors(
+        (current) => ({
+          ...current,
+          [name]: '',
+        })
+      );
     }
-  }, [meeting]);
-
-  const updateMutation = useMutation({
-    mutationFn: (data) => meetingApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['meetings'] });
-      queryClient.invalidateQueries({ queryKey: ['meeting', id] });
-      toast.success('Toplantı başarıyla güncellendi');
-      navigate('/meetings');
-    },
-    onError: (error) => {
-      toast.error(error.response?.data?.message || 'Toplantı güncellenemedi');
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: () => meetingApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['meetings'] });
-      toast.success('Toplantı silindi');
-      navigate('/meetings');
-    },
-    onError: (error) => {
-      toast.error(error.response?.data?.message || 'Toplantı silinemedi');
-    },
-  });
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleAddAttendee = () => {
-    if (attendeeName.trim()) {
-      setFormData((prev) => ({
-        ...prev,
-        attendees: [...prev.attendees, { name: attendeeName.trim(), role: attendeeRole || 'Katılımcı' }],
-      }));
+  const handleAddAttendee =
+    () => {
+      const name =
+        attendeeName.trim();
+
+      const role =
+        attendeeRole.trim();
+
+      if (!name) {
+        return;
+      }
+
+      setFormData(
+        (current) => ({
+          ...current,
+
+          attendees: [
+            ...current.attendees,
+            {
+              name,
+              role:
+                role ||
+                'Katılımcı',
+            },
+          ],
+        })
+      );
+
       setAttendeeName('');
       setAttendeeRole('');
-    }
-  };
-
-  const handleRemoveAttendee = (index) => {
-    setFormData((prev) => ({
-      ...prev,
-      attendees: prev.attendees.filter((_, i) => i !== index),
-    }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
-    const assignedTo = user?.role !== 'admin' ? user?.id : formData.assigned_to;
-
-    const submitData = {
-      ...formData,
-      case_id: formData.case_id || null,
-      client_id: formData.client_id || null,
-      assigned_to: assignedTo || null,
-      attendees: formData.attendees,
     };
 
-    updateMutation.mutate(submitData);
+  const handleRemoveAttendee =
+    (index) => {
+      setFormData(
+        (current) => ({
+          ...current,
+
+          attendees:
+            current.attendees.filter(
+              (
+                _attendee,
+                attendeeIndex
+              ) =>
+                attendeeIndex !==
+                index
+            ),
+        })
+      );
+    };
+
+  // ======================================================
+  // VALIDATION
+  // ======================================================
+
+  const validateForm =
+    () => {
+      const nextErrors =
+        {};
+
+      if (
+        !formData.title.trim()
+      ) {
+        nextErrors.title =
+          'Toplantı başlığı gereklidir';
+      }
+
+      if (
+        !formData.start_date
+      ) {
+        nextErrors.start_date =
+          'Başlangıç tarihi gereklidir';
+      }
+
+      if (
+        formData.end_date &&
+        formData.start_date &&
+        new Date(
+          formData.end_date
+        ) <
+          new Date(
+            formData.start_date
+          )
+      ) {
+        nextErrors.end_date =
+          'Bitiş tarihi başlangıç tarihinden önce olamaz';
+      }
+
+      setErrors(
+        nextErrors
+      );
+
+      return (
+        Object.keys(
+          nextErrors
+        ).length === 0
+      );
+    };
+
+  // ======================================================
+  // SUBMIT
+  // ======================================================
+
+  const handleSubmit = (
+    event
+  ) => {
+    event.preventDefault();
+
+    if (
+      updateMutation.isPending
+    ) {
+      return;
+    }
+
+    if (!validateForm()) {
+      toast.error(
+        'Formdaki eksik veya hatalı alanları kontrol edin'
+      );
+
+      return;
+    }
+
+    const submitData = {
+      title:
+        formData.title.trim(),
+
+      description:
+        formData.description
+          .trim() ||
+        null,
+
+      start_date:
+        localToUTC(
+          formData.start_date
+        ),
+
+      end_date:
+        localToUTC(
+          formData.end_date
+        ),
+
+      location:
+        formData.location
+          .trim() ||
+        null,
+
+      meeting_type:
+        formData.meeting_type,
+
+      case_id:
+        formData.case_id ||
+        null,
+
+      client_id:
+        formData.client_id ||
+        null,
+
+      status:
+        formData.status,
+
+      attendees:
+        formData.attendees,
+
+      meeting_link:
+        formData.meeting_link
+          .trim() ||
+        null,
+
+      notes:
+        formData.notes
+          .trim() ||
+        null,
+    };
+
+    /*
+     * Atanan kullanıcı edit ekranında
+     * yalnızca admin tarafından değiştirilsin.
+     *
+     * Non-admin kullanıcı mevcut atamayı
+     * yanlışlıkla kendi üzerine çekmesin.
+     */
+    if (isAdmin) {
+      submitData.assigned_to =
+        formData.assigned_to ||
+        null;
+    }
+
+    updateMutation.mutate(
+      submitData
+    );
   };
 
-  const handleDelete = () => {
-    if (window.confirm('Bu toplantıyı silmek istediğinize emin misiniz?')) {
+  // ======================================================
+  // DELETE
+  // ======================================================
+
+  const handleDelete =
+    () => {
+      if (!canDelete) {
+        toast.error(
+          'Bu toplantıyı silme yetkiniz bulunmuyor'
+        );
+
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          `"${meeting?.title}" toplantısını silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
       deleteMutation.mutate();
-    }
-  };
+    };
+
+  // ======================================================
+  // LOADING
+  // ======================================================
 
   if (meetingLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-64 items-center justify-center">
+
+        <div className="text-center">
+
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600" />
+
+          <p className="mt-4 text-sm text-gray-500">
+            Toplantı bilgileri yükleniyor...
+          </p>
+
+        </div>
+
       </div>
     );
   }
 
-  if (!meeting) {
+  // ======================================================
+  // ERROR
+  // ======================================================
+
+  if (
+    meetingError ||
+    !meeting
+  ) {
     return (
-      <div className="text-center py-12">
-        <div className="text-6xl mb-4">👤</div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Toplantı Bulunamadı</h2>
-        <Link to="/meetings" className="text-blue-600 hover:underline mt-4 inline-block">
-          ← Toplantılara Dön
+      <div className="py-12 text-center">
+
+        <div className="mb-4 text-5xl">
+          🤝
+        </div>
+
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+          Toplantı Bulunamadı
+        </h2>
+
+        <p className="mt-2 text-sm text-gray-500">
+          {meetingError
+            ?.response
+            ?.data
+            ?.message ||
+            meetingError
+              ?.message ||
+            'Toplantı bilgileri yüklenemedi'}
+        </p>
+
+        <Link
+          to="/meetings"
+          className="mt-4 inline-flex items-center gap-1 text-blue-600 hover:underline"
+        >
+          <ArrowLeft className="h-4 w-4" />
+
+          Toplantılara Dön
         </Link>
+
       </div>
     );
   }
+
+  // ======================================================
+  // RENDER
+  // ======================================================
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link to={`/meetings/${id}`} className="text-blue-600 hover:underline">
-            ← Toplantı Detayı
-          </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-            ✏️ Toplantı Düzenle
+    <div className="mx-auto max-w-3xl space-y-6">
+
+      {/* HEADER */}
+
+      <div>
+
+        <Link
+          to={`/meetings/${id}`}
+          className="
+            inline-flex
+            items-center
+            gap-1.5
+            text-xs
+            font-medium
+            text-gray-500
+            transition
+            hover:text-blue-600
+            dark:text-slate-500
+            dark:hover:text-blue-400
+          "
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+
+          Toplantı Detayı
+        </Link>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+
+          <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
+            Toplantı Düzenle
           </h1>
+
+          <Badge
+            variant={getStatusVariant(
+              formData.status
+            )}
+          >
+            {getStatusLabel(
+              formData.status
+            )}
+          </Badge>
+
         </div>
+
+        <p className="mt-1 text-sm text-gray-500">
+          Toplantı bilgilerini, katılımcıları ve ilişkili kayıtları güncelleyin.
+        </p>
+
       </div>
 
-      <Card>
-        <form onSubmit={handleSubmit} className="space-y-6 p-6">
+      {/* INFO */}
+
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+
+        <div className="flex items-start gap-3">
+
+          <CalendarDays className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+
+          <div>
+
+            <p className="font-medium text-blue-900 dark:text-blue-200">
+              Toplantı takvimde otomatik güncellenir
+            </p>
+
+            <p className="mt-1 text-sm leading-6 text-blue-800 dark:text-blue-300">
+              Tarih, durum veya ilişkili dava değiştirildiğinde toplantı takvim ve dashboard verilerine de yansır.
+            </p>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* FORM */}
+
+      <Card
+        className="
+          overflow-hidden
+          border
+          border-gray-200
+          shadow-sm
+          dark:border-white/[0.06]
+        "
+      >
+
+        <form
+          onSubmit={
+            handleSubmit
+          }
+          className="space-y-6 p-6"
+        >
+
+          {/* TITLE */}
+
           <Input
             label="Başlık *"
             name="title"
-            value={formData.title}
-            onChange={handleChange}
+            value={
+              formData.title
+            }
+            onChange={
+              handleChange
+            }
+            error={
+              errors.title
+            }
+            disabled={
+              updateMutation.isPending
+            }
             placeholder="Toplantı başlığı..."
           />
 
+          {/* DESCRIPTION */}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Açıklama
             </label>
+
             <textarea
               name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows="3"
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Toplantı ile ilgili notlar..."
+              value={
+                formData.description
+              }
+              onChange={
+                handleChange
+              }
+              disabled={
+                updateMutation.isPending
+              }
+              rows="4"
+              className="
+                w-full
+                rounded-md
+                border
+                border-gray-300
+                bg-white
+                px-3
+                py-2
+                text-gray-900
+                outline-none
+                focus:ring-2
+                focus:ring-blue-500
+                disabled:cursor-not-allowed
+                disabled:opacity-60
+                dark:border-gray-600
+                dark:bg-gray-700
+                dark:text-white
+              "
+              placeholder="Toplantı ile ilgili açıklama..."
             />
+
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* DATES */}
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
             <Input
               label="Başlangıç Tarihi *"
               name="start_date"
               type="datetime-local"
-              value={formData.start_date}
-              onChange={handleChange}
+              value={
+                formData.start_date
+              }
+              onChange={
+                handleChange
+              }
+              error={
+                errors.start_date
+              }
+              disabled={
+                updateMutation.isPending
+              }
             />
+
             <Input
               label="Bitiş Tarihi"
               name="end_date"
               type="datetime-local"
-              value={formData.end_date}
-              onChange={handleChange}
+              value={
+                formData.end_date
+              }
+              onChange={
+                handleChange
+              }
+              error={
+                errors.end_date
+              }
+              disabled={
+                updateMutation.isPending
+              }
             />
+
           </div>
 
-          <Input
-            label="Yer"
-            name="location"
-            value={formData.location}
-            onChange={handleChange}
-            placeholder="Toplantı yeri..."
-          />
-
-          <Input
-            label="Toplantı Linki (Zoom/Teams)"
-            name="meeting_link"
-            value={formData.meeting_link}
-            onChange={handleChange}
-            placeholder="https://zoom.us/..."
-          />
+          {/* LOCATION */}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Toplantı Türü
+
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              <span className="inline-flex items-center gap-1.5">
+                <MapPin className="h-4 w-4" />
+
+                Yer
+              </span>
             </label>
-            <select
-              name="meeting_type"
-              value={formData.meeting_type}
-              onChange={handleChange}
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="client">👤 Müvekkil Görüşmesi</option>
-              <option value="internal">🏢 İç Toplantı</option>
-              <option value="phone">📞 Telefon Görüşmesi</option>
-              <option value="other">📌 Diğer</option>
-            </select>
+
+            <input
+              type="text"
+              name="location"
+              value={
+                formData.location
+              }
+              onChange={
+                handleChange
+              }
+              disabled={
+                updateMutation.isPending
+              }
+              placeholder="Toplantı yeri..."
+              className="
+                w-full
+                rounded-md
+                border
+                border-gray-300
+                bg-white
+                px-3
+                py-2
+                text-gray-900
+                outline-none
+                focus:ring-2
+                focus:ring-blue-500
+                dark:border-gray-600
+                dark:bg-gray-700
+                dark:text-white
+              "
+            />
+
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* MEETING LINK */}
+
+          <div>
+
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+
+              <span className="inline-flex items-center gap-1.5">
+                <Video className="h-4 w-4" />
+
+                Toplantı Linki
+              </span>
+
+            </label>
+
+            <input
+              type="url"
+              name="meeting_link"
+              value={
+                formData.meeting_link
+              }
+              onChange={
+                handleChange
+              }
+              disabled={
+                updateMutation.isPending
+              }
+              placeholder="https://zoom.us/..."
+              className="
+                w-full
+                rounded-md
+                border
+                border-gray-300
+                bg-white
+                px-3
+                py-2
+                text-gray-900
+                outline-none
+                focus:ring-2
+                focus:ring-blue-500
+                dark:border-gray-600
+                dark:bg-gray-700
+                dark:text-white
+              "
+            />
+
+          </div>
+
+          {/* TYPE + STATUS */}
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                İlişkili Dava
+
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Toplantı Türü
               </label>
+
               <select
-                name="case_id"
-                value={formData.case_id}
-                onChange={handleChange}
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                name="meeting_type"
+                value={
+                  formData.meeting_type
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  updateMutation.isPending
+                }
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               >
-                <option value="">Dava seçin (isteğe bağlı)</option>
-                {cases.map((caseItem) => (
-                  <option key={caseItem.id} value={caseItem.id}>
-                    {caseItem.title}
-                  </option>
-                ))}
+
+                {MEETING_TYPE_OPTIONS.map(
+                  (type) => (
+                    <option
+                      key={
+                        type.value
+                      }
+                      value={
+                        type.value
+                      }
+                    >
+                      {
+                        type.label
+                      }
+                    </option>
+                  )
+                )}
+
               </select>
+
+              <p className="mt-1 text-xs text-gray-400">
+                {getMeetingTypeLabel(
+                  formData.meeting_type
+                )}
+              </p>
+
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                İlişkili Müvekkil
+
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Durum
               </label>
+
               <select
-                name="client_id"
-                value={formData.client_id}
-                onChange={handleChange}
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                name="status"
+                value={
+                  formData.status
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  updateMutation.isPending
+                }
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               >
-                <option value="">Müvekkil seçin (isteğe bağlı)</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}  {/* ✅ SADECE BURASI DEĞİŞTİ */}
-                    {client.company_name && ` (${client.company_name})`}
-                  </option>
-                ))}
+
+                {STATUS_OPTIONS.map(
+                  (status) => (
+                    <option
+                      key={
+                        status.value
+                      }
+                      value={
+                        status.value
+                      }
+                    >
+                      {
+                        status.label
+                      }
+                    </option>
+                  )
+                )}
+
               </select>
+
             </div>
+
           </div>
 
+          {/* RELATED */}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Atanan Avukat
+
+            <div className="mb-3 flex items-center gap-2">
+
+              <Link2 className="h-4 w-4 text-blue-600" />
+
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                İlişkili Kayıtlar
+              </p>
+
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+              {/* CASE */}
+
+              <div>
+
+                <label className="mb-1 block text-sm text-gray-500">
+                  Dava
+                </label>
+
+                <select
+                  name="case_id"
+                  value={
+                    formData.case_id
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    updateMutation.isPending
+                  }
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                >
+
+                  <option value="">
+                    Dava seçin
+                  </option>
+
+                  {cases.map(
+                    (caseItem) => (
+                      <option
+                        key={
+                          caseItem.id
+                        }
+                        value={
+                          caseItem.id
+                        }
+                      >
+                        {
+                          caseItem.title
+                        }
+                      </option>
+                    )
+                  )}
+
+                </select>
+
+              </div>
+
+              {/* CLIENT */}
+
+              <div>
+
+                <label className="mb-1 block text-sm text-gray-500">
+                  Müvekkil
+                </label>
+
+                <select
+                  name="client_id"
+                  value={
+                    formData.client_id
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    updateMutation.isPending
+                  }
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                >
+
+                  <option value="">
+                    Müvekkil seçin
+                  </option>
+
+                  {clients.map(
+                    (client) => (
+                      <option
+                        key={
+                          client.id
+                        }
+                        value={
+                          client.id
+                        }
+                      >
+                        {
+                          client.name
+                        }
+
+                        {client.company_name &&
+                          ` (${client.company_name})`}
+                      </option>
+                    )
+                  )}
+
+                </select>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* ASSIGNEE */}
+
+          <div>
+
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+
+              <span className="inline-flex items-center gap-1.5">
+                <UserRound className="h-4 w-4" />
+
+                Atanan Avukat
+              </span>
+
             </label>
 
-            {user?.role === 'admin' ? (
+            {isAdmin ? (
               <select
                 name="assigned_to"
-                value={formData.assigned_to}
-                onChange={handleChange}
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={
+                  formData.assigned_to
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  updateMutation.isPending
+                }
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               >
-                <option value="">Atanacak kişi seçin</option>
-                {assignableUsers.map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.first_name} {person.last_name}
-                    {person.role === 'admin' && ' (Admin)'}
-                    {person.role === 'lawyer' && ' (Avukat)'}
-                    {person.role === 'intern' && ' (Stajyer)'}
-                    {person.role === 'secretary' && ' (Sekreter)'}
-                  </option>
-                ))}
+
+                <option value="">
+                  Atanacak kişi seçin
+                </option>
+
+                {assignableUsers.map(
+                  (person) => (
+                    <option
+                      key={
+                        person.id
+                      }
+                      value={
+                        person.id
+                      }
+                    >
+                      {
+                        person.first_name
+                      }{' '}
+                      {
+                        person.last_name
+                      }
+
+                      {person.role ===
+                        'admin' &&
+                        ' (Admin)'}
+
+                      {person.role ===
+                        'lawyer' &&
+                        ' (Avukat)'}
+
+                      {person.role ===
+                        'intern' &&
+                        ' (Stajyer)'}
+
+                      {person.role ===
+                        'secretary' &&
+                        ' (Sekreter)'}
+                    </option>
+                  )
+                )}
+
               </select>
             ) : (
-              <div className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white">
-                {user?.first_name} {user?.last_name} (Kendin)
+              <div className="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-800">
+
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  {meeting.assignee
+                    ? `${meeting.assignee.first_name || ''} ${meeting.assignee.last_name || ''}`.trim()
+                    : 'Atanmadı'}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400">
+                  Atanan kişi yalnızca yönetici tarafından değiştirilebilir.
+                </p>
+
               </div>
             )}
+
           </div>
 
+          {/* ATTENDEES */}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              👥 Katılımcılar
-            </label>
-            <div className="flex gap-2">
+
+            <div className="mb-2 flex items-center gap-2">
+
+              <UsersRound className="h-4 w-4 text-blue-600" />
+
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Katılımcılar
+              </label>
+
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+
               <input
                 type="text"
-                value={attendeeName}
-                onChange={(e) => setAttendeeName(e.target.value)}
+                value={
+                  attendeeName
+                }
+                onChange={(event) =>
+                  setAttendeeName(
+                    event.target.value
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (
+                    event.key ===
+                    'Enter'
+                  ) {
+                    event.preventDefault();
+
+                    handleAddAttendee();
+                  }
+                }}
                 placeholder="Katılımcı adı"
-                className="flex-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               />
+
               <input
                 type="text"
-                value={attendeeRole}
-                onChange={(e) => setAttendeeRole(e.target.value)}
+                value={
+                  attendeeRole
+                }
+                onChange={(event) =>
+                  setAttendeeRole(
+                    event.target.value
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (
+                    event.key ===
+                    'Enter'
+                  ) {
+                    event.preventDefault();
+
+                    handleAddAttendee();
+                  }
+                }}
                 placeholder="Rol"
-                className="w-32 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:w-40"
               />
-              <Button type="button" variant="secondary" onClick={handleAddAttendee}>
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  handleAddAttendee
+                }
+              >
+                <Plus className="mr-1 h-4 w-4" />
+
                 Ekle
               </Button>
+
             </div>
-            {formData.attendees.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {formData.attendees.map((attendee, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm"
-                  >
-                    {attendee.name} {attendee.role && `(${attendee.role})`}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveAttendee(index)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
+
+            {formData.attendees.length >
+              0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+
+                {formData.attendees.map(
+                  (
+                    attendee,
+                    index
+                  ) => {
+                    const name =
+                      typeof attendee ===
+                      'string'
+                        ? attendee
+                        : attendee?.name;
+
+                    const role =
+                      typeof attendee ===
+                      'object'
+                        ? attendee?.role
+                        : null;
+
+                    return (
+                      <span
+                        key={`${name}-${index}`}
+                        className="
+                          inline-flex
+                          items-center
+                          gap-2
+                          rounded-full
+                          bg-gray-100
+                          px-3
+                          py-1.5
+                          text-sm
+                          text-gray-700
+                          dark:bg-gray-700
+                          dark:text-gray-200
+                        "
+                      >
+
+                        <span>
+                          {name ||
+                            'Katılımcı'}
+
+                          {role &&
+                            ` · ${role}`}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRemoveAttendee(
+                              index
+                            )
+                          }
+                          className="text-gray-400 transition hover:text-red-500"
+                          aria-label="Katılımcıyı kaldır"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+
+                      </span>
+                    );
+                  }
+                )}
+
               </div>
             )}
+
           </div>
+
+          {/* NOTES */}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Notlar
             </label>
+
             <textarea
               name="notes"
-              value={formData.notes}
-              onChange={handleChange}
-              rows="2"
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Toplantı sonrası notlar..."
+              value={
+                formData.notes
+              }
+              onChange={
+                handleChange
+              }
+              rows="4"
+              disabled={
+                updateMutation.isPending
+              }
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              placeholder="Toplantıyla ilgili iç notlar..."
             />
+
           </div>
 
-          <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <Button type="submit" loading={updateMutation.isPending}>
-              💾 Güncelle
+          {/* WARNING */}
+
+          {formData.status ===
+            'cancelled' && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+
+              <div className="flex items-start gap-3">
+
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+
+                <p className="text-sm leading-6 text-red-800 dark:text-red-300">
+                  Toplantı iptal durumunda. Kaydettiğinizde takvim ve ilgili ekranlarda iptal edilmiş olarak görünecektir.
+                </p>
+
+              </div>
+
+            </div>
+          )}
+
+          {/* ACTIONS */}
+
+          <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
+
+            <Button
+              type="submit"
+              loading={
+                updateMutation.isPending
+              }
+              disabled={
+                updateMutation.isPending ||
+                deleteMutation.isPending
+              }
+            >
+              <Save className="mr-2 h-4 w-4" />
+
+              Değişiklikleri Kaydet
             </Button>
-            <Button type="button" variant="secondary" onClick={() => navigate(`/meetings/${id}`)}>
-              İptal
+
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                navigate(
+                  `/meetings/${id}`
+                )
+              }
+              disabled={
+                updateMutation.isPending ||
+                deleteMutation.isPending
+              }
+            >
+              Vazgeç
             </Button>
-            <Button type="button" variant="danger" onClick={handleDelete} loading={deleteMutation.isPending}>
-              🗑️ Sil
-            </Button>
+
+            {canDelete && (
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  handleDelete
+                }
+                loading={
+                  deleteMutation.isPending
+                }
+                disabled={
+                  updateMutation.isPending ||
+                  deleteMutation.isPending
+                }
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+
+                Toplantıyı Sil
+              </Button>
+            )}
+
           </div>
+
         </form>
+
       </Card>
+
     </div>
   );
 };

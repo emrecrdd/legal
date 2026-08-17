@@ -1,443 +1,1299 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { powerOfAttorneyApi } from '../../features/power-of-attorney/powerOfAttorney.api.js';
+import {
+  useEffect,
+  useState,
+} from 'react';
+
+import {
+  Link,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
+
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+
+import {
+  powerOfAttorneyApi,
+} from '../../features/power-of-attorney/powerOfAttorney.api.js';
+
 import clientApi from '../../features/clients/client.api.js';
 import caseApi from '../../features/cases/case.api.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
+import Badge from '../../components/ui/Badge.jsx';
+
+import {
+  AlertTriangle,
+  ArrowLeft,
+  FilePlus2,
+  KeyRound,
+  Save,
+  Trash2,
+} from 'lucide-react';
+
 import toast from 'react-hot-toast';
 
+// ======================================================
+// CONSTANTS
+// ======================================================
+
+const INITIAL_FORM = {
+  client_id: '',
+  case_id: '',
+  title: '',
+  description: '',
+  start_date: '',
+  end_date: '',
+  status: 'active',
+  authorities: [],
+  notes: '',
+};
+
+const STATUS_OPTIONS = [
+  {
+    value: 'active',
+    label: 'Aktif',
+  },
+  {
+    value: 'expired',
+    label: 'Süresi Doldu',
+  },
+  {
+    value: 'cancelled',
+    label: 'İptal',
+  },
+];
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const getStatusVariant = (
+  status
+) => {
+  switch (status) {
+    case 'active':
+      return 'success';
+
+    case 'expired':
+      return 'warning';
+
+    case 'cancelled':
+      return 'danger';
+
+    default:
+      return 'default';
+  }
+};
+
+const getStatusLabel = (
+  status
+) => {
+  return (
+    STATUS_OPTIONS.find(
+      (item) =>
+        item.value ===
+        status
+    )?.label ||
+    status ||
+    'Bilinmiyor'
+  );
+};
+
+const formatDateInput = (
+  date
+) => {
+  if (!date) {
+    return '';
+  }
+
+  try {
+    const parsed =
+      new Date(date);
+
+    if (
+      Number.isNaN(
+        parsed.getTime()
+      )
+    ) {
+      return '';
+    }
+
+    const year =
+      parsed.getUTCFullYear();
+
+    const month =
+      String(
+        parsed.getUTCMonth() +
+          1
+      ).padStart(2, '0');
+
+    const day =
+      String(
+        parsed.getUTCDate()
+      ).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+  } catch {
+    return '';
+  }
+};
+
+// ======================================================
+// COMPONENT
+// ======================================================
+
 const PowerOfAttorneyEdit = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const fileInputRef = useRef(null);
+  const { id } =
+    useParams();
 
-  const [formData, setFormData] = useState({
-    client_id: '',
-    case_id: '',
-    title: '',
-    description: '',
-    start_date: '',
-    end_date: '',
-    status: 'active',
-    authorities: [],
-    notes: '',
+  const navigate =
+    useNavigate();
+
+  const queryClient =
+    useQueryClient();
+
+  const [
+    formData,
+    setFormData,
+  ] = useState(
+    INITIAL_FORM
+  );
+
+  const [
+    authorityInput,
+    setAuthorityInput,
+  ] = useState('');
+
+  const [
+    errors,
+    setErrors,
+  ] = useState({});
+
+  const [
+    initializedId,
+    setInitializedId,
+  ] = useState(null);
+
+  // ======================================================
+  // POA QUERY
+  // ======================================================
+
+  const {
+    data: poaData,
+    isLoading:
+      poaLoading,
+    error:
+      poaError,
+  } = useQuery({
+    queryKey: [
+      'powerOfAttorney',
+      id,
+    ],
+
+    queryFn: () =>
+      powerOfAttorneyApi.getOne(
+        id
+      ),
+
+    enabled:
+      Boolean(id),
   });
-  const [file, setFile] = useState(null);
-  const [fileError, setFileError] = useState('');
-  const [authorityInput, setAuthorityInput] = useState('');
-  const [errors, setErrors] = useState({});
 
-  // Vekaletname bilgilerini getir
-  const { data: poaData, isLoading: poaLoading } = useQuery({
-    queryKey: ['powerOfAttorney', id],
-    queryFn: () => powerOfAttorneyApi.getOne(id),
-    enabled: !!id,
+  // ======================================================
+  // CLIENTS
+  // ======================================================
+
+  const {
+    data: clientsData,
+    isLoading:
+      clientsLoading,
+  } = useQuery({
+    queryKey: [
+      'clients',
+      {
+        limit: 100,
+      },
+    ],
+
+    queryFn: () =>
+      clientApi.getAll({
+        limit: 100,
+      }),
+
+    staleTime:
+      5 * 60 * 1000,
   });
 
-  // Müvekkilleri getir
-  const { data: clientsData } = useQuery({
-    queryKey: ['clients', { limit: 100 }],
-    queryFn: () => clientApi.getAll({ limit: 100 }),
+  // ======================================================
+  // CASES
+  // ======================================================
+
+  const {
+    data: casesData,
+    isLoading:
+      casesLoading,
+  } = useQuery({
+    queryKey: [
+      'cases',
+      {
+        client_id:
+          formData.client_id ||
+          undefined,
+
+        limit: 100,
+      },
+    ],
+
+    queryFn: () =>
+      caseApi.getAll({
+        client_id:
+          formData.client_id ||
+          undefined,
+
+        limit: 100,
+      }),
+
+    enabled:
+      Boolean(
+        formData.client_id
+      ),
+
+    staleTime:
+      5 * 60 * 1000,
   });
 
-  // Davaları getir
-  const { data: casesData } = useQuery({
-    queryKey: ['cases', { client_id: formData.client_id || undefined, limit: 100 }],
-    queryFn: () => caseApi.getAll({ client_id: formData.client_id || undefined, limit: 100 }),
-    enabled: !!formData.client_id,
-  });
+  // ======================================================
+  // DATA
+  // ======================================================
 
-  const poa = poaData?.data;
-  const clients = clientsData?.data?.data || [];
-  const cases = casesData?.data?.data || [];
+  const poa =
+    poaData?.data?.data ??
+    poaData?.data ??
+    null;
 
-  // Formu doldur
+  const clients =
+    Array.isArray(
+      clientsData?.data?.data
+    )
+      ? clientsData.data.data
+      : [];
+
+  const cases =
+    Array.isArray(
+      casesData?.data?.data
+    )
+      ? casesData.data.data
+      : [];
+
+  // ======================================================
+  // INITIALIZE FORM
+  // ======================================================
+
   useEffect(() => {
-    if (poa) {
-      setFormData({
-        client_id: poa.client_id || '',
-        case_id: poa.case_id || '',
-        title: poa.title || '',
-        description: poa.description || '',
-        start_date: poa.start_date ? poa.start_date.split('T')[0] : '',
-        end_date: poa.end_date ? poa.end_date.split('T')[0] : '',
-        status: poa.status || 'active',
-        authorities: poa.authorities || [],
-        notes: poa.notes || '',
-      });
-    }
-  }, [poa]);
-
-  const updateMutation = useMutation({
-    mutationFn: (data) => powerOfAttorneyApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['powerOfAttorneys'] });
-      queryClient.invalidateQueries({ queryKey: ['powerOfAttorney', id] });
-      toast.success('Vekaletname başarıyla güncellendi');
-      navigate('/power-of-attorney');
-    },
-    onError: (error) => {
-      toast.error(error.response?.data?.message || 'Vekaletname güncellenemedi');
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: () => powerOfAttorneyApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['powerOfAttorneys'] });
-      toast.success('Vekaletname silindi');
-      navigate('/power-of-attorney');
-    },
-    onError: (error) => {
-      toast.error(error.response?.data?.message || 'Vekaletname silinemedi');
-    },
-  });
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: '' }));
-    }
-  };
-
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (!selectedFile) return;
-
-    if (selectedFile.size > 10 * 1024 * 1024) {
-      setFileError('Dosya boyutu 10MB\'dan büyük olamaz!');
-      setFile(null);
+    if (
+      !poa ||
+      initializedId ===
+        poa.id
+    ) {
       return;
     }
 
-    const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'image/jpeg',
-      'image/png',
-      'image/gif',
-      'image/webp',
-    ];
+    setFormData({
+      client_id:
+        poa.client_id ||
+        poa.client?.id ||
+        '',
 
-    if (!allowedTypes.includes(selectedFile.type)) {
-      setFileError('Sadece PDF, Word veya resim dosyası yükleyebilirsiniz!');
-      setFile(null);
-      return;
+      case_id:
+        poa.case_id ||
+        poa.case?.id ||
+        '',
+
+      title:
+        poa.title ||
+        '',
+
+      description:
+        poa.description ||
+        '',
+
+      start_date:
+        formatDateInput(
+          poa.start_date
+        ),
+
+      end_date:
+        formatDateInput(
+          poa.end_date
+        ),
+
+      status:
+        poa.status ||
+        'active',
+
+      authorities:
+        Array.isArray(
+          poa.authorities
+        )
+          ? poa.authorities
+          : [],
+
+      notes:
+        poa.notes ||
+        '',
+    });
+
+    setInitializedId(
+      poa.id
+    );
+  }, [
+    poa,
+    initializedId,
+  ]);
+
+  // ======================================================
+  // MUTATIONS
+  // ======================================================
+
+  const updateMutation =
+    useMutation({
+      mutationFn: (
+        data
+      ) =>
+        powerOfAttorneyApi.update(
+          id,
+          data
+        ),
+
+      onSuccess: async () => {
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: [
+              'powerOfAttorneys',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'powerOfAttorney',
+              id,
+            ],
+          }),
+        ]);
+
+        toast.success(
+          'Vekaletname başarıyla güncellendi'
+        );
+
+        navigate(
+          `/power-of-attorney/${id}`
+        );
+      },
+
+      onError: (error) => {
+        toast.error(
+          error?.response
+            ?.data?.message ||
+            'Vekaletname güncellenemedi'
+        );
+      },
+    });
+
+  const deleteMutation =
+    useMutation({
+      mutationFn: () =>
+        powerOfAttorneyApi.delete(
+          id
+        ),
+
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({
+          queryKey: [
+            'powerOfAttorneys',
+          ],
+        });
+
+        toast.success(
+          'Vekaletname silindi'
+        );
+
+        navigate(
+          '/power-of-attorney'
+        );
+      },
+
+      onError: (error) => {
+        toast.error(
+          error?.response
+            ?.data?.message ||
+            'Vekaletname silinemedi'
+        );
+      },
+    });
+
+  // ======================================================
+  // HANDLERS
+  // ======================================================
+
+  const handleChange = (
+    event
+  ) => {
+    const {
+      name,
+      value,
+    } = event.target;
+
+    setFormData(
+      (current) => ({
+        ...current,
+        [name]: value,
+      })
+    );
+
+    if (
+      name === 'client_id'
+    ) {
+      setFormData(
+        (current) => ({
+          ...current,
+          client_id:
+            value,
+          case_id: '',
+        })
+      );
     }
 
-    setFileError('');
-    setFile(selectedFile);
-  };
-
-  const handleRemoveFile = () => {
-    setFile(null);
-    setFileError('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    if (
+      errors[name]
+    ) {
+      setErrors(
+        (current) => ({
+          ...current,
+          [name]: '',
+        })
+      );
     }
   };
 
-  const handleAddAuthority = () => {
-    if (authorityInput.trim()) {
-      setFormData((prev) => ({
-        ...prev,
-        authorities: [...prev.authorities, authorityInput.trim()],
-      }));
+  // ======================================================
+  // AUTHORITIES
+  // ======================================================
+
+  const handleAddAuthority =
+    () => {
+      const value =
+        authorityInput.trim();
+
+      if (!value) {
+        return;
+      }
+
+      const alreadyExists =
+        formData.authorities.some(
+          (authority) =>
+            authority
+              .toLocaleLowerCase(
+                'tr'
+              )
+              .trim() ===
+            value
+              .toLocaleLowerCase(
+                'tr'
+              )
+              .trim()
+        );
+
+      if (alreadyExists) {
+        toast.error(
+          'Bu yetki zaten eklenmiş'
+        );
+
+        return;
+      }
+
+      setFormData(
+        (current) => ({
+          ...current,
+
+          authorities: [
+            ...current.authorities,
+            value,
+          ],
+        })
+      );
+
       setAuthorityInput('');
-    }
-  };
+    };
 
-  const handleRemoveAuthority = (index) => {
-    setFormData((prev) => ({
-      ...prev,
-      authorities: prev.authorities.filter((_, i) => i !== index),
-    }));
-  };
+  const handleRemoveAuthority =
+    (index) => {
+      setFormData(
+        (current) => ({
+          ...current,
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+          authorities:
+            current.authorities.filter(
+              (
+                _authority,
+                currentIndex
+              ) =>
+                currentIndex !==
+                index
+            ),
+        })
+      );
+    };
 
-    const newErrors = {};
-    if (!formData.client_id) newErrors.client_id = 'Müvekkil seçimi zorunludur';
-    // ✅ title kontrolü KALDIRILDI (opsiyonel)
-    // if (!formData.title) newErrors.title = 'Başlık zorunludur';
+  // ======================================================
+  // VALIDATION
+  // ======================================================
 
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+  const validateForm =
+    () => {
+      const nextErrors =
+        {};
+
+      if (
+        !formData.client_id
+      ) {
+        nextErrors.client_id =
+          'Müvekkil seçimi zorunludur';
+      }
+
+      if (
+        formData.title.length >
+        255
+      ) {
+        nextErrors.title =
+          'Başlık en fazla 255 karakter olabilir';
+      }
+
+      if (
+        formData.start_date &&
+        formData.end_date &&
+        formData.end_date <
+          formData.start_date
+      ) {
+        nextErrors.end_date =
+          'Bitiş tarihi başlangıç tarihinden önce olamaz';
+      }
+
+      setErrors(
+        nextErrors
+      );
+
+      return (
+        Object.keys(
+          nextErrors
+        ).length === 0
+      );
+    };
+
+  // ======================================================
+  // SUBMIT
+  // ======================================================
+
+  const handleSubmit = (
+    event
+  ) => {
+    event.preventDefault();
+
+    if (
+      updateMutation.isPending
+    ) {
       return;
     }
 
-    const submitData = new FormData();
-    submitData.append('client_id', formData.client_id);
-    submitData.append('case_id', formData.case_id || '');
-    submitData.append('title', formData.title || '');  // ✅ Opsiyonel
-    submitData.append('description', formData.description || '');
-    submitData.append('start_date', formData.start_date || '');
-    submitData.append('end_date', formData.end_date || '');
-    submitData.append('status', formData.status);
-    submitData.append('authorities', JSON.stringify(formData.authorities));
-    submitData.append('notes', formData.notes || '');
-    
-    if (file) {
-      submitData.append('file', file);
+    if (
+      !validateForm()
+    ) {
+      toast.error(
+        'Formdaki alanları kontrol edin'
+      );
+
+      return;
     }
 
-    updateMutation.mutate(submitData);
+    /*
+     * Burada artık FormData göndermiyoruz.
+     *
+     * Edit ekranı sadece vekaletname metadata'sını değiştiriyor.
+     * Fiziksel belge yönetimi Documents modülü üzerinden yapılmalı.
+     */
+    const submitData = {
+      client_id:
+        formData.client_id,
+
+      case_id:
+        formData.case_id ||
+        null,
+
+      title:
+        formData.title.trim() ||
+        null,
+
+      description:
+        formData.description
+          .trim() ||
+        null,
+
+      start_date:
+        formData.start_date ||
+        null,
+
+      end_date:
+        formData.end_date ||
+        null,
+
+      status:
+        formData.status,
+
+      authorities:
+        formData.authorities,
+
+      notes:
+        formData.notes
+          .trim() ||
+        null,
+    };
+
+    updateMutation.mutate(
+      submitData
+    );
   };
 
-  const handleDelete = () => {
-    if (window.confirm('Bu vekaletnameyi silmek istediğinize emin misiniz?')) {
+  // ======================================================
+  // DELETE
+  // ======================================================
+
+  const handleDelete =
+    () => {
+      const confirmed =
+        window.confirm(
+          `"${poa?.title || 'Bu vekaletname'}" kaydını silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
       deleteMutation.mutate();
-    }
-  };
+    };
+
+  // ======================================================
+  // LOADING
+  // ======================================================
 
   if (poaLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-64 items-center justify-center">
+
+        <div className="text-center">
+
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600" />
+
+          <p className="mt-4 text-sm text-gray-500">
+            Vekaletname yükleniyor...
+          </p>
+
+        </div>
+
       </div>
     );
   }
 
-  if (!poa) {
+  // ======================================================
+  // ERROR
+  // ======================================================
+
+  if (
+    poaError ||
+    !poa
+  ) {
     return (
-      <div className="text-center py-12">
-        <div className="text-6xl mb-4">📜</div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Vekaletname Bulunamadı</h2>
-        <Link to="/power-of-attorney" className="text-blue-600 hover:underline mt-4 inline-block">
-          ← Vekaletnamelere Dön
+      <div className="py-12 text-center">
+
+        <div className="mb-4 text-5xl">
+          📜
+        </div>
+
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+          Vekaletname Bulunamadı
+        </h2>
+
+        <p className="mt-2 text-sm text-gray-500">
+          {poaError?.response
+            ?.data?.message ||
+            poaError?.message ||
+            'Vekaletname bilgileri yüklenemedi'}
+        </p>
+
+        <Link
+          to="/power-of-attorney"
+          className="mt-4 inline-flex items-center gap-1 text-blue-600 hover:underline"
+        >
+          <ArrowLeft className="h-4 w-4" />
+
+          Vekaletnamelere Dön
         </Link>
+
       </div>
     );
   }
+
+  // ======================================================
+  // RENDER
+  // ======================================================
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link to="/power-of-attorney" className="text-blue-600 hover:underline">
-            ← Vekaletnameler
-          </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-            ✏️ Vekaletname Düzenle
-          </h1>
-          <p className="text-sm text-gray-500">{poa.title}</p>
+    <div className="mx-auto max-w-3xl space-y-6">
+
+      {/* HEADER */}
+
+      <div>
+
+        <Link
+          to={`/power-of-attorney/${id}`}
+          className="
+            inline-flex
+            items-center
+            gap-1.5
+            text-xs
+            font-medium
+            text-gray-500
+            transition
+            hover:text-blue-600
+            dark:text-slate-500
+            dark:hover:text-blue-400
+          "
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+
+          Vekaletname Detayı
+        </Link>
+
+        <h1 className="mt-3 text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
+          Vekaletname Düzenle
+        </h1>
+
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+
+          <Badge
+            variant={getStatusVariant(
+              formData.status
+            )}
+          >
+            {getStatusLabel(
+              formData.status
+            )}
+          </Badge>
+
+          <Badge variant="default">
+            📜 Vekaletname
+          </Badge>
+
         </div>
+
+        <p className="mt-2 text-sm text-gray-500">
+          {poa.title ||
+            poa.client?.name ||
+            'Vekaletname'}
+        </p>
+
       </div>
 
-      <Card>
-        <form onSubmit={handleSubmit} className="space-y-6 p-6">
-          {/* Müvekkil Seçimi */}
+      {/* INFO */}
+
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+
+        <div className="flex items-start gap-3">
+
+          <FilePlus2 className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+
+            <p className="font-medium text-blue-900 dark:text-blue-200">
+              Belge dosyaları ayrı yönetilir
+            </p>
+
+            <p className="mt-1 text-sm leading-6 text-blue-800 dark:text-blue-300">
+              Bu ekran vekaletnamenin kayıt bilgilerini düzenler.
+              Yeni vekaletname belgesi eklemek veya mevcut belgeleri yönetmek için belge modülünü kullanın.
+            </p>
+
+            <Link
+              to={`/documents/upload?power_of_attorney_id=${id}`}
+              className="mt-2 inline-block text-sm font-medium text-blue-700 hover:underline dark:text-blue-300"
+            >
+              + Bu vekaletnameye belge ekle
+            </Link>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* FORM */}
+
+      <Card>
+
+        <form
+          onSubmit={
+            handleSubmit
+          }
+          className="space-y-6 p-6"
+        >
+
+          {/* CLIENT */}
+
+          <div>
+
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Müvekkil *
             </label>
+
             <select
               name="client_id"
-              value={formData.client_id}
-              onChange={handleChange}
+              value={
+                formData.client_id
+              }
+              onChange={
+                handleChange
+              }
+              disabled={
+                clientsLoading ||
+                updateMutation.isPending
+              }
               className={`w-full rounded-md border ${
-                errors.client_id ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
-              } bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                errors.client_id
+                  ? 'border-red-500'
+                  : 'border-gray-300 dark:border-gray-600'
+              } bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-wait disabled:bg-gray-100 dark:bg-gray-700 dark:text-white`}
             >
-              <option value="">Müvekkil seçin</option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                </option>
-              ))}
+
+              <option value="">
+                Müvekkil seçin
+              </option>
+
+              {clients.map(
+                (client) => (
+                  <option
+                    key={
+                      client.id
+                    }
+                    value={
+                      client.id
+                    }
+                  >
+                    {
+                      client.name
+                    }
+
+                    {client.company_name &&
+                      ` (${client.company_name})`}
+                  </option>
+                )
+              )}
+
             </select>
+
             {errors.client_id && (
-              <p className="mt-1 text-sm text-red-600">{errors.client_id}</p>
+              <p className="mt-1 text-sm text-red-600">
+                {
+                  errors.client_id
+                }
+              </p>
             )}
+
           </div>
 
-          {/* Dava Seçimi */}
+          {/* CASE */}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              İlişkili Dava (Opsiyonel)
+
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              İlişkili Dava
             </label>
+
             <select
               name="case_id"
-              value={formData.case_id}
-              onChange={handleChange}
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={!formData.client_id}
+              value={
+                formData.case_id
+              }
+              onChange={
+                handleChange
+              }
+              disabled={
+                !formData.client_id ||
+                casesLoading ||
+                updateMutation.isPending
+              }
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             >
+
               <option value="">
-                {!formData.client_id ? 'Önce müvekkil seçin' : 'Dava seçin (isteğe bağlı)'}
+                {!formData.client_id
+                  ? 'Önce müvekkil seçin'
+                  : 'Dava seçin (isteğe bağlı)'}
               </option>
-              {cases.map((caseItem) => (
-                <option key={caseItem.id} value={caseItem.id}>
-                  {caseItem.title}
-                </option>
-              ))}
+
+              {cases.map(
+                (caseItem) => (
+                  <option
+                    key={
+                      caseItem.id
+                    }
+                    value={
+                      caseItem.id
+                    }
+                  >
+                    {
+                      caseItem.title
+                    }
+
+                    {caseItem.case_number &&
+                      ` · ${caseItem.case_number}`}
+                  </option>
+                )
+              )}
+
             </select>
+
           </div>
 
-          {/* Başlık (Opsiyonel) */}
+          {/* TITLE */}
+
           <Input
-            label="Vekaletname Başlığı (Opsiyonel)"
+            label="Vekaletname Başlığı"
             name="title"
-            value={formData.title}
-            onChange={handleChange}
-            error={errors.title}
+            value={
+              formData.title
+            }
+            onChange={
+              handleChange
+            }
+            error={
+              errors.title
+            }
+            disabled={
+              updateMutation.isPending
+            }
             placeholder="Örn: Arsa Davası Vekaleti"
           />
 
-          {/* Açıklama */}
+          {/* DESCRIPTION */}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Açıklama
             </label>
+
             <textarea
               name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows="3"
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={
+                formData.description
+              }
+              onChange={
+                handleChange
+              }
+              rows="4"
+              disabled={
+                updateMutation.isPending
+              }
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               placeholder="Vekaletname ile ilgili açıklama..."
             />
+
           </div>
 
-          {/* Tarihler */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* DATES */}
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
             <Input
               label="Başlangıç Tarihi"
               name="start_date"
               type="date"
-              value={formData.start_date}
-              onChange={handleChange}
+              value={
+                formData.start_date
+              }
+              onChange={
+                handleChange
+              }
+              disabled={
+                updateMutation.isPending
+              }
             />
+
             <Input
               label="Bitiş Tarihi"
               name="end_date"
               type="date"
-              value={formData.end_date}
-              onChange={handleChange}
+              value={
+                formData.end_date
+              }
+              onChange={
+                handleChange
+              }
+              error={
+                errors.end_date
+              }
+              disabled={
+                updateMutation.isPending
+              }
             />
+
           </div>
 
-          {/* Durum */}
+          {/* STATUS */}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Durum
             </label>
+
             <select
               name="status"
-              value={formData.status}
-              onChange={handleChange}
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={
+                formData.status
+              }
+              onChange={
+                handleChange
+              }
+              disabled={
+                updateMutation.isPending
+              }
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             >
-              <option value="active">Aktif</option>
-              <option value="expired">Süresi Doldu</option>
-              <option value="cancelled">İptal</option>
+
+              {STATUS_OPTIONS.map(
+                (status) => (
+                  <option
+                    key={
+                      status.value
+                    }
+                    value={
+                      status.value
+                    }
+                  >
+                    {
+                      status.label
+                    }
+                  </option>
+                )
+              )}
+
             </select>
+
           </div>
 
-          {/* Yetkiler */}
+          {/* AUTHORITIES */}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+
+            <label className="mb-1 flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+
+              <KeyRound className="h-4 w-4" />
+
               Yetkiler
+
             </label>
-            <div className="flex gap-2">
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+
               <input
                 type="text"
-                value={authorityInput}
-                onChange={(e) => setAuthorityInput(e.target.value)}
-                placeholder="Yetki ekle (örn: tahsilat)"
-                className="flex-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
+                value={
+                  authorityInput
+                }
+                onChange={(event) =>
+                  setAuthorityInput(
+                    event.target.value
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (
+                    event.key ===
+                    'Enter'
+                  ) {
+                    event.preventDefault();
+
                     handleAddAuthority();
                   }
                 }}
+                disabled={
+                  updateMutation.isPending
+                }
+                placeholder="Yetki ekle, örn: tahsilat"
+                className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               />
-              <Button type="button" variant="secondary" onClick={handleAddAuthority}>
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  handleAddAuthority
+                }
+                disabled={
+                  updateMutation.isPending
+                }
+              >
                 Ekle
               </Button>
+
             </div>
-            {formData.authorities.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                {formData.authorities.map((auth, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm"
-                  >
-                    {auth}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveAuthority(index)}
-                      className="text-red-500 hover:text-red-700"
+
+            {formData.authorities.length >
+              0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+
+                {formData.authorities.map(
+                  (
+                    authority,
+                    index
+                  ) => (
+                    <Badge
+                      key={`${authority}-${index}`}
+                      variant="default"
+                      className="flex items-center gap-1"
                     >
-                      ×
-                    </button>
-                  </span>
-                ))}
+                      {
+                        authority
+                      }
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleRemoveAuthority(
+                            index
+                          )
+                        }
+                        disabled={
+                          updateMutation.isPending
+                        }
+                        className="ml-1 text-gray-400 hover:text-red-600"
+                        aria-label={`${authority} yetkisini kaldır`}
+                      >
+                        ×
+                      </button>
+
+                    </Badge>
+                  )
+                )}
+
               </div>
             )}
+
           </div>
 
-          {/* Belge Yükleme */}
-          <div className="border-2 border-blue-500 p-4 rounded-lg">
-            <p className="font-bold text-blue-600 mb-2">📎 Vekaletname Belgesi (PDF/Word/Resim)</p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              onChange={handleFileChange}
-              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp"
-              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            />
-            {file && (
-              <div className="mt-2 flex items-center gap-2">
-                <span className="text-sm text-green-600">✅ {file.name}</span>
-                <button
-                  type="button"
-                  onClick={handleRemoveFile}
-                  className="text-sm text-red-600 hover:text-red-800"
-                >
-                  Kaldır
-                </button>
-              </div>
-            )}
-            {fileError && <p className="mt-1 text-sm text-red-600">{fileError}</p>}
-          </div>
+          {/* NOTES */}
 
-          {/* Notlar */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Notlar
             </label>
+
             <textarea
               name="notes"
-              value={formData.notes}
-              onChange={handleChange}
-              rows="3"
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={
+                formData.notes
+              }
+              onChange={
+                handleChange
+              }
+              rows="4"
+              disabled={
+                updateMutation.isPending
+              }
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               placeholder="Ek notlar..."
             />
+
           </div>
 
-          <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <Button type="submit" loading={updateMutation.isPending}>
-               Güncelle
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => navigate('/power-of-attorney')}>
-              İptal
-            </Button>
-            <Button type="button" variant="danger" onClick={handleDelete} loading={deleteMutation.isPending}>
-               Sil
-            </Button>
+          {/* WARNING */}
+
+          <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+
+            <div className="flex items-start gap-2">
+
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+
+              <p>
+                Müvekkil veya dava ilişkisini değiştirmeniz vekaletnamenin dosya bağlamını etkiler. Kaydetmeden önce seçilen kayıtları kontrol edin.
+              </p>
+
+            </div>
+
           </div>
+
+          {/* ACTIONS */}
+
+          <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
+
+            <Button
+              type="submit"
+              loading={
+                updateMutation.isPending
+              }
+              disabled={
+                updateMutation.isPending
+              }
+            >
+              <Save className="mr-2 h-4 w-4" />
+
+              Değişiklikleri Kaydet
+            </Button>
+
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                navigate(
+                  `/power-of-attorney/${id}`
+                )
+              }
+              disabled={
+                updateMutation.isPending
+              }
+            >
+              Vazgeç
+            </Button>
+
+            <Button
+              type="button"
+              variant="danger"
+              onClick={
+                handleDelete
+              }
+              loading={
+                deleteMutation.isPending
+              }
+              disabled={
+                deleteMutation.isPending
+              }
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+
+              Vekaletnameyi Sil
+            </Button>
+
+          </div>
+
         </form>
+
       </Card>
+
     </div>
   );
 };

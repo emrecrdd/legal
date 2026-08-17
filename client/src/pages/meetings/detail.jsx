@@ -1,244 +1,1009 @@
-import { useParams, Link } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import {
+  Link,
+  useParams,
+} from 'react-router-dom';
+
+import {
+  useMutation,
+  useQuery,
+} from '@tanstack/react-query';
+
 import meetingApi from '../../features/meetings/meeting.api.js';
+
 import Badge from '../../components/ui/Badge.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
+
+import {
+  ArrowLeft,
+  BriefcaseBusiness,
+  CalendarDays,
+  Clock3,
+  Edit2,
+  ExternalLink,
+  Link2,
+  MapPin,
+  MessageSquareText,
+  Phone,
+  UserRound,
+  UsersRound,
+  Video,
+} from 'lucide-react';
+
 import toast from 'react-hot-toast';
 
-const MeetingDetail = () => {
-  const { id } = useParams();
+// ======================================================
+// CONSTANTS
+// ======================================================
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['meeting', id],
-    queryFn: () => meetingApi.getOne(id),
-  });
+const STATUS_OPTIONS = [
+  {
+    value: 'scheduled',
+    label: 'Planlandı',
+  },
+  {
+    value: 'ongoing',
+    label: 'Devam Ediyor',
+  },
+  {
+    value: 'completed',
+    label: 'Tamamlandı',
+  },
+  {
+    value: 'cancelled',
+    label: 'İptal',
+  },
+];
 
-  const updateStatus = useMutation({
-    mutationFn: (status) => meetingApi.updateStatus(id, status),
-    onSuccess: () => {
-      toast.success('Toplantı durumu güncellendi');
-      refetch();
-    },
-    onError: (error) => {
-      toast.error(error.response?.data?.message || 'Durum güncellenemedi');
-    },
-  });
+// ======================================================
+// STATUS HELPERS
+// ======================================================
 
-  const meeting = data?.data?.data;
+const getStatusVariant = (status) => {
+  switch (status) {
+    case 'scheduled':
+      return 'warning';
 
-  const statuses = [
-    { value: 'scheduled', label: 'Planlandı' },
-    { value: 'ongoing', label: 'Devam Ediyor' },
-    { value: 'completed', label: 'Tamamlandı' },
-    { value: 'cancelled', label: 'İptal' },
-  ];
+    case 'ongoing':
+      return 'info';
 
-  const getStatusVariant = (status) => {
-    switch (status) {
-      case 'scheduled': return 'warning';
-      case 'ongoing': return 'info';
-      case 'completed': return 'success';
-      case 'cancelled': return 'danger';
-      default: return 'default';
-    }
+    case 'completed':
+      return 'success';
+
+    case 'cancelled':
+      return 'danger';
+
+    default:
+      return 'default';
+  }
+};
+
+const getStatusLabel = (status) => {
+  const labels = {
+    scheduled: 'Planlandı',
+    ongoing: 'Devam Ediyor',
+    completed: 'Tamamlandı',
+    cancelled: 'İptal',
   };
 
-  const getStatusLabel = (status) => {
-    const labels = {
-      scheduled: 'Planlandı',
-      ongoing: 'Devam Ediyor',
-      completed: 'Tamamlandı',
-      cancelled: 'İptal',
-    };
-    return labels[status] || status;
-  };
+  return labels[status] || status || 'Bilinmiyor';
+};
 
-  // ✅ UTC direkt gösterim (zaman dilimi çevirme YOK)
-  const formatDate = (date) => {
-  if (!date) return '-';
+// ======================================================
+// MEETING TYPE HELPERS
+// ======================================================
+
+const getMeetingTypeInfo = (type) => {
+  switch (type) {
+    case 'client':
+      return {
+        label: 'Müvekkil Görüşmesi',
+        icon: UserRound,
+      };
+
+    case 'internal':
+      return {
+        label: 'İç Toplantı',
+        icon: BriefcaseBusiness,
+      };
+
+    case 'phone':
+      return {
+        label: 'Telefon Görüşmesi',
+        icon: Phone,
+      };
+
+    default:
+      return {
+        label: 'Diğer',
+        icon: UsersRound,
+      };
+  }
+};
+
+// ======================================================
+// DATE HELPER
+// ======================================================
+
+const formatDate = (date) => {
+  if (!date) {
+    return '-';
+  }
 
   try {
-    return new Date(date).toLocaleString('tr-TR', {
-      timeZone: 'Europe/Istanbul',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const parsed = new Date(date);
+
+    if (Number.isNaN(parsed.getTime())) {
+      return '-';
+    }
+
+    return new Intl.DateTimeFormat(
+      'tr-TR',
+      {
+        timeZone: 'Europe/Istanbul',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }
+    ).format(parsed);
   } catch {
     return '-';
   }
 };
+
+// ======================================================
+// NAME HELPER
+// ======================================================
+
+const getPersonName = (
+  person,
+  fallback = 'Belirtilmemiş'
+) => {
+  if (!person) {
+    return fallback;
+  }
+
+  const name = [
+    person.first_name,
+    person.last_name,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  return name || fallback;
+};
+
+// ======================================================
+// COMPONENT
+// ======================================================
+
+const MeetingDetail = () => {
+  const { id } = useParams();
+
+  // ======================================================
+  // QUERY
+  // ======================================================
+
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: [
+      'meeting',
+      id,
+    ],
+    queryFn: () =>
+      meetingApi.getOne(id),
+    enabled: Boolean(id),
+  });
+
+  // ======================================================
+  // MUTATION
+  // ======================================================
+
+  const updateStatus =
+    useMutation({
+      mutationFn: (status) =>
+        meetingApi.updateStatus(
+          id,
+          status
+        ),
+
+      onSuccess: () => {
+        toast.success(
+          'Toplantı durumu güncellendi'
+        );
+
+        refetch();
+      },
+
+      onError: (error) => {
+        toast.error(
+          error?.response
+            ?.data?.message ||
+            'Durum güncellenemedi'
+        );
+      },
+    });
+
+  // ======================================================
+  // DATA
+  // ======================================================
+
+  const meeting =
+    data?.data?.data;
+
+  const meetingType =
+    getMeetingTypeInfo(
+      meeting?.meeting_type
+    );
+
+  const MeetingTypeIcon =
+    meetingType.icon;
+
+  // ======================================================
+  // LOADING
+  // ======================================================
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-64 items-center justify-center">
+
+        <div className="text-center">
+
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600" />
+
+          <p className="mt-4 text-sm text-gray-500">
+            Toplantı bilgileri yükleniyor...
+          </p>
+
+        </div>
+
       </div>
     );
   }
 
-  if (error || !meeting) {
+  // ======================================================
+  // ERROR
+  // ======================================================
+
+  if (
+    error ||
+    !meeting
+  ) {
     return (
-      <div className="text-center py-12">
-        <p className="text-red-600">Toplantı bulunamadı</p>
-        <Link to="/meetings" className="text-blue-600 hover:underline">
-          ← Toplantılara Dön
+      <div className="py-12 text-center">
+
+        <div className="mb-4 text-5xl">
+          🤝
+        </div>
+
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+          Toplantı Bulunamadı
+        </h2>
+
+        <p className="mt-2 text-sm text-gray-500">
+          {error
+            ?.response
+            ?.data
+            ?.message ||
+            error?.message ||
+            'Toplantı bilgileri yüklenemedi'}
+        </p>
+
+        <Link
+          to="/meetings"
+          className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline"
+        >
+          <ArrowLeft className="h-4 w-4" />
+
+          Toplantılara Dön
         </Link>
+
       </div>
     );
   }
+
+  // ======================================================
+  // RENDER
+  // ======================================================
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-6xl space-y-6">
+
+      {/* ==================================================
+          HEADER
+      ================================================== */}
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+
         <div>
-          <Link to="/meetings" className="text-blue-600 hover:underline">
-            ← Toplantılar
+
+          <Link
+            to="/meetings"
+            className="
+              inline-flex
+              items-center
+              gap-1.5
+              text-xs
+              font-medium
+              text-gray-500
+              transition
+              hover:text-blue-600
+              dark:text-slate-500
+              dark:hover:text-blue-400
+            "
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+
+            Toplantılar
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+
+          <h1
+            className="
+              mt-3
+              text-2xl
+              font-semibold
+              tracking-[-0.035em]
+              text-gray-900
+              dark:text-white
+            "
+          >
             {meeting.title}
           </h1>
-          <div className="flex items-center gap-2 mt-1">
-            <Badge variant={getStatusVariant(meeting.status)}>
-              {getStatusLabel(meeting.status)}
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+
+            <Badge
+              variant={getStatusVariant(
+                meeting.status
+              )}
+            >
+              {getStatusLabel(
+                meeting.status
+              )}
             </Badge>
-            <Badge variant="default">🤝 Toplantı</Badge>
+
+            <Badge variant="default">
+
+              <span className="inline-flex items-center gap-1">
+
+                <MeetingTypeIcon className="h-3.5 w-3.5" />
+
+                {meetingType.label}
+
+              </span>
+
+            </Badge>
+
           </div>
+
         </div>
-        <div className="flex gap-2">
+
+        {/* ACTIONS */}
+
+        <div className="flex flex-wrap items-center gap-2">
+
           <select
             value={meeting.status}
-            onChange={(e) => updateStatus.mutate(e.target.value)}
-            className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={updateStatus.isPending}
+            onChange={(event) =>
+              updateStatus.mutate(
+                event.target.value
+              )
+            }
+            disabled={
+              updateStatus.isPending
+            }
+            className="
+              rounded-lg
+              border
+              border-gray-200
+              bg-white
+              px-3
+              py-2
+              text-sm
+              font-medium
+              text-gray-700
+              outline-none
+              transition
+              focus:border-blue-500
+              focus:ring-2
+              focus:ring-blue-500/10
+              disabled:cursor-not-allowed
+              disabled:opacity-60
+              dark:border-white/[0.08]
+              dark:bg-white/[0.035]
+              dark:text-slate-200
+            "
           >
-            {statuses.map((status) => (
-              <option key={status.value} value={status.value}>
-                {status.label}
-              </option>
-            ))}
+
+            {STATUS_OPTIONS.map(
+              (status) => (
+                <option
+                  key={
+                    status.value
+                  }
+                  value={
+                    status.value
+                  }
+                >
+                  {status.label}
+                </option>
+              )
+            )}
+
           </select>
-          <Link to={`/meetings/${meeting.id}/edit`}>
-            <Button variant="outline">Düzenle</Button>
+
+          <Link
+            to={`/meetings/${meeting.id}/edit`}
+          >
+
+            <Button
+              variant="outline"
+              size="sm"
+            >
+              <Edit2 className="mr-2 h-4 w-4" />
+
+              Düzenle
+            </Button>
+
           </Link>
+
         </div>
+
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
+      {/* ==================================================
+          SUMMARY
+      ================================================== */}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+
+        {/* START */}
+
+        <div
+          className="
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            p-4
+            shadow-sm
+            dark:border-white/[0.06]
+            dark:bg-white/[0.025]
+          "
+        >
+
+          <div className="flex items-start gap-3">
+
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
+
+              <CalendarDays className="h-4 w-4" />
+
+            </div>
+
+            <div>
+
+              <p className="text-xs text-gray-400">
+                Başlangıç
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                {formatDate(
+                  meeting.start_date
+                )}
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* END */}
+
+        <div
+          className="
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            p-4
+            shadow-sm
+            dark:border-white/[0.06]
+            dark:bg-white/[0.025]
+          "
+        >
+
+          <div className="flex items-start gap-3">
+
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400">
+
+              <Clock3 className="h-4 w-4" />
+
+            </div>
+
+            <div>
+
+              <p className="text-xs text-gray-400">
+                Bitiş
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                {meeting.end_date
+                  ? formatDate(
+                      meeting.end_date
+                    )
+                  : 'Belirtilmemiş'}
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* LOCATION */}
+
+        <div
+          className="
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            p-4
+            shadow-sm
+            dark:border-white/[0.06]
+            dark:bg-white/[0.025]
+          "
+        >
+
+          <div className="flex items-start gap-3">
+
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400">
+
+              <MapPin className="h-4 w-4" />
+
+            </div>
+
+            <div className="min-w-0">
+
+              <p className="text-xs text-gray-400">
+                Yer
+              </p>
+
+              <p className="mt-1 truncate text-sm font-medium text-gray-900 dark:text-white">
+                {meeting.location ||
+                  'Belirtilmemiş'}
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* ASSIGNEE */}
+
+        <div
+          className="
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            p-4
+            shadow-sm
+            dark:border-white/[0.06]
+            dark:bg-white/[0.025]
+          "
+        >
+
+          <div className="flex items-start gap-3">
+
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
+
+              <UserRound className="h-4 w-4" />
+
+            </div>
+
+            <div>
+
+              <p className="text-xs text-gray-400">
+                Atanan Avukat
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                {getPersonName(
+                  meeting.assignee,
+                  'Atanmadı'
+                )}
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* ==================================================
+          MAIN GRID
+      ================================================== */}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+
+        {/* ==================================================
+            INFORMATION
+        ================================================== */}
+
+        <Card
+          className="
+            overflow-hidden
+            border
+            border-gray-200
+            shadow-sm
+            dark:border-white/[0.06]
+            lg:col-span-2
+          "
+        >
+
           <Card.Header>
-            <h2 className="font-semibold text-gray-900 dark:text-white">📋 Bilgiler</h2>
+
+            <h2 className="font-semibold text-gray-900 dark:text-white">
+              Toplantı Bilgileri
+            </h2>
+
           </Card.Header>
-          <Card.Body className="space-y-3">
+
+          <Card.Body className="space-y-6">
+
+            {/* DESCRIPTION */}
+
             {meeting.description && (
               <div>
-                <p className="text-sm text-gray-500">Açıklama</p>
-                <p className="text-gray-900 dark:text-white">{meeting.description}</p>
+
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Açıklama
+                </p>
+
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-gray-700 dark:text-slate-300">
+                  {
+                    meeting.description
+                  }
+                </p>
+
               </div>
             )}
-            <div>
-              <p className="text-sm text-gray-500">Başlangıç</p>
-              <p className="text-gray-900 dark:text-white">{formatDate(meeting.start_date)}</p>
-            </div>
-            {meeting.end_date && (
-              <div>
-                <p className="text-sm text-gray-500">Bitiş</p>
-                <p className="text-gray-900 dark:text-white">{formatDate(meeting.end_date)}</p>
+
+            {/* TYPE / PEOPLE */}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+              <div
+                className="
+                  rounded-xl
+                  border
+                  border-gray-100
+                  bg-gray-50/60
+                  p-4
+                  dark:border-white/[0.05]
+                  dark:bg-white/[0.02]
+                "
+              >
+
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+
+                  <MeetingTypeIcon className="h-4 w-4" />
+
+                  Toplantı Türü
+
+                </div>
+
+                <p className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
+                  {
+                    meetingType.label
+                  }
+                </p>
+
               </div>
-            )}
-            <div>
-              <p className="text-sm text-gray-500">Yer</p>
-              <p className="text-gray-900 dark:text-white">{meeting.location || 'Belirtilmemiş'}</p>
+
+              <div
+                className="
+                  rounded-xl
+                  border
+                  border-gray-100
+                  bg-gray-50/60
+                  p-4
+                  dark:border-white/[0.05]
+                  dark:bg-white/[0.02]
+                "
+              >
+
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+
+                  <UserRound className="h-4 w-4" />
+
+                  Oluşturan
+
+                </div>
+
+                <p className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
+                  {getPersonName(
+                    meeting.creator,
+                    'Bilinmiyor'
+                  )}
+                </p>
+
+              </div>
+
             </div>
-            <div>
-              <p className="text-sm text-gray-500">Toplantı Türü</p>
-              <p className="text-gray-900 dark:text-white">
-                {meeting.meeting_type === 'client' ? '👤 Müvekkil Görüşmesi' :
-                 meeting.meeting_type === 'internal' ? '🏢 İç Toplantı' :
-                 meeting.meeting_type === 'phone' ? '📞 Telefon Görüşmesi' :
-                 '📌 Diğer'}
-              </p>
-            </div>
+
+            {/* ONLINE LINK */}
+
             {meeting.meeting_link && (
-              <div>
-                <p className="text-sm text-gray-500">Toplantı Linki</p>
+              <div className="border-t border-gray-100 pt-5 dark:border-white/[0.05]">
+
+                <div className="mb-2 flex items-center gap-2">
+
+                  <Video className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+
+                  <p className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                    Çevrim İçi Toplantı
+                  </p>
+
+                </div>
+
                 <a
-                  href={meeting.meeting_link}
+                  href={
+                    meeting.meeting_link
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
+                  className="
+                    inline-flex
+                    max-w-full
+                    items-center
+                    gap-2
+                    rounded-lg
+                    bg-blue-50
+                    px-3
+                    py-2
+                    text-sm
+                    font-medium
+                    text-blue-700
+                    transition
+                    hover:bg-blue-100
+                    dark:bg-blue-500/[0.08]
+                    dark:text-blue-300
+                    dark:hover:bg-blue-500/[0.12]
+                  "
                 >
-                  {meeting.meeting_link}
+
+                  <span className="truncate">
+                    Toplantıya Git
+                  </span>
+
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+
                 </a>
+
               </div>
             )}
-            <div>
-              <p className="text-sm text-gray-500">Atanan Avukat</p>
-              <p className="text-gray-900 dark:text-white">
-                {meeting.assignee?.first_name} {meeting.assignee?.last_name || 'Atanmadı'}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Oluşturan</p>
-              <p className="text-gray-900 dark:text-white">
-                {meeting.creator?.first_name} {meeting.creator?.last_name}
-              </p>
-            </div>
+
+            {/* NOTES */}
+
+            {meeting.notes && (
+              <div className="border-t border-gray-100 pt-5 dark:border-white/[0.05]">
+
+                <div className="mb-2 flex items-center gap-2">
+
+                  <MessageSquareText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+
+                  <p className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                    Notlar
+                  </p>
+
+                </div>
+
+                <div
+                  className="
+                    rounded-xl
+                    bg-gray-50
+                    p-4
+                    text-sm
+                    leading-7
+                    text-gray-700
+                    dark:bg-white/[0.025]
+                    dark:text-slate-300
+                  "
+                >
+                  <p className="whitespace-pre-wrap">
+                    {
+                      meeting.notes
+                    }
+                  </p>
+                </div>
+
+              </div>
+            )}
+
           </Card.Body>
+
         </Card>
 
-        <Card>
+        {/* ==================================================
+            RELATED
+        ================================================== */}
+
+        <Card
+          className="
+            overflow-hidden
+            border
+            border-gray-200
+            shadow-sm
+            dark:border-white/[0.06]
+          "
+        >
+
           <Card.Header>
-            <h2 className="font-semibold text-gray-900 dark:text-white">🔗 İlişkili</h2>
+
+            <div className="flex items-center gap-2">
+
+              <Link2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                İlişkili Kayıtlar
+              </h2>
+
+            </div>
+
           </Card.Header>
-          <Card.Body className="space-y-3">
-            {meeting.case && (
-              <div>
-                <p className="text-sm text-gray-500">Dava</p>
+
+          <Card.Body className="space-y-5">
+
+            {/* CASE */}
+
+            <div>
+
+              <p className="text-xs text-gray-400">
+                Dava
+              </p>
+
+              {meeting.case ? (
                 <Link
                   to={`/cases/${meeting.case.id}`}
-                  className="text-blue-600 hover:underline"
+                  className="
+                    mt-1
+                    block
+                    text-sm
+                    font-medium
+                    text-blue-600
+                    hover:underline
+                    dark:text-blue-400
+                  "
                 >
-                  {meeting.case.title}
+                  {
+                    meeting.case.title
+                  }
                 </Link>
-              </div>
-            )}
-            {meeting.client && (
-              <div>
-                <p className="text-sm text-gray-500">Müvekkil</p>
+              ) : (
+                <p className="mt-1 text-sm text-gray-400">
+                  İlişkilendirilmemiş
+                </p>
+              )}
+
+            </div>
+
+            <div className="border-t border-gray-100 dark:border-white/[0.05]" />
+
+            {/* CLIENT */}
+
+            <div>
+
+              <p className="text-xs text-gray-400">
+                Müvekkil
+              </p>
+
+              {meeting.client ? (
                 <Link
                   to={`/clients/${meeting.client.id}`}
-                  className="text-blue-600 hover:underline"
+                  className="
+                    mt-1
+                    block
+                    text-sm
+                    font-medium
+                    text-blue-600
+                    hover:underline
+                    dark:text-blue-400
+                  "
                 >
                   {meeting.client.name}
-                  {meeting.client.company_name && ` (${meeting.client.company_name})`}
+
+                  {meeting.client
+                    .company_name &&
+                    ` (${meeting.client.company_name})`}
                 </Link>
-              </div>
-            )}
-            {meeting.attendees && meeting.attendees.length > 0 && (
-              <div>
-                <p className="text-sm text-gray-500">👥 Katılımcılar</p>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {meeting.attendees.map((attendee, index) => (
-                    <Badge key={index} variant="default">
-                      {typeof attendee === 'string' ? attendee : attendee.name}
-                      {attendee.role && ` (${attendee.role})`}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-            {meeting.notes && (
-              <div>
-                <p className="text-sm text-gray-500">Notlar</p>
-                <p className="text-gray-900 dark:text-white">{meeting.notes}</p>
-              </div>
-            )}
+              ) : (
+                <p className="mt-1 text-sm text-gray-400">
+                  İlişkilendirilmemiş
+                </p>
+              )}
+
+            </div>
+
+            {/* ATTENDEES */}
+
+            {meeting.attendees &&
+              meeting.attendees.length >
+                0 && (
+                <>
+                  <div className="border-t border-gray-100 dark:border-white/[0.05]" />
+
+                  <div>
+
+                    <div className="flex items-center gap-2">
+
+                      <UsersRound className="h-4 w-4 text-gray-400" />
+
+                      <p className="text-xs text-gray-400">
+                        Katılımcılar
+                      </p>
+
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+
+                      {meeting.attendees.map(
+                        (
+                          attendee,
+                          index
+                        ) => {
+                          const name =
+                            typeof attendee ===
+                            'string'
+                              ? attendee
+                              : attendee?.name;
+
+                          const role =
+                            typeof attendee ===
+                            'object'
+                              ? attendee?.role
+                              : null;
+
+                          return (
+                            <Badge
+                              key={`${name}-${index}`}
+                              variant="default"
+                            >
+                              {name ||
+                                'Katılımcı'}
+
+                              {role &&
+                                ` · ${role}`}
+                            </Badge>
+                          );
+                        }
+                      )}
+
+                    </div>
+
+                  </div>
+                </>
+              )}
+
           </Card.Body>
+
         </Card>
+
       </div>
+
     </div>
   );
 };
