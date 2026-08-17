@@ -1,282 +1,1299 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import {
+  useState,
+} from 'react';
+
+import {
+  Link,
+} from 'react-router-dom';
+
+import {
+  useQuery,
+} from '@tanstack/react-query';
+
 import searchApi from '../../features/search/search.api.js';
+
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
-import { useDebounce } from '../../hooks/useDebounce.js';
 
-const Search = () => {
-  const [query, setQuery] = useState('');
-  const [type, setType] = useState('all');
-  const debouncedQuery = useDebounce(query, 500);
+import Loader from '../../components/shared/Loader.jsx';
+import Error from '../../components/shared/Error.jsx';
+import Empty from '../../components/shared/Empty.jsx';
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['search', { q: debouncedQuery, type }],
-    queryFn: () => searchApi.searchAll(debouncedQuery, type),
-    enabled: debouncedQuery.length >= 2,
-  });
+import {
+  ArrowRight,
+  Building2,
+  CheckSquare,
+  FileText,
+  FolderOpen,
+  Search as SearchIcon,
+  Sparkles,
+  UserRound,
+} from 'lucide-react';
 
-  const { data: suggestions } = useQuery({
-    queryKey: ['suggestions', debouncedQuery],
-    queryFn: () => searchApi.getSuggestions(debouncedQuery),
-    enabled: debouncedQuery.length >= 2 && debouncedQuery.length < 3,
-  });
+import {
+  useDebounce,
+} from '../../hooks/useDebounce.js';
 
-  const results = data?.data?.data || data?.data || data;
-  const suggestionData = suggestions?.data;
+// ======================================================
+// CONSTANTS
+// ======================================================
 
-  const hasResults = results && (
-    (results.clients?.length || 0) > 0 ||
-    (results.cases?.length || 0) > 0 ||
-    (results.documents?.length || 0) > 0 ||
-    (results.tasks?.length || 0) > 0
-  );
+const TYPE_OPTIONS = [
+  {
+    value: 'all',
+    label: 'Tüm Sonuçlar',
+  },
+  {
+    value: 'clients',
+    label: 'Müvekkiller',
+  },
+  {
+    value: 'cases',
+    label: 'Davalar',
+  },
+  {
+    value: 'documents',
+    label: 'Belgeler',
+  },
+  {
+    value: 'tasks',
+    label: 'Görevler',
+  },
+  {
+    value: 'notes',
+    label: 'Notlar',
+  },
+];
 
-  const getTypeBadge = (type) => {
-    const badges = {
-      client: { label: 'Müvekkil', variant: 'success' },
-      case: { label: 'Dava', variant: 'info' },
-      document: { label: 'Belge', variant: 'primary' },
-      task: { label: 'Görev', variant: 'warning' },
-      note: { label: 'Not', variant: 'default' },
-    };
-    return badges[type] || badges.note;
+const CASE_STATUS_LABELS = {
+  preparation: 'Hazırlık',
+  active: 'Devam Ediyor',
+  hearing: 'Duruşmada',
+  appeal: 'İstinaf',
+  cassation: 'Temyiz',
+  concluded: 'Sonuçlandı',
+  archived: 'Arşivlendi',
+};
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const getTypeBadge = (
+  type
+) => {
+  const badges = {
+    client: {
+      label: 'Müvekkil',
+      variant: 'success',
+    },
+
+    case: {
+      label: 'Dava',
+      variant: 'info',
+    },
+
+    document: {
+      label: 'Belge',
+      variant: 'primary',
+    },
+
+    task: {
+      label: 'Görev',
+      variant: 'warning',
+    },
+
+    note: {
+      label: 'Not',
+      variant: 'default',
+    },
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-        🔍 Global Arama
-      </h1>
+    badges[type] ||
+    badges.note
+  );
+};
+
+const getClientStatusVariant = (
+  status
+) => {
+  if (
+    status === 'active'
+  ) {
+    return 'success';
+  }
+
+  if (
+    status === 'archived'
+  ) {
+    return 'default';
+  }
+
+  return 'warning';
+};
+
+const getClientStatusLabel = (
+  status
+) => {
+  const labels = {
+    active: 'Aktif',
+    passive: 'Pasif',
+    archived: 'Arşiv',
+  };
+
+  return (
+    labels[status] ||
+    status ||
+    '-'
+  );
+};
+
+const getCaseStatusVariant = (
+  status
+) => {
+  const variants = {
+    preparation: 'warning',
+    active: 'success',
+    hearing: 'info',
+    appeal: 'warning',
+    cassation: 'default',
+    concluded: 'default',
+    archived: 'danger',
+  };
+
+  return (
+    variants[status] ||
+    'default'
+  );
+};
+
+const getTaskStatusVariant = (
+  status
+) => {
+  const variants = {
+    pending: 'warning',
+    in_progress: 'info',
+    completed: 'success',
+    cancelled: 'danger',
+  };
+
+  return (
+    variants[status] ||
+    'default'
+  );
+};
+
+const getTaskStatusLabel = (
+  status
+) => {
+  const labels = {
+    pending: 'Bekliyor',
+    in_progress: 'Devam Ediyor',
+    completed: 'Tamamlandı',
+    cancelled: 'İptal',
+  };
+
+  return (
+    labels[status] ||
+    status ||
+    '-'
+  );
+};
+
+const formatFileSize = (
+  bytes
+) => {
+  const size =
+    Number(bytes) || 0;
+
+  if (
+    size <= 0
+  ) {
+    return '0 B';
+  }
+
+  const units = [
+    'B',
+    'KB',
+    'MB',
+    'GB',
+  ];
+
+  const index =
+    Math.min(
+      Math.floor(
+        Math.log(size) /
+          Math.log(1024)
+      ),
+      units.length - 1
+    );
+
+  const value =
+    size /
+    1024 ** index;
+
+  return `${Number(
+    value.toFixed(1)
+  )} ${units[index]}`;
+};
+
+const getAssigneeName = (
+  task
+) => {
+  const fullName = [
+    task?.assignee?.first_name,
+    task?.assignee?.last_name,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  return (
+    fullName ||
+    'Atanmadı'
+  );
+};
+
+// ======================================================
+// COMPONENT
+// ======================================================
+
+const Search = () => {
+  const [
+    query,
+    setQuery,
+  ] =
+    useState('');
+
+  const [
+    type,
+    setType,
+  ] =
+    useState('all');
+
+  const debouncedQuery =
+    useDebounce(
+      query,
+      500
+    );
+
+  // ====================================================
+  // SEARCH QUERY
+  // ====================================================
+
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } =
+    useQuery({
+      queryKey: [
+        'search',
+        {
+          q:
+            debouncedQuery,
+          type,
+        },
+      ],
+
+      queryFn: () =>
+        searchApi.searchAll(
+          debouncedQuery,
+          type
+        ),
+
+      enabled:
+        debouncedQuery.trim().length >=
+        2,
+    });
+
+  // ====================================================
+  // SUGGESTIONS
+  // ====================================================
+
+  const {
+    data:
+      suggestions,
+  } =
+    useQuery({
+      queryKey: [
+        'suggestions',
+        debouncedQuery,
+      ],
+
+      queryFn: () =>
+        searchApi.getSuggestions(
+          debouncedQuery
+        ),
+
+      enabled:
+        debouncedQuery.trim().length >=
+          2 &&
+        debouncedQuery.trim().length <
+          3,
+    });
+
+  // ====================================================
+  // DATA
+  // ====================================================
+
+  const results =
+    data?.data?.data ||
+    data?.data ||
+    data ||
+    null;
+
+  const suggestionData =
+    suggestions?.data?.data ||
+    suggestions?.data ||
+    [];
+
+  const hasResults =
+    Boolean(
+      results &&
+        (
+          (results.clients?.length ||
+            0) >
+            0 ||
+          (results.cases?.length ||
+            0) >
+            0 ||
+          (results.documents?.length ||
+            0) >
+            0 ||
+          (results.tasks?.length ||
+            0) >
+            0
+        )
+    );
+
+  const totalResults =
+    (results?.clients?.length ||
+      0) +
+    (results?.cases?.length ||
+      0) +
+    (results?.documents?.length ||
+      0) +
+    (results?.tasks?.length ||
+      0);
+
+  const hasSearch =
+    debouncedQuery
+      .trim()
+      .length >=
+    2;
+
+  // ====================================================
+  // RENDER
+  // ====================================================
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-6">
+
+      {/* ==================================================
+          HEADER
+      ================================================== */}
+
+      <div className="flex items-start gap-3">
+
+        <div
+          className="
+            flex
+            h-11
+            w-11
+            shrink-0
+            items-center
+            justify-center
+            rounded-xl
+            bg-blue-50
+            text-blue-600
+            dark:bg-blue-500/[0.08]
+            dark:text-blue-400
+          "
+        >
+          <SearchIcon size={21} />
+        </div>
+
+        <div>
+
+          <h1
+            className="
+              text-2xl
+              font-semibold
+              tracking-[-0.035em]
+              text-gray-900
+              dark:text-white
+            "
+          >
+            Global Arama
+          </h1>
+
+          <p
+            className="
+              mt-1
+              max-w-2xl
+              text-sm
+              leading-6
+              text-gray-500
+              dark:text-slate-400
+            "
+          >
+            Müvekkil, dava, belge ve görev kayıtlarında tek noktadan arama yapın.
+          </p>
+
+        </div>
+
+      </div>
+
+      {/* ==================================================
+          SEARCH BOX
+      ================================================== */}
 
       <Card>
-        <div className="p-4">
-          <div className="flex gap-4">
+
+        <Card.Body>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+
             <div className="flex-1">
+
               <Input
-                placeholder="Müvekkil, dava, belge, görev ara..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                icon="🔍"
+                placeholder="Müvekkil, dava, belge veya görev ara..."
+                value={
+                  query
+                }
+                onChange={(
+                  event
+                ) =>
+                  setQuery(
+                    event.target.value
+                  )
+                }
+                icon={
+                  <SearchIcon size={16} />
+                }
+                autoFocus
               />
+
             </div>
-            <div className="w-40">
+
+            <div className="sm:w-52">
+
               <select
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={
+                  type
+                }
+                onChange={(
+                  event
+                ) =>
+                  setType(
+                    event.target.value
+                  )
+                }
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  text-sm
+                  text-gray-700
+                  shadow-sm
+                  outline-none
+                  transition
+                  hover:border-gray-300
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                "
               >
-                <option value="all">Tümü</option>
-                <option value="clients">Müvekkiller</option>
-                <option value="cases">Davalar</option>
-                <option value="documents">Belgeler</option>
-                <option value="tasks">Görevler</option>
-                <option value="notes">Notlar</option>
+                {TYPE_OPTIONS.map(
+                  (
+                    option
+                  ) => (
+                    <option
+                      key={
+                        option.value
+                      }
+                      value={
+                        option.value
+                      }
+                    >
+                      {option.label}
+                    </option>
+                  )
+                )}
               </select>
+
             </div>
+
           </div>
 
-          {suggestionData && suggestionData.length > 0 && query.length < 3 && (
-            <div className="mt-4">
-              <p className="text-sm text-gray-500 mb-2">Öneriler:</p>
-              <div className="flex flex-wrap gap-2">
-                {suggestionData.map((item) => (
-                  <Link
-                    key={`${item.type}-${item.id}`}
-                    to={item.url}
-                    className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    <Badge variant={getTypeBadge(item.type).variant}>
-                      {getTypeBadge(item.type).label}
-                    </Badge>
-                    {item.label}
-                  </Link>
-                ))}
+          <div className="mt-3 flex items-center justify-between">
+
+            <p className="text-xs text-gray-400 dark:text-slate-500">
+              Arama için en az 2 karakter girin.
+            </p>
+
+            {isFetching &&
+              hasSearch && (
+                <span className="text-xs text-blue-500 dark:text-blue-400">
+                  Aranıyor...
+                </span>
+              )}
+
+          </div>
+
+          {/* SUGGESTIONS */}
+
+          {Array.isArray(
+            suggestionData
+          ) &&
+            suggestionData.length >
+              0 &&
+            query.trim().length <
+              3 && (
+              <div className="mt-5 border-t border-gray-100 pt-4 dark:border-white/[0.06]">
+
+                <div className="mb-3 flex items-center gap-2">
+
+                  <Sparkles
+                    size={14}
+                    className="text-amber-500"
+                  />
+
+                  <p className="text-xs font-semibold text-gray-500 dark:text-slate-400">
+                    Öneriler
+                  </p>
+
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+
+                  {suggestionData.map(
+                    (
+                      item
+                    ) => {
+                      const badge =
+                        getTypeBadge(
+                          item.type
+                        );
+
+                      return (
+                        <Link
+                          key={`${item.type}-${item.id}`}
+                          to={
+                            item.url
+                          }
+                          className="
+                            inline-flex
+                            items-center
+                            gap-2
+                            rounded-lg
+                            border
+                            border-gray-200
+                            bg-white
+                            px-3
+                            py-2
+                            text-sm
+                            text-gray-700
+                            transition
+                            hover:border-blue-200
+                            hover:bg-blue-50/50
+                            hover:text-blue-700
+                            dark:border-white/[0.07]
+                            dark:bg-white/[0.025]
+                            dark:text-slate-300
+                            dark:hover:border-blue-500/20
+                            dark:hover:bg-blue-500/[0.05]
+                            dark:hover:text-blue-400
+                          "
+                        >
+
+                          <Badge
+                            variant={
+                              badge.variant
+                            }
+                          >
+                            {badge.label}
+                          </Badge>
+
+                          <span>
+                            {item.label}
+                          </span>
+
+                        </Link>
+                      );
+                    }
+                  )}
+
+                </div>
+
               </div>
-            </div>
-          )}
-        </div>
+            )}
+
+        </Card.Body>
+
       </Card>
 
-      {query.length >= 2 && (
-        <>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      {/* ==================================================
+          INITIAL STATE
+      ================================================== */}
+
+      {!hasSearch && (
+        <div
+          className="
+            rounded-2xl
+            border
+            border-dashed
+            border-gray-200
+            bg-gray-50/50
+            px-6
+            py-12
+            text-center
+            dark:border-white/[0.07]
+            dark:bg-white/[0.015]
+          "
+        >
+
+          <div
+            className="
+              mx-auto
+              flex
+              h-14
+              w-14
+              items-center
+              justify-center
+              rounded-2xl
+              bg-blue-50
+              text-blue-600
+              dark:bg-blue-500/[0.08]
+              dark:text-blue-400
+            "
+          >
+            <SearchIcon size={24} />
+          </div>
+
+          <h2 className="mt-4 font-semibold text-gray-900 dark:text-white">
+            Aramaya başlayın
+          </h2>
+
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500 dark:text-slate-400">
+            Aradığınız kaydın adını, dosya numarasını, belge başlığını veya görev bilgisini yazabilirsiniz.
+          </p>
+
+        </div>
+      )}
+
+      {/* ==================================================
+          LOADING
+      ================================================== */}
+
+      {hasSearch &&
+        isLoading && (
+          <div className="flex min-h-[280px] items-center justify-center">
+            <Loader text="Kayıtlar aranıyor..." />
+          </div>
+        )}
+
+      {/* ==================================================
+          ERROR
+      ================================================== */}
+
+      {hasSearch &&
+        !isLoading &&
+        error && (
+          <Error
+            title="Arama tamamlanamadı"
+            message="Arama sırasında bir hata oluştu."
+            error={
+              error
+            }
+            onRetry={() =>
+              refetch?.()
+            }
+          />
+        )}
+
+      {/* ==================================================
+          EMPTY
+      ================================================== */}
+
+      {hasSearch &&
+        !isLoading &&
+        !error &&
+        results &&
+        !hasResults && (
+          <Empty
+            icon={
+              SearchIcon
+            }
+            title="Sonuç bulunamadı"
+            description={`"${debouncedQuery}" aramasıyla eşleşen kayıt bulunamadı.`}
+          />
+        )}
+
+      {/* ==================================================
+          RESULTS HEADER
+      ================================================== */}
+
+      {hasSearch &&
+        !isLoading &&
+        !error &&
+        hasResults && (
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+
+            <div>
+
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
+                Arama Sonuçları
+              </h2>
+
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+                “{debouncedQuery}” için{' '}
+                <span className="font-semibold text-gray-700 dark:text-slate-300">
+                  {totalResults}
+                </span>{' '}
+                sonuç bulundu
+              </p>
+
             </div>
-          ) : error ? (
-            <div className="text-center py-12 text-red-600">
-              Arama sırasında hata oluştu: {error.message}
-            </div>
-          ) : results && !hasResults ? (
-            <div className="text-center py-12 text-gray-500">
-              Sonuç bulunamadı
-            </div>
-          ) : (
-            results && (
-              <div className="space-y-4">
-                {/* Müvekkiller */}
-                {results.clients && results.clients.length > 0 && (
-                  <Card>
-                    <Card.Header>
+
+          </div>
+        )}
+
+      {/* ==================================================
+          RESULTS
+      ================================================== */}
+
+      {hasSearch &&
+        !isLoading &&
+        !error &&
+        hasResults && (
+          <div className="space-y-4">
+
+            {/* ==================================================
+                CLIENTS
+            ================================================== */}
+
+            {results.clients?.length >
+              0 && (
+              <Card>
+
+                <Card.Header>
+
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-3">
+
+                      <div
+                        className="
+                          flex
+                          h-8
+                          w-8
+                          items-center
+                          justify-center
+                          rounded-lg
+                          bg-emerald-50
+                          text-emerald-600
+                          dark:bg-emerald-500/[0.08]
+                          dark:text-emerald-400
+                        "
+                      >
+                        <UserRound size={16} />
+                      </div>
+
                       <h2 className="font-semibold text-gray-900 dark:text-white">
-                        👤 Müvekkiller ({results.clients.length})
+                        Müvekkiller
                       </h2>
-                    </Card.Header>
-                    <Card.Body>
-                      <div className="space-y-2">
-                        {results.clients.map((client) => (
-                          <Link
-                            key={client.id}
-                            to={`/clients/${client.id}`}
-                            className="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                          >
-                            <div>
-                              <p className="font-medium text-gray-900 dark:text-white">
-                                {client.name} {/* ✅ DEĞİŞTİ */}
-                              </p>
-                              {client.client_type && (
-                                <p className="text-sm text-gray-500">
-                                  {client.client_type === 'corporate' ? '🏢 Kurumsal' : '👤 Bireysel'}
-                                </p>
+
+                    </div>
+
+                    <Badge variant="default">
+                      {results.clients.length}
+                    </Badge>
+
+                  </div>
+
+                </Card.Header>
+
+                <Card.Body className="p-2">
+
+                  <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+
+                    {results.clients.map(
+                      (
+                        client
+                      ) => (
+                        <Link
+                          key={
+                            client.id
+                          }
+                          to={`/clients/${client.id}`}
+                          className="
+                            flex
+                            items-center
+                            justify-between
+                            gap-4
+                            rounded-lg
+                            px-3
+                            py-3
+                            transition
+                            hover:bg-gray-50
+                            dark:hover:bg-white/[0.025]
+                          "
+                        >
+
+                          <div className="flex min-w-0 items-center gap-3">
+
+                            <div
+                              className="
+                                flex
+                                h-9
+                                w-9
+                                shrink-0
+                                items-center
+                                justify-center
+                                rounded-lg
+                                bg-gray-100
+                                text-gray-500
+                                dark:bg-white/[0.04]
+                                dark:text-slate-400
+                              "
+                            >
+                              {client.client_type ===
+                              'corporate' ? (
+                                <Building2 size={16} />
+                              ) : (
+                                <UserRound size={16} />
                               )}
                             </div>
-                            <Badge variant={client.status === 'active' ? 'success' : 'default'}>
-                              {client.status === 'active' ? 'Aktif' : 'Pasif'}
-                            </Badge>
-                          </Link>
-                        ))}
-                      </div>
-                    </Card.Body>
-                  </Card>
-                )}
 
-                {/* Davalar */}
-                {results.cases && results.cases.length > 0 && (
-                  <Card>
-                    <Card.Header>
-                      <h2 className="font-semibold text-gray-900 dark:text-white">
-                        📁 Davalar ({results.cases.length})
-                      </h2>
-                    </Card.Header>
-                    <Card.Body>
-                      <div className="space-y-2">
-                        {results.cases.map((caseItem) => (
-                          <Link
-                            key={caseItem.id}
-                            to={`/cases/${caseItem.id}`}
-                            className="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                          >
-                            <div>
-                              <p className="font-medium text-gray-900 dark:text-white">
-                                {caseItem.title}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                {caseItem.case_number || 'Esas no yok'} - {caseItem.court_name || 'Mahkeme yok'}
-                              </p>
-                            </div>
-                            <Badge variant="info">
-                              {caseItem.status}
-                            </Badge>
-                          </Link>
-                        ))}
-                      </div>
-                    </Card.Body>
-                  </Card>
-                )}
+                            <div className="min-w-0">
 
-                {/* Belgeler */}
-                {results.documents && results.documents.length > 0 && (
-                  <Card>
-                    <Card.Header>
-                      <h2 className="font-semibold text-gray-900 dark:text-white">
-                        📄 Belgeler ({results.documents.length})
-                      </h2>
-                    </Card.Header>
-                    <Card.Body>
-                      <div className="space-y-2">
-                        {results.documents.map((doc) => (
-                          <div
-                            key={doc.id}
-                            className="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                          >
-                            <div>
-                              <p className="font-medium text-gray-900 dark:text-white">
-                                {doc.name}
+                              <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                                {client.name ||
+                                  'İsimsiz Müvekkil'}
                               </p>
-                              <p className="text-sm text-gray-500">
-                                {doc.original_name} - {(doc.file_size / 1024).toFixed(1)} KB
+
+                              <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-500">
+                                {client.client_type ===
+                                'corporate'
+                                  ? 'Kurumsal Müvekkil'
+                                  : 'Bireysel Müvekkil'}
                               </p>
+
                             </div>
-                            <a
-                              href={`${import.meta.env.VITE_API_URL}/documents/${doc.id}/preview`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline text-sm"
-                            >
-                              Görüntüle
-                            </a>
+
                           </div>
-                        ))}
-                      </div>
-                    </Card.Body>
-                  </Card>
-                )}
 
-                {/* Görevler */}
-                {results.tasks && results.tasks.length > 0 && (
-                  <Card>
-                    <Card.Header>
-                      <h2 className="font-semibold text-gray-900 dark:text-white">
-                        ✅ Görevler ({results.tasks.length})
-                      </h2>
-                    </Card.Header>
-                    <Card.Body>
-                      <div className="space-y-2">
-                        {results.tasks.map((task) => (
-                          <Link
-                            key={task.id}
-                            to={`/tasks/${task.id}`}
-                            className="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                          >
-                            <div>
-                              <p className="font-medium text-gray-900 dark:text-white">
-                                {task.title}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                {task.assignee?.first_name} {task.assignee?.last_name || 'Atanmadı'}
-                              </p>
-                            </div>
+                          <div className="flex shrink-0 items-center gap-3">
+
                             <Badge
                               variant={
-                                task.status === 'completed'
-                                  ? 'success'
-                                  : task.status === 'in_progress'
-                                  ? 'warning'
-                                  : 'default'
+                                getClientStatusVariant(
+                                  client.status
+                                )
                               }
+                              dot
                             >
-                              {task.status === 'pending'
-                                ? 'Bekliyor'
-                                : task.status === 'in_progress'
-                                ? 'Devam Ediyor'
-                                : task.status === 'completed'
-                                ? 'Tamamlandı'
-                                : 'İptal'}
+                              {getClientStatusLabel(
+                                client.status
+                              )}
                             </Badge>
-                          </Link>
-                        ))}
+
+                            <ArrowRight className="h-4 w-4 text-gray-300 dark:text-slate-600" />
+
+                          </div>
+
+                        </Link>
+                      )
+                    )}
+
+                  </div>
+
+                </Card.Body>
+
+              </Card>
+            )}
+
+            {/* ==================================================
+                CASES
+            ================================================== */}
+
+            {results.cases?.length >
+              0 && (
+              <Card>
+
+                <Card.Header>
+
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-3">
+
+                      <div
+                        className="
+                          flex
+                          h-8
+                          w-8
+                          items-center
+                          justify-center
+                          rounded-lg
+                          bg-violet-50
+                          text-violet-600
+                          dark:bg-violet-500/[0.08]
+                          dark:text-violet-400
+                        "
+                      >
+                        <FolderOpen size={16} />
                       </div>
-                    </Card.Body>
-                  </Card>
-                )}
-              </div>
-            )
-          )}
-        </>
-      )}
+
+                      <h2 className="font-semibold text-gray-900 dark:text-white">
+                        Davalar
+                      </h2>
+
+                    </div>
+
+                    <Badge variant="default">
+                      {results.cases.length}
+                    </Badge>
+
+                  </div>
+
+                </Card.Header>
+
+                <Card.Body className="p-2">
+
+                  <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+
+                    {results.cases.map(
+                      (
+                        caseItem
+                      ) => (
+                        <Link
+                          key={
+                            caseItem.id
+                          }
+                          to={`/cases/${caseItem.id}`}
+                          className="
+                            flex
+                            items-center
+                            justify-between
+                            gap-4
+                            rounded-lg
+                            px-3
+                            py-3
+                            transition
+                            hover:bg-gray-50
+                            dark:hover:bg-white/[0.025]
+                          "
+                        >
+
+                          <div className="min-w-0">
+
+                            <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                              {caseItem.title}
+                            </p>
+
+                            <p className="mt-1 truncate text-xs text-gray-500 dark:text-slate-500">
+                              {caseItem.case_number ||
+                                'Esas no yok'}
+
+                              {' · '}
+
+                              {caseItem.court_name ||
+                                'Mahkeme belirtilmemiş'}
+                            </p>
+
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-3">
+
+                            <Badge
+                              variant={
+                                getCaseStatusVariant(
+                                  caseItem.status
+                                )
+                              }
+                              dot
+                            >
+                              {CASE_STATUS_LABELS[
+                                caseItem.status
+                              ] ||
+                                caseItem.status ||
+                                '-'}
+                            </Badge>
+
+                            <ArrowRight className="h-4 w-4 text-gray-300 dark:text-slate-600" />
+
+                          </div>
+
+                        </Link>
+                      )
+                    )}
+
+                  </div>
+
+                </Card.Body>
+
+              </Card>
+            )}
+
+            {/* ==================================================
+                DOCUMENTS
+            ================================================== */}
+
+            {results.documents?.length >
+              0 && (
+              <Card>
+
+                <Card.Header>
+
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-3">
+
+                      <div
+                        className="
+                          flex
+                          h-8
+                          w-8
+                          items-center
+                          justify-center
+                          rounded-lg
+                          bg-blue-50
+                          text-blue-600
+                          dark:bg-blue-500/[0.08]
+                          dark:text-blue-400
+                        "
+                      >
+                        <FileText size={16} />
+                      </div>
+
+                      <h2 className="font-semibold text-gray-900 dark:text-white">
+                        Belgeler
+                      </h2>
+
+                    </div>
+
+                    <Badge variant="default">
+                      {results.documents.length}
+                    </Badge>
+
+                  </div>
+
+                </Card.Header>
+
+                <Card.Body className="p-2">
+
+                  <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+
+                    {results.documents.map(
+                      (
+                        doc
+                      ) => (
+                        <Link
+                          key={
+                            doc.id
+                          }
+                          to={`/documents/${doc.id}`}
+                          className="
+                            flex
+                            items-center
+                            justify-between
+                            gap-4
+                            rounded-lg
+                            px-3
+                            py-3
+                            transition
+                            hover:bg-gray-50
+                            dark:hover:bg-white/[0.025]
+                          "
+                        >
+
+                          <div className="flex min-w-0 items-center gap-3">
+
+                            <div
+                              className="
+                                flex
+                                h-9
+                                w-9
+                                shrink-0
+                                items-center
+                                justify-center
+                                rounded-lg
+                                bg-gray-100
+                                text-gray-500
+                                dark:bg-white/[0.04]
+                                dark:text-slate-400
+                              "
+                            >
+                              <FileText size={16} />
+                            </div>
+
+                            <div className="min-w-0">
+
+                              <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                                {doc.name}
+                              </p>
+
+                              <p className="mt-1 truncate text-xs text-gray-500 dark:text-slate-500">
+                                {doc.original_name ||
+                                  'Dosya adı yok'}
+
+                                {' · '}
+
+                                {formatFileSize(
+                                  doc.file_size
+                                )}
+                              </p>
+
+                            </div>
+
+                          </div>
+
+                          <ArrowRight className="h-4 w-4 shrink-0 text-gray-300 dark:text-slate-600" />
+
+                        </Link>
+                      )
+                    )}
+
+                  </div>
+
+                </Card.Body>
+
+              </Card>
+            )}
+
+            {/* ==================================================
+                TASKS
+            ================================================== */}
+
+            {results.tasks?.length >
+              0 && (
+              <Card>
+
+                <Card.Header>
+
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-3">
+
+                      <div
+                        className="
+                          flex
+                          h-8
+                          w-8
+                          items-center
+                          justify-center
+                          rounded-lg
+                          bg-amber-50
+                          text-amber-600
+                          dark:bg-amber-500/[0.08]
+                          dark:text-amber-400
+                        "
+                      >
+                        <CheckSquare size={16} />
+                      </div>
+
+                      <h2 className="font-semibold text-gray-900 dark:text-white">
+                        Görevler
+                      </h2>
+
+                    </div>
+
+                    <Badge variant="default">
+                      {results.tasks.length}
+                    </Badge>
+
+                  </div>
+
+                </Card.Header>
+
+                <Card.Body className="p-2">
+
+                  <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+
+                    {results.tasks.map(
+                      (
+                        task
+                      ) => (
+                        <Link
+                          key={
+                            task.id
+                          }
+                          to={`/tasks/${task.id}`}
+                          className="
+                            flex
+                            items-center
+                            justify-between
+                            gap-4
+                            rounded-lg
+                            px-3
+                            py-3
+                            transition
+                            hover:bg-gray-50
+                            dark:hover:bg-white/[0.025]
+                          "
+                        >
+
+                          <div className="min-w-0">
+
+                            <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                              {task.title}
+                            </p>
+
+                            <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+                              Atanan:{' '}
+                              {getAssigneeName(
+                                task
+                              )}
+                            </p>
+
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-3">
+
+                            <Badge
+                              variant={
+                                getTaskStatusVariant(
+                                  task.status
+                                )
+                              }
+                              dot
+                            >
+                              {getTaskStatusLabel(
+                                task.status
+                              )}
+                            </Badge>
+
+                            <ArrowRight className="h-4 w-4 text-gray-300 dark:text-slate-600" />
+
+                          </div>
+
+                        </Link>
+                      )
+                    )}
+
+                  </div>
+
+                </Card.Body>
+
+              </Card>
+            )}
+
+          </div>
+        )}
+
     </div>
   );
 };
