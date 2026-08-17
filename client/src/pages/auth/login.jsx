@@ -1,176 +1,562 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useLogin } from '../../features/auth/auth.hook.js';
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import {
+  useState,
+} from 'react';
+
+import {
+  Link,
+  useNavigate,
+} from 'react-router-dom';
+
+import {
+  Eye,
+  EyeOff,
+  LockKeyhole,
+  LogIn,
+  Mail,
+} from 'lucide-react';
+
+import {
+  useLogin,
+} from '../../features/auth/auth.hook.js';
+
+import Button from '../../components/ui/Button.jsx';
+
+// ======================================================
+// COMPONENT
+// ======================================================
 
 const Login = () => {
-  const navigate = useNavigate();
-  const login = useLogin();
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
-  const [errors, setErrors] = useState({});
+  const navigate =
+    useNavigate();
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: '' }));
+  const login =
+    useLogin();
+
+  const [
+    showPassword,
+    setShowPassword,
+  ] =
+    useState(false);
+
+  const [
+    formData,
+    setFormData,
+  ] =
+    useState({
+      email: '',
+      password: '',
+    });
+
+  const [
+    errors,
+    setErrors,
+  ] =
+    useState({});
+
+  // ======================================================
+  // CHANGE
+  // ======================================================
+
+  const handleChange = (
+    event
+  ) => {
+    const {
+      name,
+      value,
+    } =
+      event.target;
+
+    setFormData(
+      (
+        current
+      ) => ({
+        ...current,
+
+        [name]:
+          value,
+      })
+    );
+
+    if (
+      errors[name]
+    ) {
+      setErrors(
+        (
+          current
+        ) => ({
+          ...current,
+
+          [name]:
+            '',
+        })
+      );
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const newErrors = {};
-    if (!formData.email) newErrors.email = 'E-posta adresi gerekli';
-    if (!formData.password) newErrors.password = 'Şifre gerekli';
-    
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
+  // ======================================================
+  // VALIDATION
+  // ======================================================
 
-    try {
-      await login.mutateAsync(formData);
-      navigate('/dashboard');
-    } catch (error) {
-      // Error handled by hook
-    }
-  };
+  const validateForm =
+    () => {
+      const nextErrors =
+        {};
+
+      const email =
+        formData.email
+          .trim()
+          .toLowerCase();
+
+      if (!email) {
+        nextErrors.email =
+          'E-posta adresi gereklidir';
+      } else if (
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+          email
+        )
+      ) {
+        nextErrors.email =
+          'Geçerli bir e-posta adresi girin';
+      }
+
+      if (
+        !formData.password
+      ) {
+        nextErrors.password =
+          'Şifre gereklidir';
+      }
+
+      setErrors(
+        nextErrors
+      );
+
+      return (
+        Object.keys(
+          nextErrors
+        ).length ===
+        0
+      );
+    };
+
+  // ======================================================
+  // SUBMIT
+  // ======================================================
+
+  const handleSubmit =
+    async (
+      event
+    ) => {
+      event.preventDefault();
+
+      if (
+        login.isPending
+      ) {
+        return;
+      }
+
+      if (
+        !validateForm()
+      ) {
+        return;
+      }
+
+      try {
+        await login.mutateAsync({
+          email:
+            formData.email
+              .trim()
+              .toLowerCase(),
+
+          password:
+            formData.password,
+        });
+
+        navigate(
+          '/dashboard',
+          {
+            replace:
+              true,
+          }
+        );
+      } catch {
+        /*
+         * Hata mesajını auth hook yönetiyor.
+         */
+      }
+    };
+
+  // ======================================================
+  // RENDER
+  // ======================================================
 
   return (
     <div className="w-full">
-      {/* Başlık */}
-      <div className="hidden lg:block mb-8">
-        <h2 className="text-2xl font-bold text-white">Hoş Geldiniz</h2>
-        <p className="text-sm text-blue-300/50">Hesabınıza giriş yapın</p>
+
+      {/* HEADER */}
+
+      <div className="mb-8">
+
+        <p
+          className="
+            text-[10px]
+            font-bold
+            uppercase
+            tracking-[0.16em]
+            text-blue-600
+            dark:text-blue-400
+          "
+        >
+          Güvenli Giriş
+        </p>
+
+        <h2
+          className="
+            mt-2
+            text-2xl
+            font-semibold
+            tracking-[-0.035em]
+            text-gray-900
+            dark:text-white
+            sm:text-[28px]
+          "
+        >
+          Çalışma alanınıza giriş yapın
+        </h2>
+
+        <p
+          className="
+            mt-2
+            text-sm
+            leading-6
+            text-gray-500
+            dark:text-slate-400
+          "
+        >
+          Derkenar hesabınızla devam edin.
+        </p>
+
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Email */}
+      {/* FORM */}
+
+      <form
+        onSubmit={
+          handleSubmit
+        }
+        className="space-y-5"
+      >
+
+        {/* EMAIL */}
+
         <div>
-          <label className="block text-sm font-medium text-blue-200/80 mb-1.5">
+
+          <label
+            htmlFor="login-email"
+            className="
+              mb-1.5
+              block
+              text-sm
+              font-medium
+              text-gray-700
+              dark:text-slate-300
+            "
+          >
             E-posta Adresi
           </label>
+
           <div className="relative">
-            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300/40" />
+
+            <Mail
+              size={17}
+              className="
+                pointer-events-none
+                absolute
+                left-3.5
+                top-1/2
+                -translate-y-1/2
+                text-gray-400
+                dark:text-slate-500
+              "
+            />
+
             <input
+              id="login-email"
               type="email"
               name="email"
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="ornek@firma.com"
-              className="w-full h-12 pl-11 pr-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-blue-300/30 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
+              value={
+                formData.email
+              }
+              onChange={
+                handleChange
+              }
+              autoComplete="email"
+              autoCapitalize="none"
+              spellCheck={false}
+              disabled={
+                login.isPending
+              }
+              placeholder="adiniz@hukuk.com"
+              aria-invalid={
+                Boolean(
+                  errors.email
+                )
+              }
+              className={`
+                h-11
+                w-full
+                rounded-lg
+                border
+                bg-white
+                pl-10
+                pr-3.5
+                text-sm
+                text-gray-900
+                shadow-sm
+                outline-none
+                transition-all
+                placeholder:text-gray-400
+
+                dark:bg-white/[0.035]
+                dark:text-white
+                dark:placeholder:text-slate-500
+
+                ${
+                  errors.email
+                    ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 dark:border-red-500/50'
+                    : 'border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 dark:border-white/[0.08] dark:hover:border-white/[0.14] dark:focus:border-blue-500/60'
+                }
+
+                disabled:cursor-not-allowed
+                disabled:opacity-60
+              `}
             />
+
           </div>
+
           {errors.email && (
-            <p className="mt-1.5 text-sm text-red-400">{errors.email}</p>
+            <p className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+              {errors.email}
+            </p>
           )}
+
         </div>
 
-        {/* Password */}
+        {/* PASSWORD */}
+
         <div>
-          <label className="block text-sm font-medium text-blue-200/80 mb-1.5">
-            Şifre
-          </label>
+
+          <div className="mb-1.5 flex items-center justify-between">
+
+            <label
+              htmlFor="login-password"
+              className="
+                text-sm
+                font-medium
+                text-gray-700
+                dark:text-slate-300
+              "
+            >
+              Şifre
+            </label>
+
+            <Link
+              to="/forgot-password"
+              className="
+                text-xs
+                font-semibold
+                text-blue-600
+                transition
+                hover:text-blue-700
+                dark:text-blue-400
+                dark:hover:text-blue-300
+              "
+            >
+              Şifremi unuttum
+            </Link>
+
+          </div>
+
           <div className="relative">
-            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300/40" />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="••••••••"
-              className="w-full h-12 pl-11 pr-12 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-blue-300/30 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
+
+            <LockKeyhole
+              size={17}
+              className="
+                pointer-events-none
+                absolute
+                left-3.5
+                top-1/2
+                -translate-y-1/2
+                text-gray-400
+                dark:text-slate-500
+              "
             />
+
+            <input
+              id="login-password"
+              type={
+                showPassword
+                  ? 'text'
+                  : 'password'
+              }
+              name="password"
+              value={
+                formData.password
+              }
+              onChange={
+                handleChange
+              }
+              autoComplete="current-password"
+              disabled={
+                login.isPending
+              }
+              placeholder="Şifrenizi girin"
+              aria-invalid={
+                Boolean(
+                  errors.password
+                )
+              }
+              className={`
+                h-11
+                w-full
+                rounded-lg
+                border
+                bg-white
+                pl-10
+                pr-11
+                text-sm
+                text-gray-900
+                shadow-sm
+                outline-none
+                transition-all
+                placeholder:text-gray-400
+
+                dark:bg-white/[0.035]
+                dark:text-white
+                dark:placeholder:text-slate-500
+
+                ${
+                  errors.password
+                    ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 dark:border-red-500/50'
+                    : 'border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 dark:border-white/[0.08] dark:hover:border-white/[0.14] dark:focus:border-blue-500/60'
+                }
+
+                disabled:cursor-not-allowed
+                disabled:opacity-60
+              `}
+            />
+
             <button
               type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-300/40 hover:text-blue-300/70 transition-colors"
+              onClick={() =>
+                setShowPassword(
+                  (
+                    current
+                  ) =>
+                    !current
+                )
+              }
+              disabled={
+                login.isPending
+              }
+              className="
+                absolute
+                right-2
+                top-1/2
+                inline-flex
+                h-8
+                w-8
+                -translate-y-1/2
+                items-center
+                justify-center
+                rounded-lg
+                text-gray-400
+                transition
+                hover:bg-gray-100
+                hover:text-gray-700
+                disabled:opacity-50
+                dark:text-slate-500
+                dark:hover:bg-white/[0.05]
+                dark:hover:text-white
+              "
+              aria-label={
+                showPassword
+                  ? 'Şifreyi gizle'
+                  : 'Şifreyi göster'
+              }
             >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showPassword ? (
+                <EyeOff
+                  size={17}
+                />
+              ) : (
+                <Eye
+                  size={17}
+                />
+              )}
             </button>
+
           </div>
+
           {errors.password && (
-            <p className="mt-1.5 text-sm text-red-400">{errors.password}</p>
+            <p className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+              {errors.password}
+            </p>
           )}
+
         </div>
 
-        {/* Remember Me & Forgot Password */}
-        <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2 cursor-pointer group">
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="w-4 h-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0 cursor-pointer"
-            />
-            <span className="text-sm text-blue-300/60 group-hover:text-blue-300/80 transition-colors">
-              Beni Hatırla
-            </span>
-          </label>
-          <Link
-            to="/forgot-password"
-            className="text-sm text-blue-400/70 hover:text-blue-400 transition-colors"
+        {/* SUBMIT */}
+
+        <div className="pt-1">
+
+          <Button
+            type="submit"
+            loading={
+              login.isPending
+            }
+            disabled={
+              login.isPending
+            }
+            className="w-full"
           >
-            Şifremi Unuttum
-          </Link>
+            {!login.isPending && (
+              <LogIn className="h-4 w-4" />
+            )}
+
+            {login.isPending
+              ? 'Giriş yapılıyor'
+              : 'Giriş Yap'}
+          </Button>
+
         </div>
 
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={login.isPending}
-          className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all duration-200 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-        >
-          {login.isPending ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Giriş yapılıyor...
-            </span>
-          ) : (
-            'Giriş Yap'
-          )}
-        </button>
-
-        {/* Divider */}
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-white/5"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-[#0f2847] text-blue-300/30">veya</span>
-          </div>
-        </div>
-
-        {/* Google Login */}
-        <button
-          type="button"
-          className="w-full h-12 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white font-medium flex items-center justify-center gap-3 transition-all duration-200 hover:scale-[1.02]"
-        >
-          <svg className="w-5 h-5" viewBox="0 0 24 24">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-          </svg>
-          Google ile Giriş Yap
-        </button>
-
-        {/* Register Link */}
-        <p className="text-center text-sm text-blue-300/50">
-          Hesabın yok mu?{' '}
-          <Link to="/register" className="text-blue-400 hover:text-blue-300 font-semibold transition-colors">
-            Kayıt Ol
-          </Link>
-        </p>
       </form>
+
+      {/* FOOTER */}
+
+      <div
+        className="
+          mt-8
+          border-t
+          border-gray-200
+          pt-6
+          dark:border-white/[0.07]
+        "
+      >
+        <p
+          className="
+            text-center
+            text-xs
+            leading-5
+            text-gray-500
+            dark:text-slate-500
+          "
+        >
+          Hesabınızla ilgili sorun yaşıyorsanız
+          büro yöneticinizle iletişime geçin.
+        </p>
+      </div>
+
     </div>
   );
 };

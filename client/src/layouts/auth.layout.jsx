@@ -1,129 +1,476 @@
-import { Outlet } from 'react-router-dom';
+import {
+  Outlet,
+} from 'react-router-dom';
+
+import {
+  BrainCircuit,
+  BriefcaseBusiness,
+  FileText,
+  Gavel,
+  Landmark,
+  ShieldCheck,
+} from 'lucide-react';
+
+const features = [
+  {
+    icon: BriefcaseBusiness,
+    title: 'Dosya ve Müvekkil Yönetimi',
+    description:
+      'Dava, müvekkil ve ilişkili kayıtları tek çalışma alanında yönetin.',
+  },
+  {
+    icon: FileText,
+    title: 'Belge Yönetimi',
+    description:
+      'Dosyaya bağlı belgelere hızlı erişin ve süreçleri düzenli tutun.',
+  },
+  {
+    icon: BrainCircuit,
+    title: 'AI Destekli Çalışma',
+    description:
+      'Dosya analizi, eksik bilgi tespiti ve akıllı çalışma araçlarından yararlanın.',
+  },
+  {
+    icon: Landmark,
+    title: 'Finans ve Tahsilat',
+    description:
+      'Ücret, ödeme planı, tahsilat ve masraf süreçlerini takip edin.',
+  },
+];
 
 const AuthLayout = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a1628] via-[#0f2847] to-[#0a1628] flex items-center justify-center p-4 relative overflow-hidden">
-      
-      {/* Arka Plan Desenleri */}
-      <div className="absolute inset-0 opacity-5">
-        <div className="absolute top-0 left-0 w-full h-full bg-[url('/pattern.svg')] bg-repeat"></div>
-      </div>
-      
-      {/* Sağ Üst Köşe Işık */}
-      <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl"></div>
-      
-      {/* Sol Alt Köşe Işık */}
-      <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl"></div>
+    <div
+      className="
+        relative
+        flex
+        min-h-screen
+        items-center
+        justify-center
+        overflow-hidden
+        bg-[#06152e]
+        p-4
+        sm:p-6
+        lg:p-8
+      "
+    >
+      {/* ==================================================
+          BACKGROUND
+      ================================================== */}
 
-      <div className="relative z-10 w-full max-w-6xl flex flex-col lg:flex-row bg-white/5 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/10 overflow-hidden">
-        
-        {/* SOL - Branding */}
-        <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-gradient-to-br from-[#0d2240] to-[#061942] relative overflow-hidden">
-          
-          {/* Terazi Filigranı */}
-          <div className="absolute -bottom-20 -right-20 text-9xl text-white/5">⚖️</div>
-          
-          {/* Nokta Deseni */}
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute top-10 left-10 w-2 h-2 bg-white/20 rounded-full"></div>
-            <div className="absolute top-20 right-20 w-3 h-3 bg-white/20 rounded-full"></div>
-            <div className="absolute bottom-32 left-32 w-2 h-2 bg-white/20 rounded-full"></div>
-            <div className="absolute bottom-20 right-10 w-4 h-4 bg-white/20 rounded-full"></div>
-            <div className="absolute top-1/2 left-1/4 w-2 h-2 bg-white/20 rounded-full"></div>
-          </div>
+      <div
+        className="
+          pointer-events-none
+          absolute
+          inset-0
+          bg-[radial-gradient(circle_at_15%_15%,rgba(37,99,235,0.13),transparent_28%),radial-gradient(circle_at_85%_80%,rgba(245,158,11,0.07),transparent_25%)]
+        "
+      />
 
-          {/* Logo ve Başlık */}
-          <div>
-            <div className="flex items-center gap-4 mb-8">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-yellow-400/20 to-yellow-500/10 flex items-center justify-center border border-yellow-400/20 shadow-lg shadow-yellow-500/10">
-                <span className="text-3xl">⚖️</span>
+      <div
+        className="
+          pointer-events-none
+          absolute
+          inset-0
+          opacity-[0.035]
+          [background-image:linear-gradient(rgba(255,255,255,0.4)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.4)_1px,transparent_1px)]
+          [background-size:40px_40px]
+        "
+      />
+
+      {/* ==================================================
+          CONTAINER
+      ================================================== */}
+
+      <div
+        className="
+          relative
+          z-10
+          grid
+          w-full
+          max-w-[1180px]
+          overflow-hidden
+          rounded-[28px]
+          border
+          border-white/[0.08]
+          bg-[#081b3d]
+          shadow-[0_35px_100px_rgba(0,0,0,0.35)]
+          lg:grid-cols-[1.05fr_0.95fr]
+        "
+      >
+        {/* ==================================================
+            LEFT / BRAND
+        ================================================== */}
+
+        <section
+          className="
+            relative
+            hidden
+            min-h-[700px]
+            overflow-hidden
+            border-r
+            border-white/[0.06]
+            px-10
+            py-10
+            lg:flex
+            lg:flex-col
+            lg:justify-between
+            xl:px-12
+            xl:py-12
+          "
+        >
+          {/* background decoration */}
+
+          <div
+            className="
+              pointer-events-none
+              absolute
+              -right-24
+              -top-24
+              h-80
+              w-80
+              rounded-full
+              bg-blue-500/[0.08]
+              blur-3xl
+            "
+          />
+
+          <div
+            className="
+              pointer-events-none
+              absolute
+              -bottom-24
+              -left-20
+              h-72
+              w-72
+              rounded-full
+              bg-amber-400/[0.035]
+              blur-3xl
+            "
+          />
+
+          {/* BRAND */}
+
+          <div className="relative">
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  relative
+                  flex
+                  h-11
+                  w-11
+                  items-center
+                  justify-center
+                  rounded-xl
+                  border
+                  border-amber-400/20
+                  bg-amber-400/[0.08]
+                "
+              >
+                <Gavel
+                  size={22}
+                  className="text-amber-300"
+                />
+
+                <span
+                  className="
+                    absolute
+                    -right-1
+                    -top-1
+                    h-2
+                    w-2
+                    rounded-full
+                    border-2
+                    border-[#081b3d]
+                    bg-emerald-400
+                  "
+                />
               </div>
+
               <div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">Derkenar</h1>
-                <p className="text-sm text-blue-300/60 font-medium tracking-wider">Hukuk Büro Yönetim Sistemi</p>
+
+                <h1
+                  className="
+                    text-xl
+                    font-bold
+                    tracking-[-0.03em]
+                    text-white
+                  "
+                >
+                  Derkenar
+                </h1>
+
+                <p
+                  className="
+                    mt-0.5
+                    text-[9px]
+                    font-semibold
+                    uppercase
+                    tracking-[0.18em]
+                    text-slate-500
+                  "
+                >
+                  Hukuk Büro Yönetimi
+                </p>
+
               </div>
+
             </div>
 
-            <h2 className="text-4xl font-bold text-white leading-tight mb-4">
-              Hukuk büronuzu<br />
-              <span className="text-blue-400">tek platformda yönetin</span>
-            </h2>
-            <p className="text-blue-300/60 text-lg">
-              Müvekkil, dava, belge ve finans yönetimini bir araya getiren akıllı sistem.
+            <div className="mt-14 max-w-lg">
+
+              <p
+                className="
+                  text-[11px]
+                  font-semibold
+                  uppercase
+                  tracking-[0.16em]
+                  text-blue-400
+                "
+              >
+                Büro çalışma alanı
+              </p>
+
+              <h2
+                className="
+                  mt-4
+                  text-4xl
+                  font-semibold
+                  leading-[1.15]
+                  tracking-[-0.045em]
+                  text-white
+                  xl:text-[44px]
+                "
+              >
+                Hukuki süreçlerinizi
+                <span className="block text-slate-400">
+                  tek merkezden yönetin.
+                </span>
+              </h2>
+
+              <p
+                className="
+                  mt-5
+                  max-w-md
+                  text-[15px]
+                  leading-7
+                  text-slate-400
+                "
+              >
+                Dosyadan müvekkile, duruşmadan belgeye kadar
+                büronuzun günlük operasyonunu daha düzenli,
+                izlenebilir ve erişilebilir hale getirin.
+              </p>
+
+            </div>
+
+          </div>
+
+          {/* FEATURES */}
+
+          <div className="relative space-y-4">
+
+            {features.map(
+              (
+                feature
+              ) => {
+                const Icon =
+                  feature.icon;
+
+                return (
+                  <div
+                    key={
+                      feature.title
+                    }
+                    className="
+                      flex
+                      items-start
+                      gap-3.5
+                      rounded-xl
+                      border
+                      border-white/[0.05]
+                      bg-white/[0.025]
+                      px-4
+                      py-3.5
+                    "
+                  >
+                    <div
+                      className="
+                        flex
+                        h-9
+                        w-9
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-lg
+                        bg-blue-500/[0.08]
+                        text-blue-300
+                      "
+                    >
+                      <Icon
+                        size={17}
+                      />
+                    </div>
+
+                    <div>
+
+                      <p
+                        className="
+                          text-sm
+                          font-semibold
+                          text-slate-100
+                        "
+                      >
+                        {feature.title}
+                      </p>
+
+                      <p
+                        className="
+                          mt-1
+                          text-xs
+                          leading-5
+                          text-slate-500
+                        "
+                      >
+                        {feature.description}
+                      </p>
+
+                    </div>
+
+                  </div>
+                );
+              }
+            )}
+
+          </div>
+
+          {/* FOOTER */}
+
+          <div
+            className="
+              relative
+              flex
+              items-center
+              gap-2
+              border-t
+              border-white/[0.06]
+              pt-6
+            "
+          >
+            <ShieldCheck
+              size={15}
+              className="text-emerald-400"
+            />
+
+            <p
+              className="
+                text-[11px]
+                font-medium
+                text-slate-500
+              "
+            >
+              Güvenli hukuk bürosu çalışma alanı
             </p>
+
           </div>
 
-          {/* Özellikler */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-4 text-blue-200/80">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                <span className="text-lg">👥</span>
-              </div>
-              <div>
-                <p className="font-semibold text-white">Müvekkil Yönetimi</p>
-                <p className="text-sm text-blue-300/50">Tüm müvekkillerinizi tek yerden takip edin</p>
-              </div>
-            </div>
+        </section>
 
-            <div className="flex items-center gap-4 text-blue-200/80">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                <span className="text-lg">📄</span>
-              </div>
-              <div>
-                <p className="font-semibold text-white">Akıllı Belge Yönetimi</p>
-                <p className="text-sm text-blue-300/50">Belgelerinizi organize edin, anında erişin</p>
-              </div>
-            </div>
+        {/* ==================================================
+            RIGHT / AUTH FORM
+        ================================================== */}
 
-            <div className="flex items-center gap-4 text-blue-200/80">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                <span className="text-lg">🤖</span>
-              </div>
-              <div>
-                <p className="font-semibold text-white">Yapay Zeka Destekli Asistan</p>
-                <p className="text-sm text-blue-300/50">Akıllı öneriler ve otomatik analiz</p>
-              </div>
-            </div>
+        <section
+          className="
+            relative
+            flex
+            min-h-[620px]
+            items-center
+            justify-center
+            bg-[#f8fafc]
+            px-5
+            py-10
+            dark:bg-[#09172b]
+            sm:px-8
+            lg:min-h-[700px]
+            lg:px-10
+            xl:px-14
+          "
+        >
+          <div
+            className="
+              w-full
+              max-w-[420px]
+            "
+          >
+            {/* MOBILE BRAND */}
 
-            <div className="flex items-center gap-4 text-blue-200/80">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                <span className="text-lg">💰</span>
-              </div>
-              <div>
-                <p className="font-semibold text-white">Finans ve Tahsilat Takibi</p>
-                <p className="text-sm text-blue-300/50">Ödemeleri ve giderleri kolayca yönetin</p>
-              </div>
-            </div>
-          </div>
+            <div className="mb-10 lg:hidden">
 
-          {/* Alt Kısım */}
-          <div className="pt-8 border-t border-white/5">
-            <p className="text-sm text-blue-300/40 italic">
-              "Hukuk bir sanattır, biz yazılımla güçlendiririz."
-            </p>
-          </div>
-        </div>
+              <div className="flex items-center gap-3">
 
-        {/* SAĞ - Login Formu */}
-        <div className="w-full lg:w-1/2 p-8 lg:p-12 flex items-center justify-center">
-          <div className="w-full max-w-md">
-            <div className="lg:hidden text-center mb-8">
-              <div className="flex items-center justify-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-400/20 to-yellow-500/10 flex items-center justify-center border border-yellow-400/20">
-                  <span className="text-2xl">⚖️</span>
+                <div
+                  className="
+                    flex
+                    h-10
+                    w-10
+                    items-center
+                    justify-center
+                    rounded-xl
+                    border
+                    border-amber-400/20
+                    bg-amber-400/[0.08]
+                  "
+                >
+                  <Gavel
+                    size={20}
+                    className="text-amber-400"
+                  />
                 </div>
-                <div className="text-left">
-                  <h2 className="text-xl font-bold text-white">Derkenar</h2>
-                  <p className="text-xs text-blue-300/50 font-medium">Hukuk Büro Yönetim Sistemi</p>
+
+                <div>
+
+                  <h1
+                    className="
+                      text-lg
+                      font-bold
+                      tracking-[-0.03em]
+                      text-gray-900
+                      dark:text-white
+                    "
+                  >
+                    Derkenar
+                  </h1>
+
+                  <p
+                    className="
+                      text-[9px]
+                      font-semibold
+                      uppercase
+                      tracking-[0.16em]
+                      text-gray-400
+                      dark:text-slate-500
+                    "
+                  >
+                    Hukuk Büro Yönetimi
+                  </p>
+
                 </div>
+
               </div>
-              <h3 className="text-lg font-semibold text-white">Hoş Geldiniz</h3>
-              <p className="text-sm text-blue-300/50">Hesabınıza giriş yapın</p>
+
             </div>
+
+            {/* FORM */}
 
             <Outlet />
+
           </div>
-        </div>
+
+        </section>
+
       </div>
     </div>
   );

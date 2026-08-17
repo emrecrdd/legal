@@ -1,9 +1,19 @@
-import { Outlet } from 'react-router-dom';
+import {
+  Outlet,
+} from 'react-router-dom';
 
 const BlankLayout = () => {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <main className="flex-1">
+    <div
+      className="
+        min-h-screen
+        bg-[#f6f8fb]
+        text-gray-900
+        dark:bg-[#071426]
+        dark:text-white
+      "
+    >
+      <main className="min-h-screen">
         <Outlet />
       </main>
     </div>

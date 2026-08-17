@@ -1,70 +1,221 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
-import { Mail, ArrowLeft, CheckCircle, Gavel } from 'lucide-react';
+import {
+  useState,
+} from 'react';
+
+import {
+  Link,
+  useNavigate,
+} from 'react-router-dom';
+
+import {
+  useMutation,
+} from '@tanstack/react-query';
+
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Mail,
+  Send,
+} from 'lucide-react';
+
 import authApi from '../../features/auth/auth.api.js';
+
+import Button from '../../components/ui/Button.jsx';
+
 import toast from 'react-hot-toast';
 
 const ForgotPassword = () => {
-  const navigate = useNavigate();
+  const navigate =
+    useNavigate();
 
-  const [email, setEmail] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [
+    email,
+    setEmail,
+  ] =
+    useState('');
 
-  const mutation = useMutation({
-    mutationFn: (email) => authApi.forgotPassword(email),
+  const [
+    error,
+    setError,
+  ] =
+    useState('');
 
-    onSuccess: () => {
-      setSubmitted(true);
-      toast.success('Şifre sıfırlama bağlantısı gönderildi.');
-    },
+  const [
+    submitted,
+    setSubmitted,
+  ] =
+    useState(false);
 
-    onError: (error) => {
-      toast.error(
-        error.response?.data?.message || 'Bir hata oluştu.'
-      );
-    },
-  });
+  const mutation =
+    useMutation({
+      mutationFn: (
+        emailAddress
+      ) =>
+        authApi.forgotPassword(
+          emailAddress
+        ),
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+      onSuccess: () => {
+        setSubmitted(
+          true
+        );
 
-    if (!email) {
-      toast.error('Lütfen e-posta adresinizi girin.');
+        toast.success(
+          'Şifre sıfırlama bağlantısı gönderildi'
+        );
+      },
+
+      onError: (
+        requestError
+      ) => {
+        toast.error(
+          requestError
+            ?.response
+            ?.data
+            ?.message ||
+          requestError?.message ||
+          'Bağlantı gönderilemedi'
+        );
+      },
+    });
+
+  const handleSubmit = (
+    event
+  ) => {
+    event.preventDefault();
+
+    if (
+      mutation.isPending
+    ) {
       return;
     }
 
-    mutation.mutate(email);
+    const normalizedEmail =
+      email
+        .trim()
+        .toLowerCase();
+
+    if (!normalizedEmail) {
+      setError(
+        'E-posta adresi gereklidir'
+      );
+
+      return;
+    }
+
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        normalizedEmail
+      )
+    ) {
+      setError(
+        'Geçerli bir e-posta adresi girin'
+      );
+
+      return;
+    }
+
+    setError('');
+
+    mutation.mutate(
+      normalizedEmail
+    );
   };
 
-  if (submitted) {
+  if (
+    submitted
+  ) {
     return (
-      <div className="w-full bg-white rounded-3xl shadow-2xl border border-gray-100 p-8 lg:p-10">
+      <div className="w-full">
 
-        <div className="text-center">
+        <div
+          className="
+            flex
+            h-12
+            w-12
+            items-center
+            justify-center
+            rounded-xl
+            bg-emerald-50
+            text-emerald-600
+            dark:bg-emerald-500/[0.08]
+            dark:text-emerald-400
+          "
+        >
+          <CheckCircle2 size={22} />
+        </div>
 
-          <div className="w-24 h-24 rounded-full bg-green-100 flex items-center justify-center mx-auto">
-            <CheckCircle size={54} className="text-green-600" />
-          </div>
+        <p
+          className="
+            mt-5
+            text-[10px]
+            font-bold
+            uppercase
+            tracking-[0.16em]
+            text-emerald-600
+            dark:text-emerald-400
+          "
+        >
+          Bağlantı Gönderildi
+        </p>
 
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            Mail Gönderildi
-          </h2>
+        <h2
+          className="
+            mt-2
+            text-2xl
+            font-semibold
+            tracking-[-0.035em]
+            text-gray-900
+            dark:text-white
+            sm:text-[28px]
+          "
+        >
+          E-posta kutunuzu kontrol edin
+        </h2>
 
-          <p className="mt-4 text-gray-500">
-            Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.
-          </p>
+        <p
+          className="
+            mt-3
+            text-sm
+            leading-6
+            text-gray-500
+            dark:text-slate-400
+          "
+        >
+          Şifre sıfırlama bağlantısını
+          <span className="font-semibold text-gray-700 dark:text-slate-300">
+            {' '}
+            {email}
+          </span>
+          {' '}
+          adresine gönderdik.
+        </p>
 
-          <p className="mt-2 text-sm text-gray-400">
-            Gelen kutunuzu ve spam klasörünüzü kontrol etmeyi unutmayın.
-          </p>
+        <p
+          className="
+            mt-2
+            text-xs
+            leading-5
+            text-gray-400
+            dark:text-slate-500
+          "
+        >
+          E-posta birkaç dakika içinde görünmezse spam veya gereksiz klasörünü de kontrol edin.
+        </p>
 
-          <button
-            onClick={() => navigate('/login')}
-            className="mt-8 w-full h-14 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold hover:from-blue-700 hover:to-blue-800 transition"
+        <div className="mt-7">
+
+          <Button
+            type="button"
+            className="w-full"
+            onClick={() =>
+              navigate(
+                '/login'
+              )
+            }
           >
-            Giriş Sayfasına Dön
-          </button>
+            Giriş Ekranına Dön
+          </Button>
 
         </div>
 
@@ -73,75 +224,236 @@ const ForgotPassword = () => {
   }
 
   return (
-    <div className="w-full bg-white rounded-3xl shadow-2xl border border-gray-100 p-8 lg:p-10">
+    <div className="w-full">
 
-      <div className="text-center mb-8">
+      {/* HEADER */}
 
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#0B2F75] to-[#1547B8] flex items-center justify-center mx-auto shadow-lg">
-          <Gavel size={40} className="text-yellow-400" />
+      <div className="mb-8">
+
+        <div
+          className="
+            flex
+            h-11
+            w-11
+            items-center
+            justify-center
+            rounded-xl
+            bg-blue-50
+            text-blue-600
+            dark:bg-blue-500/[0.08]
+            dark:text-blue-400
+          "
+        >
+          <Mail size={20} />
         </div>
 
-        <h1 className="mt-6 text-3xl font-bold text-gray-900">
-          Şifre Sıfırlama
-        </h1>
+        <p
+          className="
+            mt-5
+            text-[10px]
+            font-bold
+            uppercase
+            tracking-[0.16em]
+            text-blue-600
+            dark:text-blue-400
+          "
+        >
+          Şifre Kurtarma
+        </p>
 
-        <p className="mt-3 text-gray-500">
-          E-posta adresinizi girin.
-          Size güvenli bir şifre sıfırlama bağlantısı göndereceğiz.
+        <h2
+          className="
+            mt-2
+            text-2xl
+            font-semibold
+            tracking-[-0.035em]
+            text-gray-900
+            dark:text-white
+            sm:text-[28px]
+          "
+        >
+          Şifrenizi mi unuttunuz?
+        </h2>
+
+        <p
+          className="
+            mt-2
+            text-sm
+            leading-6
+            text-gray-500
+            dark:text-slate-400
+          "
+        >
+          Hesabınıza bağlı e-posta adresini girin. Size güvenli bir şifre sıfırlama bağlantısı göndereceğiz.
         </p>
 
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      {/* FORM */}
+
+      <form
+        onSubmit={
+          handleSubmit
+        }
+        className="space-y-5"
+      >
 
         <div>
 
-          <label className="block mb-2 text-sm font-semibold text-gray-700">
+          <label
+            htmlFor="forgot-password-email"
+            className="
+              mb-1.5
+              block
+              text-sm
+              font-medium
+              text-gray-700
+              dark:text-slate-300
+            "
+          >
             E-posta Adresi
           </label>
 
           <div className="relative">
 
             <Mail
-              size={20}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+              size={17}
+              className="
+                pointer-events-none
+                absolute
+                left-3.5
+                top-1/2
+                -translate-y-1/2
+                text-gray-400
+                dark:text-slate-500
+              "
             />
 
             <input
+              id="forgot-password-email"
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="ornek@email.com"
-              className="w-full h-14 rounded-xl border border-gray-300 pl-12 pr-4 outline-none focus:ring-2 focus:ring-blue-600"
-              required
+              value={
+                email
+              }
+              onChange={(
+                event
+              ) => {
+                setEmail(
+                  event.target.value
+                );
+
+                if (
+                  error
+                ) {
+                  setError('');
+                }
+              }}
+              autoComplete="email"
+              autoCapitalize="none"
+              spellCheck={false}
+              disabled={
+                mutation.isPending
+              }
+              placeholder="adiniz@hukuk.com"
+              aria-invalid={
+                Boolean(
+                  error
+                )
+              }
+              className={`
+                h-11
+                w-full
+                rounded-lg
+                border
+                bg-white
+                pl-10
+                pr-3.5
+                text-sm
+                text-gray-900
+                shadow-sm
+                outline-none
+                transition-all
+                placeholder:text-gray-400
+
+                dark:bg-white/[0.035]
+                dark:text-white
+                dark:placeholder:text-slate-500
+
+                ${
+                  error
+                    ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 dark:border-red-500/50'
+                    : 'border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 dark:border-white/[0.08] dark:hover:border-white/[0.14] dark:focus:border-blue-500/60'
+                }
+
+                disabled:cursor-not-allowed
+                disabled:opacity-60
+              `}
             />
 
           </div>
 
+          {error && (
+            <p className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+              {error}
+            </p>
+          )}
+
         </div>
 
-        <button
-          type="submit"
-          disabled={mutation.isPending}
-          className="w-full h-14 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold shadow-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-300 hover:scale-[1.02] disabled:opacity-60"
-        >
-          {mutation.isPending
-            ? 'Gönderiliyor...'
-            : 'Şifre Sıfırlama Bağlantısı Gönder'}
-        </button>
+        <div className="pt-1">
+
+          <Button
+            type="submit"
+            loading={
+              mutation.isPending
+            }
+            disabled={
+              mutation.isPending
+            }
+            className="w-full"
+          >
+            {!mutation.isPending && (
+              <Send className="h-4 w-4" />
+            )}
+
+            {mutation.isPending
+              ? 'Gönderiliyor'
+              : 'Sıfırlama Bağlantısı Gönder'}
+          </Button>
+
+        </div>
 
       </form>
 
-      <div className="mt-8 text-center">
+      {/* BACK */}
 
+      <div
+        className="
+          mt-7
+          border-t
+          border-gray-200
+          pt-5
+          dark:border-white/[0.07]
+        "
+      >
         <Link
           to="/login"
-          className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
+          className="
+            inline-flex
+            items-center
+            gap-1.5
+            text-xs
+            font-semibold
+            text-gray-500
+            transition
+            hover:text-blue-600
+            dark:text-slate-500
+            dark:hover:text-blue-400
+          "
         >
-          <ArrowLeft size={18} />
-          Giriş Sayfasına Dön
+          <ArrowLeft size={14} />
+          Giriş ekranına dön
         </Link>
-
       </div>
 
     </div>

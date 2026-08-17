@@ -1,49 +1,122 @@
-import { Outlet } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import {
+  useEffect,
+  useState,
+} from 'react';
+
+import {
+  Outlet,
+  useLocation,
+} from 'react-router-dom';
+
 import Sidebar from '../components/layout/Sidebar.jsx';
 import Topbar from '../components/layout/Topbar.jsx';
 import MobileNav from '../components/layout/MobileNav.jsx';
 
 const DashboardLayout = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [
+    sidebarOpen,
+    setSidebarOpen,
+  ] = useState(false);
 
+  const location =
+    useLocation();
+
+  // Mobilde route değişince menüyü kapat.
   useEffect(() => {
-    if (sidebarOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [sidebarOpen]);
+    setSidebarOpen(false);
+  }, [
+    location.pathname,
+  ]);
 
-  const sidebarWidth = isSidebarCollapsed ? 'w-20' : 'w-64';
-  const marginLeft = isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64';
+  // Mobil sidebar açıkken body scroll'unu kilitle.
+  useEffect(() => {
+    if (
+      sidebarOpen
+    ) {
+      document.body.style.overflow =
+        'hidden';
+    } else {
+      document.body.style.overflow =
+        '';
+    }
+
+    return () => {
+      document.body.style.overflow =
+        '';
+    };
+  }, [
+    sidebarOpen,
+  ]);
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
-      {/* Sidebar - Collapsible */}
+    <div
+      className="
+        min-h-screen
+        bg-[#f6f8fb]
+        text-gray-900
+        dark:bg-[#071426]
+        dark:text-white
+      "
+    >
+      {/* SIDEBAR */}
       <Sidebar
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        open={
+          sidebarOpen
+        }
+        onClose={() =>
+          setSidebarOpen(
+            false
+          )
+        }
       />
 
-      {/* Ana İçerik */}
-      <div className={`flex-1 flex flex-col min-w-0 ${marginLeft}`}>
-        <Topbar onMenuClick={() => setSidebarOpen(true)} />
+      {/* CONTENT AREA */}
+      <div
+        className="
+          min-h-screen
+          lg:ml-64
+        "
+      >
+        <div className="flex min-h-screen flex-col">
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-32 lg:pb-6">
-          <div className="max-w-7xl mx-auto">
-            <Outlet />
-          </div>
-        </main>
+          {/* TOPBAR */}
+          <Topbar
+            onMenuClick={() =>
+              setSidebarOpen(
+                true
+              )
+            }
+          />
 
-        <div className="lg:hidden flex-shrink-0">
+          {/* PAGE CONTENT */}
+          <main
+            className="
+              flex-1
+              overflow-x-hidden
+              px-3
+              py-4
+              pb-24
+              sm:px-4
+              md:px-6
+              md:py-6
+              lg:pb-8
+              xl:px-8
+            "
+          >
+            <div
+              className="
+                mx-auto
+                w-full
+                max-w-[1600px]
+              "
+            >
+              <Outlet />
+            </div>
+          </main>
+
+          {/* MOBILE NAV */}
           <MobileNav />
+
         </div>
       </div>
     </div>

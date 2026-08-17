@@ -1,409 +1,2073 @@
-import { useAuth } from '../../app/providers/auth.provider.jsx';
-import { useQuery } from '@tanstack/react-query';
+import {
+  useMemo,
+} from 'react';
+
+import {
+  Link,
+} from 'react-router-dom';
+
+import {
+  useQuery,
+} from '@tanstack/react-query';
+
+import {
+  ArrowRight,
+  BriefcaseBusiness,
+  CalendarDays,
+  CheckCircle2,
+  CheckSquare2,
+  Clock3,
+  FileText,
+  FolderKanban,
+  Gavel,
+  Landmark,
+  Plus,
+  Scale,
+  TrendingUp,
+  Upload,
+  UserPlus,
+  Users,
+  WalletCards,
+} from 'lucide-react';
+
+import dayjs from 'dayjs';
+import 'dayjs/locale/tr';
+
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
 import dashboardApi from '../../features/dashboard/dashboard.api.js';
 import eventApi from '../../features/events/event.api.js';
 import meetingApi from '../../features/meetings/meeting.api.js';
-import { Link } from 'react-router-dom';
-import dayjs from 'dayjs';
+
 import Badge from '../../components/ui/Badge.jsx';
+import Button from '../../components/ui/Button.jsx';
+import Card from '../../components/ui/Card.jsx';
+import Loader from '../../components/common/Loader.jsx';
+
+dayjs.locale('tr');
 
 // ======================================================
-// UTC format fonksiyonları (zaman dilimi çevirme YOK)
+// HELPERS
 // ======================================================
 
-const formatDateUTC = (date) => {
-  if (!date) return '-';
-  try {
-    const d = new Date(date);
-    return `${String(d.getUTCDate()).padStart(2, '0')}.${String(
-      d.getUTCMonth() + 1
-    ).padStart(2, '0')}.${d.getUTCFullYear()}`;
-  } catch {
+const formatDateUTC = (
+  date
+) => {
+  if (!date) {
     return '-';
   }
+
+  const value =
+    new Date(date);
+
+  if (
+    Number.isNaN(
+      value.getTime()
+    )
+  ) {
+    return '-';
+  }
+
+  return `${String(
+    value.getUTCDate()
+  ).padStart(
+    2,
+    '0'
+  )}.${String(
+    value.getUTCMonth() +
+      1
+  ).padStart(
+    2,
+    '0'
+  )}.${value.getUTCFullYear()}`;
 };
 
-const Dashboard = () => {
-  const { user } = useAuth();
-
-  // Dashboard istatistikleri
-  const { data: statsData, isLoading: statsLoading } = useQuery({
-    queryKey: ['dashboard-stats'],
-    queryFn: () => dashboardApi.getStats(),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const { data: hearingsData, isLoading: hearingsLoading } = useQuery({
-    queryKey: ['dashboard-hearings'],
-    queryFn: () => dashboardApi.getHearings(),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const { data: tasksData, isLoading: tasksLoading } = useQuery({
-    queryKey: ['dashboard-tasks'],
-    queryFn: () => dashboardApi.getTasks(),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // ✅ Meeting'leri getir
-  const { data: meetingsData } = useQuery({
-    queryKey: ['dashboard-meetings'],
-    queryFn: () => meetingApi.getUpcoming(),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const meetings = meetingsData?.data?.data || [];
-
-  // Bugünkü toplantılar
-  const todayMeetings = meetings.filter(m => 
-    dayjs(m.start_date).isSame(dayjs(), 'day')
-  );
-
-  // ✅ Boş gün widget'ı için
-  const currentMonth = dayjs().month() + 1;
-  const currentYear = dayjs().year();
-
-  const { data: calendarData } = useQuery({
-    queryKey: ['calendar-events', currentYear, currentMonth],
-    queryFn: () => eventApi.getCalendarEvents({ year: currentYear, month: currentMonth }),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const events = calendarData?.data?.data || [];
-
-  // ✅ TÜM ETKİNLİKLERİ BİRLEŞTİR (Events + Meetings)
-  const allEvents = [
-    ...events,
-    ...meetings.map(m => ({
-      id: `meeting-${m.id}`,
-      title: m.title,
-      start: m.start_date,
-      end: m.end_date || m.start_date,
-      type: 'meeting',
-      status: m.status,
-    }))
-  ];
-
-  // ✅ allEvents ile hesapla (artık toplantılar da dahil)
-  const getWeeklyEmptyDays = () => {
-    const today = dayjs();
-    const startOfWeek = today.startOf('week');
-    const endOfWeek = today.endOf('week');
-    
-    let emptyCount = 0;
-    let currentDay = startOfWeek;
-    
-    while (currentDay.isBefore(endOfWeek) || currentDay.isSame(endOfWeek, 'day')) {
-      const dayEvents = allEvents.filter(event => dayjs(event.start).isSame(currentDay, 'day'));
-      if (dayEvents.length === 0) {
-        emptyCount++;
-      }
-      currentDay = currentDay.add(1, 'day');
+const formatMoney = (
+  value
+) => {
+  return new Intl.NumberFormat(
+    'tr-TR',
+    {
+      style: 'currency',
+      currency: 'TRY',
+      maximumFractionDigits: 0,
     }
-    
-    return emptyCount;
+  ).format(
+    Number(value) ||
+      0
+  );
+};
+
+const getStatusLabel = (
+  status
+) => {
+  const labels = {
+    scheduled: 'Planlandı',
+    ongoing: 'Devam Ediyor',
+    completed: 'Tamamlandı',
+    cancelled: 'İptal',
+    pending: 'Bekliyor',
+    in_progress: 'Devam Ediyor',
   };
 
-  const weeklyEmptyDays = getWeeklyEmptyDays();
+  return (
+    labels[status] ||
+    status ||
+    '-'
+  );
+};
 
-  const stats = statsData?.data?.data || {};
-  const hearings = hearingsData?.data?.data || [];
-  const tasks = tasksData?.data?.data || [];
+const getStatusVariant = (
+  status
+) => {
+  const variants = {
+    scheduled: 'warning',
+    ongoing: 'info',
+    completed: 'success',
+    cancelled: 'danger',
+    pending: 'warning',
+    in_progress: 'info',
+  };
+
+  return (
+    variants[status] ||
+    'default'
+  );
+};
+
+const getPriorityLabel = (
+  priority
+) => {
+  const labels = {
+    critical: 'Kritik',
+    high: 'Yüksek',
+    normal: 'Normal',
+    low: 'Düşük',
+  };
+
+  return (
+    labels[priority] ||
+    priority ||
+    '-'
+  );
+};
+
+const getPriorityVariant = (
+  priority
+) => {
+  const variants = {
+    critical: 'danger',
+    high: 'warning',
+    normal: 'primary',
+    low: 'default',
+  };
+
+  return (
+    variants[priority] ||
+    'default'
+  );
+};
+
+// ======================================================
+// DASHBOARD
+// ======================================================
+
+const Dashboard = () => {
+  const {
+    user,
+  } =
+    useAuth();
+
+  // ====================================================
+  // QUERIES
+  // ====================================================
+
+  const {
+    data:
+      statsData,
+
+    isLoading:
+      statsLoading,
+  } =
+    useQuery({
+      queryKey: [
+        'dashboard-stats',
+      ],
+
+      queryFn: () =>
+        dashboardApi.getStats(),
+
+      staleTime:
+        5 * 60 * 1000,
+    });
+
+  const {
+    data:
+      hearingsData,
+
+    isLoading:
+      hearingsLoading,
+  } =
+    useQuery({
+      queryKey: [
+        'dashboard-hearings',
+      ],
+
+      queryFn: () =>
+        dashboardApi.getHearings(),
+
+      staleTime:
+        5 * 60 * 1000,
+    });
+
+  const {
+    data:
+      tasksData,
+
+    isLoading:
+      tasksLoading,
+  } =
+    useQuery({
+      queryKey: [
+        'dashboard-tasks',
+      ],
+
+      queryFn: () =>
+        dashboardApi.getTasks(),
+
+      staleTime:
+        5 * 60 * 1000,
+    });
+
+  const {
+    data:
+      meetingsData,
+  } =
+    useQuery({
+      queryKey: [
+        'dashboard-meetings',
+      ],
+
+      queryFn: () =>
+        meetingApi.getUpcoming(),
+
+      staleTime:
+        5 * 60 * 1000,
+    });
+
+  const currentMonth =
+    dayjs().month() +
+    1;
+
+  const currentYear =
+    dayjs().year();
+
+  const {
+    data:
+      calendarData,
+  } =
+    useQuery({
+      queryKey: [
+        'calendar-events',
+        currentYear,
+        currentMonth,
+      ],
+
+      queryFn: () =>
+        eventApi.getCalendarEvents({
+          year:
+            currentYear,
+
+          month:
+            currentMonth,
+        }),
+
+      staleTime:
+        5 * 60 * 1000,
+    });
+
+  // ====================================================
+  // DATA
+  // ====================================================
+
+  const stats =
+    statsData
+      ?.data
+      ?.data ||
+    {};
+
+  const hearings =
+    Array.isArray(
+      hearingsData
+        ?.data
+        ?.data
+    )
+      ? hearingsData
+          .data
+          .data
+      : [];
+
+  const tasks =
+    Array.isArray(
+      tasksData
+        ?.data
+        ?.data
+    )
+      ? tasksData
+          .data
+          .data
+      : [];
+
+  const meetings =
+    Array.isArray(
+      meetingsData
+        ?.data
+        ?.data
+    )
+      ? meetingsData
+          .data
+          .data
+      : [];
+
+  const events =
+    Array.isArray(
+      calendarData
+        ?.data
+        ?.data
+    )
+      ? calendarData
+          .data
+          .data
+      : [];
+
+  // ====================================================
+  // DERIVED DATA
+  // ====================================================
+
+  const today =
+    dayjs();
+
+  const todayMeetings =
+    useMemo(
+      () =>
+        meetings.filter(
+          (
+            meeting
+          ) =>
+            dayjs(
+              meeting.start_date
+            ).isSame(
+              today,
+              'day'
+            )
+        ),
+      [
+        meetings,
+      ]
+    );
+
+  const allEvents =
+    useMemo(
+      () => [
+        ...events,
+
+        ...meetings.map(
+          (
+            meeting
+          ) => ({
+            id:
+              `meeting-${meeting.id}`,
+
+            title:
+              meeting.title,
+
+            start:
+              meeting.start_date,
+
+            end:
+              meeting.end_date ||
+              meeting.start_date,
+
+            type:
+              'meeting',
+
+            status:
+              meeting.status,
+          })
+        ),
+      ],
+      [
+        events,
+        meetings,
+      ]
+    );
+
+  const monthlyStats =
+    useMemo(
+      () => {
+        const daysInMonth =
+          dayjs()
+            .daysInMonth();
+
+        const days = [];
+
+        for (
+          let day = 1;
+          day <=
+          daysInMonth;
+          day += 1
+        ) {
+          const date =
+            dayjs().date(
+              day
+            );
+
+          const dayEvents =
+            allEvents.filter(
+              (
+                item
+              ) =>
+                dayjs(
+                  item.start
+                ).isSame(
+                  date,
+                  'day'
+                )
+            );
+
+          days.push({
+            date,
+            events:
+              dayEvents,
+          });
+        }
+
+        const emptyDays =
+          days.filter(
+            (
+              item
+            ) =>
+              item.events
+                .length ===
+              0
+          );
+
+        const emptyRatio =
+          days.length >
+          0
+            ? Math.round(
+                (
+                  emptyDays.length /
+                  days.length
+                ) *
+                  100
+              )
+            : 0;
+
+        let busiestDay =
+          null;
+
+        let maximum =
+          0;
+
+        days.forEach(
+          (
+            item
+          ) => {
+            if (
+              item.events
+                .length >
+              maximum
+            ) {
+              maximum =
+                item.events
+                  .length;
+
+              busiestDay =
+                item;
+            }
+          }
+        );
+
+        return {
+          daysInMonth,
+          emptyDays:
+            emptyDays.length,
+
+          emptyRatio,
+
+          busyRatio:
+            100 -
+            emptyRatio,
+
+          busiestDay,
+        };
+      },
+      [
+        allEvents,
+      ]
+    );
+
+  const weeklyEmptyDays =
+    useMemo(
+      () => {
+        const start =
+          dayjs().startOf(
+            'week'
+          );
+
+        const end =
+          dayjs().endOf(
+            'week'
+          );
+
+        let current =
+          start;
+
+        let count =
+          0;
+
+        while (
+          current.isBefore(
+            end
+          ) ||
+          current.isSame(
+            end,
+            'day'
+          )
+        ) {
+          const hasEvent =
+            allEvents.some(
+              (
+                item
+              ) =>
+                dayjs(
+                  item.start
+                ).isSame(
+                  current,
+                  'day'
+                )
+            );
+
+          if (
+            !hasEvent
+          ) {
+            count +=
+              1;
+          }
+
+          current =
+            current.add(
+              1,
+              'day'
+            );
+        }
+
+        return count;
+      },
+      [
+        allEvents,
+      ]
+    );
+
+  const hearingCount =
+    events.filter(
+      (
+        event
+      ) =>
+        event.event_type ===
+        'hearing'
+    ).length;
+
+  const taskCount =
+    events.filter(
+      (
+        event
+      ) =>
+        event.type ===
+        'task'
+    ).length;
+
+  // ====================================================
+  // CARDS
+  // ====================================================
 
   const statCards = [
-    { label: 'Toplam Müvekkil', value: stats.totalClients || 0, icon: '👤', color: 'bg-blue-500', link: '/clients' },
-    { label: 'Aktif Davalar', value: stats.activeCases || 0, icon: '📁', color: 'bg-green-500', link: '/cases' },
-    { label: 'Toplam Belge', value: stats.totalDocuments || 0, icon: '📄', color: 'bg-purple-500', link: '/documents' },
-    { label: 'Bekleyen Görev', value: stats.pendingTasks || 0, icon: '✅', color: 'bg-orange-500', link: '/tasks' },
+    {
+      label:
+        'Toplam Müvekkil',
+
+      value:
+        stats.totalClients ||
+        0,
+
+      icon:
+        Users,
+
+      link:
+        '/clients',
+
+      iconClass:
+        'bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400',
+    },
+
+    {
+      label:
+        'Aktif Davalar',
+
+      value:
+        stats.activeCases ||
+        0,
+
+      icon:
+        FolderKanban,
+
+      link:
+        '/cases',
+
+      iconClass:
+        'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400',
+    },
+
+    {
+      label:
+        'Toplam Belge',
+
+      value:
+        stats.totalDocuments ||
+        0,
+
+      icon:
+        FileText,
+
+      link:
+        '/documents',
+
+      iconClass:
+        'bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400',
+    },
+
+    {
+      label:
+        'Bekleyen Görev',
+
+      value:
+        stats.pendingTasks ||
+        0,
+
+      icon:
+        CheckSquare2,
+
+      link:
+        '/tasks',
+
+      iconClass:
+        'bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400',
+    },
   ];
 
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'critical': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      case 'high': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-      case 'normal': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      case 'low': return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  const quickActions = [
+    {
+      label:
+        'Müvekkil Ekle',
 
-  const getPriorityLabel = (priority) => {
-    const labels = { critical: 'Kritik', high: 'Yüksek', normal: 'Normal', low: 'Düşük' };
-    return labels[priority] || priority;
-  };
+      description:
+        'Yeni müvekkil kaydı',
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'ongoing':
-      case 'in_progress': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'scheduled':
-      case 'pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-      case 'completed': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      case 'cancelled': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+      icon:
+        UserPlus,
 
-  const getStatusLabel = (status) => {
-    const labels = {
-      scheduled: 'Planlandı',
-      ongoing: 'Devam Ediyor',
-      completed: 'Tamamlandı',
-      cancelled: 'İptal',
-      pending: 'Bekliyor',
-      in_progress: 'Devam Ediyor',
-    };
-    return labels[status] || status;
-  };
+      link:
+        '/clients/create',
+    },
 
-  // ✅ allEvents ile ayın boş gün oranını hesapla
-  const allDays = [];
-  const daysInMonth = dayjs().daysInMonth();
-  for (let i = 1; i <= daysInMonth; i++) {
-    const date = dayjs().date(i);
-    const dayEvents = allEvents.filter(event => dayjs(event.start).isSame(date, 'day'));
-    allDays.push({ date, events: dayEvents });
-  }
-  const totalDays = allDays.length;
-  const emptyCount = allDays.filter(d => d.events.length === 0).length;
-  const emptyRatio = totalDays > 0 ? Math.round((emptyCount / totalDays) * 100) : 0;
+    {
+      label:
+        'Yeni Dava',
 
-  // ✅ İSTATİSTİK WIDGET'I
-  const hearingCount = events.filter(e => e.event_type === 'hearing').length;
-  const meetingCount = meetings.length;
-  const taskCount = events.filter(e => e.type === 'task').length;
-  
-  // En yoğun günü bul
-  let busiestDay = null;
-  let maxEvents = 0;
-  allDays.forEach(d => {
-    if (d.events.length > maxEvents) {
-      maxEvents = d.events.length;
-      busiestDay = d;
-    }
-  });
+      description:
+        'Dosya oluştur',
 
-  if (statsLoading || hearingsLoading || tasksLoading) {
+      icon:
+        BriefcaseBusiness,
+
+      link:
+        '/cases/create',
+    },
+
+    {
+      label:
+        'Belge Yükle',
+
+      description:
+        'Dosyaya belge ekle',
+
+      icon:
+        Upload,
+
+      link:
+        '/documents/upload',
+    },
+
+    {
+      label:
+        'Görev Oluştur',
+
+      description:
+        'Yeni iş ata',
+
+      icon:
+        CheckSquare2,
+
+      link:
+        '/tasks/create',
+    },
+  ];
+
+  // ====================================================
+  // LOADING
+  // ====================================================
+
+  if (
+    statsLoading ||
+    hearingsLoading ||
+    tasksLoading
+  ) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex min-h-[420px] items-center justify-center">
+        <Loader
+          text="Çalışma alanı hazırlanıyor..."
+        />
       </div>
     );
   }
 
+  // ====================================================
+  // RENDER
+  // ====================================================
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Hoş Geldin, {user?.first_name || user?.name || 'Kullanıcı'}! 👋
-        </h1>
-        <span className="text-sm text-gray-500">{formatDateUTC(new Date())}</span>
-      </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statCards.map((stat) => (
-          <Link
-            key={stat.label}
-            to={stat.link}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">{stat.label}</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {stat.value}
-                </p>
-              </div>
-              <div className={`w-12 h-12 ${stat.color} rounded-lg flex items-center justify-center text-2xl`}>
-                {stat.icon}
-              </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+      {/* ==================================================
+          HERO
+      ================================================== */}
 
-      {/* Extra Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">💰 Finans</h2>
-          <div className="space-y-3">
-            <div className="flex justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <span className="text-gray-600 dark:text-gray-400">Toplam Tahsilat</span>
-              <span className="font-bold text-green-600">{stats.totalReceived?.toLocaleString('tr-TR')} TL</span>
-            </div>
-            <div className="flex justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <span className="text-gray-600 dark:text-gray-400">Bekleyen Tahsilat</span>
-              <span className="font-bold text-yellow-600">{stats.totalPendingPayments?.toLocaleString('tr-TR')} TL</span>
-            </div>
-          </div>
-        </div>
+      <section
+        className="
+          relative
+          overflow-hidden
+          rounded-2xl
+          border
+          border-[#153363]
+          bg-[#081b3d]
+          px-5
+          py-6
+          text-white
+          shadow-[0_12px_32px_rgba(7,20,38,0.12)]
+          md:px-7
+          md:py-7
+        "
+      >
+        <div
+          className="
+            pointer-events-none
+            absolute
+            -right-24
+            -top-24
+            h-72
+            w-72
+            rounded-full
+            bg-blue-500/[0.12]
+            blur-3xl
+          "
+        />
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📊 Hızlı Erişim</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <Link to="/clients/create" className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-center hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
-              <span className="text-2xl block">👤</span>
-              <span className="text-sm">Müvekkil Ekle</span>
-            </Link>
-            <Link to="/cases/create" className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-center hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors">
-              <span className="text-2xl block">📁</span>
-              <span className="text-sm">Dava Aç</span>
-            </Link>
-            <Link to="/documents/upload" className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-center hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors">
-              <span className="text-2xl block">📄</span>
-              <span className="text-sm">Belge Yükle</span>
-            </Link>
-            <Link to="/tasks/create" className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg text-center hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
-              <span className="text-2xl block">✅</span>
-              <span className="text-sm">Görev Ekle</span>
-            </Link>
-          </div>
-        </div>
-      </div>
+        <div
+          className="
+            pointer-events-none
+            absolute
+            -bottom-24
+            left-1/3
+            h-60
+            w-60
+            rounded-full
+            bg-amber-400/[0.04]
+            blur-3xl
+          "
+        />
 
-      {/* İstatistik Widget */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          📊 Bu Ayın İstatistikleri ({dayjs().format('MMMM YYYY')})
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+
           <div>
-            <p className="text-sm text-gray-500">⚖️ Duruşma</p>
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{hearingCount}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">🤝 Toplantı</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{meetingCount}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">📄 Görev</p>
-            <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{taskCount}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">🟢 Boş Gün</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{emptyCount}</p>
-          </div>
-        </div>
-        
-        <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            📅 En Yoğun Gün: 
-            {busiestDay && busiestDay.events.length > 0 ? (
-              <span className="font-medium text-gray-900 dark:text-white">
-                {dayjs(busiestDay.date).format('DD MMMM YYYY')} ({busiestDay.events.length} etkinlik)
-              </span>
-            ) : 'Veri yok'}
-          </p>
-        </div>
-      </div>
 
-      {/* Boş Gün Widget */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">🗓️ Bu Hafta Boş Günler</h2>
-          <div className="flex items-center gap-4">
-            <div className="text-4xl font-bold text-green-600 dark:text-green-400">{weeklyEmptyDays}</div>
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Bu hafta {weeklyEmptyDays} boş günün var</p>
-              <p className="text-xs text-gray-500">
-                {weeklyEmptyDays > 3 ? 'Harika! Zamanın bol ' : 
-                 weeklyEmptyDays > 1 ? 'Değerlendirmek için fırsat var 💪' : 
-                 'Yoğun bir hafta geçireceksin 📋'}
+            <p
+              className="
+                text-[10px]
+                font-bold
+                uppercase
+                tracking-[0.18em]
+                text-blue-300/70
+              "
+            >
+              Çalışma Alanı
+            </p>
+
+            <h1
+              className="
+                mt-2
+                text-2xl
+                font-semibold
+                tracking-[-0.035em]
+                md:text-3xl
+              "
+            >
+              Günaydın,{' '}
+              {user?.first_name ||
+                user?.name ||
+                'Kullanıcı'}
+            </h1>
+
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+              Bugünkü duruşmalarınızı, toplantılarınızı ve açık işlerinizi tek ekrandan takip edin.
+            </p>
+
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+
+            <div
+              className="
+                rounded-xl
+                border
+                border-white/[0.08]
+                bg-white/[0.04]
+                px-4
+                py-3
+              "
+            >
+              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Bugün
+              </p>
+
+              <p className="mt-1 text-sm font-semibold text-white">
+                {formatDateUTC(
+                  new Date()
+                )}
               </p>
             </div>
-          </div>
-        </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            📊 Ayın Durumu ({dayjs().format('MMMM')})
-          </h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">🟢 Boş Gün</span>
-              <div className="flex-1 mx-4 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div className="h-full bg-green-500 rounded-full" style={{ width: `${emptyRatio}%` }}></div>
-              </div>
-              <span className="text-sm font-medium">{emptyRatio}%</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">🟡 Dolu Gün</span>
-              <div className="flex-1 mx-4 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div className="h-full bg-yellow-500 rounded-full" style={{ width: `${100 - emptyRatio}%` }}></div>
-              </div>
-              <span className="text-sm font-medium">{100 - emptyRatio}%</span>
-            </div>
-          </div>
-          <p className="text-xs text-gray-500 mt-4">
-            {dayjs().format('MMMM YYYY')} ayında {totalDays} günün {emptyCount}'ü boş
-          </p>
-        </div>
-      </div>
+            <Link to="/calendar">
+              <Button
+                variant="secondary"
+                size="sm"
+              >
+                <CalendarDays className="h-4 w-4" />
+                Takvimi Aç
+              </Button>
+            </Link>
 
-      {/* Bugünkü Duruşmalar & Toplantılar */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Bugünkü Duruşmalar */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">⏰ Bugünkü Duruşmalar</h2>
-          {hearings.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">Bugün duruşma yok</p>
-          ) : (
-            <div className="space-y-3">
-              {hearings.map((hearing) => (
-                <div key={hearing.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {dayjs(hearing.start_date).format('HH:mm')} - {hearing.case?.client?.name || '-'}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {hearing.location || 'Yer belirtilmemiş'}
-                    </p>
-                    {hearing.case && (
-                      <p className="text-xs text-gray-500">Dava: {hearing.case.title}</p>
-                    )}
-                  </div>
-                  <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(hearing.status)}`}>
-                    {getStatusLabel(hearing.status)}
-                  </span>
+          </div>
+
+        </div>
+      </section>
+
+      {/* ==================================================
+          MAIN STATS
+      ================================================== */}
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+        {statCards.map(
+          (
+            stat
+          ) => {
+            const Icon =
+              stat.icon;
+
+            return (
+              <Link
+                key={
+                  stat.label
+                }
+                to={
+                  stat.link
+                }
+              >
+                <Card
+                  hover
+                  className="h-full"
+                >
+                  <Card.Body>
+
+                    <div className="flex items-start justify-between gap-4">
+
+                      <div>
+
+                        <p
+                          className="
+                            text-xs
+                            font-medium
+                            text-gray-500
+                            dark:text-slate-400
+                          "
+                        >
+                          {stat.label}
+                        </p>
+
+                        <p
+                          className="
+                            mt-2
+                            text-3xl
+                            font-semibold
+                            tracking-[-0.04em]
+                            text-gray-900
+                            dark:text-white
+                          "
+                        >
+                          {stat.value}
+                        </p>
+
+                      </div>
+
+                      <div
+                        className={`
+                          flex
+                          h-10
+                          w-10
+                          items-center
+                          justify-center
+                          rounded-xl
+                          ${stat.iconClass}
+                        `}
+                      >
+                        <Icon size={19} />
+                      </div>
+
+                    </div>
+
+                    <div
+                      className="
+                        mt-5
+                        flex
+                        items-center
+                        gap-1
+                        text-[11px]
+                        font-semibold
+                        text-gray-400
+                        transition
+                        group-hover:text-blue-600
+                        dark:text-slate-500
+                      "
+                    >
+                      Görüntüle
+                      <ArrowRight size={13} />
+                    </div>
+
+                  </Card.Body>
+                </Card>
+              </Link>
+            );
+          }
+        )}
+
+      </section>
+
+      {/* ==================================================
+          FINANCE + QUICK ACTIONS
+      ================================================== */}
+
+      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+
+        {/* FINANCE */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center justify-between">
+
+              <div className="flex items-center gap-3">
+
+                <div
+                  className="
+                    flex
+                    h-9
+                    w-9
+                    items-center
+                    justify-center
+                    rounded-lg
+                    bg-emerald-50
+                    text-emerald-600
+                    dark:bg-emerald-500/[0.08]
+                    dark:text-emerald-400
+                  "
+                >
+                  <WalletCards size={17} />
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
 
-        {/* Bugünkü Toplantılar */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">🤝 Bugünkü Toplantılar</h2>
-          {todayMeetings.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">Bugün toplantı yok</p>
-          ) : (
-            <div className="space-y-3">
-              {todayMeetings.map((meeting) => (
-                <Link key={meeting.id} to={`/meetings/${meeting.id}`} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">{meeting.title}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {dayjs(meeting.start_date).format('HH:mm')}
-                      {meeting.case && ` • ${meeting.case.title}`}
-                      {meeting.client && ` • ${meeting.client.name}`}
-                    </p>
-                  </div>
-                  <Badge 
-                    variant={meeting.status === 'scheduled' ? 'warning' : 
-                             meeting.status === 'ongoing' ? 'info' : 
-                             meeting.status === 'completed' ? 'success' : 'danger'}
-                  >
-                    {meeting.status === 'scheduled' ? 'Planlandı' :
-                     meeting.status === 'ongoing' ? 'Devam Ediyor' :
-                     meeting.status === 'completed' ? 'Tamamlandı' : 'İptal'}
-                  </Badge>
-                </Link>
-              ))}
+                <div>
+
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Finansal Durum
+                  </h2>
+
+                  <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                    Tahsilat görünümü
+                  </p>
+
+                </div>
+
+              </div>
+
+              <Link
+                to="/finance"
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+              >
+                Detaylar
+              </Link>
+
             </div>
-          )}
-        </div>
-      </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+
+              <div
+                className="
+                  rounded-xl
+                  border
+                  border-emerald-100
+                  bg-emerald-50/50
+                  p-4
+                  dark:border-emerald-500/10
+                  dark:bg-emerald-500/[0.035]
+                "
+              >
+                <p className="text-xs font-medium text-gray-500 dark:text-slate-400">
+                  Toplam Tahsilat
+                </p>
+
+                <p
+                  className="
+                    mt-2
+                    text-2xl
+                    font-semibold
+                    tracking-[-0.035em]
+                    text-emerald-700
+                    dark:text-emerald-400
+                  "
+                >
+                  {formatMoney(
+                    stats.totalReceived
+                  )}
+                </p>
+
+                <div className="mt-3 flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-500">
+                  <CheckCircle2 size={12} />
+                  Tahsil edilen tutar
+                </div>
+              </div>
+
+              <div
+                className="
+                  rounded-xl
+                  border
+                  border-amber-100
+                  bg-amber-50/50
+                  p-4
+                  dark:border-amber-500/10
+                  dark:bg-amber-500/[0.035]
+                "
+              >
+                <p className="text-xs font-medium text-gray-500 dark:text-slate-400">
+                  Bekleyen Tahsilat
+                </p>
+
+                <p
+                  className="
+                    mt-2
+                    text-2xl
+                    font-semibold
+                    tracking-[-0.035em]
+                    text-amber-700
+                    dark:text-amber-400
+                  "
+                >
+                  {formatMoney(
+                    stats.totalPendingPayments
+                  )}
+                </p>
+
+                <div className="mt-3 flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-500">
+                  <Clock3 size={12} />
+                  Tahsil edilmesi beklenen
+                </div>
+
+              </div>
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+        {/* QUICK ACTIONS */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-blue-50
+                  text-blue-600
+                  dark:bg-blue-500/[0.08]
+                  dark:text-blue-400
+                "
+              >
+                <Plus size={18} />
+              </div>
+
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Hızlı İşlemler
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Sık kullanılan işlemler
+                </p>
+              </div>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+
+              {quickActions.map(
+                (
+                  action
+                ) => {
+                  const Icon =
+                    action.icon;
+
+                  return (
+                    <Link
+                      key={
+                        action.label
+                      }
+                      to={
+                        action.link
+                      }
+                      className="
+                        group
+                        rounded-xl
+                        border
+                        border-gray-200
+                        p-3
+                        transition
+                        hover:border-blue-200
+                        hover:bg-blue-50/40
+                        dark:border-white/[0.06]
+                        dark:hover:border-blue-500/20
+                        dark:hover:bg-blue-500/[0.04]
+                      "
+                    >
+                      <div className="flex items-center gap-3">
+
+                        <div
+                          className="
+                            flex
+                            h-9
+                            w-9
+                            shrink-0
+                            items-center
+                            justify-center
+                            rounded-lg
+                            bg-gray-50
+                            text-gray-500
+                            transition
+                            group-hover:bg-blue-100
+                            group-hover:text-blue-600
+                            dark:bg-white/[0.04]
+                            dark:text-slate-400
+                            dark:group-hover:bg-blue-500/[0.08]
+                            dark:group-hover:text-blue-400
+                          "
+                        >
+                          <Icon size={17} />
+                        </div>
+
+                        <div className="min-w-0">
+
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {action.label}
+                          </p>
+
+                          <p className="mt-0.5 truncate text-[10px] text-gray-400 dark:text-slate-500">
+                            {action.description}
+                          </p>
+
+                        </div>
+
+                      </div>
+                    </Link>
+                  );
+                }
+              )}
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+      </section>
+
+      {/* ==================================================
+          TODAY
+      ================================================== */}
+
+      <section className="grid gap-4 xl:grid-cols-2">
+
+        {/* HEARINGS */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center justify-between gap-4">
+
+              <div className="flex items-center gap-3">
+
+                <div
+                  className="
+                    flex
+                    h-9
+                    w-9
+                    items-center
+                    justify-center
+                    rounded-lg
+                    bg-red-50
+                    text-red-600
+                    dark:bg-red-500/[0.08]
+                    dark:text-red-400
+                  "
+                >
+                  <Gavel size={17} />
+                </div>
+
+                <div>
+
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Bugünkü Duruşmalar
+                  </h2>
+
+                  <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                    {hearings.length} kayıt
+                  </p>
+
+                </div>
+
+              </div>
+
+              <Link
+                to="/calendar"
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+              >
+                Takvim
+              </Link>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            {hearings.length ===
+            0 ? (
+              <div className="py-8 text-center">
+
+                <Scale className="mx-auto h-8 w-8 text-gray-300 dark:text-slate-700" />
+
+                <p className="mt-3 text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Bugün duruşma yok
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                  Güncel duruşmalar burada görüntülenir.
+                </p>
+
+              </div>
+            ) : (
+              <div className="space-y-2">
+
+                {hearings.map(
+                  (
+                    hearing
+                  ) => (
+                    <Link
+                      key={
+                        hearing.id
+                      }
+                      to={`/events/${hearing.id}`}
+                      className="
+                        block
+                        rounded-xl
+                        border
+                        border-gray-100
+                        p-3.5
+                        transition
+                        hover:border-blue-200
+                        hover:bg-gray-50/70
+                        dark:border-white/[0.05]
+                        dark:hover:border-blue-500/20
+                        dark:hover:bg-white/[0.025]
+                      "
+                    >
+                      <div className="flex items-start justify-between gap-4">
+
+                        <div className="flex min-w-0 gap-3">
+
+                          <div
+                            className="
+                              flex
+                              h-10
+                              min-w-10
+                              items-center
+                              justify-center
+                              rounded-lg
+                              bg-gray-50
+                              text-xs
+                              font-bold
+                              text-gray-700
+                              dark:bg-white/[0.04]
+                              dark:text-slate-300
+                            "
+                          >
+                            {dayjs(
+                              hearing.start_date
+                            ).format(
+                              'HH:mm'
+                            )}
+                          </div>
+
+                          <div className="min-w-0">
+
+                            <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                              {hearing.title ||
+                                hearing.case
+                                  ?.title ||
+                                'Duruşma'}
+                            </p>
+
+                            <p className="mt-1 truncate text-xs text-gray-500 dark:text-slate-400">
+                              {hearing.location ||
+                                hearing.case
+                                  ?.court_name ||
+                                'Yer belirtilmemiş'}
+                            </p>
+
+                            {hearing.case
+                              ?.case_number && (
+                              <p className="mt-1 text-[10px] text-gray-400 dark:text-slate-500">
+                                Dosya:{' '}
+                                {
+                                  hearing
+                                    .case
+                                    .case_number
+                                }
+                              </p>
+                            )}
+
+                          </div>
+
+                        </div>
+
+                        <Badge
+                          variant={
+                            getStatusVariant(
+                              hearing.status
+                            )
+                          }
+                          dot
+                        >
+                          {getStatusLabel(
+                            hearing.status
+                          )}
+                        </Badge>
+
+                      </div>
+                    </Link>
+                  )
+                )}
+
+              </div>
+            )}
+
+          </Card.Body>
+
+        </Card>
+
+        {/* MEETINGS */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center justify-between gap-4">
+
+              <div className="flex items-center gap-3">
+
+                <div
+                  className="
+                    flex
+                    h-9
+                    w-9
+                    items-center
+                    justify-center
+                    rounded-lg
+                    bg-blue-50
+                    text-blue-600
+                    dark:bg-blue-500/[0.08]
+                    dark:text-blue-400
+                  "
+                >
+                  <CalendarDays size={17} />
+                </div>
+
+                <div>
+
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Bugünkü Toplantılar
+                  </h2>
+
+                  <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                    {todayMeetings.length} kayıt
+                  </p>
+
+                </div>
+
+              </div>
+
+              <Link
+                to="/meetings"
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+              >
+                Tümü
+              </Link>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            {todayMeetings.length ===
+            0 ? (
+              <div className="py-8 text-center">
+
+                <CalendarDays className="mx-auto h-8 w-8 text-gray-300 dark:text-slate-700" />
+
+                <p className="mt-3 text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Bugün toplantı yok
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                  Planlanan toplantılar burada görüntülenir.
+                </p>
+
+              </div>
+            ) : (
+              <div className="space-y-2">
+
+                {todayMeetings.map(
+                  (
+                    meeting
+                  ) => (
+                    <Link
+                      key={
+                        meeting.id
+                      }
+                      to={`/meetings/${meeting.id}`}
+                      className="
+                        block
+                        rounded-xl
+                        border
+                        border-gray-100
+                        p-3.5
+                        transition
+                        hover:border-blue-200
+                        hover:bg-gray-50/70
+                        dark:border-white/[0.05]
+                        dark:hover:border-blue-500/20
+                        dark:hover:bg-white/[0.025]
+                      "
+                    >
+
+                      <div className="flex items-start justify-between gap-4">
+
+                        <div className="flex min-w-0 gap-3">
+
+                          <div
+                            className="
+                              flex
+                              h-10
+                              min-w-10
+                              items-center
+                              justify-center
+                              rounded-lg
+                              bg-gray-50
+                              text-xs
+                              font-bold
+                              text-gray-700
+                              dark:bg-white/[0.04]
+                              dark:text-slate-300
+                            "
+                          >
+                            {dayjs(
+                              meeting.start_date
+                            ).format(
+                              'HH:mm'
+                            )}
+                          </div>
+
+                          <div className="min-w-0">
+
+                            <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                              {meeting.title}
+                            </p>
+
+                            <p className="mt-1 truncate text-xs text-gray-500 dark:text-slate-400">
+                              {meeting.case
+                                ?.title ||
+                                meeting.client
+                                  ?.name ||
+                                meeting.location ||
+                                'Genel toplantı'}
+                            </p>
+
+                          </div>
+
+                        </div>
+
+                        <Badge
+                          variant={
+                            getStatusVariant(
+                              meeting.status
+                            )
+                          }
+                          dot
+                        >
+                          {getStatusLabel(
+                            meeting.status
+                          )}
+                        </Badge>
+
+                      </div>
+
+                    </Link>
+                  )
+                )}
+
+              </div>
+            )}
+
+          </Card.Body>
+
+        </Card>
+
+      </section>
+
+      {/* ==================================================
+          TASKS + MONTH
+      ================================================== */}
+
+      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+
+        {/* TASKS */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center justify-between gap-4">
+
+              <div className="flex items-center gap-3">
+
+                <div
+                  className="
+                    flex
+                    h-9
+                    w-9
+                    items-center
+                    justify-center
+                    rounded-lg
+                    bg-amber-50
+                    text-amber-600
+                    dark:bg-amber-500/[0.08]
+                    dark:text-amber-400
+                  "
+                >
+                  <CheckSquare2 size={17} />
+                </div>
+
+                <div>
+
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Açık Görevler
+                  </h2>
+
+                  <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                    Öncelikli işleriniz
+                  </p>
+
+                </div>
+
+              </div>
+
+              <Link
+                to="/tasks"
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+              >
+                Tüm Görevler
+              </Link>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            {tasks.length ===
+            0 ? (
+              <div className="py-8 text-center">
+
+                <CheckCircle2 className="mx-auto h-8 w-8 text-gray-300 dark:text-slate-700" />
+
+                <p className="mt-3 text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Açık görev bulunmuyor
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                  Yeni görevler burada listelenir.
+                </p>
+
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+
+                {tasks
+                  .slice(
+                    0,
+                    6
+                  )
+                  .map(
+                    (
+                      task
+                    ) => (
+                      <Link
+                        key={
+                          task.id
+                        }
+                        to={`/tasks/${task.id}`}
+                        className="
+                          flex
+                          items-center
+                          justify-between
+                          gap-4
+                          py-3
+                          first:pt-0
+                          last:pb-0
+                        "
+                      >
+
+                        <div className="min-w-0">
+
+                          <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                            {task.title}
+                          </p>
+
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-gray-400 dark:text-slate-500">
+
+                            {task.due_date && (
+                              <span className="inline-flex items-center gap-1">
+                                <Clock3 size={11} />
+
+                                {dayjs(
+                                  task.due_date
+                                ).format(
+                                  'DD MMM HH:mm'
+                                )}
+                              </span>
+                            )}
+
+                            {task.case
+                              ?.title && (
+                              <span>
+                                {
+                                  task
+                                    .case
+                                    .title
+                                }
+                              </span>
+                            )}
+
+                          </div>
+
+                        </div>
+
+                        <Badge
+                          variant={
+                            getPriorityVariant(
+                              task.priority
+                            )
+                          }
+                        >
+                          {getPriorityLabel(
+                            task.priority
+                          )}
+                        </Badge>
+
+                      </Link>
+                    )
+                  )}
+
+              </div>
+            )}
+
+          </Card.Body>
+
+        </Card>
+
+        {/* MONTH SUMMARY */}
+
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-violet-50
+                  text-violet-600
+                  dark:bg-violet-500/[0.08]
+                  dark:text-violet-400
+                "
+              >
+                <TrendingUp size={17} />
+              </div>
+
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Bu Ay
+                </h2>
+
+                <p className="mt-0.5 text-xs capitalize text-gray-400 dark:text-slate-500">
+                  {dayjs().format(
+                    'MMMM YYYY'
+                  )}
+                </p>
+              </div>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body className="space-y-5">
+
+            <div className="grid grid-cols-3 gap-3">
+
+              <div
+                className="
+                  rounded-xl
+                  bg-gray-50
+                  p-3
+                  dark:bg-white/[0.025]
+                "
+              >
+                <p className="text-[10px] font-medium text-gray-400">
+                  Duruşma
+                </p>
+
+                <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-white">
+                  {hearingCount}
+                </p>
+              </div>
+
+              <div
+                className="
+                  rounded-xl
+                  bg-gray-50
+                  p-3
+                  dark:bg-white/[0.025]
+                "
+              >
+                <p className="text-[10px] font-medium text-gray-400">
+                  Toplantı
+                </p>
+
+                <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-white">
+                  {meetings.length}
+                </p>
+              </div>
+
+              <div
+                className="
+                  rounded-xl
+                  bg-gray-50
+                  p-3
+                  dark:bg-white/[0.025]
+                "
+              >
+                <p className="text-[10px] font-medium text-gray-400">
+                  Görev
+                </p>
+
+                <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-white">
+                  {taskCount}
+                </p>
+              </div>
+
+            </div>
+
+            <div>
+
+              <div className="flex items-center justify-between text-xs">
+
+                <span className="text-gray-500 dark:text-slate-400">
+                  Boş gün oranı
+                </span>
+
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {monthlyStats.emptyRatio}%
+                </span>
+
+              </div>
+
+              <div
+                className="
+                  mt-2
+                  h-2
+                  overflow-hidden
+                  rounded-full
+                  bg-gray-100
+                  dark:bg-white/[0.05]
+                "
+              >
+                <div
+                  className="
+                    h-full
+                    rounded-full
+                    bg-emerald-500
+                  "
+                  style={{
+                    width:
+                      `${monthlyStats.emptyRatio}%`,
+                  }}
+                />
+              </div>
+
+            </div>
+
+            <div>
+
+              <div className="flex items-center justify-between text-xs">
+
+                <span className="text-gray-500 dark:text-slate-400">
+                  Dolu gün oranı
+                </span>
+
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {monthlyStats.busyRatio}%
+                </span>
+
+              </div>
+
+              <div
+                className="
+                  mt-2
+                  h-2
+                  overflow-hidden
+                  rounded-full
+                  bg-gray-100
+                  dark:bg-white/[0.05]
+                "
+              >
+                <div
+                  className="
+                    h-full
+                    rounded-full
+                    bg-blue-500
+                  "
+                  style={{
+                    width:
+                      `${monthlyStats.busyRatio}%`,
+                  }}
+                />
+              </div>
+
+            </div>
+
+            <div
+              className="
+                rounded-xl
+                border
+                border-gray-100
+                bg-gray-50/60
+                p-3
+                dark:border-white/[0.05]
+                dark:bg-white/[0.02]
+              "
+            >
+              <div className="flex items-center gap-2">
+
+                <Landmark
+                  size={15}
+                  className="text-gray-400"
+                />
+
+                <p className="text-xs font-medium text-gray-600 dark:text-slate-300">
+                  En yoğun gün
+                </p>
+
+              </div>
+
+              <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">
+
+                {monthlyStats.busiestDay &&
+                monthlyStats
+                  .busiestDay
+                  .events
+                  .length >
+                  0
+                  ? `${dayjs(
+                      monthlyStats
+                        .busiestDay
+                        .date
+                    ).format(
+                      'DD MMMM YYYY'
+                    )} · ${
+                      monthlyStats
+                        .busiestDay
+                        .events
+                        .length
+                    } etkinlik`
+                  : 'Henüz veri yok'}
+
+              </p>
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+      </section>
+
+      {/* ==================================================
+          WEEK SUMMARY
+      ================================================== */}
+
+      <Card>
+
+        <Card.Body>
+
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+            <div className="flex items-center gap-4">
+
+              <div
+                className="
+                  flex
+                  h-12
+                  w-12
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-emerald-50
+                  text-emerald-600
+                  dark:bg-emerald-500/[0.08]
+                  dark:text-emerald-400
+                "
+              >
+                <CalendarDays size={21} />
+              </div>
+
+              <div>
+
+                <p className="text-xs font-medium text-gray-400 dark:text-slate-500">
+                  Bu Haftaki Boş Gün
+                </p>
+
+                <div className="mt-1 flex items-baseline gap-2">
+
+                  <p
+                    className="
+                      text-3xl
+                      font-semibold
+                      tracking-[-0.04em]
+                      text-gray-900
+                      dark:text-white
+                    "
+                  >
+                    {weeklyEmptyDays}
+                  </p>
+
+                  <span className="text-sm text-gray-500 dark:text-slate-400">
+                    gün
+                  </span>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="max-w-md">
+
+              <p className="text-sm leading-6 text-gray-500 dark:text-slate-400">
+
+                {weeklyEmptyDays >=
+                4
+                  ? 'Takviminizde bu hafta geniş çalışma alanı bulunuyor.'
+                  : weeklyEmptyDays >=
+                      2
+                    ? 'Haftanız dengeli görünüyor; birkaç boş gününüz mevcut.'
+                    : 'Bu hafta takviminiz oldukça yoğun görünüyor.'}
+
+              </p>
+
+            </div>
+
+          </div>
+
+        </Card.Body>
+
+      </Card>
+
     </div>
   );
 };
