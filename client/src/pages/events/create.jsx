@@ -1,461 +1,1886 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
+import {
+  Link,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom';
+
+import {
+  useMutation,
+  useQuery,
+} from '@tanstack/react-query';
+
 import eventApi from '../../features/events/event.api.js';
 import userApi from '../../features/users/user.api.js';
-import { useAuth } from '../../app/providers/auth.provider.jsx';
+import caseApi from '../../features/cases/case.api.js';
+
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
+import Badge from '../../components/ui/Badge.jsx';
+
+import {
+  AlarmClock,
+  ArrowLeft,
+  Building2,
+  CalendarDays,
+  Gavel,
+  MapPin,
+  Plus,
+  Save,
+  Scale,
+  Trash2,
+  UserRound,
+  Users,
+} from 'lucide-react';
+
 import toast from 'react-hot-toast';
 
+// ======================================================
+// CONSTANTS
+// ======================================================
+
+const INITIAL_FORM = {
+  title: '',
+  description: '',
+
+  hearing_type:
+    'preliminary',
+
+  status:
+    'scheduled',
+
+  start_date: '',
+  end_date: '',
+
+  location: '',
+  court_room: '',
+  judge_name: '',
+
+  assigned_to: '',
+  opposing_counsel: '',
+
+  last_hearing_result: '',
+
+  expense_status:
+    'pending',
+
+  is_all_day:
+    false,
+
+  reminder_minutes:
+    '30',
+};
+
+const HEARING_TYPES = [
+  {
+    value: 'preliminary',
+    label: 'Ön İnceleme',
+  },
+  {
+    value: 'investigation',
+    label: 'Tahkikat',
+  },
+  {
+    value: 'expert_examination',
+    label: 'Bilirkişi İncelemesi',
+  },
+  {
+    value: 'witness_hearing',
+    label: 'Tanık Dinlenmesi',
+  },
+  {
+    value: 'final_decision',
+    label: 'Karar Duruşması',
+  },
+  {
+    value: 'other',
+    label: 'Diğer',
+  },
+];
+
+const STATUS_OPTIONS = [
+  {
+    value: 'scheduled',
+    label: 'Planlandı',
+  },
+  {
+    value: 'ongoing',
+    label: 'Devam Ediyor',
+  },
+  {
+    value: 'completed',
+    label: 'Tamamlandı',
+  },
+  {
+    value: 'cancelled',
+    label: 'İptal',
+  },
+];
+
+const EXPENSE_OPTIONS = [
+  {
+    value: 'pending',
+    label: 'Bekliyor',
+  },
+  {
+    value: 'paid',
+    label: 'Ödendi',
+  },
+  {
+    value: 'not_applicable',
+    label: 'Yok',
+  },
+];
+
+const REMINDER_OPTIONS = [
+  {
+    value: '0',
+    label: 'Hatırlatma yok',
+  },
+  {
+    value: '5',
+    label: '5 dakika önce',
+  },
+  {
+    value: '10',
+    label: '10 dakika önce',
+  },
+  {
+    value: '15',
+    label: '15 dakika önce',
+  },
+  {
+    value: '30',
+    label: '30 dakika önce',
+  },
+  {
+    value: '60',
+    label: '1 saat önce',
+  },
+  {
+    value: '120',
+    label: '2 saat önce',
+  },
+  {
+    value: '1440',
+    label: '1 gün önce',
+  },
+];
+
+const ROLE_OPTIONS = [
+  {
+    value: 'avukat',
+    label: 'Avukat',
+    icon: '⚖️',
+  },
+  {
+    value: 'karsi_taraf_avukati',
+    label: 'Karşı Taraf Avukatı',
+    icon: '⚖️',
+  },
+  {
+    value: 'müvekkil',
+    label: 'Müvekkil',
+    icon: '👤',
+  },
+  {
+    value: 'davaci',
+    label: 'Davacı',
+    icon: '👤',
+  },
+  {
+    value: 'davali',
+    label: 'Davalı',
+    icon: '👤',
+  },
+  {
+    value: 'tanik',
+    label: 'Tanık',
+    icon: '🗣️',
+  },
+  {
+    value: 'bilirkişi',
+    label: 'Bilirkişi',
+    icon: '🔬',
+  },
+  {
+    value: 'uzman',
+    label: 'Uzman',
+    icon: '🎯',
+  },
+  {
+    value: 'tercüman',
+    label: 'Tercüman',
+    icon: '🌐',
+  },
+  {
+    value: 'gözlemci',
+    label: 'Gözlemci',
+    icon: '👁️',
+  },
+  {
+    value: 'diger',
+    label: 'Diğer',
+    icon: '👤',
+  },
+];
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const normalizeNullable = (
+  value
+) => {
+  const normalized =
+    String(
+      value ?? ''
+    ).trim();
+
+  return (
+    normalized ||
+    null
+  );
+};
+
+/*
+ * datetime-local timezone bilgisi taşımaz.
+ *
+ * Browser kullanıcının yerel saatini bildiği için
+ * burada gerçek ISO zamana dönüştürüyoruz.
+ *
+ * Örn:
+ * kullanıcı 18.08.2026 09:00 seçerse
+ * Europe/Istanbul için doğru UTC karşılığı backend'e gider.
+ */
+const localDateTimeToIso = (
+  value
+) => {
+  if (!value) {
+    return null;
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return null;
+  }
+
+  return date.toISOString();
+};
+
+const getRoleLabel = (
+  role
+) => {
+  return (
+    ROLE_OPTIONS.find(
+      (
+        item
+      ) =>
+        item.value ===
+        role
+    )?.label ||
+    role ||
+    'Katılımcı'
+  );
+};
+
+const getRoleIcon = (
+  role
+) => {
+  return (
+    ROLE_OPTIONS.find(
+      (
+        item
+      ) =>
+        item.value ===
+        role
+    )?.icon ||
+    '👤'
+  );
+};
+
+// ======================================================
+// COMPONENT
+// ======================================================
+
 const EventCreate = () => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const [searchParams] = useSearchParams();
-  const caseIdFromUrl = searchParams.get('case');
+  const navigate =
+    useNavigate();
 
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    hearing_type: 'other',
-    last_hearing_result: '',
-    opposing_counsel: '',
-    expense_status: 'pending',
-    start_date: '',
-    end_date: '',
-    location: '',
-    court_room: '',
-    judge_name: '',
-    status: 'scheduled',
-    case_id: caseIdFromUrl || '',
-    assigned_to: '',
-    is_all_day: false,
-    reminder_minutes: 30,
-  });
-  const [errors, setErrors] = useState({});
+  const {
+    user,
+  } =
+    useAuth();
 
-  // ✅ Admin değilse assigned_to'yu otomatik doldur
+  const [
+    searchParams,
+  ] =
+    useSearchParams();
+
+  const caseIdFromUrl =
+    searchParams.get(
+      'case'
+    );
+
+  const [
+    formData,
+    setFormData,
+  ] =
+    useState({
+      ...INITIAL_FORM,
+
+      case_id:
+        caseIdFromUrl ||
+        '',
+    });
+
+  const [
+    errors,
+    setErrors,
+  ] =
+    useState({});
+
+  const [
+    attendeeName,
+    setAttendeeName,
+  ] =
+    useState('');
+
+  const [
+    attendeeRole,
+    setAttendeeRole,
+  ] =
+    useState(
+      'diger'
+    );
+
+  const [
+    attendees,
+    setAttendees,
+  ] =
+    useState([]);
+
+  // ======================================================
+  // CURRENT CASE
+  // ======================================================
+
+  const {
+    data:
+      caseData,
+
+    isLoading:
+      caseLoading,
+  } =
+    useQuery({
+      queryKey: [
+        'case',
+        'event-create',
+        caseIdFromUrl,
+      ],
+
+      queryFn: () =>
+        caseApi.getOne(
+          caseIdFromUrl
+        ),
+
+      enabled:
+        Boolean(
+          caseIdFromUrl
+        ),
+
+      staleTime:
+        5 * 60 * 1000,
+    });
+
+  const caseItem =
+    caseData?.data?.data ||
+    null;
+
+  // ======================================================
+  // USERS
+  // ======================================================
+
+  const {
+    data:
+      usersData,
+
+    isLoading:
+      usersLoading,
+  } =
+    useQuery({
+      queryKey: [
+        'users',
+        'hearing-assignees',
+      ],
+
+      queryFn: () =>
+        userApi.getAll({
+          page: 1,
+          limit: 100,
+        }),
+
+      staleTime:
+        5 * 60 * 1000,
+    });
+
+  const users =
+    Array.isArray(
+      usersData?.data?.data
+    )
+      ? usersData.data.data
+      : [];
+
+  /*
+   * Alanın adı "Atanan Avukat".
+   * Bu nedenle sekreter veya stajyeri burada
+   * seçenek olarak göstermiyoruz.
+   */
+  const assignableUsers =
+    useMemo(() => {
+      return users.filter(
+        (
+          item
+        ) =>
+          [
+            'admin',
+            'lawyer',
+          ].includes(
+            item.role
+          )
+      );
+    }, [
+      users,
+    ]);
+
+  // ======================================================
+  // DEFAULT ASSIGNEE
+  // ======================================================
+
   useEffect(() => {
-    if (user?.role !== 'admin' && user?.id) {
-      setFormData(prev => ({
-        ...prev,
-        assigned_to: user.id
-      }));
-    }
-  }, [user]);
-
-  // ✅ Katılımcılar state
-  const [attendeesInput, setAttendeesInput] = useState('');
-  const [attendeesRole, setAttendeesRole] = useState('diger');
-  const [attendees, setAttendees] = useState([]);
-
-  // ✅ Rol seçenekleri
-  const roleOptions = [
-    { value: 'avukat', label: 'Avukat', icon: '⚖️' },
-    { value: 'karsi_taraf_avukati', label: 'Karşı Taraf Avukatı', icon: '⚖️' },
-    { value: 'tanik', label: 'Tanık', icon: '🗣️' },
-    { value: 'bilirkişi', label: 'Bilirkişi', icon: '🔬' },
-    { value: 'uzman', label: 'Uzman', icon: '🎯' },
-    { value: 'tercüman', label: 'Tercüman', icon: '🌐' },
-    { value: 'gözlemci', label: 'Gözlemci', icon: '👁️' },
-    { value: 'diger', label: 'Diğer', icon: '👤' },
-  ];
-
-  // ✅ Tüm kullanıcıları getir
-  const { data: usersData } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => userApi.getAll(),
-  });
-
-  const users = usersData?.data?.data || [];
-
-  // ✅ Admin ise herkesi göster, değilse sadece kendini
-  const assignableUsers = user?.role === 'admin'
-    ? users
-    : users.filter(u => u.id === user.id);
-
-  const mutation = useMutation({
-    mutationFn: (data) => eventApi.create(data),
-    onSuccess: (response) => {
-      toast.success('Duruşma başarıyla eklendi');
-      const event = response.data.data;
-      if (event.case_id) {
-        navigate(`/cases/${event.case_id}`);
-      } else {
-        navigate('/calendar');
-      }
-    },
-    onError: (error) => {
-      toast.error(error.response?.data?.message || 'Duruşma eklenemedi');
-    },
-  });
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: '' }));
-    }
-  };
-
-  // ✅ Katılımcı fonksiyonları
-  const addAttendee = () => {
-    const name = attendeesInput.trim();
-    if (name) {
-      setAttendees([...attendees, { name, role: attendeesRole }]);
-      setAttendeesInput('');
-    }
-  };
-
-  const removeAttendee = (index) => {
-    setAttendees(attendees.filter((_, i) => i !== index));
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      addAttendee();
-    }
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const newErrors = {};
-    if (!formData.title) newErrors.title = 'Başlık gereklidir';
-    if (!formData.start_date) newErrors.start_date = 'Başlangıç tarihi gereklidir';
-    
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+    if (
+      !user?.id
+    ) {
       return;
     }
 
-    // ✅ Admin değilse user.id'yi kullan
-    const assignedTo = user?.role !== 'admin' ? user?.id : formData.assigned_to;
+    /*
+     * Avukat kendi oluşturduğu duruşmada varsayılan
+     * olarak kendisine atanır.
+     *
+     * Admin isterse seçim yapar.
+     */
+    if (
+      user.role ===
+      'lawyer'
+    ) {
+      setFormData(
+        (
+          current
+        ) => ({
+          ...current,
 
-    mutation.mutate({
-      ...formData,
-      event_type: 'hearing',
-      assigned_to: assignedTo || null,
-      case_id: formData.case_id || null,
-      attendees: attendees.map(a => ({ name: a.name, role: a.role || 'diger' })),
+          assigned_to:
+            user.id,
+        })
+      );
+    }
+  }, [
+    user,
+  ]);
+
+  // ======================================================
+  // CASE DEFAULTS
+  // ======================================================
+
+  useEffect(() => {
+    if (
+      !caseItem
+    ) {
+      return;
+    }
+
+    /*
+     * Davada mahkeme bilgisi zaten varsa duruşma formuna
+     * otomatik öneriyoruz.
+     *
+     * Kullanıcı isterse değiştirebilir.
+     */
+    setFormData(
+      (
+        current
+      ) => ({
+        ...current,
+
+        location:
+          current.location ||
+          caseItem.court_name ||
+          '',
+      })
+    );
+  }, [
+    caseItem,
+  ]);
+
+  // ======================================================
+  // MUTATION
+  // ======================================================
+
+  const mutation =
+    useMutation({
+      mutationFn: (
+        payload
+      ) =>
+        eventApi.create(
+          payload
+        ),
+
+      onSuccess: (
+        response
+      ) => {
+        const event =
+          response?.data?.data ??
+          response?.data ??
+          null;
+
+        toast.success(
+          'Duruşma başarıyla oluşturuldu'
+        );
+
+        if (
+          event?.id
+        ) {
+          navigate(
+            `/events/${event.id}`
+          );
+
+          return;
+        }
+
+        if (
+          event?.case_id
+        ) {
+          navigate(
+            `/cases/${event.case_id}`
+          );
+
+          return;
+        }
+
+        navigate(
+          '/calendar'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        toast.error(
+          error
+            ?.response
+            ?.data
+            ?.message ||
+          error?.message ||
+          'Duruşma oluşturulamadı'
+        );
+      },
     });
+
+  const isPending =
+    mutation.isPending;
+
+  // ======================================================
+  // CHANGE
+  // ======================================================
+
+  const handleChange = (
+    event
+  ) => {
+    const {
+      name,
+      value,
+      type,
+      checked,
+    } =
+      event.target;
+
+    setFormData(
+      (
+        current
+      ) => ({
+        ...current,
+
+        [name]:
+          type ===
+          'checkbox'
+            ? checked
+            : value,
+      })
+    );
+
+    if (
+      errors[name]
+    ) {
+      setErrors(
+        (
+          current
+        ) => ({
+          ...current,
+
+          [name]:
+            '',
+        })
+      );
+    }
   };
 
+  // ======================================================
+  // ATTENDEES
+  // ======================================================
+
+  const addAttendee =
+    () => {
+      const name =
+        attendeeName.trim();
+
+      if (!name) {
+        return;
+      }
+
+      const alreadyExists =
+        attendees.some(
+          (
+            item
+          ) =>
+            item.name
+              ?.trim()
+              .toLocaleLowerCase(
+                'tr-TR'
+              ) ===
+              name.toLocaleLowerCase(
+                'tr-TR'
+              ) &&
+            item.role ===
+              attendeeRole
+        );
+
+      if (
+        alreadyExists
+      ) {
+        toast.error(
+          'Bu katılımcı zaten eklenmiş'
+        );
+
+        return;
+      }
+
+      setAttendees(
+        (
+          current
+        ) => [
+          ...current,
+
+          {
+            name,
+            role:
+              attendeeRole,
+          },
+        ]
+      );
+
+      setAttendeeName('');
+    };
+
+  const removeAttendee = (
+    index
+  ) => {
+    setAttendees(
+      (
+        current
+      ) =>
+        current.filter(
+          (
+            _,
+            currentIndex
+          ) =>
+            currentIndex !==
+            index
+        )
+    );
+  };
+
+  const handleAttendeeKeyDown =
+    (
+      event
+    ) => {
+      if (
+        event.key !==
+        'Enter'
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      addAttendee();
+    };
+
+  // ======================================================
+  // VALIDATION
+  // ======================================================
+
+  const validateForm =
+    () => {
+      const nextErrors =
+        {};
+
+      const title =
+        formData.title.trim();
+
+      if (
+        title.length <
+        2
+      ) {
+        nextErrors.title =
+          'Duruşma başlığı gereklidir';
+      }
+
+      if (
+        !formData.start_date
+      ) {
+        nextErrors.start_date =
+          'Başlangıç tarihi gereklidir';
+      }
+
+      if (
+        formData.start_date &&
+        !localDateTimeToIso(
+          formData.start_date
+        )
+      ) {
+        nextErrors.start_date =
+          'Geçerli bir başlangıç tarihi girin';
+      }
+
+      if (
+        formData.end_date &&
+        !localDateTimeToIso(
+          formData.end_date
+        )
+      ) {
+        nextErrors.end_date =
+          'Geçerli bir bitiş tarihi girin';
+      }
+
+      if (
+        formData.start_date &&
+        formData.end_date
+      ) {
+        const start =
+          new Date(
+            formData.start_date
+          );
+
+        const end =
+          new Date(
+            formData.end_date
+          );
+
+        if (
+          end <
+          start
+        ) {
+          nextErrors.end_date =
+            'Bitiş tarihi başlangıç tarihinden önce olamaz';
+        }
+      }
+
+      setErrors(
+        nextErrors
+      );
+
+      return (
+        Object.keys(
+          nextErrors
+        ).length ===
+        0
+      );
+    };
+
+  // ======================================================
+  // SUBMIT
+  // ======================================================
+
+  const handleSubmit = (
+    event
+  ) => {
+    event.preventDefault();
+
+    if (
+      isPending
+    ) {
+      return;
+    }
+
+    if (
+      !validateForm()
+    ) {
+      toast.error(
+        'Formdaki eksik veya hatalı alanları kontrol edin'
+      );
+
+      return;
+    }
+
+    const assignedTo =
+      user?.role ===
+      'lawyer'
+        ? user.id
+        : formData.assigned_to ||
+          null;
+
+    const payload = {
+      title:
+        formData.title.trim(),
+
+      description:
+        normalizeNullable(
+          formData.description
+        ),
+
+      event_type:
+        'hearing',
+
+      hearing_type:
+        formData.hearing_type,
+
+      status:
+        formData.status,
+
+      start_date:
+        localDateTimeToIso(
+          formData.start_date
+        ),
+
+      end_date:
+        formData.end_date
+          ? localDateTimeToIso(
+              formData.end_date
+            )
+          : null,
+
+      location:
+        normalizeNullable(
+          formData.location
+        ),
+
+      court_room:
+        normalizeNullable(
+          formData.court_room
+        ),
+
+      judge_name:
+        normalizeNullable(
+          formData.judge_name
+        ),
+
+      last_hearing_result:
+        normalizeNullable(
+          formData.last_hearing_result
+        ),
+
+      opposing_counsel:
+        normalizeNullable(
+          formData.opposing_counsel
+        ),
+
+      expense_status:
+        formData.expense_status,
+
+      case_id:
+        caseIdFromUrl ||
+        null,
+
+      assigned_to:
+        assignedTo,
+
+      is_all_day:
+        Boolean(
+          formData.is_all_day
+        ),
+
+      reminder_minutes:
+        Number(
+          formData.reminder_minutes
+        ) || 0,
+
+      attendees:
+        attendees.map(
+          (
+            attendee
+          ) => ({
+            name:
+              attendee.name.trim(),
+
+            role:
+              attendee.role ||
+              'diger',
+          })
+        ),
+    };
+
+    mutation.mutate(
+      payload
+    );
+  };
+
+  // ======================================================
+  // CANCEL
+  // ======================================================
+
+  const handleCancel =
+    () => {
+      if (
+        caseIdFromUrl
+      ) {
+        navigate(
+          `/cases/${caseIdFromUrl}`
+        );
+
+        return;
+      }
+
+      navigate(
+        '/calendar'
+      );
+    };
+
+  // ======================================================
+  // RENDER
+  // ======================================================
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link to={caseIdFromUrl ? `/cases/${caseIdFromUrl}` : '/calendar'} 
-                className="text-blue-600 hover:underline">
-            ← Geri Dön
-          </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-            ⚖️ Yeni Duruşma
-          </h1>
+    <div className="mx-auto max-w-4xl space-y-6">
+
+      {/* ==================================================
+          HEADER
+      ================================================== */}
+
+      <div>
+
+        <Link
+          to={
+            caseIdFromUrl
+              ? `/cases/${caseIdFromUrl}`
+              : '/calendar'
+          }
+          className="inline-flex items-center gap-1 text-sm text-gray-500 transition-colors hover:text-blue-600"
+        >
+          <ArrowLeft className="h-4 w-4" />
+
+          {caseIdFromUrl
+            ? 'Davaya Dön'
+            : 'Takvime Dön'}
+        </Link>
+
+        <div className="mt-4 flex items-start gap-3">
+
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/20">
+
+            <Gavel className="h-6 w-6 text-blue-600" />
+
+          </div>
+
+          <div>
+
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Yeni Duruşma
+            </h1>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Duruşma tarihini, görevlendirilen avukatı, katılımcıları ve hatırlatma bilgilerini oluşturun.
+            </p>
+
+          </div>
+
         </div>
+
       </div>
 
-      <Card>
-        <form onSubmit={handleSubmit} className="space-y-6 p-6">
-          {/* Başlık */}
-          <Input
-            label="Başlık *"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            error={errors.title}
-            placeholder="Örn: Ön İnceleme Duruşması"
-          />
+      {/* ==================================================
+          CASE SUMMARY
+      ================================================== */}
 
-          {/* Açıklama */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Açıklama
-            </label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows="3"
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Duruşma ile ilgili notlar..."
-            />
-          </div>
+      {caseIdFromUrl && (
+        <Card>
 
-          {/* Duruşma Türü */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Duruşma Türü
-            </label>
-            <select
-              name="hearing_type"
-              value={formData.hearing_type}
-              onChange={handleChange}
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="preliminary">Ön İnceleme</option>
-              <option value="investigation">Tahkikat</option>
-              <option value="expert_examination">Bilirkişi İncelemesi</option>
-              <option value="witness_hearing">Tanık Dinlenmesi</option>
-              <option value="final_decision">Karar Duruşması</option>
-              <option value="other">Diğer</option>
-            </select>
-          </div>
+          <Card.Body>
 
-          {/* Durum */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Durum
-            </label>
-            <select
-              name="status"
-              value={formData.status}
-              onChange={handleChange}
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="scheduled">Planlandı</option>
-              <option value="ongoing">Devam Ediyor</option>
-              <option value="completed">Tamamlandı</option>
-              <option value="cancelled">İptal</option>
-            </select>
-          </div>
+            {caseLoading ? (
+              <p className="text-sm text-gray-500">
+                Dava bilgileri yükleniyor...
+              </p>
+            ) : caseItem ? (
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
-          {/* Tarih */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Başlangıç Tarihi *"
-              name="start_date"
-              type="datetime-local"
-              value={formData.start_date}
-              onChange={handleChange}
-              error={errors.start_date}
-            />
-            <Input
-              label="Bitiş Tarihi"
-              name="end_date"
-              type="datetime-local"
-              value={formData.end_date}
-              onChange={handleChange}
-            />
-          </div>
+                <div className="flex items-start gap-3">
 
-          {/* Yer Bilgileri */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="Mahkeme"
-              name="location"
-              value={formData.location}
-              onChange={handleChange}
-              placeholder="Mahkeme adı"
-            />
-            <Input
-              label="Salon"
-              name="court_room"
-              value={formData.court_room}
-              onChange={handleChange}
-              placeholder="Salon no"
-            />
-            <Input
-              label="Hakim"
-              name="judge_name"
-              value={formData.judge_name}
-              onChange={handleChange}
-              placeholder="Hakim adı"
-            />
-          </div>
+                  <div className="rounded-xl bg-gray-100 p-3 dark:bg-gray-800">
 
-          {/* Son Duruşma Sonucu */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Son Duruşma Sonucu
-            </label>
-            <textarea
-              name="last_hearing_result"
-              value={formData.last_hearing_result}
-              onChange={handleChange}
-              rows="2"
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Bilirkişi raporu beklenecek, tanıklar dinlenecek..."
-            />
-          </div>
+                    <Scale className="h-5 w-5 text-gray-600 dark:text-gray-300" />
 
-          {/* Avukat Bilgileri */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Atanan Avukat
-              </label>
-              
-              {user?.role === 'admin' ? (
-                <select
-                  name="assigned_to"
-                  value={formData.assigned_to}
-                  onChange={handleChange}
-                  className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Atanacak kişi seçin</option>
-                  {assignableUsers.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.first_name} {person.last_name}
-                      {person.role === 'admin' && ' (Admin)'}
-                      {person.role === 'lawyer' && ' (Avukat)'}
-                      {person.role === 'intern' && ' (Stajyer)'}
-                      {person.role === 'secretary' && ' (Sekreter)'}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white">
-                  {user?.first_name} {user?.last_name} (Kendin)
+                  </div>
+
+                  <div>
+
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      {caseItem.title}
+                    </p>
+
+                    <p className="mt-1 text-sm text-gray-500">
+                      {caseItem.case_number ||
+                        'Dosya numarası yok'}
+
+                      {caseItem.court_name
+                        ? ` · ${caseItem.court_name}`
+                        : ''}
+                    </p>
+
+                  </div>
+
                 </div>
-              )}
+
+                <Badge variant="default">
+                  Davaya Bağlı
+                </Badge>
+
+              </div>
+            ) : (
+              <p className="text-sm text-red-600">
+                İlişkili dava yüklenemedi.
+              </p>
+            )}
+
+          </Card.Body>
+
+        </Card>
+      )}
+
+      {/* ==================================================
+          FORM
+      ================================================== */}
+
+      <Card>
+
+        <form
+          onSubmit={
+            handleSubmit
+          }
+          className="space-y-8 p-6"
+        >
+
+          {/* ==================================================
+              BASIC INFORMATION
+          ================================================== */}
+
+          <section className="space-y-4">
+
+            <div>
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Duruşma Bilgileri
+              </h2>
+
+              <p className="mt-1 text-xs text-gray-500">
+                Duruşmanın temel bilgilerini belirleyin.
+              </p>
+
             </div>
 
             <Input
-              label="Karşı Taraf Avukatı"
-              name="opposing_counsel"
-              value={formData.opposing_counsel}
-              onChange={handleChange}
-              placeholder="Av. Ahmet Yılmaz"
+              label="Başlık *"
+              name="title"
+              value={
+                formData.title
+              }
+              onChange={
+                handleChange
+              }
+              error={
+                errors.title
+              }
+              disabled={
+                isPending
+              }
+              placeholder="Örn: Ön İnceleme Duruşması"
             />
-          </div>
 
-          {/* Masraf / Harç Durumu */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Masraf / Harç Durumu
-            </label>
-            <select
-              name="expense_status"
-              value={formData.expense_status}
-              onChange={handleChange}
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="paid">Ödendi</option>
-              <option value="pending">Bekliyor</option>
-              <option value="not_applicable">Yok</option>
-            </select>
-          </div>
-
-          {/* ✅ KATILIMCILAR */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              👥 Katılımcılar
-            </label>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="text"
-                value={attendeesInput}
-                onChange={(e) => setAttendeesInput(e.target.value)}
-                onKeyDown={handleKeyPress}
-                className="flex-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Katılımcı adı yaz"
-              />
-              <select
-                value={attendeesRole}
-                onChange={(e) => setAttendeesRole(e.target.value)}
-                className="sm:w-48 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {roleOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.icon} {option.label}
-                  </option>
-                ))}
-              </select>
-              <Button type="button" size="sm" onClick={addAttendee} className="sm:w-auto">
-                Ekle
-              </Button>
-            </div>
-            
-            {attendees.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {attendees.map((attendee, index) => {
-                  const role = roleOptions.find(r => r.value === attendee.role);
-                  return (
-                    <span
-                      key={index}
-                      className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm"
-                    >
-                      {role?.icon || '👤'} {attendee.name} ({role?.label || attendee.role})
-                      <button
-                        type="button"
-                        onClick={() => removeAttendee(index)}
-                        className="text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-100"
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-            <p className="text-xs text-gray-400 mt-1">Katılımcı eklemek için isim yaz, rol seç ve Ekle butonuna tıkla</p>
-          </div>
-
-          {/* Hatırlatma */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Hatırlatma (dakika)
+
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Açıklama
               </label>
-              <select
-                name="reminder_minutes"
-                value={formData.reminder_minutes}
-                onChange={handleChange}
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="0">Hatırlatma yok</option>
-                <option value="5">5 dakika</option>
-                <option value="10">10 dakika</option>
-                <option value="15">15 dakika</option>
-                <option value="30">30 dakika</option>
-                <option value="60">1 saat</option>
-                <option value="120">2 saat</option>
-                <option value="1440">1 gün</option>
-              </select>
+
+              <textarea
+                name="description"
+                value={
+                  formData.description
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isPending
+                }
+                rows="3"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                placeholder="Duruşmaya ilişkin genel not..."
+              />
+
             </div>
 
-            <div className="flex items-center gap-2 pt-6">
+            <div className="grid gap-4 md:grid-cols-2">
+
+              <div>
+
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Duruşma Türü
+                </label>
+
+                <select
+                  name="hearing_type"
+                  value={
+                    formData.hearing_type
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    isPending
+                  }
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                >
+
+                  {HEARING_TYPES.map(
+                    (
+                      option
+                    ) => (
+                      <option
+                        key={
+                          option.value
+                        }
+                        value={
+                          option.value
+                        }
+                      >
+                        {option.label}
+                      </option>
+                    )
+                  )}
+
+                </select>
+
+              </div>
+
+              <div>
+
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Durum
+                </label>
+
+                <select
+                  name="status"
+                  value={
+                    formData.status
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    isPending
+                  }
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                >
+
+                  {STATUS_OPTIONS.map(
+                    (
+                      option
+                    ) => (
+                      <option
+                        key={
+                          option.value
+                        }
+                        value={
+                          option.value
+                        }
+                      >
+                        {option.label}
+                      </option>
+                    )
+                  )}
+
+                </select>
+
+              </div>
+
+            </div>
+
+          </section>
+
+          {/* ==================================================
+              DATE
+          ================================================== */}
+
+          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+
+            <div className="flex items-start gap-3">
+
+              <CalendarDays className="mt-0.5 h-5 w-5 text-blue-600" />
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Tarih ve Saat
+                </h2>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Duruşmanın başlangıç ve varsa bitiş zamanını belirleyin.
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+
+              <Input
+                label="Başlangıç Tarihi *"
+                name="start_date"
+                type="datetime-local"
+                value={
+                  formData.start_date
+                }
+                onChange={
+                  handleChange
+                }
+                error={
+                  errors.start_date
+                }
+                disabled={
+                  isPending
+                }
+              />
+
+              <Input
+                label="Bitiş Tarihi"
+                name="end_date"
+                type="datetime-local"
+                value={
+                  formData.end_date
+                }
+                onChange={
+                  handleChange
+                }
+                error={
+                  errors.end_date
+                }
+                disabled={
+                  isPending
+                }
+              />
+
+            </div>
+
+            <label className="inline-flex cursor-pointer items-center gap-2">
+
               <input
                 type="checkbox"
                 name="is_all_day"
-                checked={formData.is_all_day}
-                onChange={handleChange}
-                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                checked={
+                  formData.is_all_day
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isPending
+                }
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
-              <label className="text-sm text-gray-700 dark:text-gray-300">
+
+              <span className="text-sm text-gray-700 dark:text-gray-300">
                 Tüm gün etkinlik
-              </label>
+              </span>
+
+            </label>
+
+          </section>
+
+          {/* ==================================================
+              LOCATION
+          ================================================== */}
+
+          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+
+            <div className="flex items-start gap-3">
+
+              <MapPin className="mt-0.5 h-5 w-5 text-emerald-600" />
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Mahkeme ve Yer Bilgileri
+                </h2>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Duruşmanın gerçekleştirileceği mahkeme, salon ve hakim bilgileri.
+                </p>
+
+              </div>
+
             </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+
+              <Input
+                label="Mahkeme / Yer"
+                name="location"
+                value={
+                  formData.location
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isPending
+                }
+                placeholder="Örn: İstanbul 3. Sulh Hukuk Mahkemesi"
+              />
+
+              <Input
+                label="Salon"
+                name="court_room"
+                value={
+                  formData.court_room
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isPending
+                }
+                placeholder="Örn: Salon 8"
+              />
+
+              <Input
+                label="Hakim"
+                name="judge_name"
+                value={
+                  formData.judge_name
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isPending
+                }
+                placeholder="Hakim adı"
+              />
+
+            </div>
+
+          </section>
+
+          {/* ==================================================
+              LAWYERS
+          ================================================== */}
+
+          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+
+            <div className="flex items-start gap-3">
+
+              <UserRound className="mt-0.5 h-5 w-5 text-purple-600" />
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Avukat Bilgileri
+                </h2>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Duruşmadan sorumlu avukatı ve karşı taraf vekilini belirleyin.
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+
+              <div>
+
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Atanan Avukat
+                </label>
+
+                {user?.role ===
+                'lawyer' ? (
+                  <div className="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white">
+
+                    {user.first_name}{' '}
+                    {user.last_name}
+
+                    <span className="ml-2 text-xs text-gray-400">
+                      (Kendiniz)
+                    </span>
+
+                  </div>
+                ) : (
+                  <select
+                    name="assigned_to"
+                    value={
+                      formData.assigned_to
+                    }
+                    onChange={
+                      handleChange
+                    }
+                    disabled={
+                      isPending ||
+                      usersLoading
+                    }
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  >
+
+                    <option value="">
+                      {usersLoading
+                        ? 'Avukatlar yükleniyor...'
+                        : 'Avukat seçin'}
+                    </option>
+
+                    {assignableUsers.map(
+                      (
+                        person
+                      ) => (
+                        <option
+                          key={
+                            person.id
+                          }
+                          value={
+                            person.id
+                          }
+                        >
+                          {person.first_name}{' '}
+                          {person.last_name}
+                          {person.role ===
+                          'admin'
+                            ? ' (Yönetici)'
+                            : ' (Avukat)'}
+                        </option>
+                      )
+                    )}
+
+                  </select>
+                )}
+
+              </div>
+
+              <Input
+                label="Karşı Taraf Avukatı"
+                name="opposing_counsel"
+                value={
+                  formData.opposing_counsel
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isPending
+                }
+                placeholder="Örn: Av. Ahmet Yılmaz"
+              />
+
+            </div>
+
+          </section>
+
+          {/* ==================================================
+              ATTENDEES
+          ================================================== */}
+
+          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+
+            <div className="flex items-start gap-3">
+
+              <Users className="mt-0.5 h-5 w-5 text-indigo-600" />
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Katılımcılar
+                </h2>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Tanık, bilirkişi, taraf veya diğer katılımcıları ekleyin.
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-[1fr_12rem_auto]">
+
+              <input
+                type="text"
+                value={
+                  attendeeName
+                }
+                onChange={(
+                  event
+                ) =>
+                  setAttendeeName(
+                    event.target.value
+                  )
+                }
+                onKeyDown={
+                  handleAttendeeKeyDown
+                }
+                disabled={
+                  isPending
+                }
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                placeholder="Katılımcı adı"
+              />
+
+              <select
+                value={
+                  attendeeRole
+                }
+                onChange={(
+                  event
+                ) =>
+                  setAttendeeRole(
+                    event.target.value
+                  )
+                }
+                disabled={
+                  isPending
+                }
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              >
+
+                {ROLE_OPTIONS.map(
+                  (
+                    option
+                  ) => (
+                    <option
+                      key={
+                        option.value
+                      }
+                      value={
+                        option.value
+                      }
+                    >
+                      {option.icon}{' '}
+                      {option.label}
+                    </option>
+                  )
+                )}
+
+              </select>
+
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  isPending ||
+                  !attendeeName.trim()
+                }
+                onClick={
+                  addAttendee
+                }
+              >
+                <Plus className="mr-1 h-4 w-4" />
+
+                Ekle
+              </Button>
+
+            </div>
+
+            {attendees.length ===
+            0 ? (
+              <p className="text-xs text-gray-400">
+                Henüz ek katılımcı bulunmuyor.
+              </p>
+            ) : (
+              <div className="space-y-2">
+
+                {attendees.map(
+                  (
+                    attendee,
+                    index
+                  ) => (
+                    <div
+                      key={`${attendee.name}-${attendee.role}-${index}`}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700"
+                    >
+
+                      <div className="flex min-w-0 items-center gap-3">
+
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+                          {getRoleIcon(
+                            attendee.role
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+
+                          <p className="truncate font-medium text-gray-900 dark:text-white">
+                            {attendee.name}
+                          </p>
+
+                          <p className="text-xs text-gray-500">
+                            {getRoleLabel(
+                              attendee.role
+                            )}
+                          </p>
+
+                        </div>
+
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={
+                          isPending
+                        }
+                        onClick={() =>
+                          removeAttendee(
+                            index
+                          )
+                        }
+                        className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/20"
+                        aria-label="Katılımcıyı kaldır"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+
+                    </div>
+                  )
+                )}
+
+              </div>
+            )}
+
+          </section>
+
+          {/* ==================================================
+              RESULT / EXPENSE
+          ================================================== */}
+
+          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+
+            <div>
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Duruşma Sonucu ve Masraf
+              </h2>
+
+              <p className="mt-1 text-xs text-gray-500">
+                Gerekliyse mevcut sonucu ve harç durumunu kaydedin.
+              </p>
+
+            </div>
+
+            <div>
+
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Son Duruşma Sonucu
+              </label>
+
+              <textarea
+                name="last_hearing_result"
+                value={
+                  formData.last_hearing_result
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isPending
+                }
+                rows="3"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                placeholder="Örn: Bilirkişi raporunun beklenmesine karar verildi."
+              />
+
+            </div>
+
+            <div className="max-w-sm">
+
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Masraf / Harç Durumu
+              </label>
+
+              <select
+                name="expense_status"
+                value={
+                  formData.expense_status
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isPending
+                }
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              >
+
+                {EXPENSE_OPTIONS.map(
+                  (
+                    option
+                  ) => (
+                    <option
+                      key={
+                        option.value
+                      }
+                      value={
+                        option.value
+                      }
+                    >
+                      {option.label}
+                    </option>
+                  )
+                )}
+
+              </select>
+
+            </div>
+
+          </section>
+
+          {/* ==================================================
+              REMINDER
+          ================================================== */}
+
+          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+
+            <div className="flex items-start gap-3">
+
+              <AlarmClock className="mt-0.5 h-5 w-5 text-amber-500" />
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Hatırlatma
+                </h2>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Atanan kullanıcıya duruşma öncesinde hatırlatma oluşturulur.
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="max-w-sm">
+
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Hatırlatma Zamanı
+              </label>
+
+              <select
+                name="reminder_minutes"
+                value={
+                  formData.reminder_minutes
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isPending
+                }
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              >
+
+                {REMINDER_OPTIONS.map(
+                  (
+                    option
+                  ) => (
+                    <option
+                      key={
+                        option.value
+                      }
+                      value={
+                        option.value
+                      }
+                    >
+                      {option.label}
+                    </option>
+                  )
+                )}
+
+              </select>
+
+            </div>
+
+          </section>
+
+          {/* ==================================================
+              ACTIONS
+          ================================================== */}
+
+          <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-6 dark:border-gray-700">
+
+            <Button
+              type="submit"
+              loading={
+                isPending
+              }
+              disabled={
+                isPending
+              }
+            >
+              <Save className="mr-2 h-4 w-4" />
+
+              Duruşmayı Oluştur
+            </Button>
+
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={
+                isPending
+              }
+              onClick={
+                handleCancel
+              }
+            >
+              Vazgeç
+            </Button>
+
           </div>
 
-          {/* Butonlar */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <Button type="submit" loading={mutation.isPending}>
-              ⚖️ Duruşma Ekle
-            </Button>
-            <Button 
-              type="button" 
-              variant="secondary" 
-              onClick={() => {
-                if (caseIdFromUrl) {
-                  navigate(`/cases/${caseIdFromUrl}`);
-                } else {
-                  navigate('/calendar');
-                }
-              }}
-            >
-              İptal
-            </Button>
-          </div>
         </form>
+
       </Card>
+
     </div>
   );
 };
-  
+
 export default EventCreate;

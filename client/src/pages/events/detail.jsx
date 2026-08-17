@@ -1,34 +1,106 @@
-import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import {
+  Link,
+  useParams,
+} from 'react-router-dom';
+
+import {
+  useQuery,
+} from '@tanstack/react-query';
+
 import eventApi from '../../features/events/event.api.js';
-import caseApi from '../../features/cases/case.api.js';
+
 import Badge from '../../components/ui/Badge.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
-import { 
-  ArrowLeft, Calendar, Clock, MapPin, Building2, User, 
-  Users, Edit2, AlarmClock,
-   Phone, Mail, FileText,  CheckSquare,
-   Gavel, DollarSign
+
+import {
+  AlarmClock,
+  ArrowLeft,
+  Building2,
+  Calendar,
+  CheckSquare,
+  Clock,
+  DollarSign,
+  Edit2,
+  FileText,
+  Gavel,
+  Mail,
+  MapPin,
+  Phone,
+  Scale,
+  User,
+  Users,
 } from 'lucide-react';
 
-// ✅ Rol seçenekleri
-const roleOptions = [
-  { value: 'avukat', label: 'Avukat', icon: '⚖️' },
-  { value: 'karsi_taraf_avukati', label: 'Karşı Taraf Avukatı', icon: '⚖️' },
-  { value: 'müvekkil', label: 'Müvekkil', icon: '👤' },
-  { value: 'davaci', label: 'Davacı', icon: '👤' },
-  { value: 'davali', label: 'Davalı', icon: '👤' },
-  { value: 'tanik', label: 'Tanık', icon: '🗣️' },
-  { value: 'bilirkişi', label: 'Bilirkişi', icon: '🔬' },
-  { value: 'uzman', label: 'Uzman', icon: '🎯' },
-  { value: 'tercüman', label: 'Tercüman', icon: '🌐' },
-  { value: 'gözlemci', label: 'Gözlemci', icon: '👁️' },
-  { value: 'diger', label: 'Diğer', icon: '👤' },
+// ======================================================
+// CONSTANTS
+// ======================================================
+
+const ROLE_OPTIONS = [
+  {
+    value: 'avukat',
+    label: 'Avukat',
+    icon: '⚖️',
+  },
+  {
+    value: 'karsi_taraf_avukati',
+    label: 'Karşı Taraf Avukatı',
+    icon: '⚖️',
+  },
+  {
+    value: 'müvekkil',
+    label: 'Müvekkil',
+    icon: '👤',
+  },
+  {
+    value: 'davaci',
+    label: 'Davacı',
+    icon: '👤',
+  },
+  {
+    value: 'davali',
+    label: 'Davalı',
+    icon: '👤',
+  },
+  {
+    value: 'tanik',
+    label: 'Tanık',
+    icon: '🗣️',
+  },
+  {
+    value: 'bilirkişi',
+    label: 'Bilirkişi',
+    icon: '🔬',
+  },
+  {
+    value: 'uzman',
+    label: 'Uzman',
+    icon: '🎯',
+  },
+  {
+    value: 'tercüman',
+    label: 'Tercüman',
+    icon: '🌐',
+  },
+  {
+    value: 'gözlemci',
+    label: 'Gözlemci',
+    icon: '👁️',
+  },
+  {
+    value: 'diger',
+    label: 'Diğer',
+    icon: '👤',
+  },
 ];
 
-// ✅ Dava durumu etiketleri (Türkçe)
-const getCaseStatusLabel = (status) => {
+// ======================================================
+// LABEL HELPERS
+// ======================================================
+
+const getCaseStatusLabel = (
+  status
+) => {
   const labels = {
     active: 'Devam Ediyor',
     preparation: 'Hazırlık',
@@ -38,10 +110,17 @@ const getCaseStatusLabel = (status) => {
     concluded: 'Sonuçlandı',
     archived: 'Arşivlendi',
   };
-  return labels[status] || status;
+
+  return (
+    labels[status] ||
+    status ||
+    '-'
+  );
 };
 
-const getCaseStatusVariant = (status) => {
+const getCaseStatusVariant = (
+  status
+) => {
   const variants = {
     active: 'success',
     preparation: 'warning',
@@ -51,549 +130,1247 @@ const getCaseStatusVariant = (status) => {
     concluded: 'default',
     archived: 'danger',
   };
-  return variants[status] || 'default';
+
+  return (
+    variants[status] ||
+    'default'
+  );
 };
 
-// ======================================================
-// UTC format fonksiyonları (zaman dilimi çevirme YOK)
-// ======================================================
-
-const formatDateUTC = (date) => {
-  if (!date) return '-';
-  try {
-    const d = new Date(date);
-    return `${String(d.getUTCDate()).padStart(2, '0')}.${String(
-      d.getUTCMonth() + 1
-    ).padStart(2, '0')}.${d.getUTCFullYear()}`;
-  } catch {
-    return '-';
-  }
-};
-
-const formatTimeUTC = (date) => {
-  if (!date) return '-';
-  try {
-    const d = new Date(date);
-    return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
-  } catch {
-    return '-';
-  }
-};
-
-const formatDateTimeUTC = (date) => {
-  if (!date) return '-';
-  try {
-    const d = new Date(date);
-    return `${String(d.getUTCDate()).padStart(2, '0')}.${String(
-      d.getUTCMonth() + 1
-    ).padStart(2, '0')}.${d.getUTCFullYear()} ${String(
-      d.getUTCHours()
-    ).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
-  } catch {
-    return '-';
-  }
-};
-
-const EventDetail = () => {
-  const { id } = useParams();
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['event', id],
-    queryFn: () => eventApi.getOne(id),
-    enabled: !!id,
-  });
-
-  const event = data?.data?.data;
-
-  const { data: caseData } = useQuery({
-    queryKey: ['case', event?.case_id],
-    queryFn: () => caseApi.getOne(event?.case_id),
-    enabled: !!event?.case_id,
-  });
-
-  const caseItem = caseData?.data?.data;
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent"></div>
-        <p className="mt-4 text-sm text-gray-500">Yükleniyor...</p>
-      </div>
-    );
-  }
-
-  if (error || !event) {
-    return (
-      <div className="text-center py-20">
-        <div className="text-6xl mb-4">🔍</div>
-        <p className="text-xl text-red-600 font-semibold">Duruşma bulunamadı</p>
-        <Link to="/calendar" className="mt-4 inline-block text-blue-600 hover:underline">
-          ← Takvime Dön
-        </Link>
-      </div>
-    );
-  }
-
-  const getStatusLabel = (status) => {
-    const labels = {
-      scheduled: 'Planlandı',
-      ongoing: 'Devam Ediyor',
-      completed: 'Tamamlandı',
-      cancelled: 'İptal',
-    };
-    return labels[status] || status;
-  };
-
-  const getStatusVariant = (status) => {
-    const variants = {
-      scheduled: 'info',
-      ongoing: 'warning',
-      completed: 'success',
-      cancelled: 'danger',
-    };
-    return variants[status] || 'default';
-  };
-
-  const getEventTypeLabel = (type) => {
-    const labels = {
-      hearing: 'Duruşma',
-      meeting: 'Toplantı',
-      deadline: 'Son Tarih',
-      reminder: 'Hatırlatma',
-      other: 'Diğer',
-    };
-    return labels[type] || type;
-  };
-
-  const getEventTypeIcon = (type) => {
-    const icons = {
-      hearing: '⚖️',
-      meeting: '🤝',
-      deadline: '⏰',
-      reminder: '🔔',
-      other: '📌',
-    };
-    return icons[type] || '📌';
-  };
-
-  const getHearingTypeLabel = (type) => {
-    const labels = {
-      preliminary: 'Ön İnceleme',
-      investigation: 'Tahkikat',
-      expert_examination: 'Bilirkişi İncelemesi',
-      witness_hearing: 'Tanık Dinlenmesi',
-      final_decision: 'Karar Duruşması',
-      other: 'Diğer',
-    };
-    return labels[type] || type;
-  };
-
-  const getExpenseStatusLabel = (status) => {
-    const labels = {
-      paid: 'Ödendi ✅',
-      pending: 'Bekliyor ⏳',
-      not_applicable: 'Yok',
-    };
-    return labels[status] || status;
-  };
-
-  const getExpenseStatusVariant = (status) => {
-    const variants = {
-      paid: 'success',
-      pending: 'warning',
-      not_applicable: 'default',
-    };
-    return variants[status] || 'default';
-  };
-
-  const getRoleIcon = (role) => {
-    const icons = {
-      'avukat': '⚖️',
-      'karsi_taraf_avukati': '⚖️',
-      'müvekkil': '👤',
-      'davaci': '👤',
-      'davali': '👤',
-      'tanik': '🗣️',
-      'bilirkişi': '🔬',
-      'uzman': '🎯',
-      'tercüman': '🌐',
-      'gözlemci': '👁️',
-      'diger': '👤',
-    };
-    return icons[role?.toLowerCase()] || '👤';
-  };
-
-  const getRoleColor = (role) => {
-    const colors = {
-      'avukat': 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400',
-      'karsi_taraf_avukati': 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400',
-      'müvekkil': 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400',
-      'davaci': 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-600 dark:text-green-400',
-      'davali': 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 text-orange-600 dark:text-orange-400',
-      'tanik': 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-600 dark:text-yellow-400',
-      'bilirkişi': 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400',
-      'uzman': 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800 text-teal-600 dark:text-teal-400',
-      'tercüman': 'bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800 text-pink-600 dark:text-pink-400',
-      'gözlemci': 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400',
-      'diger': 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400',
-    };
-    return colors[role?.toLowerCase()] || 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400';
-  };
-
-  const getRoleLabel = (role) => {
-    const found = roleOptions.find(r => r.value === role);
-    return found?.label || role || 'Katılımcı';
+const getStatusLabel = (
+  status
+) => {
+  const labels = {
+    scheduled: 'Planlandı',
+    ongoing: 'Devam Ediyor',
+    completed: 'Tamamlandı',
+    cancelled: 'İptal',
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    labels[status] ||
+    status ||
+    '-'
+  );
+};
+
+const getStatusVariant = (
+  status
+) => {
+  const variants = {
+    scheduled: 'info',
+    ongoing: 'warning',
+    completed: 'success',
+    cancelled: 'danger',
+  };
+
+  return (
+    variants[status] ||
+    'default'
+  );
+};
+
+const getEventTypeLabel = (
+  type
+) => {
+  const labels = {
+    hearing: 'Duruşma',
+    meeting: 'Toplantı',
+    deadline: 'Son Tarih',
+    reminder: 'Hatırlatma',
+    other: 'Diğer',
+  };
+
+  return (
+    labels[type] ||
+    type ||
+    '-'
+  );
+};
+
+const getHearingTypeLabel = (
+  type
+) => {
+  const labels = {
+    preliminary: 'Ön İnceleme',
+    investigation: 'Tahkikat',
+    expert_examination:
+      'Bilirkişi İncelemesi',
+    witness_hearing:
+      'Tanık Dinlenmesi',
+    final_decision:
+      'Karar Duruşması',
+    other: 'Diğer',
+  };
+
+  return (
+    labels[type] ||
+    type ||
+    '-'
+  );
+};
+
+const getExpenseStatusLabel = (
+  status
+) => {
+  const labels = {
+    paid: 'Ödendi',
+    pending: 'Bekliyor',
+    not_applicable: 'Yok',
+  };
+
+  return (
+    labels[status] ||
+    status ||
+    '-'
+  );
+};
+
+const getExpenseStatusVariant = (
+  status
+) => {
+  const variants = {
+    paid: 'success',
+    pending: 'warning',
+    not_applicable: 'default',
+  };
+
+  return (
+    variants[status] ||
+    'default'
+  );
+};
+
+// ======================================================
+// DATE HELPERS
+// ======================================================
+
+const parseDate = (
+  value
+) => {
+  if (!value) {
+    return null;
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return null;
+  }
+
+  return date;
+};
+
+const formatDate = (
+  value
+) => {
+  const date =
+    parseDate(value);
+
+  if (!date) {
+    return '-';
+  }
+
+  return new Intl.DateTimeFormat(
+    'tr-TR',
+    {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone:
+        'Europe/Istanbul',
+    }
+  ).format(date);
+};
+
+const formatTime = (
+  value
+) => {
+  const date =
+    parseDate(value);
+
+  if (!date) {
+    return '-';
+  }
+
+  return new Intl.DateTimeFormat(
+    'tr-TR',
+    {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone:
+        'Europe/Istanbul',
+    }
+  ).format(date);
+};
+
+const formatDateTime = (
+  value
+) => {
+  const date =
+    parseDate(value);
+
+  if (!date) {
+    return '-';
+  }
+
+  return new Intl.DateTimeFormat(
+    'tr-TR',
+    {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone:
+        'Europe/Istanbul',
+    }
+  ).format(date);
+};
+
+// ======================================================
+// ATTENDEE HELPERS
+// ======================================================
+
+const getRoleIcon = (
+  role
+) => {
+  return (
+    ROLE_OPTIONS.find(
+      (
+        item
+      ) =>
+        item.value ===
+        role
+    )?.icon ||
+    '👤'
+  );
+};
+
+const getRoleLabel = (
+  role
+) => {
+  return (
+    ROLE_OPTIONS.find(
+      (
+        item
+      ) =>
+        item.value ===
+        role
+    )?.label ||
+    role ||
+    'Katılımcı'
+  );
+};
+
+const getRoleColor = (
+  role
+) => {
+  const colors = {
+    avukat:
+      'border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-900/20 dark:text-purple-300',
+
+    karsi_taraf_avukati:
+      'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300',
+
+    müvekkil:
+      'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300',
+
+    davaci:
+      'border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300',
+
+    davali:
+      'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-900/20 dark:text-orange-300',
+
+    tanik:
+      'border-yellow-200 bg-yellow-50 text-yellow-700 dark:border-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300',
+
+    bilirkişi:
+      'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-300',
+
+    uzman:
+      'border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-800 dark:bg-teal-900/20 dark:text-teal-300',
+
+    tercüman:
+      'border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-900/20 dark:text-pink-300',
+  };
+
+  return (
+    colors[role] ||
+    'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'
+  );
+};
+
+// ======================================================
+// COMPONENT
+// ======================================================
+
+const EventDetail = () => {
+  const {
+    id,
+  } =
+    useParams();
+
+  const {
+    data,
+    isLoading,
+    error,
+  } =
+    useQuery({
+      queryKey: [
+        'event',
+        id,
+      ],
+
+      queryFn: () =>
+        eventApi.getOne(
+          id
+        ),
+
+      enabled:
+        Boolean(id),
+
+      staleTime:
+        2 * 60 * 1000,
+    });
+
+  const event =
+    data?.data?.data ||
+    null;
+
+  /*
+   * Backend artık Case + clients ilişkisini
+   * event detail içinde döndürüyor.
+   *
+   * Böylece ikinci case API çağrısına gerek yok.
+   */
+  const caseItem =
+    event?.case ||
+    null;
+
+  const clients =
+    Array.isArray(
+      caseItem?.clients
+    )
+      ? caseItem.clients
+      : [];
+
+  const attendees =
+    Array.isArray(
+      event?.attendees
+    )
+      ? event.attendees
+      : [];
+
+  const todoItems =
+    Array.isArray(
+      event?.todo_items
+    )
+      ? event.todo_items
+      : [];
+
+  const attendeeCount =
+    attendees.length +
+    (event?.assignedTo
+      ? 1
+      : 0) +
+    (event?.opposing_counsel
+      ? 1
+      : 0);
+
+  // ====================================================
+  // LOADING
+  // ====================================================
+
+  if (
+    isLoading
+  ) {
+    return (
+      <div className="flex min-h-[24rem] flex-col items-center justify-center gap-4">
+
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+
+        <p className="text-sm text-gray-500">
+          Duruşma bilgileri yükleniyor...
+        </p>
+
+      </div>
+    );
+  }
+
+  // ====================================================
+  // ERROR
+  // ====================================================
+
+  if (
+    error ||
+    !event
+  ) {
+    return (
+      <div className="py-20 text-center">
+
+        <Gavel className="mx-auto h-12 w-12 text-gray-300" />
+
+        <h2 className="mt-4 text-xl font-semibold text-gray-900 dark:text-white">
+          Duruşma bulunamadı
+        </h2>
+
+        <p className="mt-2 text-sm text-gray-500">
+          {error
+            ?.response
+            ?.data
+            ?.message ||
+            'Kayıt kaldırılmış veya erişilemiyor olabilir.'}
+        </p>
+
+        <Link
+          to="/calendar"
+          className="mt-5 inline-block"
+        >
+          <Button variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+
+            Takvime Dön
+          </Button>
+        </Link>
+
+      </div>
+    );
+  }
+
+  // ====================================================
+  // RENDER
+  // ====================================================
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-6">
+
+      {/* ==================================================
+          HEADER
+      ================================================== */}
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+
         <div>
-          <Link 
-            to={event.case_id ? `/cases/${event.case_id}` : '/calendar'} 
-            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+
+          <Link
+            to={
+              event.case_id
+                ? `/cases/${event.case_id}`
+                : '/calendar'
+            }
+            className="inline-flex items-center gap-1 text-sm text-gray-500 transition-colors hover:text-blue-600"
           >
-            <ArrowLeft className="w-4 h-4" />
-            {event.case_id ? 'Davaya Dön' : 'Takvime Dön'}
+            <ArrowLeft className="h-4 w-4" />
+
+            {event.case_id
+              ? 'Davaya Dön'
+              : 'Takvime Dön'}
           </Link>
-          <div className="mt-2">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {event.title}
-            </h1>
-            <div className="flex flex-wrap items-center gap-2 mt-1">
-              <Badge variant={getStatusVariant(event.status)}>
-                {getStatusLabel(event.status)}
-              </Badge>
-              <Badge variant="default" className="bg-gray-100 dark:bg-gray-700">
-                {getEventTypeLabel(event.event_type)}
-              </Badge>
-              {event.hearing_type && (
-                <Badge variant="default" className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-                  {getHearingTypeLabel(event.hearing_type)}
-                </Badge>
-              )}
+
+          <div className="mt-4 flex items-start gap-3">
+
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/20">
+
+              <Gavel className="h-6 w-6 text-blue-600" />
+
             </div>
+
+            <div>
+
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                {event.title}
+              </h1>
+
+              <div className="mt-2 flex flex-wrap gap-2">
+
+                <Badge
+                  variant={
+                    getStatusVariant(
+                      event.status
+                    )
+                  }
+                >
+                  {getStatusLabel(
+                    event.status
+                  )}
+                </Badge>
+
+                <Badge variant="default">
+                  {getEventTypeLabel(
+                    event.event_type
+                  )}
+                </Badge>
+
+                {event.event_type ===
+                  'hearing' &&
+                  event.hearing_type && (
+                    <Badge variant="info">
+                      {getHearingTypeLabel(
+                        event.hearing_type
+                      )}
+                    </Badge>
+                  )}
+
+                {event.is_all_day && (
+                  <Badge variant="default">
+                    Tüm Gün
+                  </Badge>
+                )}
+
+              </div>
+
+            </div>
+
           </div>
+
         </div>
-        <div className="flex gap-2">
-          <Link to={`/events/${event.id}/edit`}>
-            <Button variant="outline" size="sm">
-              <Edit2 className="w-4 h-4 mr-2" />
-              Düzenle
-            </Button>
-          </Link>
-        </div>
+
+        <Link
+          to={`/events/${event.id}/edit`}
+        >
+          <Button variant="outline">
+            <Edit2 className="mr-2 h-4 w-4" />
+
+            Düzenle
+          </Button>
+        </Link>
+
       </div>
 
-      {/* Ana Kart */}
-      <Card className="border border-gray-200 dark:border-gray-700 shadow-sm">
-        <Card.Body className="space-y-6">
-          {/* Açıklama */}
-          {event.description && (
-            <div>
-              <p className="text-sm text-gray-500">Açıklama</p>
-              <p className="text-gray-900 dark:text-white mt-1">{event.description}</p>
-            </div>
-          )}
+      {/* ==================================================
+          DATE SUMMARY
+      ================================================== */}
 
-          {/* Dosya / Esas Numarası */}
-          {caseItem && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
-              <div className="flex items-center gap-2">
-                <Gavel className="w-5 h-5 text-blue-600" />
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  {caseItem.case_number || 'Yargı Birimi * yok'}
-                </span>
-                <span className="text-sm text-gray-500">|</span>
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {caseItem.court_name || 'Mahkeme yok'}
-                </span>
+      <div className="grid gap-4 md:grid-cols-2">
+
+        <Card>
+
+          <Card.Body>
+
+            <div className="flex items-start gap-3">
+
+              <div className="rounded-xl bg-blue-50 p-3 dark:bg-blue-900/20">
+
+                <Calendar className="h-5 w-5 text-blue-600" />
+
               </div>
-            </div>
-          )}
 
-          {/* Tarih ve Saat - UTC ile düzeltildi */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-              <Calendar className="w-5 h-5 text-blue-500 mt-0.5" />
               <div>
-                <p className="text-xs uppercase tracking-wider text-gray-400 font-medium">Başlangıç</p>
-                <p className="font-medium text-gray-900 dark:text-white">
-                  {formatDateUTC(event.start_date)}
+
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Başlangıç
                 </p>
-                <p className="text-sm text-gray-500">
-                  {formatTimeUTC(event.start_date)}
+
+                <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                  {formatDate(
+                    event.start_date
+                  )}
                 </p>
-              </div>
-            </div>
-            {event.end_date && (
-              <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                <Clock className="w-5 h-5 text-green-500 mt-0.5" />
-                <div>
-                  <p className="text-xs uppercase tracking-wider text-gray-400 font-medium">Bitiş</p>
-                  <p className="font-medium text-gray-900 dark:text-white">
-                    {formatDateUTC(event.end_date)}
-                  </p>
+
+                {!event.is_all_day && (
                   <p className="text-sm text-gray-500">
-                    {formatTimeUTC(event.end_date)}
+                    {formatTime(
+                      event.start_date
+                    )}
                   </p>
-                </div>
+                )}
+
               </div>
-            )}
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+        <Card>
+
+          <Card.Body>
+
+            <div className="flex items-start gap-3">
+
+              <div className="rounded-xl bg-green-50 p-3 dark:bg-green-900/20">
+
+                <Clock className="h-5 w-5 text-green-600" />
+
+              </div>
+
+              <div>
+
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Bitiş
+                </p>
+
+                {event.end_date ? (
+                  <>
+                    <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                      {formatDate(
+                        event.end_date
+                      )}
+                    </p>
+
+                    {!event.is_all_day && (
+                      <p className="text-sm text-gray-500">
+                        {formatTime(
+                          event.end_date
+                        )}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="mt-1 text-sm text-gray-400">
+                    Bitiş zamanı belirtilmemiş
+                  </p>
+                )}
+
+              </div>
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+
+      </div>
+
+      {/* ==================================================
+          DESCRIPTION
+      ================================================== */}
+
+      {event.description && (
+        <Card>
+
+          <Card.Header>
+            <h2 className="font-semibold text-gray-900 dark:text-white">
+              Açıklama
+            </h2>
+          </Card.Header>
+
+          <Card.Body>
+            <p className="whitespace-pre-wrap text-sm leading-6 text-gray-700 dark:text-gray-300">
+              {event.description}
+            </p>
+          </Card.Body>
+
+        </Card>
+      )}
+
+      {/* ==================================================
+          CASE
+      ================================================== */}
+
+      {caseItem && (
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+
+              <div className="flex items-center gap-2">
+
+                <Scale className="h-5 w-5 text-blue-600" />
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  İlişkili Dava
+                </h2>
+
+              </div>
+
+              <Badge
+                variant={
+                  getCaseStatusVariant(
+                    caseItem.status
+                  )
+                }
+              >
+                {getCaseStatusLabel(
+                  caseItem.status
+                )}
+              </Badge>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            <Link
+              to={`/cases/${caseItem.id}`}
+              className="text-lg font-semibold text-blue-600 hover:underline dark:text-blue-400"
+            >
+              {caseItem.title}
+            </Link>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+              <div>
+
+                <p className="text-xs uppercase tracking-wide text-gray-400">
+                  Dosya No
+                </p>
+
+                <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                  {caseItem.case_number ||
+                    '-'}
+                </p>
+
+              </div>
+
+              <div>
+
+                <p className="text-xs uppercase tracking-wide text-gray-400">
+                  Yargı Türü
+                </p>
+
+                <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                  {caseItem.judiciary_type ||
+                    '-'}
+                </p>
+
+              </div>
+
+              <div>
+
+                <p className="text-xs uppercase tracking-wide text-gray-400">
+                  Yargı Birimi
+                </p>
+
+                <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                  {caseItem.judiciary_unit ||
+                    '-'}
+                </p>
+
+              </div>
+
+              <div>
+
+                <p className="text-xs uppercase tracking-wide text-gray-400">
+                  Mahkeme
+                </p>
+
+                <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                  {caseItem.court_name ||
+                    '-'}
+                </p>
+
+              </div>
+
+            </div>
+
+            {/* MULTI CLIENT */}
+
+            <div className="mt-6 border-t border-gray-100 pt-5 dark:border-gray-700">
+
+              <p className="text-xs uppercase tracking-wide text-gray-400">
+                Müvekkiller
+              </p>
+
+              {clients.length === 0 ? (
+                <p className="mt-2 text-sm text-gray-400">
+                  Davaya bağlı müvekkil bulunmuyor.
+                </p>
+              ) : (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+
+                  {clients.map(
+                    (
+                      client
+                    ) => (
+                      <div
+                        key={
+                          client.id
+                        }
+                        className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
+                      >
+
+                        <Link
+                          to={`/clients/${client.id}`}
+                          className="font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                        >
+                          {client.name}
+                        </Link>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+
+                          {client.phone && (
+                            <a
+                              href={`tel:${client.phone}`}
+                              className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                            >
+                              <Phone className="h-3.5 w-3.5" />
+
+                              {client.phone}
+                            </a>
+                          )}
+
+                          {client.email && (
+                            <a
+                              href={`mailto:${client.email}`}
+                              className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                            >
+                              <Mail className="h-3.5 w-3.5" />
+
+                              E-posta
+                            </a>
+                          )}
+
+                        </div>
+
+                      </div>
+                    )
+                  )}
+
+                </div>
+              )}
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+      )}
+
+      {/* ==================================================
+          LOCATION
+      ================================================== */}
+
+      {(event.location ||
+        event.court_room ||
+        event.judge_name) && (
+        <Card>
+
+          <Card.Header>
+            <h2 className="font-semibold text-gray-900 dark:text-white">
+              Duruşma Yeri
+            </h2>
+          </Card.Header>
+
+          <Card.Body>
+
+            <div className="grid gap-4 md:grid-cols-3">
+
+              <div className="flex items-start gap-3">
+
+                <MapPin className="mt-0.5 h-5 w-5 text-gray-400" />
+
+                <div>
+
+                  <p className="text-xs text-gray-400">
+                    Yer / Mahkeme
+                  </p>
+
+                  <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                    {event.location ||
+                      '-'}
+                  </p>
+
+                </div>
+
+              </div>
+
+              <div className="flex items-start gap-3">
+
+                <Building2 className="mt-0.5 h-5 w-5 text-gray-400" />
+
+                <div>
+
+                  <p className="text-xs text-gray-400">
+                    Salon
+                  </p>
+
+                  <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                    {event.court_room ||
+                      '-'}
+                  </p>
+
+                </div>
+
+              </div>
+
+              <div className="flex items-start gap-3">
+
+                <User className="mt-0.5 h-5 w-5 text-gray-400" />
+
+                <div>
+
+                  <p className="text-xs text-gray-400">
+                    Hakim
+                  </p>
+
+                  <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                    {event.judge_name ||
+                      '-'}
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </Card.Body>
+
+        </Card>
+      )}
+
+      {/* ==================================================
+          ATTENDEES
+      ================================================== */}
+
+      <Card>
+
+        <Card.Header>
+
+          <div className="flex items-center justify-between">
+
+            <div className="flex items-center gap-2">
+
+              <Users className="h-5 w-5 text-purple-600" />
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Katılımcılar
+              </h2>
+
+            </div>
+
+            <Badge variant="default">
+              {attendeeCount} kişi
+            </Badge>
+
           </div>
 
-          {/* Yer Bilgileri */}
-          {(event.location || event.court_room || event.judge_name) && (
-            <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">📍 Yer Bilgileri</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {event.location && (
-                  <div className="flex items-start gap-2">
-                    <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
-                    <div>
-                      <p className="text-xs text-gray-400">Yer</p>
-                      <p className="font-medium text-gray-900 dark:text-white">{event.location}</p>
-                    </div>
-                  </div>
-                )}
-                {event.court_room && (
-                  <div className="flex items-start gap-2">
-                    <Building2 className="w-4 h-4 text-gray-400 mt-0.5" />
-                    <div>
-                      <p className="text-xs text-gray-400">Salon</p>
-                      <p className="font-medium text-gray-900 dark:text-white">{event.court_room}</p>
-                    </div>
-                  </div>
-                )}
-                {event.judge_name && (
-                  <div className="flex items-start gap-2">
-                    <User className="w-4 h-4 text-gray-400 mt-0.5" />
-                    <div>
-                      <p className="text-xs text-gray-400">Hakim</p>
-                      <p className="font-medium text-gray-900 dark:text-white">{event.judge_name}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+        </Card.Header>
 
-          {/* Katılımcılar */}
-          <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                👥 Katılımcılar
-              </h3>
-              <Badge variant="default" className="bg-gray-100 dark:bg-gray-700">
-                {(event.attendees?.length || 0) + (event.opposing_counsel ? 1 : 0) + (event.assignedTo ? 1 : 0)} Kişi
-              </Badge>
-            </div>
+        <Card.Body>
 
-            <div className="space-y-2">
+          {attendeeCount ===
+          0 ? (
+            <p className="py-5 text-center text-sm text-gray-400">
+              Henüz katılımcı eklenmemiş.
+            </p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+
               {event.assignedTo && (
-                <div className="flex items-center gap-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800">
-                  <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-800 flex items-center justify-center text-purple-600 dark:text-purple-300 text-lg">
-                    ⚖️
+                <div className="rounded-xl border border-purple-200 bg-purple-50 p-4 dark:border-purple-800 dark:bg-purple-900/20">
+
+                  <div className="flex items-center gap-3">
+
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg dark:bg-gray-800">
+                      ⚖️
+                    </div>
+
+                    <div>
+
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        {event.assignedTo.first_name}{' '}
+                        {event.assignedTo.last_name}
+                      </p>
+
+                      <p className="text-sm text-purple-600 dark:text-purple-300">
+                        Atanan Avukat
+                      </p>
+
+                    </div>
+
                   </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {event.assignedTo?.first_name} {event.assignedTo?.last_name}
-                    </p>
-                    <p className="text-sm text-purple-600 dark:text-purple-400">Avukat</p>
-                  </div>
+
                 </div>
               )}
 
               {event.opposing_counsel && (
-                <div className="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
-                  <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-800 flex items-center justify-center text-red-600 dark:text-red-300 text-lg">
-                    ⚖️
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+
+                  <div className="flex items-center gap-3">
+
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg dark:bg-gray-800">
+                      ⚖️
+                    </div>
+
+                    <div>
+
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        {event.opposing_counsel}
+                      </p>
+
+                      <p className="text-sm text-red-600 dark:text-red-300">
+                        Karşı Taraf Avukatı
+                      </p>
+
+                    </div>
+
                   </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {event.opposing_counsel}
-                    </p>
-                    <p className="text-sm text-red-600 dark:text-red-400">Karşı Taraf Avukatı</p>
-                  </div>
+
                 </div>
               )}
 
-              {event.attendees && event.attendees.length > 0 && (
-                <>
-                  {event.attendees.map((attendee, index) => {
-                    const role = attendee.role || 'diger';
-                    const icon = getRoleIcon(role);
-                    const colorClass = getRoleColor(role);
-                    const roleLabel = getRoleLabel(role);
+              {attendees.map(
+                (
+                  attendee,
+                  index
+                ) => {
+                  const role =
+                    attendee.role ||
+                    'diger';
 
-                    return (
-                      <div key={index} className={`flex items-center gap-3 p-3 rounded-xl border ${colorClass}`}>
-                        <div className="w-10 h-10 rounded-full bg-white/50 dark:bg-gray-700/50 flex items-center justify-center text-lg">
-                          {icon}
+                  return (
+                    <div
+                      key={
+                        attendee.id ||
+                        `${attendee.name}-${index}`
+                      }
+                      className={`rounded-xl border p-4 ${getRoleColor(
+                        role
+                      )}`}
+                    >
+
+                      <div className="flex items-center gap-3">
+
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/70 text-lg dark:bg-gray-800/60">
+                          {getRoleIcon(
+                            role
+                          )}
                         </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900 dark:text-white">
-                            {attendee.name}
+
+                        <div>
+
+                          <p className="font-semibold text-gray-900 dark:text-white">
+                            {attendee.name ||
+                              'İsimsiz Katılımcı'}
                           </p>
-                          <p className="text-sm capitalize">
-                            {roleLabel}
+
+                          <p className="text-sm">
+                            {getRoleLabel(
+                              role
+                            )}
                           </p>
+
                         </div>
+
                       </div>
-                    );
-                  })}
-                </>
+
+                    </div>
+                  );
+                }
               )}
 
-              {(!event.attendees || event.attendees.length === 0) && !event.opposing_counsel && !event.assignedTo && (
-                <div className="text-center py-4 text-gray-400 text-sm">
-                  Henüz katılımcı eklenmemiş
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Son Duruşma Sonucu */}
-          {event.last_hearing_result && (
-            <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
-              <div className="flex items-start gap-3">
-                <FileText className="w-5 h-5 text-orange-500 mt-0.5" />
-                <div>
-                  <p className="text-xs uppercase tracking-wider text-gray-400 font-medium">Son Duruşma Sonucu</p>
-                  <p className="text-gray-900 dark:text-white">{event.last_hearing_result}</p>
-                </div>
-              </div>
             </div>
           )}
 
-          {/* Yapılacak İşler */}
-          {event.todo_items && event.todo_items.length > 0 && (
-            <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-                <CheckSquare className="w-4 h-4" />
-                ✅ Yapılacak İşler
-              </h3>
-              <div className="space-y-2">
-                {event.todo_items.map((item, index) => (
-                  <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                    <input 
-                      type="checkbox" 
-                      checked={item.done || false}
-                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                      onChange={() => {}} 
+        </Card.Body>
+
+      </Card>
+
+      {/* ==================================================
+          RESULT
+      ================================================== */}
+
+      {event.last_hearing_result && (
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-2">
+
+              <FileText className="h-5 w-5 text-orange-500" />
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Son Duruşma Sonucu
+              </h2>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            <p className="whitespace-pre-wrap text-sm leading-6 text-gray-700 dark:text-gray-300">
+              {event.last_hearing_result}
+            </p>
+
+          </Card.Body>
+
+        </Card>
+      )}
+
+      {/* ==================================================
+          TODO
+      ================================================== */}
+
+      {todoItems.length >
+        0 && (
+        <Card>
+
+          <Card.Header>
+
+            <div className="flex items-center gap-2">
+
+              <CheckSquare className="h-5 w-5 text-blue-600" />
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Yapılacak İşler
+              </h2>
+
+            </div>
+
+          </Card.Header>
+
+          <Card.Body>
+
+            <div className="space-y-2">
+
+              {todoItems.map(
+                (
+                  item,
+                  index
+                ) => (
+                  <div
+                    key={
+                      item.id ||
+                      index
+                    }
+                    className="flex items-center gap-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800"
+                  >
+
+                    <input
+                      type="checkbox"
+                      checked={
+                        Boolean(
+                          item.done
+                        )
+                      }
+                      readOnly
+                      disabled
+                      className="h-4 w-4 rounded border-gray-300"
                     />
-                    <span className={item.done ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-300'}>
+
+                    <span
+                      className={
+                        item.done
+                          ? 'text-gray-400 line-through'
+                          : 'text-gray-700 dark:text-gray-300'
+                      }
+                    >
                       {item.text}
                     </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          {/* Masraf / Harç Durumu */}
-          {event.expense_status && (
-            <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
-              <div className="flex items-start gap-3">
-                <DollarSign className="w-5 h-5 text-green-500 mt-0.5" />
-                <div>
-                  <p className="text-xs uppercase tracking-wider text-gray-400 font-medium">Masraf / Harç Durumu</p>
-                  <Badge variant={getExpenseStatusVariant(event.expense_status)}>
-                    {getExpenseStatusLabel(event.expense_status)}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* İlişkili Dava */}
-          {caseItem && (
-            <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">📋 İlişkili Dava</h3>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <Link 
-                    to={`/cases/${caseItem.id}`}
-                    className="font-semibold text-blue-600 hover:underline dark:text-blue-400"
-                  >
-                    {caseItem.title}
-                  </Link>
-                  <Badge variant={getCaseStatusVariant(caseItem.status)}>
-                    {getCaseStatusLabel(caseItem.status)}
-                  </Badge>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-400 font-medium">📋 Yargı Birimi *</p>
-                    <p className="font-medium text-gray-900 dark:text-white">{caseItem.case_number || '-'}</p>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-400 font-medium">🏛️ Mahkeme</p>
-                    <p className="font-medium text-gray-900 dark:text-white">{caseItem.court_name || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 font-medium">👤 Müvekkil</p>
-                    <Link 
-                      to={`/clients/${caseItem.client?.id}`}
-                      className="font-medium text-blue-600 hover:underline dark:text-blue-400"
-                    >
-                      {caseItem.client?.first_name} {caseItem.client?.last_name || '-'}
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+                )
+              )}
 
-          {/* Müvekkil İletişim */}
-          {caseItem?.client && (
-            <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">📞 Müvekkil İletişim</h3>
-              <div className="flex flex-wrap gap-2">
-                {caseItem.client.phone && (
-                  <a 
-                    href={`tel:${caseItem.client.phone}`}
-                    className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm transition-colors"
-                  >
-                    <Phone className="w-4 h-4" />
-                    {caseItem.client.phone}
-                  </a>
-                )}
-                {caseItem.client.email && (
-                  <a 
-                    href={`mailto:${caseItem.client.email}`}
-                    className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm transition-colors"
-                  >
-                    <Mail className="w-4 h-4" />
-                    {caseItem.client.email}
-                  </a>
-                )}
-              </div>
             </div>
-          )}
 
-          {/* Hatırlatma */}
-          <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
+          </Card.Body>
+
+        </Card>
+      )}
+
+      {/* ==================================================
+          OPERATION SUMMARY
+      ================================================== */}
+
+      <Card>
+
+        <Card.Body>
+
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+
             <div className="flex items-start gap-3">
-              <AlarmClock className="w-5 h-5 text-yellow-500 mt-0.5" />
+
+              <DollarSign className="mt-0.5 h-5 w-5 text-green-500" />
+
               <div>
-                <p className="text-xs uppercase tracking-wider text-gray-400 font-medium">⏰ Hatırlatma</p>
-                <p className="font-medium text-gray-900 dark:text-white">
-                  {event.reminder_minutes > 0 ? `${event.reminder_minutes} dakika önce` : 'Hatırlatma yok'}
+
+                <p className="text-xs uppercase tracking-wide text-gray-400">
+                  Masraf / Harç
                 </p>
+
+                <div className="mt-2">
+
+                  <Badge
+                    variant={
+                      getExpenseStatusVariant(
+                        event.expense_status
+                      )
+                    }
+                  >
+                    {getExpenseStatusLabel(
+                      event.expense_status
+                    )}
+                  </Badge>
+
+                </div>
+
               </div>
+
             </div>
+
+            <div className="flex items-start gap-3">
+
+              <AlarmClock className="mt-0.5 h-5 w-5 text-yellow-500" />
+
+              <div>
+
+                <p className="text-xs uppercase tracking-wide text-gray-400">
+                  Hatırlatma
+                </p>
+
+                <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                  {Number(
+                    event.reminder_minutes
+                  ) >
+                  0
+                    ? `${event.reminder_minutes} dakika önce`
+                    : 'Hatırlatma yok'}
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="flex items-start gap-3">
+
+              <User className="mt-0.5 h-5 w-5 text-gray-400" />
+
+              <div>
+
+                <p className="text-xs uppercase tracking-wide text-gray-400">
+                  Kaydı Oluşturan
+                </p>
+
+                <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                  {event.creator
+                    ? `${event.creator.first_name || ''} ${event.creator.last_name || ''}`.trim()
+                    : '-'}
+                </p>
+
+              </div>
+
+            </div>
+
           </div>
 
-          {/* Oluşturulma Bilgisi */}
-          <div className="border-t border-gray-100 dark:border-gray-700 pt-4 text-xs text-gray-400">
-            <p>👤 Oluşturan: {event.creator?.first_name} {event.creator?.last_name}</p>
-            <p>📅 Oluşturulma: {formatDateTimeUTC(event.created_at)}</p>
+          <div className="mt-5 border-t border-gray-100 pt-4 text-xs text-gray-400 dark:border-gray-700">
+
+            Oluşturulma:{' '}
+            {formatDateTime(
+              event.created_at
+            )}
+
           </div>
+
         </Card.Body>
+
       </Card>
+
     </div>
   );
 };
