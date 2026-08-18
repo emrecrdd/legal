@@ -1,39 +1,103 @@
 import axios from '../../app/config/axios.js';
 
 const userApi = {
-  // ✅ Tüm kullanıcıları getir
-  getAll: (params) => {
-    return axios.get('/users', { params });
+  // ======================================================
+  // LIST
+  // ======================================================
+
+  getAll: (params = {}) => {
+    return axios.get(
+      '/users',
+      {
+        params,
+      }
+    );
   },
 
-  // ✅ Tek kullanıcı getir
+  // ======================================================
+  // DETAIL
+  // ======================================================
+
   getOne: (id) => {
-    return axios.get(`/users/${id}`);
+    return axios.get(
+      `/users/${id}`
+    );
   },
 
-  // ✅ Sadece avukatları getir
+  // ======================================================
+  // CREATE
+  // Admin only
+  // ======================================================
+
+  create: (data) => {
+    return axios.post(
+      '/users',
+      data
+    );
+  },
+
+  // ======================================================
+  // LAWYERS
+  // ======================================================
+
   getLawyers: () => {
-    return axios.get('/users', { params: { role: 'lawyer' } });
+    return axios.get(
+      '/users',
+      {
+        params: {
+          role: 'lawyer',
+        },
+      }
+    );
   },
 
-  // ✅ Kullanıcı güncelle
+  // ======================================================
+  // PROFILE UPDATE
+  // Rol ve aktiflik burada değiştirilmez.
+  // ======================================================
+
   update: (id, data) => {
-    return axios.put(`/users/${id}`, data);
+    return axios.patch(
+      `/users/${id}`,
+      data
+    );
   },
 
-  // ✅ YENİ: Kullanıcı sil (Admin)
+  // ======================================================
+  // ROLE
+  // ======================================================
+
+  changeRole: (
+    id,
+    role
+  ) => {
+    return axios.patch(
+      `/users/${id}/role`,
+      {
+        role,
+      }
+    );
+  },
+
+  // ======================================================
+  // ACTIVE / PASSIVE
+  // Backend mevcut değeri toggle ediyor.
+  // ======================================================
+
+  toggleActive: (id) => {
+    return axios.patch(
+      `/users/${id}/toggle-active`
+    );
+  },
+
+  // ======================================================
+  // DELETE
+  // ======================================================
+
   delete: (id) => {
-    return axios.delete(`/users/${id}`);
-  },
-
-  // ✅ YENİ: Kullanıcı aktif/pasif değiştir
-  toggleActive: (id, is_active) => {
-    return axios.patch(`/users/${id}/toggle-active`, { is_active });
-  },
-
-  // ✅ YENİ: Kullanıcı rol değiştir
-  changeRole: (id, role) => {
-    return axios.patch(`/users/${id}/role`, { role });
+    return axios.delete(
+      `/users/${id}`
+    );
   },
 };
 

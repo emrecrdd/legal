@@ -1,60 +1,160 @@
-import { authRepository } from './auth.repository.js';
-import { generateTokens, verifyToken } from '../../utils/jwt.js';
-import { config } from '../../config/env.js';
-import { logger } from '../../config/logger.js';
 import crypto from 'crypto';
-import { emailService } from '../../integrations/email.service.js';
 import bcrypt from 'bcryptjs';
 
+import {
+  authRepository,
+} from './auth.repository.js';
+
+import {
+  generateTokens,
+  verifyToken,
+} from '../../utils/jwt.js';
+
+import {
+  config,
+} from '../../config/env.js';
+
+import {
+  logger,
+} from '../../config/logger.js';
+
+import {
+  emailService,
+} from '../../integrations/email.service.js';
+
+// ======================================================
+// CONSTANTS
+// ======================================================
+
+const MIN_PASSWORD_LENGTH = 8;
+
+const RESET_TOKEN_EXPIRY_MS =
+  60 * 60 * 1000;
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const normalizeEmail = (email) => {
+  return String(
+    email || ''
+  )
+    .trim()
+    .toLowerCase();
+};
+
+const validatePassword = (
+  password
+) => {
+  if (
+    typeof password !==
+      'string' ||
+    password.length <
+      MIN_PASSWORD_LENGTH
+  ) {
+    throw new Error(
+      `Şifre en az ${MIN_PASSWORD_LENGTH} karakter olmalıdır`
+    );
+  }
+};
+
+// ======================================================
+// SERVICE
+// ======================================================
+
 export const authService = {
-  async register(userData) {
-    // ✅ Şifre kontrolü
-    if (!userData.password) {
-      throw new Error('Password is required');
+  // ====================================================
+  // LOGIN
+  // ====================================================
+
+  async login(
+    email,
+    password
+  ) {
+    const cleanEmail =
+      normalizeEmail(
+        email
+      );
+
+    if (
+      !cleanEmail ||
+      !password
+    ) {
+      throw new Error(
+        'E-posta ve şifre gereklidir'
+      );
     }
 
-    const existingUser = await authRepository.findByEmail(userData.email);
-    if (existingUser) {
-      throw new Error('User with this email already exists');
+    /*
+     * Güvenlik:
+     * Kullanıcının bulunup bulunmadığını
+     * farklı mesajlarla dışarı vermiyoruz.
+     */
+    const user =
+      await authRepository.findByEmail(
+        cleanEmail
+      );
+
+    if (
+      !user ||
+      !user.password
+    ) {
+      throw new Error(
+        'E-posta veya şifre hatalı'
+      );
     }
 
-    // ❌ Şunları SİL (hash'i model yapıyor)
-    // const salt = await bcrypt.genSalt(10);
-    // const hashedPassword = await bcrypt.hash(userData.password, salt);
+    const isPasswordValid =
+      await bcrypt.compare(
+        password,
+        user.password
+      );
 
-    // ✅ Sadece kullanıcıyı oluştur (model hook'u hash'leyecek)
-    const user = await authRepository.create(userData);
-
-    return user;
-  },
-
-  async login(email, password) {
-    const user = await authRepository.findByEmail(email);
-
-    if (!user) {
-      throw new Error('Invalid email or password');
+    if (
+      !isPasswordValid
+    ) {
+      throw new Error(
+        'E-posta veya şifre hatalı'
+      );
     }
 
-    if (!user.password) {
-      throw new Error('Account is corrupted. Please contact support.');
+    // Hesap erişim kontrolü
+    if (
+      user.is_active !== true
+    ) {
+      throw new Error(
+        'Hesabınız pasif durumda. Büro yöneticinizle iletişime geçin.'
+      );
     }
 
-    // ✅ Doğrudan bcrypt.compare kullan
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    /*
+     * email_verified konusunda şimdilik zorunluluk
+     * koymuyoruz.
+     *
+     * Çünkü kullanıcıları admin oluşturacak.
+     * İleride gerçek e-posta doğrulama akışı
+     * kurulursa burada kontrol eklenebilir.
+     */
 
-    if (!isPasswordValid) {
-      throw new Error('Invalid email or password');
-    }
+    const {
+      accessToken,
+      refreshToken,
+    } = generateTokens(
+      user
+    );
 
-    if (!user.is_active) {
-      throw new Error('Account is deactivated');
-    }
+    /*
+     * Refresh token rotation/store.
+     */
+    await authRepository.updateRefreshToken(
+      user.id,
+      refreshToken
+    );
 
-    await user.update({ last_login: new Date() });
-
-    const { accessToken, refreshToken } = generateTokens(user);
-
-    await authRepository.updateRefreshToken(user.id, refreshToken);
+    await user.update({
+      last_login:
+        new Date(),
+    });
 
     return {
       user,
@@ -63,92 +163,328 @@ export const authService = {
     };
   },
 
-  async logout(refreshToken, req) {
-    const token = refreshToken || req?.cookies?.refreshToken;
+  // ====================================================
+  // LOGOUT
+  // ====================================================
 
-    if (!token) {
-      throw new Error('Refresh token required');
+  async logout(
+    refreshToken
+  ) {
+    if (
+      !refreshToken
+    ) {
+      /*
+       * Logout idempotent olsun.
+       * Token yok diye kullanıcının logout'u
+       * hata vermesin.
+       */
+      return;
     }
 
-    await authRepository.invalidateRefreshToken(token);
+    await authRepository.invalidateRefreshToken(
+      refreshToken
+    );
   },
 
-  async refreshToken(refreshToken) {
-    if (!refreshToken) {
-      throw new Error('Refresh token required');
+  // ====================================================
+  // REFRESH TOKEN
+  // ====================================================
+
+  async refreshToken(
+    refreshToken
+  ) {
+    if (
+      !refreshToken
+    ) {
+      throw new Error(
+        'Refresh token gerekli'
+      );
     }
+
+    // ================================================
+    // JWT VERIFY
+    // ================================================
 
     let decoded;
 
     try {
-      decoded = verifyToken(refreshToken, config.JWT_REFRESH_SECRET);
-    } catch (error) {
-      throw new Error('Invalid refresh token');
+      decoded =
+        verifyToken(
+          refreshToken,
+          config.JWT_REFRESH_SECRET
+        );
+    } catch {
+      throw new Error(
+        'Geçersiz veya süresi dolmuş oturum'
+      );
     }
 
-    const user = await authRepository.findByRefreshToken(refreshToken);
+    if (!decoded) {
+      throw new Error(
+        'Geçersiz veya süresi dolmuş oturum'
+      );
+    }
+
+    // ================================================
+    // TOKEN MUST EXIST SERVER-SIDE
+    // ================================================
+
+    const user =
+      await authRepository.findByRefreshToken(
+        refreshToken
+      );
 
     if (!user) {
-      throw new Error('Invalid refresh token');
+      throw new Error(
+        'Geçersiz veya süresi dolmuş oturum'
+      );
     }
+
+    // ================================================
+    // ACCOUNT STATUS
+    // ================================================
+
+    if (
+      user.is_active !== true
+    ) {
+      /*
+       * Pasife alınmış kullanıcının mevcut
+       * refresh tokenını da geçersiz hale getir.
+       */
+      try {
+        await authRepository.invalidateRefreshToken(
+          refreshToken
+        );
+      } catch (error) {
+        logger.warn(
+          'Inactive user refresh-token cleanup failed:',
+          error
+        );
+      }
+
+      throw new Error(
+        'Kullanıcı hesabı aktif değil'
+      );
+    }
+
+    /*
+     * JWT içerisindeki user id mevcutsa
+     * DB'den bulunan kullanıcıyla uyuşmalı.
+     *
+     * Token payload alanının id/userId/sub
+     * hangisi olduğunu jwt.js dosyasında
+     * kesinleştireceğiz.
+     */
+    const tokenUserId =
+      decoded.id ||
+      decoded.userId ||
+      decoded.sub;
+
+    if (
+      tokenUserId &&
+      String(tokenUserId) !==
+        String(user.id)
+    ) {
+      throw new Error(
+        'Geçersiz oturum'
+      );
+    }
+
+    // ================================================
+    // ROTATE
+    // ================================================
 
     const {
       accessToken,
-      refreshToken: newRefreshToken,
-    } = generateTokens(user);
+      refreshToken:
+        newRefreshToken,
+    } = generateTokens(
+      user
+    );
 
-    await authRepository.updateRefreshToken(user.id, newRefreshToken);
+    await authRepository.updateRefreshToken(
+      user.id,
+      newRefreshToken
+    );
 
     return {
       accessToken,
-      refreshToken: newRefreshToken,
+      refreshToken:
+        newRefreshToken,
     };
   },
 
-  async getProfile(userId) {
-    const user = await authRepository.findById(userId);
+  // ====================================================
+  // PROFILE
+  // ====================================================
+
+  async getProfile(
+    userId
+  ) {
+    if (!userId) {
+      throw new Error(
+        'Kullanıcı bilgisi bulunamadı'
+      );
+    }
+
+    const user =
+      await authRepository.findById(
+        userId
+      );
 
     if (!user) {
-      throw new Error('User not found');
+      throw new Error(
+        'Kullanıcı bulunamadı'
+      );
+    }
+
+    if (
+      user.is_active !== true
+    ) {
+      throw new Error(
+        'Kullanıcı hesabı aktif değil'
+      );
     }
 
     return user;
   },
 
-  async changePassword(userId, currentPassword, newPassword) {
-    const user = await authRepository.findByIdWithPassword(userId);
+  // ====================================================
+  // CHANGE PASSWORD
+  // ====================================================
+
+  async changePassword(
+    userId,
+    currentPassword,
+    newPassword
+  ) {
+    if (
+      !currentPassword
+    ) {
+      throw new Error(
+        'Mevcut şifre gereklidir'
+      );
+    }
+
+    validatePassword(
+      newPassword
+    );
+
+    if (
+      currentPassword ===
+      newPassword
+    ) {
+      throw new Error(
+        'Yeni şifre mevcut şifre ile aynı olamaz'
+      );
+    }
+
+    const user =
+      await authRepository.findByIdWithPassword(
+        userId
+      );
 
     if (!user) {
-      throw new Error('User not found');
+      throw new Error(
+        'Kullanıcı bulunamadı'
+      );
     }
 
-    if (!user.password) {
-      throw new Error('User password not set. Please reset your password.');
+    if (
+      !user.password
+    ) {
+      throw new Error(
+        'Kullanıcı şifresi bulunamadı'
+      );
     }
 
-    // ✅ Doğrudan bcrypt.compare kullan
-    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    const isPasswordValid =
+      await bcrypt.compare(
+        currentPassword,
+        user.password
+      );
 
-    if (!isPasswordValid) {
-      throw new Error('Current password is incorrect');
+    if (
+      !isPasswordValid
+    ) {
+      throw new Error(
+        'Mevcut şifre yanlış'
+      );
     }
 
-    // ✅ Model hook'u hash'leyecek, manuel hash'e gerek yok
-    user.password = newPassword;
+    /*
+     * Hash burada yapılmıyor.
+     * User.beforeUpdate hook'u hashleyecek.
+     */
+    user.password =
+      newPassword;
+
     await user.save();
 
-    await authRepository.invalidateAllRefreshTokens(userId);
+    /*
+     * Şifre değişince bütün mevcut
+     * oturumları kapatıyoruz.
+     */
+    await authRepository.invalidateAllRefreshTokens(
+      userId
+    );
   },
 
-  async forgotPassword(email) {
-    const user = await authRepository.findByEmail(email);
+  // ====================================================
+  // FORGOT PASSWORD
+  // ====================================================
 
-    if (!user) {
-      throw new Error('User not found');
+  async forgotPassword(
+    email
+  ) {
+    const cleanEmail =
+      normalizeEmail(
+        email
+      );
+
+    if (!cleanEmail) {
+      return;
     }
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetExpires = new Date(Date.now() + 3600000);
+    const user =
+      await authRepository.findByEmail(
+        cleanEmail
+      );
+
+    /*
+     * ACCOUNT ENUMERATION KORUMASI
+     *
+     * Kullanıcı bulunmasa bile hata atmıyoruz.
+     * Controller dışarıya her zaman aynı cevabı verir.
+     */
+    if (!user) {
+      return;
+    }
+
+    if (
+      user.is_active !== true
+    ) {
+      /*
+       * Pasif hesap için de dışarı farklı
+       * sonuç vermiyoruz.
+       */
+      return;
+    }
+
+    // ================================================
+    // RESET TOKEN
+    // ================================================
+
+    const resetToken =
+      crypto
+        .randomBytes(32)
+        .toString('hex');
+
+    const resetExpires =
+      new Date(
+        Date.now() +
+          RESET_TOKEN_EXPIRY_MS
+      );
 
     await authRepository.savePasswordResetToken(
       user.id,
@@ -156,33 +492,103 @@ export const authService = {
       resetExpires
     );
 
+    // ================================================
+    // EMAIL
+    // ================================================
+
     try {
-      await emailService.sendPasswordResetEmail(user, resetToken);
+      await emailService.sendPasswordResetEmail(
+        user,
+        resetToken
+      );
     } catch (error) {
-      logger.error('Email error:', error);
+      logger.error(
+        'Password reset email error:',
+        error
+      );
+
+      /*
+       * Token DB'de oluşmuş olabilir ama mail
+       * gönderilemedi.
+       *
+       * Dışarı kullanıcı var/yok veya mail servisi
+       * hakkında bilgi sızdırmıyoruz.
+       */
     }
 
-    return { resetToken };
+    /*
+     * KRİTİK:
+     * resetToken response'a DÖNMÜYOR.
+     */
   },
 
-  async resetPassword(token, newPassword) {
-    const user = await authRepository.findByPasswordResetToken(token);
+  // ====================================================
+  // RESET PASSWORD
+  // ====================================================
+
+  async resetPassword(
+    token,
+    newPassword
+  ) {
+    if (!token) {
+      throw new Error(
+        'Şifre sıfırlama bağlantısı geçersiz'
+      );
+    }
+
+    validatePassword(
+      newPassword
+    );
+
+    const user =
+      await authRepository.findByPasswordResetToken(
+        token
+      );
 
     if (!user) {
-      throw new Error('Invalid or expired reset token');
+      throw new Error(
+        'Şifre sıfırlama bağlantısı geçersiz veya süresi dolmuş'
+      );
     }
 
-    if (user.password_reset_expires < new Date()) {
-      throw new Error('Reset token has expired');
+    if (
+      !user.password_reset_expires ||
+      new Date(
+        user.password_reset_expires
+      ) <= new Date()
+    ) {
+      throw new Error(
+        'Şifre sıfırlama bağlantısının süresi dolmuş'
+      );
     }
 
-    // ✅ Model hook'u hash'leyecek
-    user.password = newPassword;
-    user.password_reset_token = null;
-    user.password_reset_expires = null;
+    if (
+      user.is_active !== true
+    ) {
+      throw new Error(
+        'Kullanıcı hesabı aktif değil'
+      );
+    }
+
+    /*
+     * Model beforeUpdate hook'u şifreyi hashleyecek.
+     */
+    user.password =
+      newPassword;
+
+    user.password_reset_token =
+      null;
+
+    user.password_reset_expires =
+      null;
 
     await user.save();
 
-    await authRepository.invalidateAllRefreshTokens(user.id);
+    /*
+     * Şifre resetlenince bütün oturumları kapat.
+     */
+    await authRepository.invalidateAllRefreshTokens(
+      user.id
+    );
   },
 };

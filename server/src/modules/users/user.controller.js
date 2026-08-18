@@ -1,200 +1,1101 @@
-import { User } from '../../models/User.js';
-import { Op } from 'sequelize';
-import { successResponse, errorResponse, paginatedResponse } from '../../utils/response.js';
-import { paginate, getPaginationData } from '../../utils/paginate.js';
-import { AuditLog } from '../../models/AuditLog.js';
+import {
+  Op,
+  UniqueConstraintError,
+} from 'sequelize';
+
+import {
+  User,
+} from '../../models/User.js';
+
+import {
+  AuditLog,
+} from '../../models/AuditLog.js';
+
+import {
+  ROLES,
+} from '../../constants/roles.js';
+
+import {
+  successResponse,
+  errorResponse,
+  paginatedResponse,
+} from '../../utils/response.js';
+
+import {
+  paginate,
+  getPaginationData,
+} from '../../utils/paginate.js';
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const VALID_ROLES =
+  new Set(
+    Object.values(ROLES)
+  );
+
+const normalizeEmail = (
+  email
+) => {
+  return String(
+    email || ''
+  )
+    .trim()
+    .toLowerCase();
+};
+
+const isValidEmail = (
+  email
+) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+    email
+  );
+};
+
+const getSafeUser = (
+  user
+) => {
+  if (!user) {
+    return null;
+  }
+
+  return typeof user.toJSON ===
+    'function'
+    ? user.toJSON()
+    : user;
+};
+
+const createAuditLog =
+  async ({
+    req,
+    action,
+    entityId,
+    description,
+  }) => {
+    try {
+      await AuditLog.create({
+        action,
+
+        entity_type:
+          'user',
+
+        entity_id:
+          entityId,
+
+        user_id:
+          req.user.id,
+
+        description,
+
+        ip_address:
+          req.ip,
+
+        user_agent:
+          req.headers[
+            'user-agent'
+          ],
+      });
+    } catch (error) {
+      /*
+       * Ana işlem audit log problemi yüzünden
+       * başarısız olmamalı.
+       */
+      console.error(
+        '❌ Audit log error:',
+        error
+      );
+    }
+  };
+
+// ======================================================
+// CONTROLLER
+// ======================================================
 
 export const userController = {
-  async findAll(req, res) {
+  // ====================================================
+  // LIST
+  // ====================================================
+
+  async findAll(
+    req,
+    res
+  ) {
     try {
-      const { page = 1, limit = 10, role, search } = req.query;
+      const {
+        page = 1,
+        limit = 10,
+        role,
+        search,
+        is_active,
+      } = req.query;
+
       const where = {};
 
       if (role) {
-        where.role = role;
+        if (
+          !VALID_ROLES.has(
+            role
+          )
+        ) {
+          return errorResponse(
+            res,
+            'Geçersiz kullanıcı rolü',
+            400
+          );
+        }
+
+        where.role =
+          role;
       }
 
-      if (search) {
+      if (
+        is_active !==
+        undefined
+      ) {
+        where.is_active =
+          String(
+            is_active
+          ) === 'true';
+      }
+
+      if (
+        search?.trim()
+      ) {
+        const value =
+          search.trim();
+
         where[Op.or] = [
-          { first_name: { [Op.iLike]: `%${search}%` } },
-          { last_name: { [Op.iLike]: `%${search}%` } },
-          { email: { [Op.iLike]: `%${search}%` } },
+          {
+            first_name: {
+              [Op.iLike]:
+                `%${value}%`,
+            },
+          },
+          {
+            last_name: {
+              [Op.iLike]:
+                `%${value}%`,
+            },
+          },
+          {
+            email: {
+              [Op.iLike]:
+                `%${value}%`,
+            },
+          },
         ];
       }
 
-      const query = paginate({ where }, page, limit);
-      const { count, rows } = await User.findAndCountAll({
-        ...query,
-        attributes: { exclude: ['password', 'refresh_token'] },
-        order: [['created_at', 'DESC']],
-      });
+      const query =
+        paginate(
+          {
+            where,
+          },
+          page,
+          limit
+        );
 
-      const pagination = getPaginationData(count, page, limit);
-      return paginatedResponse(res, rows, pagination, 'Users fetched successfully');
+      const {
+        count,
+        rows,
+      } =
+        await User.findAndCountAll({
+          ...query,
+
+          attributes: {
+            exclude: [
+              'password',
+              'refresh_token',
+              'email_verification_token',
+              'password_reset_token',
+              'password_reset_expires',
+            ],
+          },
+
+          order: [
+            [
+              'created_at',
+              'DESC',
+            ],
+          ],
+        });
+
+      const pagination =
+        getPaginationData(
+          count,
+          page,
+          limit
+        );
+
+      return paginatedResponse(
+        res,
+        rows,
+        pagination,
+        'Kullanıcılar getirildi'
+      );
     } catch (error) {
-      console.error('❌ User findAll error:', error);
-      return errorResponse(res, error.message, 400);
+      console.error(
+        '❌ User findAll error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        'Kullanıcılar getirilemedi',
+        500
+      );
     }
   },
 
-  async findOne(req, res) {
+  // ====================================================
+  // DETAIL
+  // ====================================================
+
+  async findOne(
+    req,
+    res
+  ) {
     try {
-      const user = await User.findByPk(req.params.id, {
-        attributes: { exclude: ['password', 'refresh_token'] },
-      });
+      const user =
+        await User.findByPk(
+          req.params.id,
+          {
+            attributes: {
+              exclude: [
+                'password',
+                'refresh_token',
+                'email_verification_token',
+                'password_reset_token',
+                'password_reset_expires',
+              ],
+            },
+          }
+        );
+
       if (!user) {
-        return errorResponse(res, 'User not found', 404);
+        return errorResponse(
+          res,
+          'Kullanıcı bulunamadı',
+          404
+        );
       }
-      return successResponse(res, user, 'User fetched successfully');
+
+      return successResponse(
+        res,
+        user,
+        'Kullanıcı getirildi'
+      );
     } catch (error) {
-      console.error('❌ User findOne error:', error);
-      return errorResponse(res, error.message, 400);
+      console.error(
+        '❌ User findOne error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        'Kullanıcı getirilemedi',
+        500
+      );
     }
   },
 
-  // ✅ Kullanıcı güncelle
-  async update(req, res) {
+  // ====================================================
+  // CREATE
+  // ADMIN ONLY - route middleware tarafından korunmalı
+  // ====================================================
+
+  async create(
+    req,
+    res
+  ) {
     try {
-      const user = await User.findByPk(req.params.id);
-      if (!user) {
-        return errorResponse(res, 'User not found', 404);
+      const {
+        first_name,
+        last_name,
+        email,
+        password,
+        phone,
+        role = ROLES.INTERN,
+        title,
+        bio,
+        is_active = true,
+      } = req.body;
+
+      const cleanFirstName =
+        String(
+          first_name || ''
+        ).trim();
+
+      const cleanLastName =
+        String(
+          last_name || ''
+        ).trim();
+
+      const cleanEmail =
+        normalizeEmail(
+          email
+        );
+
+      // ================================================
+      // VALIDATION
+      // ================================================
+
+      if (
+        !cleanFirstName
+      ) {
+        return errorResponse(
+          res,
+          'Ad gereklidir',
+          400
+        );
       }
 
-      const { first_name, last_name, email, phone, role, title, bio, is_active } = req.body;
+      if (
+        !cleanLastName
+      ) {
+        return errorResponse(
+          res,
+          'Soyad gereklidir',
+          400
+        );
+      }
 
-      await user.update({
-        first_name: first_name || user.first_name,
-        last_name: last_name || user.last_name,
-        email: email || user.email,
-        phone: phone !== undefined ? phone : user.phone,
-        role: role || user.role,
-        title: title !== undefined ? title : user.title,
-        bio: bio !== undefined ? bio : user.bio,
-        is_active: is_active !== undefined ? is_active : user.is_active,
+      if (
+        !cleanEmail
+      ) {
+        return errorResponse(
+          res,
+          'E-posta adresi gereklidir',
+          400
+        );
+      }
+
+      if (
+        !isValidEmail(
+          cleanEmail
+        )
+      ) {
+        return errorResponse(
+          res,
+          'Geçerli bir e-posta adresi girin',
+          400
+        );
+      }
+
+      if (
+        !password ||
+        password.length < 8
+      ) {
+        return errorResponse(
+          res,
+          'Şifre en az 8 karakter olmalıdır',
+          400
+        );
+      }
+
+      if (
+        !VALID_ROLES.has(
+          role
+        )
+      ) {
+        return errorResponse(
+          res,
+          'Geçersiz kullanıcı rolü',
+          400
+        );
+      }
+
+      // ================================================
+      // DUPLICATE EMAIL
+      // ================================================
+
+      const existingUser =
+        await User.findOne({
+          where: {
+            email:
+              cleanEmail,
+          },
+        });
+
+      if (
+        existingUser
+      ) {
+        return errorResponse(
+          res,
+          'Bu e-posta adresi zaten kullanılıyor',
+          409
+        );
+      }
+
+      // ================================================
+      // CREATE
+      //
+      // User.beforeCreate hook'u şifreyi hashliyor.
+      // Controller içinde tekrar hashlemiyoruz.
+      // ================================================
+
+      const user =
+        await User.create({
+          first_name:
+            cleanFirstName,
+
+          last_name:
+            cleanLastName,
+
+          email:
+            cleanEmail,
+
+          password,
+
+          phone:
+            phone?.trim() ||
+            null,
+
+          role,
+
+          title:
+            title?.trim() ||
+            null,
+
+          bio:
+            bio?.trim() ||
+            null,
+
+          is_active:
+            Boolean(
+              is_active
+            ),
+
+          /*
+           * Eğer email verification sistemi kullanılmıyorsa
+           * admin-created kullanıcılar için true düşünülebilir.
+           *
+           * Şimdilik mevcut model davranışını koruyoruz.
+           */
+        });
+
+      await createAuditLog({
+        req,
+
+        action:
+          'create',
+
+        entityId:
+          user.id,
+
+        description:
+          `"${user.email}" kullanıcısı "${user.role}" rolüyle oluşturuldu`,
       });
 
-      // ✅ Logla
-      await AuditLog.create({
-        action: 'update',
-        entity_type: 'user',
-        entity_id: user.id,
-        user_id: req.user.id,
-        description: `"${user.email}" kullanıcısı güncellendi`,
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
-      });
-
-      return successResponse(res, user, 'Kullanıcı başarıyla güncellendi');
+      return successResponse(
+        res,
+        getSafeUser(
+          user
+        ),
+        'Kullanıcı başarıyla oluşturuldu',
+        201
+      );
     } catch (error) {
-      console.error('❌ User update error:', error);
-      return errorResponse(res, error.message, 400);
+      console.error(
+        '❌ User create error:',
+        error
+      );
+
+      if (
+        error instanceof
+        UniqueConstraintError
+      ) {
+        return errorResponse(
+          res,
+          'Bu e-posta adresi zaten kullanılıyor',
+          409
+        );
+      }
+
+      return errorResponse(
+        res,
+        'Kullanıcı oluşturulamadı',
+        500
+      );
     }
   },
 
-  // ✅ Kullanıcı sil (Soft Delete)
-  async delete(req, res) {
+  // ====================================================
+  // UPDATE
+  // ====================================================
+
+  async update(
+    req,
+    res
+  ) {
     try {
-      const user = await User.findByPk(req.params.id);
+      const user =
+        await User.findByPk(
+          req.params.id
+        );
+
       if (!user) {
-        return errorResponse(res, 'User not found', 404);
+        return errorResponse(
+          res,
+          'Kullanıcı bulunamadı',
+          404
+        );
       }
 
-      // ✅ Kendini silmesini engelle
-      if (user.id === req.user.id) {
-        return errorResponse(res, 'Kendi hesabınızı silemezsiniz', 400);
+      const {
+        first_name,
+        last_name,
+        email,
+        phone,
+        title,
+        bio,
+      } = req.body;
+
+      /*
+       * Rol ve is_active burada değiştirilmez.
+       *
+       * Bunların ayrı endpointleri var:
+       * PATCH /users/:id/role
+       * PATCH /users/:id/toggle-active
+       */
+
+      const updateData = {};
+
+      if (
+        first_name !==
+        undefined
+      ) {
+        const value =
+          String(
+            first_name
+          ).trim();
+
+        if (!value) {
+          return errorResponse(
+            res,
+            'Ad boş olamaz',
+            400
+          );
+        }
+
+        updateData.first_name =
+          value;
       }
 
-      const userEmail = user.email;
+      if (
+        last_name !==
+        undefined
+      ) {
+        const value =
+          String(
+            last_name
+          ).trim();
+
+        if (!value) {
+          return errorResponse(
+            res,
+            'Soyad boş olamaz',
+            400
+          );
+        }
+
+        updateData.last_name =
+          value;
+      }
+
+      if (
+        email !==
+        undefined
+      ) {
+        const value =
+          normalizeEmail(
+            email
+          );
+
+        if (
+          !isValidEmail(
+            value
+          )
+        ) {
+          return errorResponse(
+            res,
+            'Geçerli bir e-posta adresi girin',
+            400
+          );
+        }
+
+        const existing =
+          await User.findOne({
+            where: {
+              email:
+                value,
+
+              id: {
+                [Op.ne]:
+                  user.id,
+              },
+            },
+          });
+
+        if (existing) {
+          return errorResponse(
+            res,
+            'Bu e-posta adresi başka bir kullanıcı tarafından kullanılıyor',
+            409
+          );
+        }
+
+        updateData.email =
+          value;
+      }
+
+      if (
+        phone !==
+        undefined
+      ) {
+        updateData.phone =
+          phone?.trim() ||
+          null;
+      }
+
+      if (
+        title !==
+        undefined
+      ) {
+        updateData.title =
+          title?.trim() ||
+          null;
+      }
+
+      if (
+        bio !==
+        undefined
+      ) {
+        updateData.bio =
+          bio?.trim() ||
+          null;
+      }
+
+      await user.update(
+        updateData
+      );
+
+      await createAuditLog({
+        req,
+
+        action:
+          'update',
+
+        entityId:
+          user.id,
+
+        description:
+          `"${user.email}" kullanıcısının profil bilgileri güncellendi`,
+      });
+
+      return successResponse(
+        res,
+        getSafeUser(
+          user
+        ),
+        'Kullanıcı başarıyla güncellendi'
+      );
+    } catch (error) {
+      console.error(
+        '❌ User update error:',
+        error
+      );
+
+      if (
+        error instanceof
+        UniqueConstraintError
+      ) {
+        return errorResponse(
+          res,
+          'Bu e-posta adresi zaten kullanılıyor',
+          409
+        );
+      }
+
+      return errorResponse(
+        res,
+        'Kullanıcı güncellenemedi',
+        500
+      );
+    }
+  },
+
+  // ====================================================
+  // DELETE
+  // ====================================================
+
+  async delete(
+    req,
+    res
+  ) {
+    try {
+      const user =
+        await User.findByPk(
+          req.params.id
+        );
+
+      if (!user) {
+        return errorResponse(
+          res,
+          'Kullanıcı bulunamadı',
+          404
+        );
+      }
+
+      if (
+        user.id ===
+        req.user.id
+      ) {
+        return errorResponse(
+          res,
+          'Kendi hesabınızı silemezsiniz',
+          400
+        );
+      }
+
+      // ================================================
+      // LAST ADMIN PROTECTION
+      // ================================================
+
+      if (
+        user.role ===
+        ROLES.ADMIN
+      ) {
+        const adminCount =
+          await User.count({
+            where: {
+              role:
+                ROLES.ADMIN,
+
+              is_active:
+                true,
+            },
+          });
+
+        if (
+          adminCount <= 1
+        ) {
+          return errorResponse(
+            res,
+            'Sistemdeki son aktif yönetici silinemez',
+            400
+          );
+        }
+      }
+
+      const userEmail =
+        user.email;
+
+      const userId =
+        user.id;
+
       await user.destroy();
 
-      // ✅ Logla
-      await AuditLog.create({
-        action: 'delete',
-        entity_type: 'user',
-        entity_id: user.id,
-        user_id: req.user.id,
-        description: `"${userEmail}" kullanıcısı silindi`,
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
+      await createAuditLog({
+        req,
+
+        action:
+          'delete',
+
+        entityId:
+          userId,
+
+        description:
+          `"${userEmail}" kullanıcısı silindi`,
       });
 
-      return successResponse(res, null, 'Kullanıcı başarıyla silindi');
+      return successResponse(
+        res,
+        null,
+        'Kullanıcı başarıyla silindi'
+      );
     } catch (error) {
-      console.error('❌ User delete error:', error);
-      return errorResponse(res, error.message, 400);
+      console.error(
+        '❌ User delete error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        'Kullanıcı silinemedi',
+        500
+      );
     }
   },
 
-  // ✅ Kullanıcı aktif/pasif değiştir
-  async toggleActive(req, res) {
+  // ====================================================
+  // TOGGLE ACTIVE
+  // ====================================================
+
+  async toggleActive(
+    req,
+    res
+  ) {
     try {
-      const user = await User.findByPk(req.params.id);
+      const user =
+        await User.findByPk(
+          req.params.id
+        );
+
       if (!user) {
-        return errorResponse(res, 'User not found', 404);
+        return errorResponse(
+          res,
+          'Kullanıcı bulunamadı',
+          404
+        );
       }
 
-      // ✅ Kendini pasif yapmasını engelle
-      if (user.id === req.user.id) {
-        return errorResponse(res, 'Kendi hesabınızı pasif yapamazsınız', 400);
+      if (
+        user.id ===
+        req.user.id
+      ) {
+        return errorResponse(
+          res,
+          'Kendi hesabınızı pasif yapamazsınız',
+          400
+        );
       }
 
-      const newStatus = !user.is_active;
-      await user.update({ is_active: newStatus });
+      const newStatus =
+        !user.is_active;
 
-      // ✅ Logla
-      await AuditLog.create({
-        action: 'update',
-        entity_type: 'user',
-        entity_id: user.id,
-        user_id: req.user.id,
-        description: `"${user.email}" kullanıcısı ${newStatus ? 'aktif' : 'pasif'} yapıldı`,
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
+      // Son aktif admin pasif yapılamaz
+      if (
+        user.role ===
+          ROLES.ADMIN &&
+        newStatus === false
+      ) {
+        const adminCount =
+          await User.count({
+            where: {
+              role:
+                ROLES.ADMIN,
+
+              is_active:
+                true,
+            },
+          });
+
+        if (
+          adminCount <= 1
+        ) {
+          return errorResponse(
+            res,
+            'Sistemdeki son aktif yönetici pasif yapılamaz',
+            400
+          );
+        }
+      }
+
+      await user.update({
+        is_active:
+          newStatus,
       });
 
-      return successResponse(res, user, `Kullanıcı ${newStatus ? 'aktif' : 'pasif'} yapıldı`);
+      /*
+       * Pasife alınan kullanıcının refresh tokenını
+       * geçersiz kılmak iyi olur.
+       */
+      if (
+        !newStatus
+      ) {
+        await user.update({
+          refresh_token:
+            null,
+        });
+      }
+
+      await createAuditLog({
+        req,
+
+        action:
+          'update',
+
+        entityId:
+          user.id,
+
+        description:
+          `"${user.email}" kullanıcısı ${
+            newStatus
+              ? 'aktif'
+              : 'pasif'
+          } yapıldı`,
+      });
+
+      return successResponse(
+        res,
+        getSafeUser(
+          user
+        ),
+        `Kullanıcı ${
+          newStatus
+            ? 'aktif'
+            : 'pasif'
+        } yapıldı`
+      );
     } catch (error) {
-      console.error('❌ User toggleActive error:', error);
-      return errorResponse(res, error.message, 400);
+      console.error(
+        '❌ User toggleActive error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        'Kullanıcı durumu güncellenemedi',
+        500
+      );
     }
   },
 
-  // ✅ Kullanıcı rol değiştir
-  async changeRole(req, res) {
+  // ====================================================
+  // CHANGE ROLE
+  // ====================================================
+
+  async changeRole(
+    req,
+    res
+  ) {
     try {
-      const { role } = req.body;
-      const user = await User.findByPk(req.params.id);
+      const {
+        role,
+      } = req.body;
+
+      const user =
+        await User.findByPk(
+          req.params.id
+        );
+
       if (!user) {
-        return errorResponse(res, 'User not found', 404);
+        return errorResponse(
+          res,
+          'Kullanıcı bulunamadı',
+          404
+        );
       }
 
-      if (!role) {
-        return errorResponse(res, 'Rol belirtilmelidir', 400);
+      if (
+        !role ||
+        !VALID_ROLES.has(
+          role
+        )
+      ) {
+        return errorResponse(
+          res,
+          'Geçerli bir rol belirtilmelidir',
+          400
+        );
       }
 
-      // ✅ Kendi rolünü değiştirmesini engelle (isteğe bağlı)
-      if (user.id === req.user.id) {
-        return errorResponse(res, 'Kendi rolünüzü değiştiremezsiniz', 400);
+      if (
+        user.id ===
+        req.user.id
+      ) {
+        return errorResponse(
+          res,
+          'Kendi rolünüzü değiştiremezsiniz',
+          400
+        );
       }
 
-      const oldRole = user.role;
-      await user.update({ role });
+      if (
+        user.role ===
+          role
+      ) {
+        return successResponse(
+          res,
+          getSafeUser(
+            user
+          ),
+          'Kullanıcı zaten bu role sahip'
+        );
+      }
 
-      // ✅ Logla
-      await AuditLog.create({
-        action: 'update',
-        entity_type: 'user',
-        entity_id: user.id,
-        user_id: req.user.id,
-        description: `"${user.email}" kullanıcısının rolü "${oldRole}" → "${role}" olarak değiştirildi`,
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
+      // ================================================
+      // LAST ADMIN PROTECTION
+      // ================================================
+
+      if (
+        user.role ===
+          ROLES.ADMIN &&
+        role !==
+          ROLES.ADMIN
+      ) {
+        const adminCount =
+          await User.count({
+            where: {
+              role:
+                ROLES.ADMIN,
+
+              is_active:
+                true,
+            },
+          });
+
+        if (
+          adminCount <= 1
+        ) {
+          return errorResponse(
+            res,
+            'Sistemdeki son aktif yöneticinin rolü değiştirilemez',
+            400
+          );
+        }
+      }
+
+      const oldRole =
+        user.role;
+
+      await user.update({
+        role,
       });
 
-      return successResponse(res, user, 'Kullanıcı rolü başarıyla değiştirildi');
+      /*
+       * Rol değişince mevcut refresh tokenı geçersiz
+       * kılmak mantıklı. Kullanıcı tekrar giriş yapınca
+       * yeni yetkileriyle token alır.
+       */
+      await user.update({
+        refresh_token:
+          null,
+      });
+
+      await createAuditLog({
+        req,
+
+        action:
+          'update',
+
+        entityId:
+          user.id,
+
+        description:
+          `"${user.email}" kullanıcısının rolü "${oldRole}" → "${role}" olarak değiştirildi`,
+      });
+
+      return successResponse(
+        res,
+        getSafeUser(
+          user
+        ),
+        'Kullanıcı rolü başarıyla değiştirildi'
+      );
     } catch (error) {
-      console.error('❌ User changeRole error:', error);
-      return errorResponse(res, error.message, 400);
+      console.error(
+        '❌ User changeRole error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        'Kullanıcı rolü değiştirilemedi',
+        500
+      );
     }
   },
 };

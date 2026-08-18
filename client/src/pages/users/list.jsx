@@ -4,6 +4,10 @@ import {
 } from 'react';
 
 import {
+  Link,
+} from 'react-router-dom';
+
+import {
   useMutation,
   useQuery,
   useQueryClient,
@@ -29,7 +33,7 @@ import {
   Search,
   ShieldCheck,
   Trash2,
-  UserRound,
+  UserPlus,
   Users,
   X,
 } from 'lucide-react';
@@ -233,7 +237,7 @@ const UserList = () => {
   ]);
 
   // ====================================================
-  // UPDATE
+  // PROFILE UPDATE
   // ====================================================
 
   const updateMutation =
@@ -247,23 +251,33 @@ const UserList = () => {
           data
         ),
 
-      onSuccess: () => {
-        queryClient.invalidateQueries({
-          queryKey: ['users'],
-        });
-
-        toast.success(
-          'Kullanıcı güncellendi'
-        );
-
-        setIsModalOpen(
-          false
-        );
-
-        setEditingUser(
-          null
+      onError: (
+        requestError
+      ) => {
+        toast.error(
+          requestError
+            ?.response
+            ?.data
+            ?.message ||
+            'Kullanıcı bilgileri güncellenemedi'
         );
       },
+    });
+
+  // ====================================================
+  // ROLE UPDATE
+  // ====================================================
+
+  const roleMutation =
+    useMutation({
+      mutationFn: ({
+        id,
+        role,
+      }) =>
+        userApi.changeRole(
+          id,
+          role
+        ),
 
       onError: (
         requestError
@@ -273,7 +287,33 @@ const UserList = () => {
             ?.response
             ?.data
             ?.message ||
-            'Güncelleme başarısız'
+            'Kullanıcı rolü değiştirilemedi'
+        );
+      },
+    });
+
+  // ====================================================
+  // ACTIVE STATUS
+  // ====================================================
+
+  const activeMutation =
+    useMutation({
+      mutationFn: (
+        id
+      ) =>
+        userApi.toggleActive(
+          id
+        ),
+
+      onError: (
+        requestError
+      ) => {
+        toast.error(
+          requestError
+            ?.response
+            ?.data
+            ?.message ||
+            'Hesap durumu değiştirilemedi'
         );
       },
     });
@@ -291,8 +331,8 @@ const UserList = () => {
           id
         ),
 
-      onSuccess: () => {
-        queryClient.invalidateQueries({
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({
           queryKey: ['users'],
         });
 
@@ -313,6 +353,15 @@ const UserList = () => {
         );
       },
     });
+
+  // ====================================================
+  // DERIVED
+  // ====================================================
+
+  const isUpdating =
+    updateMutation.isPending ||
+    roleMutation.isPending ||
+    activeMutation.isPending;
 
   // ====================================================
   // HANDLERS
@@ -358,7 +407,7 @@ const UserList = () => {
 
     const confirmed =
       window.confirm(
-        `"${name}" kullanıcısını silmek istediğinize emin misiniz?`
+        `"${name}" kullanıcısını silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`
       );
 
     if (
@@ -386,6 +435,12 @@ const UserList = () => {
 
   const closeModal =
     () => {
+      if (
+        isUpdating
+      ) {
+        return;
+      }
+
       setIsModalOpen(
         false
       );
@@ -395,57 +450,205 @@ const UserList = () => {
       );
     };
 
-  const handleUpdate = (
-    event
-  ) => {
-    event.preventDefault();
+  // ====================================================
+  // UPDATE USER
+  // ====================================================
 
-    if (
-      !editingUser?.id
-    ) {
-      return;
-    }
+  const handleUpdate =
+    async (
+      event
+    ) => {
+      event.preventDefault();
 
-    const formData =
-      new FormData(
-        event.currentTarget
-      );
+      if (
+        !editingUser?.id ||
+        isUpdating
+      ) {
+        return;
+      }
 
-    const updateData = {
-      first_name:
-        formData.get(
-          'first_name'
-        ),
+      const formData =
+        new FormData(
+          event.currentTarget
+        );
 
-      last_name:
-        formData.get(
-          'last_name'
-        ),
+      const firstName =
+        String(
+          formData.get(
+            'first_name'
+          ) || ''
+        ).trim();
 
-      email:
-        formData.get(
-          'email'
-        ),
+      const lastName =
+        String(
+          formData.get(
+            'last_name'
+          ) || ''
+        ).trim();
 
-      role:
-        formData.get(
-          'role'
-        ),
+      const email =
+        String(
+          formData.get(
+            'email'
+          ) || ''
+        )
+          .trim()
+          .toLowerCase();
 
-      is_active:
+      const role =
+        String(
+          formData.get(
+            'role'
+          ) || ''
+        );
+
+      const requestedActive =
         formData.get(
           'is_active'
-        ) === 'true',
+        ) === 'true';
+
+      // ================================================
+      // VALIDATION
+      // ================================================
+
+      if (
+        !firstName
+      ) {
+        toast.error(
+          'Ad gereklidir'
+        );
+
+        return;
+      }
+
+      if (
+        !lastName
+      ) {
+        toast.error(
+          'Soyad gereklidir'
+        );
+
+        return;
+      }
+
+      if (
+        !email
+      ) {
+        toast.error(
+          'E-posta adresi gereklidir'
+        );
+
+        return;
+      }
+
+      if (
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+          email
+        )
+      ) {
+        toast.error(
+          'Geçerli bir e-posta adresi girin'
+        );
+
+        return;
+      }
+
+      try {
+        // ==============================================
+        // PROFILE
+        // ==============================================
+
+        const profileChanged =
+          firstName !==
+            editingUser.first_name ||
+          lastName !==
+            editingUser.last_name ||
+          email !==
+            String(
+              editingUser.email ||
+              ''
+            )
+              .trim()
+              .toLowerCase();
+
+        if (
+          profileChanged
+        ) {
+          await updateMutation.mutateAsync({
+            id:
+              editingUser.id,
+
+            data: {
+              first_name:
+                firstName,
+
+              last_name:
+                lastName,
+
+              email,
+            },
+          });
+        }
+
+        // ==============================================
+        // ROLE
+        // ==============================================
+
+        if (
+          role !==
+          editingUser.role
+        ) {
+          await roleMutation.mutateAsync({
+            id:
+              editingUser.id,
+
+            role,
+          });
+        }
+
+        // ==============================================
+        // ACTIVE STATUS
+        // ==============================================
+
+        if (
+          requestedActive !==
+          Boolean(
+            editingUser.is_active
+          )
+        ) {
+          await activeMutation.mutateAsync(
+            editingUser.id
+          );
+        }
+
+        // ==============================================
+        // CACHE
+        // ==============================================
+
+        await queryClient.invalidateQueries({
+          queryKey: [
+            'users',
+          ],
+        });
+
+        toast.success(
+          'Kullanıcı başarıyla güncellendi'
+        );
+
+        setIsModalOpen(
+          false
+        );
+
+        setEditingUser(
+          null
+        );
+      } catch {
+        /*
+         * Mutation hata mesajlarını
+         * kendi onError callback'leri gösteriyor.
+         */
+      }
     };
-
-    updateMutation.mutate({
-      id:
-        editingUser.id,
-
-      data:
-        updateData,
-    });
-  };
 
   // ====================================================
   // LOADING
@@ -552,6 +755,16 @@ const UserList = () => {
           </div>
 
         </div>
+
+        <Link
+          to="/users/create"
+          className="shrink-0"
+        >
+          <Button>
+            <UserPlus className="h-4 w-4" />
+            Yeni Kullanıcı
+          </Button>
+        </Link>
 
       </div>
 
@@ -716,7 +929,7 @@ const UserList = () => {
           description={
             hasFilters
               ? 'Arama veya rol filtresini değiştirerek tekrar deneyin.'
-              : 'Sistemde görüntülenecek kullanıcı kaydı bulunmuyor.'
+              : 'Henüz kullanıcı kaydı bulunmuyor.'
           }
           action={
             hasFilters ? (
@@ -728,7 +941,16 @@ const UserList = () => {
               >
                 Filtreleri Temizle
               </Button>
-            ) : null
+            ) : (
+              <Link
+                to="/users/create"
+              >
+                <Button>
+                  <UserPlus className="h-4 w-4" />
+                  İlk Kullanıcıyı Ekle
+                </Button>
+              </Link>
+            )
           }
         />
       ) : (
@@ -816,7 +1038,8 @@ const UserList = () => {
                           </p>
 
                           <p className="mt-0.5 text-[10px] text-gray-400 dark:text-slate-500">
-                            ID: {String(
+                            ID:{' '}
+                            {String(
                               item.id
                             ).slice(
                               0,
@@ -916,6 +1139,9 @@ const UserList = () => {
                               item
                             )
                           }
+                          disabled={
+                            isUpdating
+                          }
                           className="
                             inline-flex
                             h-8
@@ -927,6 +1153,8 @@ const UserList = () => {
                             transition
                             hover:bg-blue-50
                             hover:text-blue-600
+                            disabled:cursor-not-allowed
+                            disabled:opacity-50
                             dark:text-slate-500
                             dark:hover:bg-blue-500/[0.08]
                             dark:hover:text-blue-400
@@ -957,6 +1185,7 @@ const UserList = () => {
                             transition
                             hover:bg-red-50
                             hover:text-red-600
+                            disabled:cursor-not-allowed
                             disabled:opacity-50
                             dark:text-slate-500
                             dark:hover:bg-red-500/[0.08]
@@ -1088,6 +1317,9 @@ const UserList = () => {
         }
         title="Kullanıcı Düzenle"
         size="md"
+        closeOnBackdrop={
+          !isUpdating
+        }
       >
 
         {editingUser && (
@@ -1143,12 +1375,14 @@ const UserList = () => {
                 </p>
 
                 <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-500">
-                  Kullanıcı hesabı ve yetki bilgilerini düzenleyin.
+                  Profil, rol ve hesap durumunu yönetin.
                 </p>
 
               </div>
 
             </div>
+
+            {/* PROFILE */}
 
             <div className="grid gap-3 sm:grid-cols-2">
 
@@ -1158,6 +1392,9 @@ const UserList = () => {
                 defaultValue={
                   editingUser.first_name
                 }
+                disabled={
+                  isUpdating
+                }
                 required
               />
 
@@ -1166,6 +1403,9 @@ const UserList = () => {
                 name="last_name"
                 defaultValue={
                   editingUser.last_name
+                }
+                disabled={
+                  isUpdating
                 }
                 required
               />
@@ -1179,8 +1419,13 @@ const UserList = () => {
               defaultValue={
                 editingUser.email
               }
+              disabled={
+                isUpdating
+              }
               required
             />
+
+            {/* ROLE */}
 
             <div>
 
@@ -1193,6 +1438,9 @@ const UserList = () => {
                 defaultValue={
                   editingUser.role
                 }
+                disabled={
+                  isUpdating
+                }
                 className="
                   h-10
                   w-full
@@ -1204,9 +1452,12 @@ const UserList = () => {
                   text-sm
                   text-gray-700
                   outline-none
+                  transition
                   focus:border-blue-500
                   focus:ring-2
                   focus:ring-blue-500/10
+                  disabled:cursor-not-allowed
+                  disabled:opacity-60
                   dark:border-white/[0.08]
                   dark:bg-white/[0.035]
                   dark:text-slate-300
@@ -1229,7 +1480,13 @@ const UserList = () => {
                 </option>
               </select>
 
+              <p className="mt-1.5 text-xs text-gray-500 dark:text-slate-500">
+                Rol değişiklikleri ayrı güvenlik işlemi olarak kaydedilir.
+              </p>
+
             </div>
+
+            {/* STATUS */}
 
             <div>
 
@@ -1244,6 +1501,9 @@ const UserList = () => {
                     ? 'true'
                     : 'false'
                 }
+                disabled={
+                  isUpdating
+                }
                 className="
                   h-10
                   w-full
@@ -1255,9 +1515,12 @@ const UserList = () => {
                   text-sm
                   text-gray-700
                   outline-none
+                  transition
                   focus:border-blue-500
                   focus:ring-2
                   focus:ring-blue-500/10
+                  disabled:cursor-not-allowed
+                  disabled:opacity-60
                   dark:border-white/[0.08]
                   dark:bg-white/[0.035]
                   dark:text-slate-300
@@ -1272,7 +1535,13 @@ const UserList = () => {
                 </option>
               </select>
 
+              <p className="mt-1.5 text-xs text-gray-500 dark:text-slate-500">
+                Pasife alınan kullanıcı sisteme giriş yapamaz.
+              </p>
+
             </div>
+
+            {/* ACTIONS */}
 
             <div className="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-white/[0.06]">
 
@@ -1282,6 +1551,9 @@ const UserList = () => {
                 onClick={
                   closeModal
                 }
+                disabled={
+                  isUpdating
+                }
               >
                 İptal
               </Button>
@@ -1289,7 +1561,10 @@ const UserList = () => {
               <Button
                 type="submit"
                 loading={
-                  updateMutation.isPending
+                  isUpdating
+                }
+                disabled={
+                  isUpdating
                 }
               >
                 Güncelle

@@ -17,7 +17,7 @@ import PublicRoute from './public.routes.jsx';
 
 import AuthLayout from '../../layouts/auth.layout.jsx';
 import DashboardLayout from '../../layouts/dashboard.layout.jsx';
-
+import UserCreate from '../../pages/users/UserCreate.jsx';
 // ======================================================
 // AUTH
 // ======================================================
@@ -635,6 +635,10 @@ const AppRouter = () => {
               />
             }
           >
+            <Route
+  path="/users/create"
+  element={<UserCreate />}
+/>
             <Route
               path="/users"
               element={
