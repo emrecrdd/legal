@@ -17,9 +17,11 @@ const Input = forwardRef(
     const generatedId = useId();
     const inputId = id || generatedId;
 
+    const hasIcon = Boolean(icon);
+    const hasError = Boolean(error);
+
     return (
       <div className="w-full">
-        {/* Label */}
         {label && (
           <label
             htmlFor={inputId}
@@ -36,9 +38,8 @@ const Input = forwardRef(
           </label>
         )}
 
-        {/* Input */}
         <div className="relative">
-          {icon && (
+          {hasIcon && (
             <div
               className="
                 pointer-events-none
@@ -46,10 +47,13 @@ const Input = forwardRef(
                 inset-y-0
                 left-0
                 flex
+                w-10
                 items-center
-                pl-3.5
+                justify-center
                 text-gray-400
                 dark:text-slate-500
+                [&>svg]:h-4
+                [&>svg]:w-4
               "
             >
               {icon}
@@ -59,9 +63,9 @@ const Input = forwardRef(
           <input
             ref={ref}
             id={inputId}
-            aria-invalid={!!error}
+            aria-invalid={hasError || undefined}
             aria-describedby={
-              error
+              hasError
                 ? `${inputId}-error`
                 : helperText
                   ? `${inputId}-helper`
@@ -72,6 +76,7 @@ const Input = forwardRef(
               w-full
               rounded-lg
               border
+              border-gray-200
               bg-white
               px-3.5
               text-sm
@@ -83,7 +88,6 @@ const Input = forwardRef(
 
               placeholder:text-gray-400
 
-              border-gray-200
               hover:border-gray-300
 
               focus:border-blue-500
@@ -94,9 +98,7 @@ const Input = forwardRef(
               dark:bg-white/[0.035]
               dark:text-white
               dark:placeholder:text-slate-500
-
               dark:hover:border-white/[0.14]
-
               dark:focus:border-blue-500/60
               dark:focus:bg-white/[0.05]
               dark:focus:ring-blue-500/10
@@ -109,13 +111,13 @@ const Input = forwardRef(
               dark:disabled:bg-white/[0.02]
               dark:disabled:text-slate-600
 
-              ${icon ? 'pl-10' : ''}
+              ${hasIcon ? 'pl-10' : ''}
+              ${hasError ? 'pr-10' : ''}
 
               ${
-                error
+                hasError
                   ? `
                     border-red-400
-                    pr-10
                     focus:border-red-500
                     focus:ring-red-500/10
                     dark:border-red-500/50
@@ -129,8 +131,7 @@ const Input = forwardRef(
             {...props}
           />
 
-          {/* Error icon */}
-          {error && (
+          {hasError && (
             <div
               className="
                 pointer-events-none
@@ -138,8 +139,9 @@ const Input = forwardRef(
                 inset-y-0
                 right-0
                 flex
+                w-10
                 items-center
-                pr-3.5
+                justify-center
               "
             >
               <AlertCircle
@@ -150,8 +152,7 @@ const Input = forwardRef(
           )}
         </div>
 
-        {/* Error */}
-        {error && (
+        {hasError && (
           <p
             id={`${inputId}-error`}
             className="
@@ -169,8 +170,7 @@ const Input = forwardRef(
           </p>
         )}
 
-        {/* Helper */}
-        {!error && helperText && (
+        {!hasError && helperText && (
           <p
             id={`${inputId}-helper`}
             className="
