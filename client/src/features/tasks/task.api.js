@@ -1,4 +1,9 @@
 import axios from '../../app/config/axios.js';
+import { API_ROUTES } from '../../constants/api-routes.js';
+
+const {
+  TASKS,
+} = API_ROUTES;
 
 const taskApi = {
   // ======================================================
@@ -6,9 +11,12 @@ const taskApi = {
   // ======================================================
 
   getAll: (params = {}) => {
-    return axios.get('/tasks', {
-      params,
-    });
+    return axios.get(
+      TASKS.GET_ALL,
+      {
+        params,
+      }
+    );
   },
 
   // ======================================================
@@ -17,7 +25,7 @@ const taskApi = {
 
   getOne: (id) => {
     return axios.get(
-      `/tasks/${id}`
+      TASKS.GET_ONE(id)
     );
   },
 
@@ -27,7 +35,7 @@ const taskApi = {
 
   create: (data) => {
     return axios.post(
-      '/tasks',
+      TASKS.CREATE,
       data
     );
   },
@@ -38,7 +46,7 @@ const taskApi = {
 
   update: (id, data) => {
     return axios.put(
-      `/tasks/${id}`,
+      TASKS.UPDATE(id),
       data
     );
   },
@@ -49,7 +57,7 @@ const taskApi = {
 
   delete: (id) => {
     return axios.delete(
-      `/tasks/${id}`
+      TASKS.DELETE(id)
     );
   },
 
@@ -62,7 +70,7 @@ const taskApi = {
     status
   ) => {
     return axios.patch(
-      `/tasks/${id}/status`,
+      TASKS.UPDATE_STATUS(id),
       {
         status,
       }
@@ -78,7 +86,7 @@ const taskApi = {
     assigned_to
   ) => {
     return axios.patch(
-      `/tasks/${id}/assign`,
+      TASKS.ASSIGN(id),
       {
         assigned_to,
       }
@@ -93,7 +101,7 @@ const taskApi = {
     params = {}
   ) => {
     return axios.get(
-      '/tasks/my',
+      TASKS.MY_TASKS,
       {
         params,
       }
@@ -102,13 +110,13 @@ const taskApi = {
 
   getMyOverdue: () => {
     return axios.get(
-      '/tasks/my/overdue'
+      TASKS.MY_OVERDUE
     );
   },
 
   getMyUpcoming: () => {
     return axios.get(
-      '/tasks/my/upcoming'
+      TASKS.MY_UPCOMING
     );
   },
 
@@ -118,21 +126,12 @@ const taskApi = {
 
   getStatistics: () => {
     return axios.get(
-      '/tasks/statistics'
+      TASKS.STATISTICS
     );
   },
 
   // ======================================================
   // CLIENT TASKS
-  //
-  // Tüm müvekkil görevleri - paginated
-  //
-  // params:
-  // {
-  //   page,
-  //   limit,
-  //   status
-  // }
   // ======================================================
 
   getByClient: (
@@ -140,7 +139,9 @@ const taskApi = {
     params = {}
   ) => {
     return axios.get(
-      `/tasks/client/${clientId}`,
+      TASKS.CLIENT_TASKS(
+        clientId
+      ),
       {
         params,
       }
@@ -148,13 +149,7 @@ const taskApi = {
   },
 
   // ======================================================
-  // CLIENT COCKPIT OVERVIEW
-  //
-  // params:
-  // {
-  //   active_limit,
-  //   recent_limit
-  // }
+  // CLIENT OVERVIEW
   // ======================================================
 
   getClientOverview: (
@@ -162,7 +157,9 @@ const taskApi = {
     params = {}
   ) => {
     return axios.get(
-      `/tasks/client/${clientId}/overview`,
+      TASKS.CLIENT_OVERVIEW(
+        clientId
+      ),
       {
         params,
       }
@@ -175,7 +172,7 @@ const taskApi = {
 
   startTask: (id) => {
     return axios.post(
-      `/tasks/${id}/start`
+      TASKS.START(id)
     );
   },
 
@@ -188,7 +185,7 @@ const taskApi = {
     data
   ) => {
     return axios.post(
-      `/tasks/${id}/complete`,
+      TASKS.COMPLETE(id),
       data
     );
   },
@@ -202,7 +199,7 @@ const taskApi = {
     progress
   ) => {
     return axios.patch(
-      `/tasks/${id}/progress`,
+      TASKS.PROGRESS(id),
       {
         progress,
       }
@@ -215,7 +212,7 @@ const taskApi = {
 
   approveTask: (id) => {
     return axios.post(
-      `/tasks/${id}/approve`
+      TASKS.APPROVE(id)
     );
   },
 
@@ -228,7 +225,7 @@ const taskApi = {
     content
   ) => {
     return axios.post(
-      `/tasks/${id}/notes`,
+      TASKS.NOTES(id),
       {
         content,
       }
@@ -237,7 +234,7 @@ const taskApi = {
 
   getNotes: (id) => {
     return axios.get(
-      `/tasks/${id}/notes`
+      TASKS.NOTES(id)
     );
   },
 };

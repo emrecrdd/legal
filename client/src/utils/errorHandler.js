@@ -1,63 +1,249 @@
 import toast from 'react-hot-toast';
 
-export const errorHandler = (error, fallback = 'Bir hata oluştu') => {
-  console.error('Error:', error);
+// ======================================================
+// HELPERS
+// ======================================================
 
-  // Network error
-  if (!error.response) {
-    toast.error('Bağlantı hatası. Lütfen internet bağlantınızı kontrol edin.');
+const DEFAULT_ERROR_MESSAGE =
+  'Bir hata oluştu. Lütfen tekrar deneyin.';
+
+const NETWORK_ERROR_MESSAGE =
+  'Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+
+const getValidationMessages = (errors) => {
+  if (!errors) {
+    return [];
+  }
+
+  if (Array.isArray(errors)) {
+    return errors.filter(Boolean);
+  }
+
+  if (typeof errors !== 'object') {
+    return [String(errors)];
+  }
+
+  return Object.values(errors)
+    .flatMap((value) =>
+      Array.isArray(value)
+        ? value
+        : [value]
+    )
+    .filter(Boolean)
+    .map(String);
+};
+
+// ======================================================
+// ERROR HANDLER
+// ======================================================
+
+export const errorHandler = (
+  error,
+  fallback = DEFAULT_ERROR_MESSAGE
+) => {
+  // Development ortamında detaylı log.
+  // Production'da hassas response içeriğini console'a
+  // gereksiz yere basmıyoruz.
+  if (import.meta.env.DEV) {
+    console.error('API Error:', error);
+  }
+
+  // İstek kullanıcı tarafından iptal edildiyse
+  // hata göstermeye gerek yok.
+  if (
+    error?.code === 'ERR_CANCELED' ||
+    error?.name === 'CanceledError'
+  ) {
     return;
   }
 
-  const { status, data } = error.response;
+  // ====================================================
+  // NETWORK / TIMEOUT
+  // ====================================================
 
-  // Handle specific status codes
+  if (!error?.response) {
+    if (
+      error?.code === 'ECONNABORTED' ||
+      error?.code === 'ETIMEDOUT'
+    ) {
+      toast.error(
+        'İstek zaman aşımına uğradı. Lütfen tekrar deneyin.'
+      );
+
+      return;
+    }
+
+    toast.error(
+      NETWORK_ERROR_MESSAGE
+    );
+
+    return;
+  }
+
+  // ====================================================
+  // HTTP ERROR
+  // ====================================================
+
+  const {
+    status,
+    data,
+  } = error.response;
+
+  const apiMessage =
+    typeof data?.message === 'string'
+      ? data.message
+      : null;
+
   switch (status) {
     case 400:
-      toast.error(data?.message || 'Geçersiz istek');
+      toast.error(
+        apiMessage ||
+          'Gönderilen bilgiler geçersiz.'
+      );
       break;
+
     case 401:
-      toast.error('Oturum süreniz doldu. Lütfen tekrar giriş yapın.');
-      // Redirect to login if needed
+      /*
+       * 401 yönlendirmesi ve refresh-token işlemi
+       * axios interceptor tarafından yönetilmeli.
+       *
+       * Burada tekrar redirect yapmıyoruz.
+       */
+      toast.error(
+        apiMessage ||
+          'Oturumunuz sona erdi. Lütfen tekrar giriş yapın.'
+      );
       break;
+
     case 403:
-      toast.error('Bu işlem için yetkiniz yok');
+      toast.error(
+        apiMessage ||
+          'Bu işlemi gerçekleştirmek için yetkiniz bulunmuyor.'
+      );
       break;
+
     case 404:
-      toast.error('Kayıt bulunamadı');
+      toast.error(
+        apiMessage ||
+          'İstenen kayıt bulunamadı.'
+      );
       break;
-    case 422:
-      if (data?.errors) {
-        Object.values(data.errors).forEach((err) => {
-          if (Array.isArray(err)) {
-            err.forEach((msg) => toast.error(msg));
-          } else {
-            toast.error(err);
-          }
-        });
-      } else {
-        toast.error(data?.message || 'Doğrulama hatası');
+
+    case 409:
+      toast.error(
+        apiMessage ||
+          'Bu işlem mevcut bir kayıtla çakışıyor.'
+      );
+      break;
+
+    case 422: {
+      const validationMessages =
+        getValidationMessages(
+          data?.errors
+        );
+
+      if (
+        validationMessages.length >
+        0
+      ) {
+        /*
+         * 10 validation hatasında 10 toast
+         * göstermek yerine ilk birkaçını gösteriyoruz.
+         */
+        validationMessages
+          .slice(0, 3)
+          .forEach((message) => {
+            toast.error(message);
+          });
+
+        if (
+          validationMessages.length >
+          3
+        ) {
+          toast.error(
+            `${validationMessages.length - 3} doğrulama hatası daha var.`
+          );
+        }
+
+        return;
       }
+
+      toast.error(
+        apiMessage ||
+          'Girilen bilgileri kontrol edin.'
+      );
+
       break;
+    }
+
     case 429:
-      toast.error('Çok fazla istek gönderildi. Lütfen daha sonra tekrar deneyin.');
+      toast.error(
+        apiMessage ||
+          'Çok fazla istek gönderildi. Lütfen kısa bir süre sonra tekrar deneyin.'
+      );
       break;
+
     case 500:
-      toast.error('Sunucu hatası. Lütfen daha sonra tekrar deneyin.');
+    case 502:
+    case 503:
+    case 504:
+      toast.error(
+        'Sunucu tarafında geçici bir sorun oluştu. Lütfen daha sonra tekrar deneyin.'
+      );
       break;
+
     default:
-      toast.error(data?.message || fallback);
+      toast.error(
+        apiMessage ||
+          fallback
+      );
   }
 };
 
-export const showSuccess = (message) => {
+// ======================================================
+// TOAST HELPERS
+// ======================================================
+
+export const showSuccess = (
+  message
+) => {
+  if (!message) {
+    return;
+  }
+
   toast.success(message);
 };
 
-export const showWarning = (message) => {
-  toast.warning(message);
+export const showError = (
+  message
+) => {
+  if (!message) {
+    return;
+  }
+
+  toast.error(message);
 };
 
-export const showInfo = (message) => {
-  toast.info(message);
+export const showWarning = (
+  message
+) => {
+  if (!message) {
+    return;
+  }
+
+  toast(message, {
+    icon: '⚠️',
+  });
+};
+
+export const showInfo = (
+  message
+) => {
+  if (!message) {
+    return;
+  }
+
+  toast(message, {
+    icon: 'ℹ️',
+  });
 };

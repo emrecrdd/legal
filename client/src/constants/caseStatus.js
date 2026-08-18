@@ -8,35 +8,119 @@ export const CASE_STATUS = {
   ARCHIVED: 'archived',
 };
 
+// ======================================================
+// LABELS
+// ======================================================
+
 export const CASE_STATUS_LABELS = {
-  [CASE_STATUS.PREPARATION]: 'Hazırlık',
-  [CASE_STATUS.ACTIVE]: 'Devam Ediyor',
-  [CASE_STATUS.HEARING]: 'Duruşmada',
-  [CASE_STATUS.APPEAL]: 'İstinaf',
-  [CASE_STATUS.CASSATION]: 'Temyiz',
-  [CASE_STATUS.CONCLUDED]: 'Sonuçlandı',
-  [CASE_STATUS.ARCHIVED]: 'Arşivlendi',
+  [CASE_STATUS.PREPARATION]:
+    'Hazırlık',
+
+  [CASE_STATUS.ACTIVE]:
+    'Devam Ediyor',
+
+  [CASE_STATUS.HEARING]:
+    'Duruşmada',
+
+  [CASE_STATUS.APPEAL]:
+    'İstinaf',
+
+  [CASE_STATUS.CASSATION]:
+    'Temyiz',
+
+  [CASE_STATUS.CONCLUDED]:
+    'Sonuçlandı',
+
+  [CASE_STATUS.ARCHIVED]:
+    'Arşivlendi',
 };
 
-export const CASE_STATUS_COLORS = {
-  [CASE_STATUS.PREPARATION]: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-  [CASE_STATUS.ACTIVE]: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-  [CASE_STATUS.HEARING]: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  [CASE_STATUS.APPEAL]: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  [CASE_STATUS.CASSATION]: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-  [CASE_STATUS.CONCLUDED]: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200',
-  [CASE_STATUS.ARCHIVED]: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-};
+// ======================================================
+// ICONS
+// ======================================================
 
 export const CASE_STATUS_ICONS = {
-  [CASE_STATUS.PREPARATION]: '📝',
-  [CASE_STATUS.ACTIVE]: '⚖️',
-  [CASE_STATUS.HEARING]: '🏛️',
-  [CASE_STATUS.APPEAL]: '⬆️',
-  [CASE_STATUS.CASSATION]: '⬆️⬆️',
-  [CASE_STATUS.CONCLUDED]: '✅',
-  [CASE_STATUS.ARCHIVED]: '📦',
+  [CASE_STATUS.PREPARATION]:
+    '📝',
+
+  [CASE_STATUS.ACTIVE]:
+    '⚖️',
+
+  [CASE_STATUS.HEARING]:
+    '🏛️',
+
+  [CASE_STATUS.APPEAL]:
+    '⬆️',
+
+  [CASE_STATUS.CASSATION]:
+    '⬆️⬆️',
+
+  [CASE_STATUS.CONCLUDED]:
+    '✅',
+
+  [CASE_STATUS.ARCHIVED]:
+    '📦',
 };
+
+// ======================================================
+// BADGE VARIANTS
+// Badge.jsx ile uyumlu
+// ======================================================
+
+export const CASE_STATUS_BADGE_VARIANTS = {
+  [CASE_STATUS.PREPARATION]:
+    'warning',
+
+  [CASE_STATUS.ACTIVE]:
+    'success',
+
+  [CASE_STATUS.HEARING]:
+    'info',
+
+  [CASE_STATUS.APPEAL]:
+    'warning',
+
+  [CASE_STATUS.CASSATION]:
+    'primary',
+
+  [CASE_STATUS.CONCLUDED]:
+    'default',
+
+  [CASE_STATUS.ARCHIVED]:
+    'danger',
+};
+
+// ======================================================
+// COLORS
+// Badge dışında özel kullanım gerekirse
+// ======================================================
+
+export const CASE_STATUS_COLORS = {
+  [CASE_STATUS.PREPARATION]:
+    'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/15 dark:bg-amber-500/[0.08] dark:text-amber-300',
+
+  [CASE_STATUS.ACTIVE]:
+    'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/15 dark:bg-emerald-500/[0.08] dark:text-emerald-300',
+
+  [CASE_STATUS.HEARING]:
+    'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/15 dark:bg-violet-500/[0.08] dark:text-violet-300',
+
+  [CASE_STATUS.APPEAL]:
+    'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/15 dark:bg-amber-500/[0.08] dark:text-amber-300',
+
+  [CASE_STATUS.CASSATION]:
+    'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/15 dark:bg-blue-500/[0.08] dark:text-blue-300',
+
+  [CASE_STATUS.CONCLUDED]:
+    'border-gray-200 bg-gray-50 text-gray-700 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-slate-300',
+
+  [CASE_STATUS.ARCHIVED]:
+    'border-red-200 bg-red-50 text-red-700 dark:border-red-500/15 dark:bg-red-500/[0.08] dark:text-red-300',
+};
+
+// ======================================================
+// ORDER
+// ======================================================
 
 export const CASE_STATUS_ORDER = [
   CASE_STATUS.PREPARATION,
@@ -48,16 +132,110 @@ export const CASE_STATUS_ORDER = [
   CASE_STATUS.ARCHIVED,
 ];
 
-export const CASE_STATUS_OPTIONS = Object.entries(CASE_STATUS_LABELS).map(([value, label]) => ({
-  value,
-  label,
-}));
+// ======================================================
+// OPTIONS
+// ======================================================
+
+export const CASE_STATUS_OPTIONS =
+  CASE_STATUS_ORDER.map(
+    (value) => ({
+      value,
+
+      label:
+        CASE_STATUS_LABELS[
+          value
+        ],
+
+      icon:
+        CASE_STATUS_ICONS[
+          value
+        ],
+
+      variant:
+        CASE_STATUS_BADGE_VARIANTS[
+          value
+        ],
+    })
+  );
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+export const getCaseStatusLabel = (
+  status
+) => {
+  return (
+    CASE_STATUS_LABELS[
+      status
+    ] ||
+    status ||
+    '-'
+  );
+};
+
+export const getCaseStatusVariant = (
+  status
+) => {
+  return (
+    CASE_STATUS_BADGE_VARIANTS[
+      status
+    ] ||
+    'default'
+  );
+};
+
+export const getCaseStatusIcon = (
+  status
+) => {
+  return (
+    CASE_STATUS_ICONS[
+      status
+    ] ||
+    '📁'
+  );
+};
+
+export const isCaseClosed = (
+  status
+) => {
+  return [
+    CASE_STATUS.CONCLUDED,
+    CASE_STATUS.ARCHIVED,
+  ].includes(status);
+};
+
+export const isCaseActive = (
+  status
+) => {
+  return [
+    CASE_STATUS.PREPARATION,
+    CASE_STATUS.ACTIVE,
+    CASE_STATUS.HEARING,
+    CASE_STATUS.APPEAL,
+    CASE_STATUS.CASSATION,
+  ].includes(status);
+};
+
+// ======================================================
+// DEFAULT EXPORT
+// ======================================================
 
 export default {
   CASE_STATUS,
+
   CASE_STATUS_LABELS,
-  CASE_STATUS_COLORS,
   CASE_STATUS_ICONS,
+  CASE_STATUS_COLORS,
+  CASE_STATUS_BADGE_VARIANTS,
+
   CASE_STATUS_ORDER,
   CASE_STATUS_OPTIONS,
+
+  getCaseStatusLabel,
+  getCaseStatusVariant,
+  getCaseStatusIcon,
+
+  isCaseClosed,
+  isCaseActive,
 };

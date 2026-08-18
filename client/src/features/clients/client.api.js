@@ -1,4 +1,9 @@
 import axios from '../../app/config/axios.js';
+import { API_ROUTES } from '../../constants/api-routes.js';
+
+const {
+  CLIENTS,
+} = API_ROUTES;
 
 const clientApi = {
   // ======================================================
@@ -7,7 +12,7 @@ const clientApi = {
 
   getAll: (params = {}) => {
     return axios.get(
-      '/clients',
+      CLIENTS.GET_ALL,
       {
         params,
       }
@@ -16,29 +21,27 @@ const clientApi = {
 
   getOne: (id) => {
     return axios.get(
-      `/clients/${id}`
+      CLIENTS.GET_ONE(id)
     );
   },
 
   create: (data) => {
     return axios.post(
-      '/clients',
+      CLIENTS.CREATE,
       data
     );
   },
 
-  // Metadata / kısmi güncelleme
   update: (id, data) => {
     return axios.patch(
-      `/clients/${id}`,
+      CLIENTS.UPDATE(id),
       data
     );
   },
 
-  // Backend paranoid:true olduğu için soft-delete
   delete: (id) => {
     return axios.delete(
-      `/clients/${id}`
+      CLIENTS.DELETE(id)
     );
   },
 
@@ -48,7 +51,7 @@ const clientApi = {
 
   getStatistics: () => {
     return axios.get(
-      '/clients/statistics'
+      CLIENTS.STATISTICS
     );
   },
 
@@ -58,19 +61,19 @@ const clientApi = {
 
   getCaseHistory: (id) => {
     return axios.get(
-      `/clients/${id}/cases`
+      CLIENTS.CASE_HISTORY(id)
     );
   },
 
   getPayments: (id) => {
     return axios.get(
-      `/clients/${id}/payments`
+      CLIENTS.PAYMENTS(id)
     );
   },
 
   getNotes: (id) => {
     return axios.get(
-      `/clients/${id}/notes`
+      CLIENTS.NOTES(id)
     );
   },
 };

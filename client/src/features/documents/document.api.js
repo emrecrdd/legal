@@ -1,21 +1,37 @@
 import axios from '../../app/config/axios.js';
+import { API_ROUTES } from '../../constants/api-routes.js';
+
+const {
+  DOCUMENTS,
+} = API_ROUTES;
 
 const documentApi = {
-  getAll: (params) => {
-    return axios.get('/documents', {
-      params,
-    });
+  // ======================================================
+  // DOCUMENTS
+  // ======================================================
+
+  getAll: (params = {}) => {
+    return axios.get(
+      DOCUMENTS.GET_ALL,
+      {
+        params,
+      }
+    );
   },
 
   getOne: (id) => {
     return axios.get(
-      `/documents/${id}`
+      DOCUMENTS.GET_ONE(id)
     );
   },
 
+  // ======================================================
+  // UPLOAD
+  // ======================================================
+
   upload: (data) => {
     return axios.post(
-      '/documents/upload',
+      DOCUMENTS.UPLOAD,
       data,
       {
         headers: {
@@ -28,7 +44,7 @@ const documentApi = {
 
   uploadMultiple: (data) => {
     return axios.post(
-      '/documents/upload-multiple',
+      DOCUMENTS.UPLOAD_MULTIPLE,
       data,
       {
         headers: {
@@ -39,10 +55,9 @@ const documentApi = {
     );
   },
 
-  // ✅ Yeni belge versiyonu yükle
   uploadVersion: (id, data) => {
     return axios.post(
-      `/documents/${id}/versions`,
+      DOCUMENTS.UPLOAD_VERSION(id),
       data,
       {
         headers: {
@@ -53,55 +68,70 @@ const documentApi = {
     );
   },
 
-  // ✅ Metadata update
-  // Backend PATCH destekliyor.
+  // ======================================================
+  // UPDATE / DELETE
+  // ======================================================
+
   update: (id, data) => {
     return axios.patch(
-      `/documents/${id}`,
+      DOCUMENTS.UPDATE(id),
       data
     );
   },
 
   delete: (id) => {
     return axios.delete(
-      `/documents/${id}`
+      DOCUMENTS.DELETE(id)
     );
   },
+
+  // ======================================================
+  // FILE ACCESS
+  // ======================================================
 
   download: (id) => {
     return axios.get(
-      `/documents/${id}/download`,
+      DOCUMENTS.DOWNLOAD(id),
       {
-        responseType: 'blob',
+        responseType:
+          'blob',
       }
     );
   },
 
-  // ✅ Tarayıcı içinde önizleme için
   preview: (id) => {
     return axios.get(
-      `/documents/${id}/preview`,
+      DOCUMENTS.PREVIEW(id),
       {
-        responseType: 'blob',
+        responseType:
+          'blob',
       }
     );
   },
+
+  // ======================================================
+  // VERSIONS
+  // ======================================================
 
   getVersions: (id) => {
     return axios.get(
-      `/documents/${id}/versions`
+      DOCUMENTS.VERSIONS(id)
     );
   },
 
+  // ======================================================
+  // META
+  // ======================================================
+
   getCategories: () => {
     return axios.get(
-      '/documents/categories'
+      DOCUMENTS.CATEGORIES
     );
   },
 
   getStatistics: () => {
     return axios.get(
-      '/documents/statistics'
+      DOCUMENTS.STATISTICS
     );
   },
 };

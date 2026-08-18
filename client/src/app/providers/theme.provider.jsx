@@ -1,46 +1,164 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+} from 'react';
 
-const ThemeContext = createContext(null);
+import {
+  useLocalStorage,
+} from '../../hooks/useLocalStorage.js';
 
-export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState('light');
+const ThemeContext =
+  createContext(null);
+
+const VALID_THEMES = new Set([
+  'light',
+  'dark',
+]);
+
+export const ThemeProvider = ({
+  children,
+}) => {
+  const [
+    theme,
+    setTheme,
+  ] = useLocalStorage(
+    'theme',
+    'light'
+  );
+
+  // ====================================================
+  // NORMALIZE THEME
+  // ====================================================
+
+  const normalizedTheme =
+    VALID_THEMES.has(theme)
+      ? theme
+      : 'light';
+
+  // ====================================================
+  // APPLY THEME
+  // ====================================================
 
   useEffect(() => {
-    // localStorage'dan oku
-    const saved = localStorage.getItem('theme');
-    if (saved) {
-      setTheme(saved);
+    if (
+      typeof document ===
+      'undefined'
+    ) {
+      return;
     }
-  }, []);
 
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('theme', theme);
-    console.log('🌓 Tema değişti:', theme); // KONSOLDA GÖR!
-    console.log('🌓 ClassList:', root.classList); // KONSOLDA GÖR!
-  }, [theme]);
+    const root =
+      document.documentElement;
 
-  const toggleTheme = () => {
-    console.log('🔄 Toggle çalıştı!'); // KONSOLDA GÖR!
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
+    root.classList.toggle(
+      'dark',
+      normalizedTheme === 'dark'
+    );
+
+    root.style.colorScheme =
+      normalizedTheme;
+  }, [
+    normalizedTheme,
+  ]);
+
+  // ====================================================
+  // SET THEME
+  // ====================================================
+
+  const changeTheme =
+    useCallback(
+      (nextTheme) => {
+        if (
+          !VALID_THEMES.has(
+            nextTheme
+          )
+        ) {
+          return;
+        }
+
+        setTheme(
+          nextTheme
+        );
+      },
+      [
+        setTheme,
+      ]
+    );
+
+  // ====================================================
+  // TOGGLE
+  // ====================================================
+
+  const toggleTheme =
+    useCallback(() => {
+      setTheme(
+        (current) =>
+          current === 'dark'
+            ? 'light'
+            : 'dark'
+      );
+    }, [
+      setTheme,
+    ]);
+
+  // ====================================================
+  // DERIVED
+  // ====================================================
+
+  const isDark =
+    normalizedTheme ===
+    'dark';
+
+  // ====================================================
+  // CONTEXT
+  // ====================================================
+
+  const value =
+    useMemo(
+      () => ({
+        theme:
+          normalizedTheme,
+
+        isDark,
+
+        setTheme:
+          changeTheme,
+
+        toggleTheme,
+      }),
+      [
+        normalizedTheme,
+        isDark,
+        changeTheme,
+        toggleTheme,
+      ]
+    );
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider
+      value={value}
+    >
       {children}
     </ThemeContext.Provider>
   );
 };
 
 export const useTheme = () => {
-  const context = useContext(ThemeContext);
+  const context =
+    useContext(
+      ThemeContext
+    );
+
   if (!context) {
-    throw new Error('useTheme must be used within ThemeProvider');
+    throw new Error(
+      'useTheme must be used within ThemeProvider'
+    );
   }
+
   return context;
 };
+
+export default ThemeContext;

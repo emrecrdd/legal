@@ -1,116 +1,348 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import { useLocalStorage } from '../../hooks/useLocalStorage.js';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
+import {
+  useLocalStorage,
+} from '../../hooks/useLocalStorage.js';
+
 import authApi from '../../features/auth/auth.api.js';
 
-const AuthContext = createContext(null);
+const AuthContext =
+  createContext(null);
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useLocalStorage('user', null);
-  const [tokens, setTokens] = useLocalStorage('tokens', null);
+export const AuthProvider = ({
+  children,
+}) => {
+  const [
+    user,
+    setUser,
+    removeUser,
+  ] = useLocalStorage(
+    'user',
+    null
+  );
 
-  const [loading, setLoading] = useState(true);
+  const [
+    tokens,
+    setTokens,
+    removeTokens,
+  ] = useLocalStorage(
+    'tokens',
+    null
+  );
 
-  // ✅ INIT AUTH (SADECE 1 KEZ)
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  // ====================================================
+  // CLEAR AUTH
+  // ====================================================
+
+  const clearAuth =
+    useCallback(() => {
+      removeUser();
+      removeTokens();
+    }, [
+      removeUser,
+      removeTokens,
+    ]);
+
+  // ====================================================
+  // INIT / VERIFY AUTH
+  // ====================================================
+
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (!tokens?.accessToken) {
-          setUser(null);
+    let cancelled =
+      false;
+
+    const initAuth =
+      async () => {
+        setLoading(true);
+
+        if (
+          !tokens?.accessToken
+        ) {
+          if (
+            !cancelled
+          ) {
+            setUser(null);
+            setLoading(false);
+          }
+
           return;
         }
 
-        const res = await authApi.getProfile();
-        const data = res.data.data;
+        try {
+          const response =
+            await authApi.getProfile();
 
-        // 🔥 direkt user
-        setUser(data);
-      } catch (err) {
-        console.error('Auth init error:', err);
-        setUser(null);
-        setTokens(null);
-      } finally {
-        setLoading(false);
-      }
-    };
+          const profile =
+            response?.data?.data;
+
+          if (
+            !cancelled
+          ) {
+            setUser(
+              profile || null
+            );
+          }
+        } catch (error) {
+          if (
+            import.meta.env.DEV
+          ) {
+            console.error(
+              'Auth init error:',
+              error
+            );
+          }
+
+          if (
+            !cancelled
+          ) {
+            clearAuth();
+          }
+        } finally {
+          if (
+            !cancelled
+          ) {
+            setLoading(false);
+          }
+        }
+      };
 
     initAuth();
-  }, []); // 🔥 CRITICAL FIX: tokens kaldırıldı
 
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    tokens?.accessToken,
+    setUser,
+    clearAuth,
+  ]);
+
+  // ====================================================
   // LOGIN
-  const login = async (email, password) => {
-    const res = await authApi.login(email, password);
-    const data = res.data.data;
+  // ====================================================
 
-    setUser(data.user);
+  const login =
+    useCallback(
+      async (
+        email,
+        password
+      ) => {
+        const response =
+          await authApi.login(
+            email,
+            password
+          );
 
-    setTokens({
-      accessToken: data.accessToken,
-      refreshToken: data.refreshToken,
-    });
+        const data =
+          response?.data?.data;
 
-    return res;
-  };
+        setTokens({
+          accessToken:
+            data.accessToken,
 
+          refreshToken:
+            data.refreshToken,
+        });
+
+        setUser(
+          data.user
+        );
+
+        return response;
+      },
+      [
+        setTokens,
+        setUser,
+      ]
+    );
+
+  // ====================================================
   // LOGOUT
-  const logout = async () => {
-    try {
-      if (tokens?.refreshToken) {
-        await authApi.logout(tokens.refreshToken);
-      }
-    } catch (err) {
-      console.error(err);
-    }
+  // ====================================================
 
-    setUser(null);
-    setTokens(null);
-  };
+  const logout =
+    useCallback(
+      async () => {
+        const refreshToken =
+          tokens?.refreshToken;
 
+        /*
+         * UI logout için backend başarısız olsa bile
+         * local session temizlenmeli.
+         */
+        clearAuth();
+
+        try {
+          if (
+            refreshToken
+          ) {
+            await authApi.logout(
+              refreshToken
+            );
+          }
+        } catch (error) {
+          if (
+            import.meta.env.DEV
+          ) {
+            console.error(
+              'Logout error:',
+              error
+            );
+          }
+        }
+      },
+      [
+        tokens?.refreshToken,
+        clearAuth,
+      ]
+    );
+
+  // ====================================================
   // REGISTER
-  const register = async (userData) => {
-    return authApi.register(userData);
-  };
+  // ====================================================
 
+  const register =
+    useCallback(
+      (userData) => {
+        return authApi.register(
+          userData
+        );
+      },
+      []
+    );
+
+  // ====================================================
   // REFRESH
-  const refreshTokenFn = async () => {
-    try {
-      const res = await authApi.refreshToken(tokens?.refreshToken);
-      const data = res.data.data;
+  // ====================================================
 
-      setTokens({
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
-      });
+  const refreshToken =
+    useCallback(
+      async () => {
+        const currentRefreshToken =
+          tokens?.refreshToken;
 
-      return res;
-    } catch (err) {
-      await logout();
-      throw err;
-    }
-  };
+        if (
+          !currentRefreshToken
+        ) {
+          clearAuth();
 
-  const value = {
-    user,
-    tokens,
-    loading,
+          throw new Error(
+            'Refresh token bulunamadı'
+          );
+        }
 
-    // 🔥 FIXED AUTH LOGIC
-    isAuthenticated: !!tokens?.accessToken,
+        try {
+          const response =
+            await authApi.refreshToken(
+              currentRefreshToken
+            );
 
-    login,
-    logout,
-    register,
-    refreshToken: refreshTokenFn,
-  };
+          const data =
+            response?.data?.data;
+
+          setTokens({
+            accessToken:
+              data.accessToken,
+
+            refreshToken:
+              data.refreshToken ||
+              currentRefreshToken,
+          });
+
+          return response;
+        } catch (error) {
+          clearAuth();
+
+          throw error;
+        }
+      },
+      [
+        tokens?.refreshToken,
+        setTokens,
+        clearAuth,
+      ]
+    );
+
+  // ====================================================
+  // DERIVED STATE
+  // ====================================================
+
+  const isAuthenticated =
+    Boolean(
+      user &&
+      tokens?.accessToken
+    );
+
+  // ====================================================
+  // CONTEXT VALUE
+  // ====================================================
+
+  const value =
+    useMemo(
+      () => ({
+        user,
+        tokens,
+        loading,
+
+        isAuthenticated,
+
+        login,
+        logout,
+        register,
+        refreshToken,
+
+        setUser,
+      }),
+      [
+        user,
+        tokens,
+        loading,
+        isAuthenticated,
+
+        login,
+        logout,
+        register,
+        refreshToken,
+
+        setUser,
+      ]
+    );
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider
+      value={value}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
 
 export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
+  const context =
+    useContext(
+      AuthContext
+    );
+
+  if (!context) {
+    throw new Error(
+      'useAuth must be used within AuthProvider'
+    );
+  }
+
+  return context;
 };
+
+export default AuthContext;

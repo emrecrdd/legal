@@ -1,4 +1,7 @@
 import axios from '../../app/config/axios.js';
+import { API_ROUTES } from '../../constants/api-routes.js';
+
+const { MEETINGS } = API_ROUTES;
 
 const meetingApi = {
   // ======================================================
@@ -6,12 +9,9 @@ const meetingApi = {
   // ======================================================
 
   getAll: (params = {}) => {
-    return axios.get(
-      '/meetings',
-      {
-        params,
-      }
-    );
+    return axios.get(MEETINGS.GET_ALL, {
+      params,
+    });
   },
 
   // ======================================================
@@ -20,7 +20,7 @@ const meetingApi = {
 
   getOne: (id) => {
     return axios.get(
-      `/meetings/${id}`
+      MEETINGS.GET_ONE(id)
     );
   },
 
@@ -30,7 +30,7 @@ const meetingApi = {
 
   create: (data) => {
     return axios.post(
-      '/meetings',
+      MEETINGS.CREATE,
       data
     );
   },
@@ -41,7 +41,7 @@ const meetingApi = {
 
   update: (id, data) => {
     return axios.put(
-      `/meetings/${id}`,
+      MEETINGS.UPDATE(id),
       data
     );
   },
@@ -52,7 +52,7 @@ const meetingApi = {
 
   delete: (id) => {
     return axios.delete(
-      `/meetings/${id}`
+      MEETINGS.DELETE(id)
     );
   },
 
@@ -60,12 +60,9 @@ const meetingApi = {
   // STATUS
   // ======================================================
 
-  updateStatus: (
-    id,
-    status
-  ) => {
+  updateStatus: (id, status) => {
     return axios.patch(
-      `/meetings/${id}/status`,
+      MEETINGS.UPDATE_STATUS(id),
       {
         status,
       }
@@ -74,21 +71,11 @@ const meetingApi = {
 
   // ======================================================
   // MY MEETINGS
-  // Pagination destekli.
-  //
-  // params:
-  // {
-  //   page,
-  //   limit,
-  //   include_completed
-  // }
   // ======================================================
 
-  getMyMeetings: (
-    params = {}
-  ) => {
+  getMyMeetings: (params = {}) => {
     return axios.get(
-      '/meetings/my',
+      MEETINGS.MY_MEETINGS,
       {
         params,
       }
@@ -97,18 +84,11 @@ const meetingApi = {
 
   // ======================================================
   // UPCOMING
-  //
-  // params:
-  // {
-  //   limit
-  // }
   // ======================================================
 
-  getUpcoming: (
-    params = {}
-  ) => {
+  getUpcoming: (params = {}) => {
     return axios.get(
-      '/meetings/upcoming',
+      MEETINGS.UPCOMING,
       {
         params,
       }
@@ -117,12 +97,6 @@ const meetingApi = {
 
   // ======================================================
   // BY CASE
-  //
-  // params:
-  // {
-  //   page,
-  //   limit
-  // }
   // ======================================================
 
   getByCase: (
@@ -130,7 +104,7 @@ const meetingApi = {
     params = {}
   ) => {
     return axios.get(
-      `/meetings/case/${caseId}`,
+      MEETINGS.BY_CASE(caseId),
       {
         params,
       }
@@ -139,15 +113,6 @@ const meetingApi = {
 
   // ======================================================
   // BY CLIENT
-  //
-  // Tüm toplantı geçmişi.
-  // Pagination destekli.
-  //
-  // params:
-  // {
-  //   page,
-  //   limit
-  // }
   // ======================================================
 
   getByClient: (
@@ -155,7 +120,7 @@ const meetingApi = {
     params = {}
   ) => {
     return axios.get(
-      `/meetings/client/${clientId}`,
+      MEETINGS.BY_CLIENT(clientId),
       {
         params,
       }
@@ -164,14 +129,6 @@ const meetingApi = {
 
   // ======================================================
   // CLIENT COCKPIT TIMELINE
-  //
-  // Müvekkil detay ekranı için optimize endpoint.
-  //
-  // params:
-  // {
-  //   upcoming_limit,
-  //   recent_limit
-  // }
   // ======================================================
 
   getClientTimeline: (
@@ -179,7 +136,7 @@ const meetingApi = {
     params = {}
   ) => {
     return axios.get(
-      `/meetings/client/${clientId}/timeline`,
+      MEETINGS.CLIENT_TIMELINE(clientId),
       {
         params,
       }

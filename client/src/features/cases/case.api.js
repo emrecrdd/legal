@@ -1,71 +1,135 @@
 import axios from '../../app/config/axios.js';
+import { API_ROUTES } from '../../constants/api-routes.js';
+
+const { CASES } = API_ROUTES;
 
 const caseApi = {
-  getAll: (params) => {
-    return axios.get('/cases', { params });
+  // ======================================================
+  // CASES
+  // ======================================================
+
+  getAll: (params = {}) => {
+    return axios.get(
+      CASES.GET_ALL,
+      { params }
+    );
   },
 
   getOne: (id) => {
-    return axios.get(`/cases/${id}`);
+    return axios.get(
+      CASES.GET_ONE(id)
+    );
   },
 
   create: (data) => {
-    return axios.post('/cases', data);
+    return axios.post(
+      CASES.CREATE,
+      data
+    );
   },
+
+  // ======================================================
+  // UPDATE
+  // ======================================================
 
   // Normal tam güncelleme
   update: (id, data) => {
-    return axios.put(`/cases/${id}`, data);
+    return axios.put(
+      CASES.UPDATE(id),
+      data
+    );
   },
 
-  // AI önerilerinde sadece seçilen alanları güncelle
-  // Diğer dava alanlarına dokunmaz
+  // AI önerileri / kısmi güncelleme
+  // Sadece gönderilen alanları değiştirir
   patch: (id, data) => {
-    return axios.patch(`/cases/${id}`, data);
+    return axios.patch(
+      CASES.UPDATE(id),
+      data
+    );
   },
 
   delete: (id) => {
-    return axios.delete(`/cases/${id}`);
+    return axios.delete(
+      CASES.DELETE(id)
+    );
   },
 
   updateStatus: (id, status) => {
-    return axios.patch(`/cases/${id}/status`, { status });
+    return axios.patch(
+      CASES.UPDATE_STATUS(id),
+      { status }
+    );
   },
+
+  // ======================================================
+  // STATISTICS
+  // ======================================================
 
   getStatistics: () => {
-    return axios.get('/cases/statistics');
+    return axios.get(
+      CASES.STATISTICS
+    );
   },
 
+  // ======================================================
+  // PARTIES
+  // ======================================================
+
   getParties: (id) => {
-    return axios.get(`/cases/${id}/parties`);
+    return axios.get(
+      CASES.GET_PARTIES(id)
+    );
   },
 
   addParty: (id, data) => {
-    return axios.post(`/cases/${id}/parties`, data);
+    return axios.post(
+      CASES.ADD_PARTY(id),
+      data
+    );
   },
 
   removeParty: (id, partyId) => {
-    return axios.delete(`/cases/${id}/parties/${partyId}`);
+    return axios.delete(
+      CASES.REMOVE_PARTY(
+        id,
+        partyId
+      )
+    );
   },
 
+  // ======================================================
+  // RELATED DATA
+  // ======================================================
+
   getDocuments: (id) => {
-    return axios.get(`/cases/${id}/documents`);
+    return axios.get(
+      CASES.GET_DOCUMENTS(id)
+    );
   },
 
   getTasks: (id) => {
-    return axios.get(`/cases/${id}/tasks`);
+    return axios.get(
+      CASES.GET_TASKS(id)
+    );
   },
 
   getEvents: (id) => {
-    return axios.get(`/cases/${id}/events`);
+    return axios.get(
+      CASES.GET_EVENTS(id)
+    );
   },
 
   getPayments: (id) => {
-    return axios.get(`/cases/${id}/payments`);
+    return axios.get(
+      CASES.GET_PAYMENTS(id)
+    );
   },
 
   getNotes: (id) => {
-    return axios.get(`/cases/${id}/notes`);
+    return axios.get(
+      CASES.GET_NOTES(id)
+    );
   },
 };
 

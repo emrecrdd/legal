@@ -1,66 +1,471 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { io } from 'socket.io-client';
-import { useAuth } from '../app/providers/auth.provider.jsx';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
-export const useSocket = (namespace = '/') => {
-  const [isConnected, setIsConnected] = useState(false);
-  const socketRef = useRef(null);
-  const { tokens } = useAuth();
+import {
+  io,
+} from 'socket.io-client';
+
+import {
+  useAuth,
+} from '../app/providers/auth.provider.jsx';
+
+import env from '../config/env.js';
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const normalizeNamespace = (
+  namespace
+) => {
+  if (
+    !namespace ||
+    namespace === '/'
+  ) {
+    return '/';
+  }
+
+  return namespace.startsWith('/')
+    ? namespace
+    : `/${namespace}`;
+};
+
+// ======================================================
+// HOOK
+// ======================================================
+
+export const useSocket = (
+  namespace = '/'
+) => {
+  const {
+    tokens,
+  } = useAuth();
+
+  const [
+    isConnected,
+    setIsConnected,
+  ] = useState(false);
+
+  const [
+    connectionError,
+    setConnectionError,
+  ] = useState(null);
+
+  const socketRef =
+    useRef(null);
+
+  // Component üzerinden eklenen
+  // listener'ları takip ediyoruz.
+  const listenersRef =
+    useRef(
+      new Map()
+    );
+
+  const normalizedNamespace =
+    useMemo(
+      () =>
+        normalizeNamespace(
+          namespace
+        ),
+      [namespace]
+    );
+
+  const accessToken =
+    tokens?.accessToken;
+
+  // ====================================================
+  // CONNECTION
+  // ====================================================
 
   useEffect(() => {
-    if (!tokens?.accessToken) return;
+    if (!accessToken) {
+      setIsConnected(
+        false
+      );
 
-    // ✅ /api'yi kaldır, sadece base URL'i al
-    const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
-    
-    const socket = io(`${baseUrl}${namespace}`, {
-      auth: {
-        token: tokens.accessToken,
-      },
-      transports: ['websocket'],
-    });
+      setConnectionError(
+        null
+      );
 
-    socketRef.current = socket;
+      return undefined;
+    }
 
-    socket.on('connect', () => {
-      console.log('🟢 Socket connected');
-      setIsConnected(true);
-    });
+    const socket =
+      io(
+        `${env.WS_URL}${normalizedNamespace}`,
+        {
+          auth: {
+            token:
+              accessToken,
+          },
 
-    socket.on('disconnect', () => {
-      console.log('🔴 Socket disconnected');
-      setIsConnected(false);
-    });
+          /*
+           * websocket tercih edilir.
+           * polling fallback bırakmak bazı proxy /
+           * mobil ağ senaryolarında daha dayanıklıdır.
+           */
+          transports: [
+            'websocket',
+            'polling',
+          ],
 
-    socket.on('connect_error', (error) => {
-      console.error('❌ Socket connection error:', error);
-      setIsConnected(false);
-    });
+          reconnection:
+            true,
+
+          reconnectionAttempts:
+            10,
+
+          reconnectionDelay:
+            1000,
+
+          reconnectionDelayMax:
+            5000,
+
+          timeout:
+            10000,
+        }
+      );
+
+    socketRef.current =
+      socket;
+
+    // ==================================================
+    // BASE EVENTS
+    // ==================================================
+
+    const handleConnect =
+      () => {
+        setIsConnected(
+          true
+        );
+
+        setConnectionError(
+          null
+        );
+
+        if (
+          import.meta.env.DEV
+        ) {
+          console.log(
+            'Socket connected:',
+            socket.id
+          );
+        }
+      };
+
+    const handleDisconnect =
+      (reason) => {
+        setIsConnected(
+          false
+        );
+
+        if (
+          import.meta.env.DEV
+        ) {
+          console.log(
+            'Socket disconnected:',
+            reason
+          );
+        }
+      };
+
+    const handleConnectError =
+      (error) => {
+        setIsConnected(
+          false
+        );
+
+        setConnectionError(
+          error
+        );
+
+        if (
+          import.meta.env.DEV
+        ) {
+          console.error(
+            'Socket connection error:',
+            error
+          );
+        }
+      };
+
+    socket.on(
+      'connect',
+      handleConnect
+    );
+
+    socket.on(
+      'disconnect',
+      handleDisconnect
+    );
+
+    socket.on(
+      'connect_error',
+      handleConnectError
+    );
+
+    // ==================================================
+    // CLEANUP
+    // ==================================================
 
     return () => {
-      socket.removeAllListeners();
+      listenersRef.current.forEach(
+        (
+          callbacks,
+          event
+        ) => {
+          callbacks.forEach(
+            (callback) => {
+              socket.off(
+                event,
+                callback
+              );
+            }
+          );
+        }
+      );
+
+      listenersRef.current.clear();
+
+      socket.off(
+        'connect',
+        handleConnect
+      );
+
+      socket.off(
+        'disconnect',
+        handleDisconnect
+      );
+
+      socket.off(
+        'connect_error',
+        handleConnectError
+      );
+
       socket.disconnect();
-      socketRef.current = null;
+
+      socketRef.current =
+        null;
+
+      setIsConnected(
+        false
+      );
     };
-  }, [tokens?.accessToken, namespace]);
+  }, [
+    accessToken,
+    normalizedNamespace,
+  ]);
 
-  const emit = useCallback((event, data) => {
-    if (socketRef.current && isConnected) {
-      socketRef.current.emit(event, data);
-    }
-  }, [isConnected]);
+  // ====================================================
+  // EMIT
+  // ====================================================
 
-  const on = useCallback((event, callback) => {
-    if (socketRef.current) {
-      socketRef.current.on(event, callback);
-    }
-  }, []);
+  const emit =
+    useCallback(
+      (
+        event,
+        data,
+        acknowledgement
+      ) => {
+        const socket =
+          socketRef.current;
 
-  const off = useCallback((event, callback) => {
-    if (socketRef.current) {
-      socketRef.current.off(event, callback);
-    }
-  }, []);
+        if (
+          !socket ||
+          !socket.connected
+        ) {
+          if (
+            import.meta.env.DEV
+          ) {
+            console.warn(
+              `Socket emit skipped, not connected: ${event}`
+            );
+          }
 
-  return { socket: socketRef.current, isConnected, emit, on, off };
+          return false;
+        }
+
+        if (
+          typeof acknowledgement ===
+          'function'
+        ) {
+          socket.emit(
+            event,
+            data,
+            acknowledgement
+          );
+        } else {
+          socket.emit(
+            event,
+            data
+          );
+        }
+
+        return true;
+      },
+      []
+    );
+
+  // ====================================================
+  // ON
+  // ====================================================
+
+  const on =
+    useCallback(
+      (
+        event,
+        callback
+      ) => {
+        const socket =
+          socketRef.current;
+
+        if (
+          !socket ||
+          typeof callback !==
+            'function'
+        ) {
+          return () => {};
+        }
+
+        socket.on(
+          event,
+          callback
+        );
+
+        const callbacks =
+          listenersRef.current.get(
+            event
+          ) ||
+          new Set();
+
+        callbacks.add(
+          callback
+        );
+
+        listenersRef.current.set(
+          event,
+          callbacks
+        );
+
+        /*
+         * Böylece consumer:
+         *
+         * useEffect(() => {
+         *   return on('notification', handler);
+         * }, [on]);
+         *
+         * kullanabilir.
+         */
+        return () => {
+          socket.off(
+            event,
+            callback
+          );
+
+          const currentCallbacks =
+            listenersRef.current.get(
+              event
+            );
+
+          if (
+            !currentCallbacks
+          ) {
+            return;
+          }
+
+          currentCallbacks.delete(
+            callback
+          );
+
+          if (
+            currentCallbacks.size ===
+            0
+          ) {
+            listenersRef.current.delete(
+              event
+            );
+          }
+        };
+      },
+      []
+    );
+
+  // ====================================================
+  // OFF
+  // ====================================================
+
+  const off =
+    useCallback(
+      (
+        event,
+        callback
+      ) => {
+        const socket =
+          socketRef.current;
+
+        if (!socket) {
+          return;
+        }
+
+        if (
+          callback
+        ) {
+          socket.off(
+            event,
+            callback
+          );
+
+          const callbacks =
+            listenersRef.current.get(
+              event
+            );
+
+          callbacks?.delete(
+            callback
+          );
+
+          if (
+            callbacks?.size ===
+            0
+          ) {
+            listenersRef.current.delete(
+              event
+            );
+          }
+
+          return;
+        }
+
+        socket.off(event);
+
+        listenersRef.current.delete(
+          event
+        );
+      },
+      []
+    );
+
+  // ====================================================
+  // RETURN
+  // ====================================================
+
+  return {
+    socket:
+      socketRef.current,
+
+    isConnected,
+
+    connectionError,
+
+    emit,
+    on,
+    off,
+  };
 };
+
+export default useSocket;
