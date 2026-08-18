@@ -6,11 +6,11 @@ import {
 
 import {
   authenticate,
-  authorize,
+  authorizePermission,
 } from '../../middlewares/auth.middleware.js';
 
 import {
-  ROLES,
+  PERMISSION_KEYS,
 } from '../../constants/roles.js';
 
 const router =
@@ -28,32 +28,29 @@ router.use(
 // COLLECTION
 // ======================================================
 
+// Müvekkil oluştur
 router.post(
   '/',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.CREATE_CLIENTS
   ),
   clientController.create
 );
 
+// Müvekkilleri listele
 router.get(
   '/',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_CLIENTS
   ),
   clientController.findAll
 );
 
+// İstatistikler
 router.get(
   '/statistics',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_CLIENTS
   ),
   clientController.getStatistics
 );
@@ -62,33 +59,29 @@ router.get(
 // CLIENT SUBRESOURCES
 // ======================================================
 
+// Müvekkilin dava geçmişi
 router.get(
   '/:id/cases',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_CASES
   ),
   clientController.getCaseHistory
 );
 
+// Müvekkilin ödeme kayıtları
 router.get(
   '/:id/payments',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_PAYMENTS
   ),
   clientController.getPayments
 );
 
+// Müvekkilin notları
 router.get(
   '/:id/notes',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_NOTES
   ),
   clientController.getNotes
 );
@@ -97,31 +90,29 @@ router.get(
 // DETAIL
 // ======================================================
 
+// Müvekkil detayı
 router.get(
   '/:id',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_CLIENTS
   ),
   clientController.findOne
 );
 
+// Müvekkil güncelle
 router.patch(
   '/:id',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_CLIENTS
   ),
   clientController.update
 );
 
+// Müvekkil sil
 router.delete(
   '/:id',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.DELETE_CLIENTS
   ),
   clientController.remove
 );

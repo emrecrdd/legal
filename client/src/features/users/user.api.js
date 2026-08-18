@@ -91,6 +91,74 @@ const userApi = {
   },
 
   // ======================================================
+  // PERMISSIONS - GET
+  // Rol varsayılanları + kullanıcı override'ları +
+  // efektif yetkiler
+  // ======================================================
+
+  getPermissions: (id) => {
+    return axios.get(
+      `/users/${id}/permissions`
+    );
+  },
+
+  // ======================================================
+  // PERMISSIONS - UPDATE
+  //
+  // data:
+  // {
+  //   permissions: {
+  //     delete_documents: true,
+  //     edit_payments: false
+  //   }
+  // }
+  // ======================================================
+
+  updatePermissions: (
+    id,
+    permissions
+  ) => {
+    return axios.patch(
+      `/users/${id}/permissions`,
+      {
+        permissions,
+      }
+    );
+  },
+
+  // ======================================================
+  // PERMISSIONS - RESET
+  // Kullanıcıyı rol varsayılanlarına döndürür.
+  // ======================================================
+
+  resetPermissions: (id) => {
+    return axios.delete(
+      `/users/${id}/permissions`
+    );
+  },
+
+  // ======================================================
+  // PERMISSIONS - PRESET
+  //
+  // preset örnek:
+  // STANDARD_LAWYER
+  // SENIOR_LAWYER
+  // MANAGING_LAWYER
+  // ======================================================
+
+  applyPermissionPreset: (
+    id,
+    preset
+  ) => {
+    return axios.post(
+      `/users/${id}/permissions/preset`,
+      {
+        preset,
+      }
+    );
+  },
+
+  // ======================================================
   // DELETE
   // ======================================================
 

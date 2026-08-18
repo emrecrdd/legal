@@ -6,11 +6,11 @@ import {
 
 import {
   authenticate,
-  authorize,
+  authorizePermission,
 } from '../../middlewares/auth.middleware.js';
 
 import {
-  ROLES,
+  PERMISSION_KEYS,
 } from '../../constants/roles.js';
 
 const router =
@@ -30,12 +30,11 @@ router.use(
 
 router.get(
   '/calendar',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_CALENDAR
   ),
+
   eventController.getCalendarEvents
 );
 
@@ -45,12 +44,11 @@ router.get(
 
 router.get(
   '/my',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_EVENTS
   ),
+
   eventController.getMyEvents
 );
 
@@ -60,12 +58,11 @@ router.get(
 
 router.get(
   '/case/:caseId',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_EVENTS
   ),
+
   eventController.getByCase
 );
 
@@ -75,11 +72,11 @@ router.get(
 
 router.post(
   '/',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.CREATE_EVENTS
   ),
+
   eventController.create
 );
 
@@ -89,12 +86,11 @@ router.post(
 
 router.get(
   '/',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_EVENTS
   ),
+
   eventController.findAll
 );
 
@@ -104,11 +100,11 @@ router.get(
 
 router.patch(
   '/:id/status',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_EVENTS
   ),
+
   eventController.updateStatus
 );
 
@@ -118,12 +114,11 @@ router.patch(
 
 router.get(
   '/:id',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_EVENTS
   ),
+
   eventController.findOne
 );
 
@@ -133,11 +128,11 @@ router.get(
 
 router.patch(
   '/:id',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_EVENTS
   ),
+
   eventController.update
 );
 
@@ -147,10 +142,11 @@ router.patch(
 
 router.delete(
   '/:id',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER
+
+  authorizePermission(
+    PERMISSION_KEYS.DELETE_EVENTS
   ),
+
   eventController.remove
 );
 

@@ -25,7 +25,7 @@ router.use(
 );
 
 // ======================================================
-// ADMIN ONLY
+// ADMIN ONLY - COLLECTION
 // ======================================================
 
 // Kullanıcı listesi
@@ -47,35 +47,52 @@ router.post(
 );
 
 // ======================================================
-// SINGLE USER
+// PERMISSION MANAGEMENT
+//
+// ÖNEMLİ:
+// Bunları genel /:id route'larından önce tutuyoruz.
 // ======================================================
 
-// Detay
+// Kullanıcının rol + override + efektif yetkilerini getir
 router.get(
-  '/:id',
+  '/:id/permissions',
   authorize(
     ROLES.ADMIN
   ),
-  userController.findOne
+  userController.getPermissions
 );
 
-// Genel kullanıcı bilgilerini güncelle
+// Kullanıcıya özel yetkileri güncelle
 router.patch(
-  '/:id',
+  '/:id/permissions',
   authorize(
     ROLES.ADMIN
   ),
-  userController.update
+  userController.updatePermissions
 );
 
-// Backward compatibility gerekiyorsa PUT'u da tut
-router.put(
-  '/:id',
+// Kullanıcı özel yetkilerini temizle
+// Rol varsayılanlarına geri döner
+router.delete(
+  '/:id/permissions',
   authorize(
     ROLES.ADMIN
   ),
-  userController.update
+  userController.resetPermissions
 );
+
+// Hazır yetki şablonu uygula
+router.post(
+  '/:id/permissions/preset',
+  authorize(
+    ROLES.ADMIN
+  ),
+  userController.applyPermissionPreset
+);
+
+// ======================================================
+// ROLE / STATUS
+// ======================================================
 
 // Rol değiştir
 router.patch(
@@ -95,7 +112,41 @@ router.patch(
   userController.toggleActive
 );
 
-// Sil
+// ======================================================
+// SINGLE USER
+// ======================================================
+
+// Detay
+router.get(
+  '/:id',
+  authorize(
+    ROLES.ADMIN
+  ),
+  userController.findOne
+);
+
+// Profil bilgileri güncelle
+router.patch(
+  '/:id',
+  authorize(
+    ROLES.ADMIN
+  ),
+  userController.update
+);
+
+// Eski frontend çağrıları bozulmasın
+router.put(
+  '/:id',
+  authorize(
+    ROLES.ADMIN
+  ),
+  userController.update
+);
+
+// ======================================================
+// DELETE
+// ======================================================
+
 router.delete(
   '/:id',
   authorize(

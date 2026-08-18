@@ -10,15 +10,19 @@ import {
 
 import {
   authenticate,
-  authorize,
+  authorizePermission,
 } from '../../middlewares/auth.middleware.js';
 
 import {
-  ROLES,
+  PERMISSION_KEYS,
 } from '../../constants/roles.js';
 
 const router =
   express.Router();
+
+// ======================================================
+// AUTH
+// ======================================================
 
 router.use(
   authenticate
@@ -28,13 +32,12 @@ router.use(
 // UPLOADS
 // ======================================================
 
+// Tek belge yükleme
 router.post(
   '/upload',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.UPLOAD_DOCUMENTS
   ),
 
   documentUpload.single(
@@ -44,13 +47,12 @@ router.post(
   documentController.upload
 );
 
+// Çoklu belge yükleme
 router.post(
   '/upload-multiple',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.UPLOAD_DOCUMENTS
   ),
 
   documentUpload.array(
@@ -63,41 +65,38 @@ router.post(
 
 // ======================================================
 // LIST / META
-// Bunlar /:id route'undan ÖNCE olmalı.
+//
+// Bunlar /:id route'undan önce olmalı.
 // ======================================================
 
+// Belge listesi
 router.get(
   '/',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_DOCUMENTS
   ),
 
   documentController.findAll
 );
 
+// Belge kategorileri
 router.get(
   '/categories',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_DOCUMENTS
   ),
 
   documentController.getCategories
 );
 
+// Belge istatistikleri
 router.get(
   '/statistics',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_DOCUMENTS
   ),
 
   documentController.getStatistics
@@ -107,27 +106,23 @@ router.get(
 // DOCUMENT OPERATIONS
 // ======================================================
 
+// Belge indir
 router.get(
   '/:id/download',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.DOWNLOAD_DOCUMENTS
   ),
 
   documentController.download
 );
 
+// Belge önizleme
 router.get(
   '/:id/preview',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_DOCUMENTS
   ),
 
   documentController.preview
@@ -137,26 +132,23 @@ router.get(
 // VERSIONS
 // ======================================================
 
+// Belge versiyonlarını görüntüle
 router.get(
   '/:id/versions',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_DOCUMENTS
   ),
 
   documentController.getVersions
 );
 
+// Yeni belge versiyonu oluştur
 router.post(
   '/:id/versions',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.MANAGE_DOCUMENT_VERSIONS
   ),
 
   documentUpload.single(
@@ -170,56 +162,57 @@ router.post(
 // SINGLE DOCUMENT
 // ======================================================
 
+// Belge detayı
 router.get(
   '/:id',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_DOCUMENTS
   ),
 
   documentController.findOne
 );
 
-/*
- * Metadata update için PATCH esas endpoint.
- */
+// ======================================================
+// UPDATE
+// ======================================================
+
+// Metadata güncelleme
 router.patch(
   '/:id',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_DOCUMENTS
   ),
 
   documentController.update
 );
 
 /*
- * Eski frontend bozulmasın diye PUT'u şimdilik
- * backward compatibility olarak tutuyoruz.
+ * Backward compatibility.
+ *
+ * Eski frontend PUT çağrısı yapıyorsa çalışmaya
+ * devam etsin. Yetki kontrolü PATCH ile aynıdır.
  */
 router.put(
   '/:id',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_DOCUMENTS
   ),
 
   documentController.update
 );
 
+// ======================================================
+// DELETE
+// ======================================================
+
 router.delete(
   '/:id',
 
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER
+  authorizePermission(
+    PERMISSION_KEYS.DELETE_DOCUMENTS
   ),
 
   documentController.remove

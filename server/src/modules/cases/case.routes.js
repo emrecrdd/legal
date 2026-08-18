@@ -1,14 +1,28 @@
 import express from 'express';
-import { caseController } from './case.controller.js';
+
+import {
+  caseController,
+} from './case.controller.js';
+
 import {
   authenticate,
-  authorize,
+  authorizePermission,
 } from '../../middlewares/auth.middleware.js';
-import { ROLES } from '../../constants/roles.js';
 
-const router = express.Router();
+import {
+  PERMISSION_KEYS,
+} from '../../constants/roles.js';
 
-router.use(authenticate);
+const router =
+  express.Router();
+
+// ======================================================
+// AUTH
+// ======================================================
+
+router.use(
+  authenticate
+);
 
 // ======================================================
 // MAIN CRUD
@@ -17,61 +31,79 @@ router.use(authenticate);
 // Dava oluştur
 router.post(
   '/',
-  authorize(ROLES.ADMIN, ROLES.LAWYER),
+
+  authorizePermission(
+    PERMISSION_KEYS.CREATE_CASES
+  ),
+
   caseController.create
 );
 
 // Davaları listele
 router.get(
   '/',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_CASES
   ),
+
   caseController.findAll
 );
 
 // İstatistikler
-// DİKKAT: /:id route'undan önce olmalı
+// /:id route'undan önce olmalı
 router.get(
   '/statistics',
-  authorize(ROLES.ADMIN, ROLES.LAWYER),
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_CASES
+  ),
+
   caseController.getStatistics
 );
 
 // Tek dava
 router.get(
   '/:id',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_CASES
   ),
+
   caseController.findOne
 );
 
 // Tam güncelleme
 router.put(
   '/:id',
-  authorize(ROLES.ADMIN, ROLES.LAWYER),
+
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_CASES
+  ),
+
   caseController.update
 );
 
 // Kısmi güncelleme
-// AI ile Dosyayı Tamamla burayı kullanacak
+// AI ile Dosyayı Tamamla burayı kullanıyor
 router.patch(
   '/:id',
-  authorize(ROLES.ADMIN, ROLES.LAWYER),
+
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_CASES
+  ),
+
   caseController.patch
 );
 
 // Dava sil
 router.delete(
   '/:id',
-  authorize(ROLES.ADMIN),
+
+  authorizePermission(
+    PERMISSION_KEYS.DELETE_CASES
+  ),
+
   caseController.remove
 );
 
@@ -81,7 +113,11 @@ router.delete(
 
 router.patch(
   '/:id/status',
-  authorize(ROLES.ADMIN, ROLES.LAWYER),
+
+  authorizePermission(
+    PERMISSION_KEYS.CHANGE_CASE_STATUS
+  ),
+
   caseController.updateStatus
 );
 
@@ -89,26 +125,36 @@ router.patch(
 // PARTIES
 // ======================================================
 
+// Taraf ekle
 router.post(
   '/:id/parties',
-  authorize(ROLES.ADMIN, ROLES.LAWYER),
+
+  authorizePermission(
+    PERMISSION_KEYS.MANAGE_CASE_PARTIES
+  ),
+
   caseController.addParty
 );
 
+// Taraf sil
 router.delete(
   '/:id/parties/:partyId',
-  authorize(ROLES.ADMIN, ROLES.LAWYER),
+
+  authorizePermission(
+    PERMISSION_KEYS.MANAGE_CASE_PARTIES
+  ),
+
   caseController.removeParty
 );
 
+// Tarafları görüntüle
 router.get(
   '/:id/parties',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_CASES
   ),
+
   caseController.getParties
 );
 
@@ -116,58 +162,61 @@ router.get(
 // RELATED DATA
 // ======================================================
 
+// Dava belgeleri
 router.get(
   '/:id/documents',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_DOCUMENTS
   ),
+
   caseController.getDocuments
 );
 
+// Dava görevleri
 router.get(
   '/:id/tasks',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TASKS
   ),
+
   caseController.getTasks
 );
 
+// Dava etkinlikleri
 router.get(
   '/:id/events',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_EVENTS
   ),
+
   caseController.getEvents
 );
 
+// Dava ödemeleri
 router.get(
   '/:id/payments',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_PAYMENTS
   ),
+
   caseController.getPayments
 );
 
+// Dava notları
 router.get(
   '/:id/notes',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.INTERN,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_NOTES
   ),
+
   caseController.getNotes
 );
 
-export { router as caseRoutes };
+export {
+  router as caseRoutes,
+};

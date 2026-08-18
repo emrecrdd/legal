@@ -6,11 +6,11 @@ import {
 
 import {
   authenticate,
-  authorize,
+  authorizePermission,
 } from '../../middlewares/auth.middleware.js';
 
 import {
-  ROLES,
+  PERMISSION_KEYS,
 } from '../../constants/roles.js';
 
 const router =
@@ -25,38 +25,16 @@ router.use(
 );
 
 // ======================================================
-// ROLE GROUPS
-// ======================================================
-
-const CAN_READ = [
-  ROLES.ADMIN,
-  ROLES.LAWYER,
-  ROLES.INTERN,
-  ROLES.SECRETARY,
-];
-
-const CAN_WRITE = [
-  ROLES.ADMIN,
-  ROLES.LAWYER,
-  ROLES.SECRETARY,
-];
-
-const CAN_DELETE = [
-  ROLES.ADMIN,
-  ROLES.LAWYER,
-];
-
-// ======================================================
 // SPECIAL ROUTES
 //
-// Bunlar mutlaka /:id route'undan önce tanımlanmalı.
+// Bunlar /:id route'undan önce olmalı.
 // ======================================================
 
 // Kullanıcının toplantıları
 router.get(
   '/my',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_MEETINGS
   ),
   meetingController.getMyMeetings
 );
@@ -64,8 +42,8 @@ router.get(
 // Yaklaşan toplantılar
 router.get(
   '/upcoming',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_MEETINGS
   ),
   meetingController.getUpcoming
 );
@@ -73,8 +51,8 @@ router.get(
 // Dava bazlı toplantılar
 router.get(
   '/case/:caseId',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_MEETINGS
   ),
   meetingController.getByCase
 );
@@ -83,23 +61,20 @@ router.get(
 // CLIENT ROUTES
 // ======================================================
 
-// Client cockpit için hafif timeline.
-//
-// ÖNEMLİ:
-// /client/:clientId route'undan önce tanımlıyoruz.
+// Client cockpit timeline
 router.get(
   '/client/:clientId/timeline',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_MEETINGS
   ),
   meetingController.getClientTimeline
 );
 
-// Müvekkilin tüm toplantıları - paginated
+// Müvekkilin tüm toplantıları
 router.get(
   '/client/:clientId',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_MEETINGS
   ),
   meetingController.getByClient
 );
@@ -108,11 +83,11 @@ router.get(
 // CRUD
 // ======================================================
 
-// Oluştur
+// Toplantı oluştur
 router.post(
   '/',
-  authorize(
-    ...CAN_WRITE
+  authorizePermission(
+    PERMISSION_KEYS.CREATE_MEETINGS
   ),
   meetingController.create
 );
@@ -120,8 +95,8 @@ router.post(
 // Liste
 router.get(
   '/',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_MEETINGS
   ),
   meetingController.findAll
 );
@@ -129,8 +104,8 @@ router.get(
 // Detay
 router.get(
   '/:id',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_MEETINGS
   ),
   meetingController.findOne
 );
@@ -138,8 +113,8 @@ router.get(
 // Güncelle
 router.put(
   '/:id',
-  authorize(
-    ...CAN_WRITE
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_MEETINGS
   ),
   meetingController.update
 );
@@ -147,8 +122,8 @@ router.put(
 // Durum değiştir
 router.patch(
   '/:id/status',
-  authorize(
-    ...CAN_WRITE
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_MEETINGS
   ),
   meetingController.updateStatus
 );
@@ -156,8 +131,8 @@ router.patch(
 // Sil
 router.delete(
   '/:id',
-  authorize(
-    ...CAN_DELETE
+  authorizePermission(
+    PERMISSION_KEYS.DELETE_MEETINGS
   ),
   meetingController.remove
 );

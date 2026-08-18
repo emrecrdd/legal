@@ -6,11 +6,11 @@ import {
 
 import {
   authenticate,
-  authorize,
+  authorizePermission,
 } from '../../middlewares/auth.middleware.js';
 
 import {
-  ROLES,
+  PERMISSION_KEYS,
 } from '../../constants/roles.js';
 
 const router =
@@ -30,11 +30,11 @@ router.use(
 
 router.get(
   '/summary',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_FINANCE_REPORTS
   ),
+
   paymentController.getSummary
 );
 
@@ -45,64 +45,75 @@ router.get(
 // Plan oluştur
 router.post(
   '/plans',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.MANAGE_PAYMENT_PLANS
   ),
+
   paymentController.createPlan
 );
 
 // Plan listesi
 router.get(
   '/plans',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_PAYMENTS
   ),
+
   paymentController.findAllPlans
 );
 
-// Müvekkil finans özeti
+// ======================================================
+// CLIENT FINANCE SUMMARY
+//
+// /client/:clientId route'undan önce olmalı.
+// ======================================================
+
 router.get(
   '/client/:clientId/summary',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_FINANCE_REPORTS
   ),
+
   paymentController.getClientPlanSummary
 );
+
+// ======================================================
+// PAYMENT PLAN DETAIL
+// ======================================================
 
 // Plan detay
 router.get(
   '/plans/:id',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_PAYMENTS
   ),
+
   paymentController.findOnePlan
 );
 
 // Plan aktive et
 router.patch(
   '/plans/:id/activate',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER
+
+  authorizePermission(
+    PERMISSION_KEYS.MANAGE_PAYMENT_PLANS
   ),
+
   paymentController.activatePlan
 );
 
 // Plan iptal et
 router.patch(
   '/plans/:id/cancel',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER
+
+  authorizePermission(
+    PERMISSION_KEYS.MANAGE_PAYMENT_PLANS
   ),
+
   paymentController.cancelPlan
 );
 
@@ -110,25 +121,25 @@ router.patch(
 // CLIENT / CASE PAYMENTS
 // ======================================================
 
-// Müvekkil hareketleri
+// Müvekkil finans hareketleri
 router.get(
   '/client/:clientId',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_PAYMENTS
   ),
+
   paymentController.getClientPayments
 );
 
-// Dava hareketleri
+// Dava finans hareketleri
 router.get(
   '/case/:caseId',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_PAYMENTS
   ),
+
   paymentController.getCasePayments
 );
 
@@ -139,36 +150,39 @@ router.get(
 // Finans hareketi oluştur
 router.post(
   '/',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.CREATE_PAYMENTS
   ),
+
   paymentController.createPayment
 );
 
-// Finans hareketleri listesi
+// Finans hareketlerini listele
 router.get(
   '/',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_PAYMENTS
   ),
+
   paymentController.findAllPayments
 );
 
 // ======================================================
 // REVERSAL
+//
+// Finansal kaydı doğrudan silmek yerine
+// muhasebesel ters kayıt oluşturur.
 // ======================================================
 
-// Tamamlanmış hareketi ters kayda al
 router.post(
   '/:id/reverse',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER
+
+  authorizePermission(
+    PERMISSION_KEYS.REVERSE_PAYMENTS
   ),
+
   paymentController.reversePayment
 );
 
@@ -179,32 +193,33 @@ router.post(
 // Finans hareketi detay
 router.get(
   '/:id',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_PAYMENTS
   ),
+
   paymentController.findOnePayment
 );
 
 // Metadata güncelle
 router.patch(
   '/:id',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER,
-    ROLES.SECRETARY
+
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_PAYMENTS
   ),
+
   paymentController.updatePayment
 );
 
-// Pending/cancelled hareketi soft delete
+// Pending / cancelled hareketi soft delete
 router.delete(
   '/:id',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER
+
+  authorizePermission(
+    PERMISSION_KEYS.DELETE_PAYMENTS
   ),
+
   paymentController.removePayment
 );
 

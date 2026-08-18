@@ -13,6 +13,10 @@ import {
 
 import {
   ROLES,
+  ALL_PERMISSIONS,
+  PERMISSION_PRESETS,
+  getEffectivePermissions,
+  isValidPermission,
 } from '../../constants/roles.js';
 
 import {
@@ -32,7 +36,9 @@ import {
 
 const VALID_ROLES =
   new Set(
-    Object.values(ROLES)
+    Object.values(
+      ROLES
+    )
   );
 
 const normalizeEmail = (
@@ -66,6 +72,118 @@ const getSafeUser = (
     : user;
 };
 
+const getPermissionOverrides = (
+  user
+) => {
+  const permissions =
+    user?.permissions;
+
+  if (
+    !permissions ||
+    typeof permissions !==
+      'object' ||
+    Array.isArray(
+      permissions
+    )
+  ) {
+    return {};
+  }
+
+  return permissions;
+};
+
+const sanitizePermissionOverrides = (
+  permissions
+) => {
+  if (
+    !permissions ||
+    typeof permissions !==
+      'object' ||
+    Array.isArray(
+      permissions
+    )
+  ) {
+    return {};
+  }
+
+  const sanitized = {};
+
+  for (
+    const [
+      permission,
+      enabled,
+    ] of Object.entries(
+      permissions
+    )
+  ) {
+    if (
+      !isValidPermission(
+        permission
+      )
+    ) {
+      continue;
+    }
+
+    if (
+      typeof enabled !==
+      'boolean'
+    ) {
+      continue;
+    }
+
+    sanitized[
+      permission
+    ] = enabled;
+  }
+
+  return sanitized;
+};
+
+const buildPermissionPayload = (
+  user
+) => {
+  const overrides =
+    getPermissionOverrides(
+      user
+    );
+
+  const effectivePermissions =
+    getEffectivePermissions(
+      user.role,
+      overrides
+    );
+
+  return {
+    user: {
+      id:
+        user.id,
+
+      first_name:
+        user.first_name,
+
+      last_name:
+        user.last_name,
+
+      email:
+        user.email,
+
+      role:
+        user.role,
+
+      is_active:
+        user.is_active,
+    },
+
+    overrides,
+
+    effective_permissions:
+      effectivePermissions,
+
+    all_permissions:
+      ALL_PERMISSIONS,
+  };
+};
+
 const createAuditLog =
   async ({
     req,
@@ -97,10 +215,6 @@ const createAuditLog =
           ],
       });
     } catch (error) {
-      /*
-       * Ana işlem audit log problemi yüzünden
-       * başarısız olmamalı.
-       */
       console.error(
         '❌ Audit log error:',
         error
@@ -165,7 +279,9 @@ export const userController = {
         const value =
           search.trim();
 
-        where[Op.or] = [
+        where[
+          Op.or
+        ] = [
           {
             first_name: {
               [Op.iLike]:
@@ -302,7 +418,6 @@ export const userController = {
 
   // ====================================================
   // CREATE
-  // ADMIN ONLY - route middleware tarafından korunmalı
   // ====================================================
 
   async create(
@@ -320,6 +435,7 @@ export const userController = {
         title,
         bio,
         is_active = true,
+        permissions = {},
       } = req.body;
 
       const cleanFirstName =
@@ -336,10 +452,6 @@ export const userController = {
         normalizeEmail(
           email
         );
-
-      // ================================================
-      // VALIDATION
-      // ================================================
 
       if (
         !cleanFirstName
@@ -406,10 +518,6 @@ export const userController = {
         );
       }
 
-      // ================================================
-      // DUPLICATE EMAIL
-      // ================================================
-
       const existingUser =
         await User.findOne({
           where: {
@@ -428,12 +536,10 @@ export const userController = {
         );
       }
 
-      // ================================================
-      // CREATE
-      //
-      // User.beforeCreate hook'u şifreyi hashliyor.
-      // Controller içinde tekrar hashlemiyoruz.
-      // ================================================
+      const safePermissions =
+        sanitizePermissionOverrides(
+          permissions
+        );
 
       const user =
         await User.create({
@@ -467,12 +573,8 @@ export const userController = {
               is_active
             ),
 
-          /*
-           * Eğer email verification sistemi kullanılmıyorsa
-           * admin-created kullanıcılar için true düşünülebilir.
-           *
-           * Şimdilik mevcut model davranışını koruyoruz.
-           */
+          permissions:
+            safePermissions,
         });
 
       await createAuditLog({
@@ -522,7 +624,7 @@ export const userController = {
   },
 
   // ====================================================
-  // UPDATE
+  // UPDATE PROFILE
   // ====================================================
 
   async update(
@@ -552,15 +654,8 @@ export const userController = {
         bio,
       } = req.body;
 
-      /*
-       * Rol ve is_active burada değiştirilmez.
-       *
-       * Bunların ayrı endpointleri var:
-       * PATCH /users/:id/role
-       * PATCH /users/:id/toggle-active
-       */
-
-      const updateData = {};
+      const updateData =
+        {};
 
       if (
         first_name !==
@@ -638,7 +733,9 @@ export const userController = {
             },
           });
 
-        if (existing) {
+        if (
+          existing
+        ) {
           return errorResponse(
             res,
             'Bu e-posta adresi başka bir kullanıcı tarafından kullanılıyor',
@@ -759,10 +856,6 @@ export const userController = {
         );
       }
 
-      // ================================================
-      // LAST ADMIN PROTECTION
-      // ================================================
-
       if (
         user.role ===
         ROLES.ADMIN
@@ -865,11 +958,11 @@ export const userController = {
       const newStatus =
         !user.is_active;
 
-      // Son aktif admin pasif yapılamaz
       if (
         user.role ===
           ROLES.ADMIN &&
-        newStatus === false
+        newStatus ===
+          false
       ) {
         const adminCount =
           await User.count({
@@ -896,20 +989,12 @@ export const userController = {
       await user.update({
         is_active:
           newStatus,
-      });
 
-      /*
-       * Pasife alınan kullanıcının refresh tokenını
-       * geçersiz kılmak iyi olur.
-       */
-      if (
-        !newStatus
-      ) {
-        await user.update({
-          refresh_token:
-            null,
-        });
-      }
+        refresh_token:
+          newStatus
+            ? user.refresh_token
+            : null,
+      });
 
       await createAuditLog({
         req,
@@ -1005,7 +1090,7 @@ export const userController = {
 
       if (
         user.role ===
-          role
+        role
       ) {
         return successResponse(
           res,
@@ -1015,10 +1100,6 @@ export const userController = {
           'Kullanıcı zaten bu role sahip'
         );
       }
-
-      // ================================================
-      // LAST ADMIN PROTECTION
-      // ================================================
 
       if (
         user.role ===
@@ -1053,14 +1134,7 @@ export const userController = {
 
       await user.update({
         role,
-      });
 
-      /*
-       * Rol değişince mevcut refresh tokenı geçersiz
-       * kılmak mantıklı. Kullanıcı tekrar giriş yapınca
-       * yeni yetkileriyle token alır.
-       */
-      await user.update({
         refresh_token:
           null,
       });
@@ -1094,6 +1168,407 @@ export const userController = {
       return errorResponse(
         res,
         'Kullanıcı rolü değiştirilemedi',
+        500
+      );
+    }
+  },
+
+  // ====================================================
+  // GET PERMISSIONS
+  // ====================================================
+
+  async getPermissions(
+    req,
+    res
+  ) {
+    try {
+      const user =
+        await User.findByPk(
+          req.params.id
+        );
+
+      if (!user) {
+        return errorResponse(
+          res,
+          'Kullanıcı bulunamadı',
+          404
+        );
+      }
+
+      return successResponse(
+        res,
+        buildPermissionPayload(
+          user
+        ),
+        'Kullanıcı yetkileri getirildi'
+      );
+    } catch (error) {
+      console.error(
+        '❌ User getPermissions error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        'Kullanıcı yetkileri getirilemedi',
+        500
+      );
+    }
+  },
+
+  // ====================================================
+  // UPDATE PERMISSIONS
+  //
+  // Body:
+  // {
+  //   permissions: {
+  //     delete_documents: true,
+  //     edit_payments: false
+  //   }
+  // }
+  // ====================================================
+
+  async updatePermissions(
+    req,
+    res
+  ) {
+    try {
+      const user =
+        await User.findByPk(
+          req.params.id
+        );
+
+      if (!user) {
+        return errorResponse(
+          res,
+          'Kullanıcı bulunamadı',
+          404
+        );
+      }
+
+      if (
+        user.role ===
+        ROLES.ADMIN
+      ) {
+        return errorResponse(
+          res,
+          'Yönetici rolü tam yetkilidir; kullanıcı bazlı yetki özelleştirmesi uygulanamaz',
+          400
+        );
+      }
+
+      const {
+        permissions,
+      } = req.body;
+
+      if (
+        !permissions ||
+        typeof permissions !==
+          'object' ||
+        Array.isArray(
+          permissions
+        )
+      ) {
+        return errorResponse(
+          res,
+          'permissions alanı nesne olmalıdır',
+          400
+        );
+      }
+
+      const invalidPermissions =
+        Object.keys(
+          permissions
+        ).filter(
+          (permission) =>
+            !isValidPermission(
+              permission
+            )
+        );
+
+      if (
+        invalidPermissions.length >
+        0
+      ) {
+        return errorResponse(
+          res,
+          `Geçersiz yetkiler: ${invalidPermissions.join(
+            ', '
+          )}`,
+          400
+        );
+      }
+
+      const invalidValues =
+        Object.entries(
+          permissions
+        ).filter(
+          ([, value]) =>
+            typeof value !==
+            'boolean'
+        );
+
+      if (
+        invalidValues.length >
+        0
+      ) {
+        return errorResponse(
+          res,
+          'Yetki değerleri yalnızca true veya false olabilir',
+          400
+        );
+      }
+
+      const safePermissions =
+        sanitizePermissionOverrides(
+          permissions
+        );
+
+      await user.update({
+        permissions:
+          safePermissions,
+
+        /*
+         * Yetki değiştiğinde refresh oturumunu iptal ediyoruz.
+         * Kullanıcı bir sonraki login'de temiz oturum alır.
+         */
+        refresh_token:
+          null,
+      });
+
+      await createAuditLog({
+        req,
+
+        action:
+          'update',
+
+        entityId:
+          user.id,
+
+        description:
+          `"${user.email}" kullanıcısının özel yetkileri güncellendi`,
+      });
+
+      return successResponse(
+        res,
+        buildPermissionPayload(
+          user
+        ),
+        'Kullanıcı yetkileri başarıyla güncellendi'
+      );
+    } catch (error) {
+      console.error(
+        '❌ User updatePermissions error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        'Kullanıcı yetkileri güncellenemedi',
+        500
+      );
+    }
+  },
+
+  // ====================================================
+  // RESET PERMISSIONS
+  //
+  // Kullanıcı tekrar rol varsayılanlarına döner.
+  // ====================================================
+
+  async resetPermissions(
+    req,
+    res
+  ) {
+    try {
+      const user =
+        await User.findByPk(
+          req.params.id
+        );
+
+      if (!user) {
+        return errorResponse(
+          res,
+          'Kullanıcı bulunamadı',
+          404
+        );
+      }
+
+      if (
+        user.role ===
+        ROLES.ADMIN
+      ) {
+        return errorResponse(
+          res,
+          'Yönetici rolü zaten tam yetkilidir',
+          400
+        );
+      }
+
+      await user.update({
+        permissions:
+          {},
+
+        refresh_token:
+          null,
+      });
+
+      await createAuditLog({
+        req,
+
+        action:
+          'update',
+
+        entityId:
+          user.id,
+
+        description:
+          `"${user.email}" kullanıcısının özel yetkileri sıfırlandı`,
+      });
+
+      return successResponse(
+        res,
+        buildPermissionPayload(
+          user
+        ),
+        'Kullanıcı rol varsayılanlarına döndürüldü'
+      );
+    } catch (error) {
+      console.error(
+        '❌ User resetPermissions error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        'Kullanıcı yetkileri sıfırlanamadı',
+        500
+      );
+    }
+  },
+
+  // ====================================================
+  // APPLY PERMISSION PRESET
+  //
+  // Body:
+  // {
+  //   preset: "SENIOR_LAWYER"
+  // }
+  // ====================================================
+
+  async applyPermissionPreset(
+    req,
+    res
+  ) {
+    try {
+      const user =
+        await User.findByPk(
+          req.params.id
+        );
+
+      if (!user) {
+        return errorResponse(
+          res,
+          'Kullanıcı bulunamadı',
+          404
+        );
+      }
+
+      if (
+        user.role ===
+        ROLES.ADMIN
+      ) {
+        return errorResponse(
+          res,
+          'Yönetici rolü zaten tam yetkilidir',
+          400
+        );
+      }
+
+      const {
+        preset,
+      } = req.body;
+
+      const presetData =
+        PERMISSION_PRESETS[
+          preset
+        ];
+
+      if (
+        !presetData
+      ) {
+        return errorResponse(
+          res,
+          'Geçersiz yetki şablonu',
+          400
+        );
+      }
+
+      if (
+        presetData.role &&
+        presetData.role !==
+          user.role
+      ) {
+        return errorResponse(
+          res,
+          'Bu yetki şablonu kullanıcının rolüyle uyumlu değil',
+          400
+        );
+      }
+
+      const overrides =
+        sanitizePermissionOverrides(
+          presetData.overrides ||
+          {}
+        );
+
+      await user.update({
+        permissions:
+          overrides,
+
+        refresh_token:
+          null,
+      });
+
+      await createAuditLog({
+        req,
+
+        action:
+          'update',
+
+        entityId:
+          user.id,
+
+        description:
+          `"${user.email}" kullanıcısına "${presetData.label}" yetki şablonu uygulandı`,
+      });
+
+      return successResponse(
+        res,
+        {
+          ...buildPermissionPayload(
+            user
+          ),
+
+          preset: {
+            key:
+              preset,
+
+            label:
+              presetData.label,
+          },
+        },
+        'Yetki şablonu başarıyla uygulandı'
+      );
+    } catch (error) {
+      console.error(
+        '❌ User applyPermissionPreset error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        'Yetki şablonu uygulanamadı',
         500
       );
     }

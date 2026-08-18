@@ -6,11 +6,11 @@ import {
 
 import {
   authenticate,
-  authorize,
+  authorizePermission,
 } from '../../middlewares/auth.middleware.js';
 
 import {
-  ROLES,
+  PERMISSION_KEYS,
 } from '../../constants/roles.js';
 
 const router =
@@ -25,59 +25,30 @@ router.use(
 );
 
 // ======================================================
-// ROLE GROUPS
-// ======================================================
-
-const CAN_READ = [
-  ROLES.ADMIN,
-  ROLES.LAWYER,
-  ROLES.INTERN,
-  ROLES.SECRETARY,
-];
-
-const CAN_WRITE = [
-  ROLES.ADMIN,
-  ROLES.LAWYER,
-  ROLES.SECRETARY,
-];
-
-const CAN_DELETE = [
-  ROLES.ADMIN,
-  ROLES.LAWYER,
-];
-
-const CAN_WORK_ON_TASK = [
-  ROLES.ADMIN,
-  ROLES.LAWYER,
-  ROLES.INTERN,
-  ROLES.SECRETARY,
-];
-
-// ======================================================
 // MY TASKS
 // Özel route'lar /:id'den önce olmalı
 // ======================================================
 
 router.get(
   '/my',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TASKS
   ),
   taskController.getMyTasks
 );
 
 router.get(
   '/my/overdue',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TASKS
   ),
   taskController.getOverdue
 );
 
 router.get(
   '/my/upcoming',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TASKS
   ),
   taskController.getUpcoming
 );
@@ -88,9 +59,8 @@ router.get(
 
 router.get(
   '/statistics',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TASKS
   ),
   taskController.getStatistics
 );
@@ -100,22 +70,20 @@ router.get(
 // ======================================================
 
 // ClientDetail cockpit için optimize özet.
-//
-// ÖNEMLİ:
-// /client/:clientId route'undan önce gelmeli.
+// /client/:clientId route'undan önce olmalı.
 router.get(
   '/client/:clientId/overview',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TASKS
   ),
   taskController.getClientOverview
 );
 
-// Müvekkilin tüm görevleri - paginated
+// Müvekkilin tüm görevleri
 router.get(
   '/client/:clientId',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TASKS
   ),
   taskController.getByClient
 );
@@ -124,80 +92,78 @@ router.get(
 // MAIN COLLECTION CRUD
 // ======================================================
 
+// Görev oluştur
 router.post(
   '/',
-  authorize(
-    ...CAN_WRITE
+  authorizePermission(
+    PERMISSION_KEYS.CREATE_TASKS
   ),
   taskController.create
 );
 
+// Görevleri listele
 router.get(
   '/',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TASKS
   ),
   taskController.findAll
 );
 
 // ======================================================
 // SINGLE TASK ACTIONS
-//
-// Bunların tamamı /:id genel detail route'undan
-// önce veya spesifik pattern olarak tanımlanabilir.
 // ======================================================
 
-// Durum
+// Durum güncelle
 router.patch(
   '/:id/status',
-  authorize(
-    ...CAN_WRITE
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_TASKS
   ),
   taskController.updateStatus
 );
 
-// Atama
+// Görev ata
 router.patch(
   '/:id/assign',
-  authorize(
-    ROLES.ADMIN,
-    ROLES.LAWYER
+  authorizePermission(
+    PERMISSION_KEYS.ASSIGN_TASKS
   ),
   taskController.assignTask
 );
 
-// Başlat
+// Görevi başlat
 router.post(
   '/:id/start',
-  authorize(
-    ...CAN_WORK_ON_TASK
+  authorizePermission(
+    PERMISSION_KEYS.WORK_ON_TASKS
   ),
   taskController.startTask
 );
 
-// Tamamla
+// Görevi tamamla
 router.post(
   '/:id/complete',
-  authorize(
-    ...CAN_WORK_ON_TASK
+  authorizePermission(
+    PERMISSION_KEYS.WORK_ON_TASKS
   ),
   taskController.completeTask
 );
 
-// İlerleme
+// İlerleme güncelle
 router.patch(
   '/:id/progress',
-  authorize(
-    ...CAN_WORK_ON_TASK
+  authorizePermission(
+    PERMISSION_KEYS.WORK_ON_TASKS
   ),
   taskController.updateProgress
 );
 
-// Onay
+// Görev onayla
 router.post(
   '/:id/approve',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.APPROVE_TASKS
   ),
   taskController.approveTask
 );
@@ -205,8 +171,8 @@ router.post(
 // Not ekle
 router.post(
   '/:id/notes',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.CREATE_NOTES
   ),
   taskController.addNote
 );
@@ -214,8 +180,8 @@ router.post(
 // Notları getir
 router.get(
   '/:id/notes',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_NOTES
   ),
   taskController.getNotes
 );
@@ -225,26 +191,29 @@ router.get(
 // Genel /:id route'ları en sona
 // ======================================================
 
+// Görev detayı
 router.get(
   '/:id',
-  authorize(
-    ...CAN_READ
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TASKS
   ),
   taskController.findOne
 );
 
+// Görev güncelle
 router.put(
   '/:id',
-  authorize(
-    ...CAN_WRITE
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_TASKS
   ),
   taskController.update
 );
 
+// Görev sil
 router.delete(
   '/:id',
-  authorize(
-    ...CAN_DELETE
+  authorizePermission(
+    PERMISSION_KEYS.DELETE_TASKS
   ),
   taskController.remove
 );

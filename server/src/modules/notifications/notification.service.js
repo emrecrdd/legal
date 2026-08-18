@@ -1,195 +1,502 @@
-import { Notification } from '../../models/Notification.js';
-import { Op } from 'sequelize';
-import { paginate, getPaginationData } from '../../utils/paginate.js';
+import {
+  Notification,
+} from '../../models/Notification.js';
+
+import {
+  paginate,
+  getPaginationData,
+} from '../../utils/paginate.js';
 
 let ioInstance = null;
 
-export const setIo = (io) => {
-  ioInstance = io;
+// ======================================================
+// SOCKET INSTANCE
+// ======================================================
+
+export const setIo = (
+  io
+) => {
+  ioInstance =
+    io;
 };
 
-export const notificationService = {
-  // ✅ Bildirim oluştur + Socket ile gönder
-  async create(userId, type, title, message, link = null, metadata = {}) {
-    const notification = await Notification.create({
-      user_id: userId,
-      type,
-      title,
-      message,
-      link,
-      metadata,
-      read: false,  // ✅ EKLE
-    });
+// ======================================================
+// HELPERS
+// ======================================================
 
-    // Socket ile gönder
-    if (ioInstance) {
-      ioInstance.to(`user-${userId}`).emit('notification', {
-        id: notification.id,
-        title: notification.title,
-        message: notification.message,
-        type: notification.type,
-        link: notification.link,
-        read: notification.read,
-        created_at: notification.created_at,
-        metadata: notification.metadata,
+const findOwnedNotification =
+  async (
+    id,
+    userId
+  ) => {
+    if (
+      !id ||
+      !userId
+    ) {
+      throw new Error(
+        'Bildirim bulunamadı'
+      );
+    }
+
+    const notification =
+      await Notification.findOne({
+        where: {
+          id,
+          user_id:
+            userId,
+        },
+      });
+
+    if (
+      !notification
+    ) {
+      /*
+       * Burada özellikle "yetkiniz yok" demiyoruz.
+       *
+       * Böylece başka kullanıcıya ait bir notification
+       * ID'sinin gerçekten var olup olmadığını sızdırmıyoruz.
+       */
+      throw new Error(
+        'Bildirim bulunamadı'
+      );
+    }
+
+    return notification;
+  };
+
+// ======================================================
+// SERVICE
+// ======================================================
+
+export const notificationService = {
+  // ====================================================
+  // CREATE
+  // ====================================================
+
+  async create(
+    userId,
+    type,
+    title,
+    message,
+    link = null,
+    metadata = {}
+  ) {
+    const notification =
+      await Notification.create({
+        user_id:
+          userId,
+
+        type,
+
+        title,
+
+        message,
+
+        link,
+
+        metadata,
+
+        read:
+          false,
+      });
+
+    // ==================================================
+    // REAL-TIME SOCKET DELIVERY
+    // ==================================================
+
+    if (
+      ioInstance
+    ) {
+      ioInstance
+        .to(
+          `user-${userId}`
+        )
+        .emit(
+          'notification',
+          {
+            id:
+              notification.id,
+
+            title:
+              notification.title,
+
+            message:
+              notification.message,
+
+            type:
+              notification.type,
+
+            link:
+              notification.link,
+
+            read:
+              notification.read,
+
+            created_at:
+              notification.created_at,
+
+            metadata:
+              notification.metadata,
+          }
+        );
+    }
+
+    return notification;
+  },
+
+  // ====================================================
+  // USER NOTIFICATIONS
+  // ====================================================
+
+  async getByUser(
+    userId,
+    {
+      page = 1,
+      limit = 10,
+      read = null,
+    } = {}
+  ) {
+    const where = {
+      user_id:
+        userId,
+    };
+
+    if (
+      read !== null
+    ) {
+      where.read =
+        read;
+    }
+
+    const query =
+      paginate(
+        {
+          where,
+
+          order: [
+            [
+              'created_at',
+              'DESC',
+            ],
+          ],
+        },
+        page,
+        limit
+      );
+
+    const {
+      count,
+      rows,
+    } =
+      await Notification.findAndCountAll({
+        ...query,
+      });
+
+    const pagination =
+      getPaginationData(
+        count,
+        page,
+        limit
+      );
+
+    return {
+      data:
+        rows,
+
+      pagination,
+    };
+  },
+
+  // ====================================================
+  // UNREAD COUNT
+  // ====================================================
+
+  async getUnreadCount(
+    userId
+  ) {
+    return Notification.count({
+      where: {
+        user_id:
+          userId,
+
+        read:
+          false,
+      },
+    });
+  },
+
+  // ====================================================
+  // GET ONE
+  //
+  // SECURITY:
+  // Sadece notification sahibi erişebilir.
+  // ====================================================
+
+  async getOne(
+    id,
+    userId
+  ) {
+    return findOwnedNotification(
+      id,
+      userId
+    );
+  },
+
+  // ====================================================
+  // MARK AS READ
+  //
+  // SECURITY:
+  // Sadece notification sahibi değiştirebilir.
+  // ====================================================
+
+  async markAsRead(
+    id,
+    userId
+  ) {
+    const notification =
+      await findOwnedNotification(
+        id,
+        userId
+      );
+
+    if (
+      notification.read !==
+      true
+    ) {
+      await notification.update({
+        read:
+          true,
       });
     }
 
     return notification;
   },
 
-  // ✅ Kullanıcının bildirimlerini getir
-  async getByUser(userId, { page = 1, limit = 10, read = null }) {
-    const where = { user_id: userId };
+  // ====================================================
+  // MARK ALL AS READ
+  // ====================================================
 
-    if (read !== null) {
-      where.read = read;
-    }
+  async markAllAsRead(
+    userId
+  ) {
+    const [
+      affectedCount,
+    ] =
+      await Notification.update(
+        {
+          read:
+            true,
+        },
+        {
+          where: {
+            user_id:
+              userId,
 
-    const query = paginate({ where, order: [['created_at', 'DESC']] }, page, limit);
-    const { count, rows } = await Notification.findAndCountAll({
-      ...query,
-    });
-
-    const pagination = getPaginationData(count, page, limit);
+            read:
+              false,
+          },
+        }
+      );
 
     return {
-      data: rows,
-      pagination,
+      success:
+        true,
+
+      affected:
+        affectedCount,
     };
   },
 
-  // ✅ Okunmamış bildirim sayısı
-  async getUnreadCount(userId) {
-    return Notification.count({
-      where: {
-        user_id: userId,
-        read: false,
-      },
-    });
-  },
+  // ====================================================
+  // REMOVE ONE
+  //
+  // SECURITY:
+  // Sadece notification sahibi silebilir.
+  // ====================================================
 
-  // ✅ Tek bildirim getir
-  async getOne(id) {
-    const notification = await Notification.findByPk(id);
-    if (!notification) {
-      throw new Error('Bildirim bulunamadı');
-    }
-    return notification;
-  },
+  async remove(
+    id,
+    userId
+  ) {
+    const notification =
+      await findOwnedNotification(
+        id,
+        userId
+      );
 
-  // ✅ Okundu işaretle
-  async markAsRead(id) {
-    const notification = await Notification.findByPk(id);
-    if (!notification) {
-      throw new Error('Bildirim bulunamadı');
-    }
-    await notification.update({ read: true });
-    return notification;
-  },
-
-  // ✅ Tümünü okundu işaretle
-  async markAllAsRead(userId) {
-    await Notification.update(
-      { read: true },
-      {
-        where: {
-          user_id: userId,
-          read: false,
-        },
-      }
-    );
-    return { success: true };
-  },
-
-  // ✅ Bildirim sil
-  async remove(id) {
-    const notification = await Notification.findByPk(id);
-    if (!notification) {
-      throw new Error('Bildirim bulunamadı');
-    }
     await notification.destroy();
+
     return notification;
   },
 
-  // ✅ Tüm bildirimleri sil
-  async removeAll(userId) {
-    await Notification.destroy({
-      where: { user_id: userId },
-    });
-    return { success: true };
+  // ====================================================
+  // REMOVE ALL
+  // ====================================================
+
+  async removeAll(
+    userId
+  ) {
+    const deletedCount =
+      await Notification.destroy({
+        where: {
+          user_id:
+            userId,
+        },
+      });
+
+    return {
+      success:
+        true,
+
+      deleted:
+        deletedCount,
+    };
   },
 
-  // ============ TETİKLEYİCİLER ============
+  // ====================================================
+  // TRIGGERS
+  // ====================================================
 
-  // ✅ Görev atama bildirimi
-  async notifyTaskAssigned(userId, taskId, taskTitle, assignedBy) {
+  // Görev atama bildirimi
+  async notifyTaskAssigned(
+    userId,
+    taskId,
+    taskTitle,
+    assignedBy
+  ) {
     return this.create(
       userId,
       'task',
       '📋 Yeni Görev Atandı',
       `${assignedBy} size "${taskTitle}" görevini atadı.`,
       `/tasks/${taskId}`,
-      { taskId }
+      {
+        taskId,
+      }
     );
   },
 
-  // ✅ Duruşma hatırlatıcı
-  async notifyHearingReminder(userId, eventId, eventTitle, eventDate) {
-    const dateStr = new Date(eventDate).toLocaleDateString('tr-TR');
+  // Duruşma hatırlatıcı
+  async notifyHearingReminder(
+    userId,
+    eventId,
+    eventTitle,
+    eventDate
+  ) {
+    const dateStr =
+      new Date(
+        eventDate
+      ).toLocaleDateString(
+        'tr-TR'
+      );
+
     return this.create(
       userId,
       'event',
       '⚖️ Duruşma Hatırlatıcı',
       `"${eventTitle}" duruşmanız ${dateStr} tarihinde.`,
       `/events/${eventId}`,
-      { eventId, eventDate }
+      {
+        eventId,
+        eventDate,
+      }
     );
   },
 
-  // ✅ Toplantı hatırlatıcı
-  async notifyMeetingReminder(userId, meetingId, meetingTitle, meetingDate) {
-    const dateStr = new Date(meetingDate).toLocaleDateString('tr-TR');
+  // Toplantı hatırlatıcı
+  async notifyMeetingReminder(
+    userId,
+    meetingId,
+    meetingTitle,
+    meetingDate
+  ) {
+    const dateStr =
+      new Date(
+        meetingDate
+      ).toLocaleDateString(
+        'tr-TR'
+      );
+
     return this.create(
       userId,
       'event',
       '👤 Toplantı Hatırlatıcı',
       `"${meetingTitle}" toplantınız ${dateStr} tarihinde.`,
       `/meetings/${meetingId}`,
-      { meetingId, meetingDate }
+      {
+        meetingId,
+        meetingDate,
+      }
     );
   },
 
-  // ✅ Yeni belge bildirimi
-  async notifyDocumentUploaded(userId, documentId, documentName, uploadedBy, caseTitle) {
+  // Yeni belge bildirimi
+  async notifyDocumentUploaded(
+    userId,
+    documentId,
+    documentName,
+    uploadedBy,
+    caseTitle
+  ) {
+    const destination =
+      caseTitle
+        ? `${caseTitle} davasına`
+        : 'sisteme';
+
     return this.create(
       userId,
       'system',
       '📄 Yeni Belge Yüklendi',
-      `${uploadedBy} "${documentName}" belgesini ${caseTitle ? caseTitle + ' davasına' : ''} yükledi.`,
+      `${uploadedBy} "${documentName}" belgesini ${destination} yükledi.`,
       `/documents/${documentId}`,
-      { documentId }
+      {
+        documentId,
+      }
     );
   },
 
-  // ✅ Dava durumu değişikliği
-  async notifyCaseStatusChanged(userId, caseId, caseTitle, oldStatus, newStatus) {
+  // Dava durumu değişikliği
+  async notifyCaseStatusChanged(
+    userId,
+    caseId,
+    caseTitle,
+    oldStatus,
+    newStatus
+  ) {
     const statusMap = {
-      preparation: 'Hazırlık',
-      active: 'Devam Ediyor',
-      hearing: 'Duruşmada',
-      appeal: 'İstinaf',
-      cassation: 'Temyiz',
-      concluded: 'Sonuçlandı',
-      archived: 'Arşivlendi',
+      preparation:
+        'Hazırlık',
+
+      active:
+        'Devam Ediyor',
+
+      hearing:
+        'Duruşmada',
+
+      appeal:
+        'İstinaf',
+
+      cassation:
+        'Temyiz',
+
+      concluded:
+        'Sonuçlandı',
+
+      archived:
+        'Arşivlendi',
     };
+
     return this.create(
       userId,
       'system',
       '📁 Dava Durumu Değişti',
       `"${caseTitle}" davasının durumu "${statusMap[oldStatus] || oldStatus}" → "${statusMap[newStatus] || newStatus}" olarak değiştirildi.`,
       `/cases/${caseId}`,
-      { caseId, oldStatus, newStatus }
+      {
+        caseId,
+        oldStatus,
+        newStatus,
+      }
     );
   },
 };

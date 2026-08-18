@@ -1,41 +1,189 @@
-import { Router } from 'express';
-import { powerOfAttorneyController } from './powerOfAttorney.controller.js';
-import { authenticate } from '../../middlewares/auth.middleware.js';
-import { uploadSingle } from '../../middlewares/upload.middleware.js';  // ✅ EKLENDI
-import { validate } from '../../middlewares/validate.middleware.js';
-import { body } from 'express-validator';
+import {
+  Router,
+} from 'express';
 
-const router = Router();
+import {
+  powerOfAttorneyController,
+} from './powerOfAttorney.controller.js';
 
-// ✅ Validation Rules
+import {
+  authenticate,
+  authorizePermission,
+} from '../../middlewares/auth.middleware.js';
+
+import {
+  uploadSingle,
+} from '../../middlewares/upload.middleware.js';
+
+import {
+  validate,
+} from '../../middlewares/validate.middleware.js';
+
+import {
+  body,
+} from 'express-validator';
+
+import {
+  PERMISSION_KEYS,
+} from '../../constants/roles.js';
+
+const router =
+  Router();
+
+// ======================================================
+// VALIDATION
+// ======================================================
+
 const createValidation = [
-  body('client_id').notEmpty().withMessage('Müvekkil seçimi zorunludur'),
-  body('title').notEmpty().withMessage('Başlık zorunludur'),
+  body('client_id')
+    .notEmpty()
+    .withMessage(
+      'Müvekkil seçimi zorunludur'
+    ),
+
+  body('title')
+    .notEmpty()
+    .withMessage(
+      'Başlık zorunludur'
+    ),
 ];
 
 const updateValidation = [
-  body('title').optional().notEmpty().withMessage('Başlık boş olamaz'),
+  body('title')
+    .optional()
+    .notEmpty()
+    .withMessage(
+      'Başlık boş olamaz'
+    ),
 ];
 
-// ✅ Tüm rotalar auth gerektirir
-router.use(authenticate);
+// ======================================================
+// AUTH
+// ======================================================
 
-// 📋 Vekaletname İşlemleri
-router.get('/', powerOfAttorneyController.findAll);
-router.get('/statistics', powerOfAttorneyController.getStatistics);
-router.get('/client/:clientId', powerOfAttorneyController.findByClient);
-router.get('/:id', powerOfAttorneyController.findOne);
+router.use(
+  authenticate
+);
 
-// ✅ DOSYA YÜKLEME DESTEĞİ EKLENDI
+// ======================================================
+// LIST / STATISTICS
+//
+// Özel route'lar /:id'den önce tutulmalı.
+// ======================================================
+
+// Tüm vekaletnameleri listele
+router.get(
+  '/',
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_POWER_OF_ATTORNEY
+  ),
+
+  powerOfAttorneyController.findAll
+);
+
+// İstatistikler
+router.get(
+  '/statistics',
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_POWER_OF_ATTORNEY
+  ),
+
+  powerOfAttorneyController.getStatistics
+);
+
+// Müvekkile göre vekaletnameler
+router.get(
+  '/client/:clientId',
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_POWER_OF_ATTORNEY
+  ),
+
+  powerOfAttorneyController.findByClient
+);
+
+// ======================================================
+// CREATE
+// ======================================================
+
 router.post(
-  '/', 
-  uploadSingle('file'),  // ✅ 'file' input name ile eşleşmeli!
-  validate(createValidation), 
+  '/',
+
+  authorizePermission(
+    PERMISSION_KEYS.CREATE_POWER_OF_ATTORNEY
+  ),
+
+  uploadSingle(
+    'file'
+  ),
+
+  validate(
+    createValidation
+  ),
+
   powerOfAttorneyController.create
 );
 
-router.put('/:id', validate(updateValidation), powerOfAttorneyController.update);
-router.patch('/:id/status', powerOfAttorneyController.updateStatus);
-router.delete('/:id', powerOfAttorneyController.delete);
+// ======================================================
+// DETAIL
+// ======================================================
 
-export { router as powerOfAttorneyRoutes };
+// Tek vekaletname
+router.get(
+  '/:id',
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_POWER_OF_ATTORNEY
+  ),
+
+  powerOfAttorneyController.findOne
+);
+
+// ======================================================
+// UPDATE
+// ======================================================
+
+router.put(
+  '/:id',
+
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_POWER_OF_ATTORNEY
+  ),
+
+  validate(
+    updateValidation
+  ),
+
+  powerOfAttorneyController.update
+);
+
+// Durum değiştir
+router.patch(
+  '/:id/status',
+
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_POWER_OF_ATTORNEY
+  ),
+
+  powerOfAttorneyController.updateStatus
+);
+
+// ======================================================
+// DELETE
+// ======================================================
+
+router.delete(
+  '/:id',
+
+  authorizePermission(
+    PERMISSION_KEYS.DELETE_POWER_OF_ATTORNEY
+  ),
+
+  powerOfAttorneyController.delete
+);
+
+export {
+  router as powerOfAttorneyRoutes,
+};
