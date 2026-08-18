@@ -1,298 +1,343 @@
 @import "tailwindcss";
 
-/* ============ DARK MODE ============ */
+/* =========================================================
+   DERKENAR DESIGN SYSTEM
+   Tailwind CSS v4
+========================================================= */
+
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ============ LIGHT THEME (Varsayılan) ============ */
+/* =========================================================
+   DESIGN TOKENS
+========================================================= */
+
 :root {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-card: #ffffff;
-  --bg-header: #ffffff;
-  --bg-input: #f1f5f9;
-  --bg-hover: #f1f5f9;
-  
+  /* Backgrounds */
+  --app-bg: #f6f8fc;
+  --surface: #ffffff;
+  --surface-secondary: #f8fafc;
+  --surface-muted: #f1f5f9;
+  --surface-hover: #f8fafc;
+
+  /* Text */
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --text-muted: #94a3b8;
-  
-  --border-color: #e2e8f0;
-  --shadow-color: rgba(0, 0, 0, 0.05);
-  
-  --accent-blue: #3b82f6;
-  --accent-green: #22c55e;
-  --accent-red: #ef4444;
-  --accent-yellow: #eab308;
-  --accent-purple: #8b5cf6;
+
+  /* Borders */
+  --border-default: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  /* Brand */
+  --brand-50: #eff6ff;
+  --brand-100: #dbeafe;
+  --brand-500: #3b82f6;
+  --brand-600: #2563eb;
+  --brand-700: #1d4ed8;
+
+  /* Status */
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #2563eb;
+
+  /* Sidebar */
+  --sidebar-bg: #071b36;
+  --sidebar-bg-secondary: #0b2344;
+
+  /* Shadows */
+  --shadow-sm:
+    0 1px 2px rgba(15, 23, 42, 0.04);
+
+  --shadow-md:
+    0 4px 12px rgba(15, 23, 42, 0.06);
+
+  --shadow-lg:
+    0 12px 30px rgba(15, 23, 42, 0.08);
+
+  --shadow-xl:
+    0 20px 50px rgba(15, 23, 42, 0.12);
+
+  /* Radius */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+
+  /* Focus */
+  --focus-ring: rgba(37, 99, 235, 0.22);
 }
 
-/* ============ DARK THEME ============ */
+/* =========================================================
+   DARK THEME
+========================================================= */
+
 .dark {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-card: #1e293b;
-  --bg-header: #1e293b;
-  --bg-input: #334155;
-  --bg-hover: #334155;
-  
-  --text-primary: #f1f5f9;
+  --app-bg: #07111f;
+
+  --surface: #0d1b2e;
+  --surface-secondary: #10233d;
+  --surface-muted: #142a48;
+  --surface-hover: #172f50;
+
+  --text-primary: #f8fafc;
   --text-secondary: #cbd5e1;
-  --text-muted: #64748b;
-  
-  --border-color: #334155;
-  --shadow-color: rgba(0, 0, 0, 0.3);
-  
-  --accent-blue: #60a5fa;
-  --accent-green: #4ade80;
-  --accent-red: #f87171;
-  --accent-yellow: #facc15;
-  --accent-purple: #a78bfa;
+  --text-muted: #71839c;
+
+  --border-default: rgba(148, 163, 184, 0.14);
+  --border-strong: rgba(148, 163, 184, 0.25);
+
+  --brand-50: rgba(37, 99, 235, 0.1);
+  --brand-100: rgba(37, 99, 235, 0.18);
+  --brand-500: #60a5fa;
+  --brand-600: #3b82f6;
+  --brand-700: #2563eb;
+
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --info: #60a5fa;
+
+  --shadow-sm:
+    0 1px 2px rgba(0, 0, 0, 0.24);
+
+  --shadow-md:
+    0 6px 16px rgba(0, 0, 0, 0.24);
+
+  --shadow-lg:
+    0 16px 40px rgba(0, 0, 0, 0.3);
+
+  --shadow-xl:
+    0 24px 60px rgba(0, 0, 0, 0.38);
+
+  --focus-ring: rgba(96, 165, 250, 0.25);
 }
 
-/* ============ BASE STYLES ============ */
-* {
-  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+/* =========================================================
+   DOCUMENT
+========================================================= */
+
+html {
+  min-height: 100%;
+  background: var(--app-bg);
+  color-scheme: light;
+  scroll-behavior: smooth;
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 body {
-  background-color: var(--bg-primary);
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(59, 130, 246, 0.035),
+      transparent 28rem
+    ),
+    var(--app-bg);
+
   color: var(--text-primary);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ============ SCROLLBAR ============ */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+.dark body {
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(37, 99, 235, 0.08),
+      transparent 32rem
+    ),
+    var(--app-bg);
 }
 
-::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
+#root {
+  min-height: 100vh;
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--text-muted);
-  border-radius: 4px;
+/* =========================================================
+   SELECTION
+========================================================= */
+
+::selection {
+  background: rgba(37, 99, 235, 0.18);
+  color: inherit;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+/* =========================================================
+   FOCUS ACCESSIBILITY
+========================================================= */
+
+:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
 }
 
-/* ============ CARDS ============ */
-.bg-white,
-.bg-card {
-  background-color: var(--bg-card) !important;
-}
-
-/* ============ HEADER ============ */
-.bg-white.shadow-sm {
-  background-color: var(--bg-header) !important;
-  border-bottom: 1px solid var(--border-color);
-}
-
-/* ============ TEXT COLORS ============ */
-.text-gray-900,
-.text-gray-800 {
-  color: var(--text-primary) !important;
-}
-
-.text-gray-700 {
-  color: var(--text-secondary) !important;
-}
-
-.text-gray-600 {
-  color: var(--text-secondary) !important;
-}
-
-.text-gray-500 {
-  color: var(--text-muted) !important;
-}
-
-.text-gray-400 {
-  color: var(--text-muted) !important;
-}
-
-/* ============ BORDER COLORS ============ */
-.border-gray-200,
-.border-gray-300 {
-  border-color: var(--border-color) !important;
-}
-
-.border-b,
-.border-t {
-  border-color: var(--border-color) !important;
-}
-
-/* ============ SHADOWS ============ */
-.shadow-sm,
-.shadow-md,
-.shadow-lg {
-  box-shadow: 0 1px 3px var(--shadow-color), 0 1px 2px var(--shadow-color) !important;
-}
-
-.shadow-md {
-  box-shadow: 0 4px 6px var(--shadow-color) !important;
-}
-
-.shadow-lg {
-  box-shadow: 0 10px 15px var(--shadow-color) !important;
-}
-
-/* ============ INPUTS & SELECTS ============ */
+button,
+a,
 input,
 select,
 textarea {
-  background-color: var(--bg-input) !important;
-  color: var(--text-primary) !important;
-  border-color: var(--border-color) !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* =========================================================
+   FORM ELEMENTS
+========================================================= */
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  accent-color: var(--brand-600);
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: var(--text-muted) !important;
+  color: var(--text-muted);
 }
 
-input:focus,
-select:focus,
-textarea:focus {
-  border-color: var(--accent-blue) !important;
-  ring-color: var(--accent-blue) !important;
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
 }
 
-/* ============ HOVER EFFECTS ============ */
-.hover\:bg-gray-100:hover {
-  background-color: var(--bg-hover) !important;
+textarea {
+  resize: vertical;
 }
 
-.hover\:bg-gray-50:hover {
-  background-color: var(--bg-hover) !important;
+/* Chrome autofill */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-primary);
+  transition: background-color 9999s ease-in-out 0s;
 }
 
-/* ============ DROPDOWN ============ */
-.dark .bg-white.rounded-lg.shadow-lg {
-  background-color: var(--bg-card) !important;
-  border: 1px solid var(--border-color);
+/* =========================================================
+   BUTTON RESET
+========================================================= */
+
+button {
+  border: 0;
 }
 
-/* ============ TABLE ============ */
-table {
-  background-color: var(--bg-card) !important;
+button:not(:disabled) {
+  cursor: pointer;
 }
 
-thead {
-  background-color: var(--bg-secondary) !important;
-}
+/* =========================================================
+   LINKS
+========================================================= */
 
-tbody tr:hover {
-  background-color: var(--bg-hover) !important;
-}
-
-/* ============ BADGE VARIANTS ============ */
-.dark .bg-blue-100 {
-  background-color: #1e3a5f !important;
-  color: #93c5fd !important;
-}
-
-.dark .bg-green-100 {
-  background-color: #14532d !important;
-  color: #86efac !important;
-}
-
-.dark .bg-red-100 {
-  background-color: #7f1d1d !important;
-  color: #fca5a5 !important;
-}
-
-.dark .bg-yellow-100 {
-  background-color: #713f12 !important;
-  color: #fcd34d !important;
-}
-
-.dark .bg-purple-100 {
-  background-color: #3b1f6e !important;
-  color: #c4b5fd !important;
-}
-
-.dark .bg-gray-100 {
-  background-color: #374151 !important;
-  color: #d1d5db !important;
-}
-
-/* ============ BUTTONS ============ */
-.dark .bg-blue-600 {
-  background-color: #2563eb !important;
-}
-
-.dark .bg-blue-600:hover {
-  background-color: #1d4ed8 !important;
-}
-
-.dark .bg-gray-200 {
-  background-color: #374151 !important;
-  color: #f1f5f9 !important;
-}
-
-.dark .bg-gray-200:hover {
-  background-color: #4b5563 !important;
-}
-
-/* ============ ACCENT COLORS ============ */
-.text-blue-600 {
-  color: var(--accent-blue) !important;
-}
-
-.text-green-600 {
-  color: var(--accent-green) !important;
-}
-
-.text-red-600 {
-  color: var(--accent-red) !important;
-}
-
-.text-yellow-600 {
-  color: var(--accent-yellow) !important;
-}
-
-.text-purple-600 {
-  color: var(--accent-purple) !important;
-}
-
-/* ============ LINKS ============ */
 a {
-  color: var(--accent-blue);
+  text-decoration: none;
 }
 
-a:hover {
-  color: var(--accent-blue);
-  opacity: 0.8;
+/*
+  Link rengini global olarak zorlamıyoruz.
+
+  Çünkü:
+  - sidebar linkleri beyaz olabilir
+  - danger link kırmızı olabilir
+  - kart linkleri mavi olabilir
+
+  Renk Tailwind component class'ından gelsin.
+*/
+
+/* =========================================================
+   TABLE
+========================================================= */
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
-/* ============ MODAL ============ */
-.dark .bg-white.rounded-lg {
-  background-color: var(--bg-card) !important;
-  border: 1px solid var(--border-color);
+th {
+  font-weight: 600;
 }
 
-/* ============ NOTIFICATIONS ============ */
-.dark .bg-red-500 {
-  background-color: #dc2626 !important;
+tbody tr {
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease;
 }
 
-/* ============ SIDEBAR PATTERN ============ */
-.sidebar-pattern {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: 220px;
-  background: radial-gradient(ellipse at bottom left, rgba(255, 255, 255, 0.03) 0%, transparent 70%);
-  pointer-events: none;
+/* =========================================================
+   SCROLLBAR
+========================================================= */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color:
+    rgba(148, 163, 184, 0.55)
+    transparent;
 }
 
-/* ============ SIDEBAR SCROLL ============ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.72);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.7);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.85);
+}
+
+/* =========================================================
+   SIDEBAR SCROLLBAR
+========================================================= */
+
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color:
+    rgba(255, 255, 255, 0.08)
+    transparent;
+}
+
 .sidebar-scroll::-webkit-scrollbar {
-  width: 3px;
+  width: 4px;
 }
 
 .sidebar-scroll::-webkit-scrollbar-track {
@@ -301,36 +346,228 @@ a:hover {
 
 .sidebar-scroll::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  border-radius: 999px;
 }
 
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.16);
 }
 
-/* ============ SCROLLBAR GENEL ============ */
-::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+/* =========================================================
+   SIDEBAR DECORATION
+========================================================= */
+
+.sidebar-pattern {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+
+  height: 280px;
+
+  pointer-events: none;
+
+  background:
+    radial-gradient(
+      ellipse at bottom left,
+      rgba(96, 165, 250, 0.08) 0%,
+      rgba(37, 99, 235, 0.03) 35%,
+      transparent 72%
+    );
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+/* =========================================================
+   APP SURFACE UTILITIES
+========================================================= */
+
+.app-surface {
+  background: var(--surface);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-sm);
 }
 
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 10px;
+.app-surface-hover {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+.app-surface-hover:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
 }
 
-.dark ::-webkit-scrollbar-thumb {
-  background: #334155;
+/* =========================================================
+   GLASS SURFACE
+========================================================= */
+
+.glass-surface {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+
+  box-shadow: var(--shadow-md);
 }
 
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+.dark .glass-surface {
+  background: rgba(13, 27, 46, 0.76);
+  border-color: rgba(148, 163, 184, 0.1);
+}
+
+/* =========================================================
+   SOFT GRID BACKGROUND
+========================================================= */
+
+.app-grid-pattern {
+  background-image:
+    linear-gradient(
+      rgba(148, 163, 184, 0.045) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(148, 163, 184, 0.045) 1px,
+      transparent 1px
+    );
+
+  background-size: 32px 32px;
+}
+
+/* =========================================================
+   STATUS DOTS
+========================================================= */
+
+.status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+}
+
+.status-dot-success {
+  background: var(--success);
+  box-shadow:
+    0 0 0 4px rgba(34, 197, 94, 0.1);
+}
+
+.status-dot-danger {
+  background: var(--danger);
+  box-shadow:
+    0 0 0 4px rgba(239, 68, 68, 0.1);
+}
+
+/* =========================================================
+   SKELETON
+========================================================= */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-muted);
+}
+
+.skeleton::after {
+  position: absolute;
+  inset: 0;
+
+  content: "";
+
+  transform: translateX(-100%);
+
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.35),
+    transparent
+  );
+
+  animation:
+    skeleton-loading
+    1.4s
+    infinite;
+}
+
+.dark .skeleton::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.05),
+    transparent
+  );
+}
+
+@keyframes skeleton-loading {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* =========================================================
+   ROUTE / PAGE TRANSITION
+========================================================= */
+
+.page-enter {
+  animation:
+    page-enter
+    180ms
+    ease-out;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================================
+   MOTION ACCESSIBILITY
+========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* =========================================================
+   PRINT
+   Hukuk uygulaması için önemli.
+========================================================= */
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  aside,
+  header,
+  nav,
+  button,
+  .no-print {
+    display: none !important;
+  }
+
+  main {
+    overflow: visible !important;
+  }
+
+  .print-card {
+    border: 1px solid #d1d5db !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
 }
