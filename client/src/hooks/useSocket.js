@@ -14,8 +14,7 @@ import {
   useAuth,
 } from '../app/providers/auth.provider.jsx';
 
-import env from '../config/env.js';
-
+import env from "../app/config/env.js";
 // ======================================================
 // HELPERS
 // ======================================================
