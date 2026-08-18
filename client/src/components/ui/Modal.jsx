@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useId,
   useRef,
 } from 'react';
 
@@ -18,37 +17,32 @@ const Modal = ({
   className = '',
   closeOnBackdrop = true,
 }) => {
-  const modalRef = useRef(null);
-  const titleId = useId();
+  const modalRef =
+    useRef(null);
 
   useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-
-    const previousOverflow =
-      document.body.style.overflow;
-
-    const previouslyFocusedElement =
-      document.activeElement;
-
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') {
+    const handleEscape = (
+      event
+    ) => {
+      if (
+        event.key ===
+        'Escape'
+      ) {
         onClose?.();
       }
     };
 
-    document.addEventListener(
-      'keydown',
-      handleEscape
-    );
+    if (
+      isOpen
+    ) {
+      document.addEventListener(
+        'keydown',
+        handleEscape
+      );
 
-    document.body.style.overflow =
-      'hidden';
-
-    requestAnimationFrame(() => {
-      modalRef.current?.focus();
-    });
+      document.body.style.overflow =
+        'hidden';
+    }
 
     return () => {
       document.removeEventListener(
@@ -57,15 +51,7 @@ const Modal = ({
       );
 
       document.body.style.overflow =
-        previousOverflow;
-
-      if (
-        previouslyFocusedElement &&
-        typeof previouslyFocusedElement.focus ===
-          'function'
-      ) {
-        previouslyFocusedElement.focus();
-      }
+        '';
     };
   }, [
     isOpen,
@@ -80,14 +66,18 @@ const Modal = ({
     full: 'max-w-6xl',
   };
 
-  if (!isOpen) {
+  if (
+    !isOpen
+  ) {
     return null;
   }
 
-  const handleBackdropMouseDown = (
+  const handleBackdropClick = (
     event
   ) => {
-    if (!closeOnBackdrop) {
+    if (
+      !closeOnBackdrop
+    ) {
       return;
     }
 
@@ -107,24 +97,9 @@ const Modal = ({
         z-50
         overflow-y-auto
       "
-      aria-hidden={!isOpen}
     >
-      {/* BACKDROP */}
       <div
         className="
-          fixed
-          inset-0
-          bg-slate-950/60
-          backdrop-blur-[3px]
-        "
-        aria-hidden="true"
-      />
-
-      {/* POSITIONER */}
-      <div
-        className="
-          relative
-          z-10
           flex
           min-h-full
           items-center
@@ -133,69 +108,62 @@ const Modal = ({
           sm:p-6
         "
         onMouseDown={
-          handleBackdropMouseDown
+          handleBackdropClick
         }
       >
+        {/* BACKDROP */}
+        <div
+          className="
+            fixed
+            inset-0
+            bg-slate-950/55
+            backdrop-blur-[3px]
+          "
+          aria-hidden="true"
+        />
+
         {/* MODAL */}
         <div
-          ref={modalRef}
+          ref={
+            modalRef
+          }
           role="dialog"
           aria-modal="true"
-          aria-labelledby={
-            title
-              ? titleId
-              : undefined
-          }
-          tabIndex={-1}
           className={`
             relative
+            z-10
             w-full
             ${sizes[size] || sizes.md}
-
             overflow-hidden
             rounded-2xl
             border
-            border-gray-200/80
+            border-gray-200
             bg-white
-
-            shadow-[0_24px_80px_rgba(15,23,42,0.28)]
-
-            outline-none
-
+            shadow-[0_24px_80px_rgba(15,23,42,0.25)]
             dark:border-white/[0.08]
             dark:bg-[#0b1b33]
-            dark:shadow-[0_28px_90px_rgba(0,0,0,0.45)]
-
             ${className}
           `}
-          onMouseDown={(event) =>
-            event.stopPropagation()
-          }
         >
           {/* HEADER */}
           {(title || onClose) && (
             <div
               className="
                 flex
-                min-h-[64px]
                 items-center
                 justify-between
                 gap-4
-
                 border-b
                 border-gray-100
                 px-5
                 py-4
-
                 dark:border-white/[0.06]
-
                 md:px-6
               "
             >
               <div className="min-w-0">
                 {title && (
                   <h3
-                    id={titleId}
                     className="
                       truncate
                       text-base
@@ -210,45 +178,31 @@ const Modal = ({
                 )}
               </div>
 
-              {onClose && (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="
-                    inline-flex
-                    h-9
-                    w-9
-                    shrink-0
-                    items-center
-                    justify-center
-
-                    rounded-lg
-                    border
-                    border-transparent
-
-                    text-gray-400
-
-                    transition-all
-                    duration-150
-
-                    hover:border-gray-200
-                    hover:bg-gray-100
-                    hover:text-gray-700
-
-                    focus-visible:outline-none
-                    focus-visible:ring-2
-                    focus-visible:ring-blue-500/40
-
-                    dark:text-slate-500
-                    dark:hover:border-white/[0.08]
-                    dark:hover:bg-white/[0.05]
-                    dark:hover:text-white
-                  "
-                  aria-label="Kapat"
-                >
-                  <X size={18} />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={
+                  onClose
+                }
+                className="
+                  inline-flex
+                  h-8
+                  w-8
+                  shrink-0
+                  items-center
+                  justify-center
+                  rounded-lg
+                  text-gray-400
+                  transition
+                  hover:bg-gray-100
+                  hover:text-gray-700
+                  dark:text-slate-500
+                  dark:hover:bg-white/[0.05]
+                  dark:hover:text-white
+                "
+                aria-label="Kapat"
+              >
+                <X size={18} />
+              </button>
             </div>
           )}
 
@@ -259,9 +213,7 @@ const Modal = ({
               overflow-y-auto
               px-5
               py-5
-
               md:px-6
-              md:py-6
             "
           >
             {children}
@@ -276,16 +228,13 @@ const Modal = ({
                 items-center
                 justify-end
                 gap-2
-
                 border-t
                 border-gray-100
                 bg-gray-50/60
                 px-5
                 py-4
-
                 dark:border-white/[0.06]
                 dark:bg-white/[0.015]
-
                 md:px-6
               "
             >

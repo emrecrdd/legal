@@ -10,13 +10,11 @@ const Table = ({
         overflow-hidden
         rounded-2xl
         border
-        border-gray-200/80
+        border-gray-200
         bg-white
-        shadow-[0_1px_2px_rgba(15,23,42,0.02),0_4px_16px_rgba(15,23,42,0.025)]
-
+        shadow-[0_1px_2px_rgba(15,23,42,0.02)]
         dark:border-white/[0.07]
         dark:bg-[#0b1b33]
-        dark:shadow-none
       "
     >
       <div className="overflow-x-auto">
@@ -25,7 +23,6 @@ const Table = ({
             min-w-full
             border-separate
             border-spacing-0
-            text-left
             ${className}
           `}
           {...props}
@@ -40,7 +37,6 @@ const Table = ({
 Table.Head = ({
   children,
   className = '',
-  ...props
 }) => (
   <thead
     className={`
@@ -48,7 +44,6 @@ Table.Head = ({
       dark:bg-white/[0.025]
       ${className}
     `}
-    {...props}
   >
     {children}
   </thead>
@@ -57,7 +52,6 @@ Table.Head = ({
 Table.Body = ({
   children,
   className = '',
-  ...props
 }) => (
   <tbody
     className={`
@@ -65,7 +59,6 @@ Table.Body = ({
       dark:bg-transparent
       ${className}
     `}
-    {...props}
   >
     {children}
   </tbody>
@@ -80,15 +73,15 @@ Table.Row = ({
   <tr
     className={`
       group
+      border-b
+      border-gray-100
       transition-colors
-      duration-150
+      last:border-b-0
+      dark:border-white/[0.05]
 
       ${
         hover
-          ? `
-            hover:bg-gray-50/80
-            dark:hover:bg-white/[0.025]
-          `
+          ? 'hover:bg-gray-50/70 dark:hover:bg-white/[0.025]'
           : ''
       }
 
@@ -109,25 +102,18 @@ Table.HeadCell = ({
     className={`
       whitespace-nowrap
       border-b
-      border-gray-200/80
+      border-gray-100
       px-4
-      py-3.5
-
+      py-3
       text-left
-      text-[11px]
-      font-semibold
+      text-[10px]
+      font-bold
       uppercase
-      tracking-[0.07em]
-      text-gray-500
-
-      first:pl-5
-      last:pr-5
-
+      tracking-[0.08em]
+      text-gray-400
       dark:border-white/[0.06]
-      dark:text-slate-400
-
+      dark:text-slate-500
       md:px-5
-
       ${className}
     `}
     {...props}
@@ -146,22 +132,13 @@ Table.Cell = ({
       border-b
       border-gray-100
       px-4
-      py-4
-
-      align-middle
+      py-3.5
       text-sm
       text-gray-700
-
-      first:pl-5
-      last:pr-5
-
+      last:border-b-0
       dark:border-white/[0.05]
       dark:text-slate-300
-
-      group-last:border-b-0
-
       md:px-5
-
       ${className}
     `}
     {...props}
