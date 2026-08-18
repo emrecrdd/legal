@@ -1,5 +1,5 @@
 import axios from '../../app/config/axios.js';
-import { API_ROUTES } from '../../constants/api-routes.js';
+import { API_ROUTES } from '../../constants/apiRoutes.js';
 
 const {
   DOCUMENTS,
