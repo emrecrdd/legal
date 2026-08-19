@@ -11,10 +11,6 @@ import {
 } from 'react-router-dom';
 
 import {
-  useUsers,
-} from '../../features/users/user.query.js';
-
-import {
   useCases,
 } from '../../features/cases/case.query.js';
 
@@ -24,11 +20,17 @@ import {
 
 import {
   useCreateTask,
+  useAssignableUsers,
 } from '../../features/tasks/task.query.js';
 
 import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
 
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
@@ -55,7 +57,6 @@ import {
 const INITIAL_FORM = {
   title: '',
   description: '',
-  status: 'pending',
   priority: 'normal',
   due_date: '',
   assigned_to: '',
@@ -71,25 +72,6 @@ const VALID_PRIORITIES = new Set([
   'high',
   'critical',
 ]);
-
-const STATUS_OPTIONS = [
-  {
-    value: 'pending',
-    label: 'Bekliyor',
-  },
-  {
-    value: 'in_progress',
-    label: 'Devam Ediyor',
-  },
-  {
-    value: 'completed',
-    label: 'Tamamlandı',
-  },
-  {
-    value: 'cancelled',
-    label: 'İptal',
-  },
-];
 
 const PRIORITY_OPTIONS = [
   {
@@ -121,15 +103,6 @@ const normalizeDateTimeLocal = (
     return '';
   }
 
-  /*
-   * datetime-local:
-   * YYYY-MM-DDTHH:mm
-   *
-   * URL'den tam ISO gelirse:
-   * 2026-08-17T14:30:00.000Z
-   *
-   * input'a uygun hale getiriyoruz.
-   */
   if (
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(
       value
@@ -210,6 +183,28 @@ const TaskCreate = () => {
     useState({});
 
   // ====================================================
+  // PERMISSIONS
+  // ====================================================
+
+  const canAssignTasks =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.ASSIGN_TASKS
+    );
+
+  const canViewCases =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_CASES
+    );
+
+  const canViewClients =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_CLIENTS
+    );
+
+  // ====================================================
   // QUERY PARAM PREFILL
   // ====================================================
 
@@ -288,11 +283,13 @@ const TaskCreate = () => {
 
   const {
     data:
-      usersData,
+      assignableUsersData,
     isLoading:
-      usersLoading,
+      assignableUsersLoading,
   } =
-    useUsers();
+    useAssignableUsers(
+      canAssignTasks
+    );
 
   const {
     data:
@@ -317,11 +314,15 @@ const TaskCreate = () => {
   const createMutation =
     useCreateTask();
 
-  const users =
+  const assignableUsers =
     Array.isArray(
-      usersData?.data?.data
+      assignableUsersData
+        ?.data
+        ?.data
     )
-      ? usersData.data.data
+      ? assignableUsersData
+          .data
+          .data
       : [];
 
   const cases =
@@ -400,12 +401,20 @@ const TaskCreate = () => {
           current.estimated_hours,
 
         case_id:
-          prefillData.case_id ||
-          current.case_id,
+          canViewCases
+            ? (
+                prefillData.case_id ||
+                current.case_id
+              )
+            : '',
 
         client_id:
-          prefillData.client_id ||
-          current.client_id,
+          canViewClients
+            ? (
+                prefillData.client_id ||
+                current.client_id
+              )
+            : '',
 
         note:
           prefillData.note ||
@@ -415,16 +424,20 @@ const TaskCreate = () => {
   }, [
     prefillData,
     isAiPrefill,
+    canViewCases,
+    canViewClients,
   ]);
 
   // ====================================================
-  // NON-ADMIN => SELF ASSIGN
+  // DEFAULT ASSIGNEE
+  //
+  // assign_tasks yoksa kullanıcı yalnızca kendisine
+  // görev oluşturur.
   // ====================================================
 
   useEffect(() => {
     if (
-      user?.role !==
-        'admin' &&
+      !canAssignTasks &&
       user?.id
     ) {
       setFormData(
@@ -438,33 +451,9 @@ const TaskCreate = () => {
       );
     }
   }, [
-    user,
+    canAssignTasks,
+    user?.id,
   ]);
-
-  // ====================================================
-  // ASSIGNABLE USERS
-  // ====================================================
-
-  const assignableUsers =
-    useMemo(() => {
-      if (
-        user?.role ===
-        'admin'
-      ) {
-        return users;
-      }
-
-      return users.filter(
-        (
-          person
-        ) =>
-          person.id ===
-          user?.id
-      );
-    }, [
-      users,
-      user,
-    ]);
 
   // ====================================================
   // SELECTED DATA
@@ -511,6 +500,30 @@ const TaskCreate = () => {
         value,
       } =
         event.target;
+
+      if (
+        name ===
+          'assigned_to' &&
+        !canAssignTasks
+      ) {
+        return;
+      }
+
+      if (
+        name ===
+          'case_id' &&
+        !canViewCases
+      ) {
+        return;
+      }
+
+      if (
+        name ===
+          'client_id' &&
+        !canViewClients
+      ) {
+        return;
+      }
 
       setFormData(
         (
@@ -577,15 +590,16 @@ const TaskCreate = () => {
         return;
       }
 
+      /*
+       * assign_tasks yoksa frontend her zaman
+       * oturum açmış kullanıcıyı gönderir.
+       */
       const assignedTo =
-        user?.role !==
-        'admin'
-          ? user?.id
-          : formData.assigned_to;
+        canAssignTasks
+          ? formData.assigned_to
+          : user?.id;
 
       const submitData = {
-        ...formData,
-
         title:
           formData.title.trim(),
 
@@ -593,6 +607,17 @@ const TaskCreate = () => {
           formData.description
             ?.trim() ||
           null,
+
+        /*
+         * Yeni görev workflow'a pending olarak girer.
+         * Status daha sonra start/complete/approve
+         * endpointleri üzerinden ilerler.
+         */
+        status:
+          'pending',
+
+        priority:
+          formData.priority,
 
         note:
           formData.note
@@ -604,12 +629,20 @@ const TaskCreate = () => {
           null,
 
         case_id:
-          formData.case_id ||
-          null,
+          canViewCases
+            ? (
+                formData.case_id ||
+                null
+              )
+            : null,
 
         client_id:
-          formData.client_id ||
-          null,
+          canViewClients
+            ? (
+                formData.client_id ||
+                null
+              )
+            : null,
 
         due_date:
           formData.due_date ||
@@ -654,6 +687,7 @@ const TaskCreate = () => {
   const handleCancel =
     () => {
       if (
+        canViewCases &&
         formData.case_id
       ) {
         navigate(
@@ -1008,7 +1042,7 @@ const TaskCreate = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Durum, öncelik, son tarih ve tahmini çalışma süresi
+                  Öncelik, son tarih ve tahmini çalışma süresi
                 </p>
 
               </div>
@@ -1019,62 +1053,7 @@ const TaskCreate = () => {
 
           <Card.Body className="space-y-5">
 
-            <div className="grid gap-4 md:grid-cols-3">
-
-              {/* STATUS */}
-
-              <div>
-
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Durum
-                </label>
-
-                <select
-                  name="status"
-                  value={
-                    formData.status
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  className="
-                    h-10
-                    w-full
-                    rounded-lg
-                    border
-                    border-gray-200
-                    bg-white
-                    px-3.5
-                    text-sm
-                    text-gray-700
-                    outline-none
-                    focus:border-blue-500
-                    focus:ring-2
-                    focus:ring-blue-500/10
-                    dark:border-white/[0.08]
-                    dark:bg-white/[0.035]
-                    dark:text-slate-300
-                  "
-                >
-                  {STATUS_OPTIONS.map(
-                    (
-                      option
-                    ) => (
-                      <option
-                        key={
-                          option.value
-                        }
-                        value={
-                          option.value
-                        }
-                      >
-                        {option.label}
-                      </option>
-                    )
-                  )}
-                </select>
-
-              </div>
+            <div className="grid gap-4 md:grid-cols-2">
 
               {/* PRIORITY */}
 
@@ -1192,8 +1171,6 @@ const TaskCreate = () => {
 
             </div>
 
-            {/* ESTIMATED HOURS */}
-
             <div className="max-w-xs">
 
               <Input
@@ -1217,6 +1194,10 @@ const TaskCreate = () => {
                 }
               />
 
+            </div>
+
+            <div className="rounded-lg bg-gray-50 px-3 py-2.5 text-xs text-gray-500 dark:bg-white/[0.025] dark:text-slate-400">
+              Yeni görev <strong>Bekliyor</strong> durumunda oluşturulur. Görev durumu daha sonra görev iş akışından değiştirilir.
             </div>
 
           </Card.Body>
@@ -1268,8 +1249,7 @@ const TaskCreate = () => {
 
           <Card.Body>
 
-            {user?.role ===
-            'admin' ? (
+            {canAssignTasks ? (
               <div>
 
                 <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
@@ -1285,7 +1265,7 @@ const TaskCreate = () => {
                     handleChange
                   }
                   disabled={
-                    usersLoading
+                    assignableUsersLoading
                   }
                   className="
                     h-10
@@ -1309,7 +1289,7 @@ const TaskCreate = () => {
                   "
                 >
                   <option value="">
-                    {usersLoading
+                    {assignableUsersLoading
                       ? 'Kullanıcılar yükleniyor...'
                       : 'Atanacak kişi seçin'}
                   </option>
@@ -1388,6 +1368,10 @@ const TaskCreate = () => {
                       {getRoleLabel(
                         user?.role
                       )}
+                    </p>
+
+                    <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                      Başka kullanıcıya görev atama yetkiniz olmadığı için görev size atanacaktır.
                     </p>
 
                   </div>
@@ -1472,7 +1456,8 @@ const TaskCreate = () => {
                     handleChange
                   }
                   disabled={
-                    casesLoading
+                    casesLoading ||
+                    !canViewCases
                   }
                   className="
                     h-10
@@ -1496,30 +1481,34 @@ const TaskCreate = () => {
                   "
                 >
                   <option value="">
-                    {casesLoading
-                      ? 'Davalar yükleniyor...'
-                      : 'Dava seçin (isteğe bağlı)'}
+                    {!canViewCases
+                      ? 'Dava görüntüleme yetkiniz yok'
+                      : casesLoading
+                        ? 'Davalar yükleniyor...'
+                        : 'Dava seçin (isteğe bağlı)'}
                   </option>
 
-                  {cases.map(
-                    (
-                      caseItem
-                    ) => (
-                      <option
-                        key={
-                          caseItem.id
-                        }
-                        value={
-                          caseItem.id
-                        }
-                      >
-                        {caseItem.title}
-                      </option>
-                    )
-                  )}
+                  {canViewCases &&
+                    cases.map(
+                      (
+                        caseItem
+                      ) => (
+                        <option
+                          key={
+                            caseItem.id
+                          }
+                          value={
+                            caseItem.id
+                          }
+                        >
+                          {caseItem.title}
+                        </option>
+                      )
+                    )}
                 </select>
 
                 {isAiPrefill &&
+                  canViewCases &&
                   formData.case_id && (
                     <div className="mt-2 flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400">
 
@@ -1576,7 +1565,8 @@ const TaskCreate = () => {
                     handleChange
                   }
                   disabled={
-                    clientsLoading
+                    clientsLoading ||
+                    !canViewClients
                   }
                   className="
                     h-10
@@ -1600,30 +1590,33 @@ const TaskCreate = () => {
                   "
                 >
                   <option value="">
-                    {clientsLoading
-                      ? 'Müvekkiller yükleniyor...'
-                      : 'Müvekkil seçin (isteğe bağlı)'}
+                    {!canViewClients
+                      ? 'Müvekkil görüntüleme yetkiniz yok'
+                      : clientsLoading
+                        ? 'Müvekkiller yükleniyor...'
+                        : 'Müvekkil seçin (isteğe bağlı)'}
                   </option>
 
-                  {clients.map(
-                    (
-                      client
-                    ) => (
-                      <option
-                        key={
-                          client.id
-                        }
-                        value={
-                          client.id
-                        }
-                      >
-                        {client.name}
-                        {client.company_name
-                          ? ` · ${client.company_name}`
-                          : ''}
-                      </option>
-                    )
-                  )}
+                  {canViewClients &&
+                    clients.map(
+                      (
+                        client
+                      ) => (
+                        <option
+                          key={
+                            client.id
+                          }
+                          value={
+                            client.id
+                          }
+                        >
+                          {client.name}
+                          {client.company_name
+                            ? ` · ${client.company_name}`
+                            : ''}
+                        </option>
+                      )
+                    )}
                 </select>
 
                 {selectedClient && (
@@ -1725,6 +1718,9 @@ const TaskCreate = () => {
           <Button
             type="submit"
             loading={
+              createMutation.isPending
+            }
+            disabled={
               createMutation.isPending
             }
           >

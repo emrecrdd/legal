@@ -18,7 +18,10 @@ import {
   useTaskNotes,
   useUpdateProgress,
 } from '../../features/tasks/task.query.js';
-
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
 import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
@@ -293,77 +296,160 @@ const TaskDetail = () => {
   // PERMISSIONS
   // ======================================================
 
-  const permissions =
-    useMemo(() => {
-      if (
-        !task ||
-        !user
-      ) {
-        return {
-          isAdmin: false,
-          isAssignee: false,
-          isCreator: false,
-          canStart: false,
-          canComplete: false,
-          canApprove: false,
-          canUpdateProgress: false,
-          canAddNote: false,
-        };
-      }
+  // ======================================================
+// PERMISSIONS
+//
+// İki katmanlı kontrol:
+//
+// 1. Kullanıcının sistem yetkisi var mı?
+// 2. Bu görev üzerinde işlem yapma koşulu sağlanıyor mu?
+// ======================================================
 
-      const isAdmin =
-        user.role ===
-        'admin';
-
-      const isAssignee =
-        task.assigned_to ===
-        user.id;
-
-      const isCreator =
-        task.created_by ===
-        user.id;
-
+const permissions =
+  useMemo(() => {
+    if (
+      !task ||
+      !user
+    ) {
       return {
-        isAdmin,
-        isAssignee,
-        isCreator,
+        isAssignee: false,
+        isCreator: false,
 
-        canStart:
-          isAssignee &&
-          task.status ===
-            'pending',
+        canStart: false,
+        canComplete: false,
+        canApprove: false,
+        canUpdateProgress: false,
+        canAddNote: false,
+        canEdit: false,
 
-        canComplete:
-          isAssignee &&
-          task.status ===
-            'in_progress',
-
-        canApprove:
-          isAdmin &&
-          task.status ===
-            'completed' &&
-          !task.approved_at,
-
-        canUpdateProgress:
-          isAssignee &&
-          task.status ===
-            'in_progress',
-
-        canAddNote:
-          isAssignee,
+        canViewCase: false,
+        canViewClient: false,
       };
-    }, [
-      task,
-      user,
-    ]);
+    }
 
-  const {
-    canStart,
-    canComplete,
-    canApprove,
-    canUpdateProgress,
-    canAddNote,
-  } = permissions;
+    const isAssignee =
+      task.assigned_to ===
+      user.id;
+
+    const isCreator =
+      task.created_by ===
+      user.id;
+
+    // ================================================
+    // SYSTEM PERMISSIONS
+    // ================================================
+
+    const canWorkOnTasks =
+      hasPermission(
+        user,
+        PERMISSION_KEYS.WORK_ON_TASKS
+      );
+
+    const canApproveTasks =
+      hasPermission(
+        user,
+        PERMISSION_KEYS.APPROVE_TASKS
+      );
+
+    const canEditTasks =
+      hasPermission(
+        user,
+        PERMISSION_KEYS.EDIT_TASKS
+      );
+
+    const canViewCase =
+      hasPermission(
+        user,
+        PERMISSION_KEYS.VIEW_CASES
+      );
+
+    const canViewClient =
+      hasPermission(
+        user,
+        PERMISSION_KEYS.VIEW_CLIENTS
+      );
+
+    // ================================================
+    // TASK WORKFLOW
+    // ================================================
+
+    return {
+      isAssignee,
+      isCreator,
+
+      /*
+       * Bir görevi çalıştırabilmek için:
+       *
+       * - work_on_tasks yetkisi
+       * - görevin kullanıcıya atanmış olması
+       * - uygun workflow durumu
+       */
+      canStart:
+        canWorkOnTasks &&
+        isAssignee &&
+        task.status ===
+          'pending',
+
+      canComplete:
+        canWorkOnTasks &&
+        isAssignee &&
+        task.status ===
+          'in_progress',
+
+      canUpdateProgress:
+        canWorkOnTasks &&
+        isAssignee &&
+        task.status ===
+          'in_progress',
+
+      /*
+       * Artık sadece role=admin değil.
+       *
+       * Admin zaten hasPermission() üzerinden
+       * otomatik tam yetkili.
+       *
+       * Yönetici avukata approve_tasks verilirse
+       * o da görev onaylayabilir.
+       */
+      canApprove:
+        canApproveTasks &&
+        task.status ===
+          'completed' &&
+        !task.approved_at,
+
+      /*
+       * Mevcut iş kuralını koruyoruz:
+       * çalışma notunu görevin atanmış kişisi ekler.
+       */
+      canAddNote:
+        canWorkOnTasks &&
+        isAssignee,
+
+      /*
+       * Görev metadata düzenleme ayrı permission.
+       */
+      canEdit:
+        canEditTasks,
+
+      canViewCase,
+      canViewClient,
+    };
+  }, [
+    task,
+    user,
+  ]);
+
+const {
+  canStart,
+  canComplete,
+  canApprove,
+  canUpdateProgress,
+  canAddNote,
+  canEdit,
+  canViewCase,
+  canViewClient,
+} = permissions;
+
 
   // ======================================================
   // WORKFLOW
@@ -888,18 +974,20 @@ const TaskDetail = () => {
               </Button>
             )}
 
-            <Link
-              to={`/tasks/${task.id}/edit`}
-            >
-              <Button
-                variant="outline"
-                size="sm"
-              >
-                <Edit2 className="mr-2 h-4 w-4" />
+          {canEdit && (
+  <Link
+    to={`/tasks/${task.id}/edit`}
+  >
+    <Button
+      variant="outline"
+      size="sm"
+    >
+      <Edit2 className="mr-2 h-4 w-4" />
 
-                Düzenle
-              </Button>
-            </Link>
+      Düzenle
+    </Button>
+  </Link>
+)}
 
           </div>
 
@@ -1494,44 +1582,62 @@ const TaskDetail = () => {
                 <div className="grid gap-3 md:grid-cols-2">
 
                   {task.case && (
-                    <Link
-                      to={`/cases/${task.case.id}`}
-                      className="rounded-xl border border-gray-100 p-4 transition hover:border-blue-200 hover:bg-blue-50/40 dark:border-white/[0.05] dark:hover:border-blue-500/20 dark:hover:bg-blue-500/[0.03]"
-                    >
+  canViewCase ? (
+    <Link
+      to={`/cases/${task.case.id}`}
+      className="rounded-xl border border-gray-100 p-4 transition hover:border-blue-200 hover:bg-blue-50/40 dark:border-white/[0.05] dark:hover:border-blue-500/20 dark:hover:bg-blue-500/[0.03]"
+    >
+      <p className="text-xs text-gray-400">
+        Dava
+      </p>
 
-                      <p className="text-xs text-gray-400">
-                        Dava
-                      </p>
+      <p className="mt-1 font-medium text-blue-600 dark:text-blue-400">
+        {task.case.title}
+      </p>
+    </Link>
+  ) : (
+    <div className="rounded-xl border border-gray-100 p-4 dark:border-white/[0.05]">
 
-                      <p className="mt-1 font-medium text-blue-600 dark:text-blue-400">
-                        {
-                          task.case
-                            .title
-                        }
-                      </p>
+      <p className="text-xs text-gray-400">
+        Dava
+      </p>
 
-                    </Link>
-                  )}
+      <p className="mt-1 font-medium text-gray-700 dark:text-slate-300">
+        {task.case.title}
+      </p>
+
+    </div>
+  )
+)}
 
                   {task.client && (
-                    <Link
-                      to={`/clients/${task.client.id}`}
-                      className="rounded-xl border border-gray-100 p-4 transition hover:border-blue-200 hover:bg-blue-50/40 dark:border-white/[0.05] dark:hover:border-blue-500/20 dark:hover:bg-blue-500/[0.03]"
-                    >
+  canViewClient ? (
+    <Link
+      to={`/clients/${task.client.id}`}
+      className="rounded-xl border border-gray-100 p-4 transition hover:border-blue-200 hover:bg-blue-50/40 dark:border-white/[0.05] dark:hover:border-blue-500/20 dark:hover:bg-blue-500/[0.03]"
+    >
+      <p className="text-xs text-gray-400">
+        Müvekkil
+      </p>
 
-                      <p className="text-xs text-gray-400">
-                        Müvekkil
-                      </p>
+      <p className="mt-1 font-medium text-blue-600 dark:text-blue-400">
+        {task.client.name}
+      </p>
+    </Link>
+  ) : (
+    <div className="rounded-xl border border-gray-100 p-4 dark:border-white/[0.05]">
 
-                      <p className="mt-1 font-medium text-blue-600 dark:text-blue-400">
-                        {
-                          task.client
-                            .name
-                        }
-                      </p>
+      <p className="text-xs text-gray-400">
+        Müvekkil
+      </p>
 
-                    </Link>
-                  )}
+      <p className="mt-1 font-medium text-gray-700 dark:text-slate-300">
+        {task.client.name}
+      </p>
+
+    </div>
+  )
+)}
 
                 </div>
 

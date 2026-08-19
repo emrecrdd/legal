@@ -14,7 +14,10 @@ import {
 import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
-
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Table from '../../components/ui/Table.jsx';
@@ -317,17 +320,22 @@ const TasksList = () => {
   // ====================================================
 
   const canCreateTask =
-    [
-      'admin',
-      'lawyer',
-      'secretary',
-    ].includes(
-      user?.role
-    );
+  hasPermission(
+    user,
+    PERMISSION_KEYS.CREATE_TASKS
+  );
 
-  const isAdmin =
-    user?.role ===
-    'admin';
+const canApproveTask =
+  hasPermission(
+    user,
+    PERMISSION_KEYS.APPROVE_TASKS
+  );
+
+const canViewCases =
+  hasPermission(
+    user,
+    PERMISSION_KEYS.VIEW_CASES
+  );
 
   // ====================================================
   // QUERY
@@ -624,9 +632,8 @@ const TasksList = () => {
           ADMIN APPROVAL NOTICE
       ================================================== */}
 
-      {isAdmin &&
-        awaitingApprovalCount >
-          0 && (
+      {canApproveTask &&
+  awaitingApprovalCount > 0 && (
           <div
             className="
               rounded-2xl
@@ -1053,34 +1060,45 @@ const TasksList = () => {
                     <Table.Cell>
 
                       {task.case ? (
-                        <Link
-                          to={`/cases/${task.case.id}`}
-                          className="
-                            block
-                            max-w-[14rem]
-                            truncate
-                            text-sm
-                            font-medium
-                            text-gray-700
-                            transition
-                            hover:text-blue-600
-                            dark:text-slate-300
-                            dark:hover:text-blue-400
-                          "
-                          title={
-                            task.case
-                              .title
-                          }
-                        >
-                          {task.case
-                            .title}
-                        </Link>
-                      ) : (
-                        <span className="text-gray-400 dark:text-slate-600">
-                          -
-                        </span>
-                      )}
-
+  canViewCases ? (
+    <Link
+      to={`/cases/${task.case.id}`}
+      className="
+        block
+        max-w-[14rem]
+        truncate
+        text-sm
+        font-medium
+        text-gray-700
+        transition
+        hover:text-blue-600
+        dark:text-slate-300
+        dark:hover:text-blue-400
+      "
+      title={task.case.title}
+    >
+      {task.case.title}
+    </Link>
+  ) : (
+    <span
+      className="
+        block
+        max-w-[14rem]
+        truncate
+        text-sm
+        text-gray-600
+        dark:text-slate-400
+      "
+      title={task.case.title}
+    >
+      {task.case.title}
+    </span>
+  )
+) : (
+  <span className="text-gray-400 dark:text-slate-600">
+    -
+  </span>
+)}
                     </Table.Cell>
 
                     {/* PRIORITY */}

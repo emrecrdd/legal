@@ -15,6 +15,15 @@ import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 
 import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
+import {
   Activity,
   AlertTriangle,
   ArrowLeft,
@@ -259,6 +268,7 @@ const CaseAIAnalysis = ({
   onRefresh,
   refreshing,
   caseId,
+  canCreateTasks,
 }) => {
   if (!analysis) {
     return null;
@@ -478,7 +488,8 @@ const CaseAIAnalysis = ({
                         </span>
                       )}
 
-                      {action.canCreateTask && (
+                      {action.canCreateTask &&
+                      canCreateTasks && (
   <Link
     to={`/tasks/create?${new URLSearchParams({
       source: 'ai',
@@ -745,6 +756,8 @@ const CaseCompletionAnalysis = ({
   onToggleCaseUpdate,
   onApplySelectedCaseUpdates,
   applyingCaseUpdates,
+  canManageParties,
+  canEditCase,
 }) => {
   if (!analysis) {
     return null;
@@ -868,10 +881,11 @@ const CaseCompletionAnalysis = ({
           <input
             type="checkbox"
             checked={checked}
+            disabled={!canManageParties}
             onChange={() =>
               onToggleMissingParty(party)
             }
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600"
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
           />
 
           <div className="flex-1">
@@ -914,17 +928,19 @@ const CaseCompletionAnalysis = ({
 </div>
 
 <div className="mt-4 flex flex-wrap items-center gap-3">
-  <Button
-    type="button"
-    disabled={
-      selectedMissingParties.length === 0 ||
-      addingMissingParties
-    }
-    loading={addingMissingParties}
-    onClick={onAddSelectedMissingParties}
-  >
-    Seçilen Tarafları Davaya Ekle
-  </Button>
+  {canManageParties && (
+    <Button
+      type="button"
+      disabled={
+        selectedMissingParties.length === 0 ||
+        addingMissingParties
+      }
+      loading={addingMissingParties}
+      onClick={onAddSelectedMissingParties}
+    >
+      Seçilen Tarafları Davaya Ekle
+    </Button>
+  )}
 
   {selectedMissingParties.length > 0 && (
     <span className="text-sm text-gray-500">
@@ -1016,10 +1032,11 @@ const CaseCompletionAnalysis = ({
         <input
           type="checkbox"
           checked={checked}
+          disabled={!canEditCase}
           onChange={() =>
             onToggleCaseUpdate(item)
           }
-          className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600"
+          className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
         />
 
         <div className="flex-1">
@@ -1069,17 +1086,19 @@ const CaseCompletionAnalysis = ({
 })}
 
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  disabled={
-                    selectedCaseUpdates.length === 0 ||
-                    applyingCaseUpdates
-                  }
-                  loading={applyingCaseUpdates}
-                  onClick={onApplySelectedCaseUpdates}
-                >
-                  Seçilen Güncellemeleri Uygula
-                </Button>
+                {canEditCase && (
+                  <Button
+                    type="button"
+                    disabled={
+                      selectedCaseUpdates.length === 0 ||
+                      applyingCaseUpdates
+                    }
+                    loading={applyingCaseUpdates}
+                    onClick={onApplySelectedCaseUpdates}
+                  >
+                    Seçilen Güncellemeleri Uygula
+                  </Button>
+                )}
 
                 {selectedCaseUpdates.length > 0 && (
                   <span className="text-sm text-gray-500">
@@ -1181,7 +1200,81 @@ const CaseCompletionAnalysis = ({
 const CaseDetail = () => {
   const { id } = useParams();
 
+  const {
+    user,
+  } = useAuth();
+
   const queryClient = useQueryClient();
+
+  // ====================================================
+  // PERMISSIONS
+  // ====================================================
+
+  const canUseAI =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.USE_AI
+    );
+
+  const canEditCase =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_CASES
+    );
+
+  const canManageParties =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.MANAGE_CASE_PARTIES
+    );
+
+  const canViewClients =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_CLIENTS
+    );
+
+  const canViewDocuments =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_DOCUMENTS
+    );
+
+  const canUploadDocuments =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.UPLOAD_DOCUMENTS
+    );
+
+  const canDownloadDocuments =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DOWNLOAD_DOCUMENTS
+    );
+
+  const canViewTasks =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_TASKS
+    );
+
+  const canCreateTasks =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.CREATE_TASKS
+    );
+
+  const canViewEvents =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_EVENTS
+    );
+
+  const canCreateEvents =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.CREATE_EVENTS
+    );
 
   const [caseCompletion, setCaseCompletion] =
     useState(null);
@@ -1494,6 +1587,11 @@ const handleApplySelectedCaseUpdates = () => {
   const handleAIAnalysis = (
     force = false
   ) => {
+    if (!canUseAI) {
+      toast.error('AI kullanımı için yetkiniz bulunmuyor');
+      return;
+    }
+
     if (!id) {
       return;
     }
@@ -1507,6 +1605,11 @@ const handleApplySelectedCaseUpdates = () => {
   const handleCaseCompletion = (
     force = false
   ) => {
+    if (!canUseAI) {
+      toast.error('AI kullanımı için yetkiniz bulunmuyor');
+      return;
+    }
+
     if (!id) {
       return;
     }
@@ -1518,6 +1621,11 @@ const handleApplySelectedCaseUpdates = () => {
 
   const handleDownload =
     async (doc) => {
+      if (!canDownloadDocuments) {
+        toast.error('Belge indirme yetkiniz bulunmuyor');
+        return;
+      }
+
       try {
         const response =
           await documentApi.download(
@@ -1802,49 +1910,55 @@ const handleApplySelectedCaseUpdates = () => {
 
           <div className="flex flex-wrap items-center gap-2">
 
-            <Button
-              type="button"
-              onClick={() =>
-                handleAIAnalysis(false)
-              }
-              loading={
-                aiSummaryMutation.isPending
-              }
-              disabled={
-                aiSummaryMutation.isPending
-              }
-            >
-              <Brain className="mr-2 h-4 w-4" />
-              AI Analiz Et
-            </Button>
+            {canUseAI && (
+              <>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    handleAIAnalysis(false)
+                  }
+                  loading={
+                    aiSummaryMutation.isPending
+                  }
+                  disabled={
+                    aiSummaryMutation.isPending
+                  }
+                >
+                  <Brain className="mr-2 h-4 w-4" />
+                  AI Analiz Et
+                </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() =>
-                handleCaseCompletion(false)
-              }
-              loading={
-                caseCompletionMutation.isPending
-              }
-              disabled={
-                caseCompletionMutation.isPending
-              }
-            >
-              <Sparkles className="mr-2 h-4 w-4" />
-              Dosyayı Tamamla
-            </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    handleCaseCompletion(false)
+                  }
+                  loading={
+                    caseCompletionMutation.isPending
+                  }
+                  disabled={
+                    caseCompletionMutation.isPending
+                  }
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Dosyayı Tamamla
+                </Button>
+              </>
+            )}
 
-            <Link
-              to={`/cases/${caseItem.id}/edit`}
-            >
-              <Button
-                variant="outline"
+            {canEditCase && (
+              <Link
+                to={`/cases/${caseItem.id}/edit`}
               >
-                <Edit2 className="mr-2 h-4 w-4" />
-                Düzenle
-              </Button>
-            </Link>
+                <Button
+                  variant="outline"
+                >
+                  <Edit2 className="mr-2 h-4 w-4" />
+                  Düzenle
+                </Button>
+              </Link>
+            )}
 
           </div>
 
@@ -2056,50 +2170,63 @@ const handleApplySelectedCaseUpdates = () => {
           AI
       ================================================== */}
 
-      <CaseAIAnalysis
-        analysis={aiAnalysis}
-        onRefresh={() =>
-          handleAIAnalysis(true)
-        }
-        refreshing={
-          aiSummaryMutation.isPending
-        }
-        caseId={caseItem.id}
-      />
+      {canUseAI && (
+        <>
+          <CaseAIAnalysis
+            analysis={aiAnalysis}
+            onRefresh={() =>
+              handleAIAnalysis(true)
+            }
+            refreshing={
+              aiSummaryMutation.isPending
+            }
+            caseId={caseItem.id}
+            canCreateTasks={
+              canCreateTasks
+            }
+          />
 
-      <CaseCompletionAnalysis
-        analysis={caseCompletion}
-        refreshing={
-          caseCompletionMutation.isPending
-        }
-        onRefresh={() =>
-          handleCaseCompletion(true)
-        }
-        selectedMissingParties={
-          selectedMissingParties
-        }
-        onToggleMissingParty={
-          toggleMissingParty
-        }
-        onAddSelectedMissingParties={
-          handleAddSelectedMissingParties
-        }
-        addingMissingParties={
-          addMissingPartiesMutation.isPending
-        }
-        selectedCaseUpdates={
-          selectedCaseUpdates
-        }
-        onToggleCaseUpdate={
-          toggleCaseUpdate
-        }
-        onApplySelectedCaseUpdates={
-          handleApplySelectedCaseUpdates
-        }
-        applyingCaseUpdates={
-          applyCaseUpdatesMutation.isPending
-        }
-      />
+          <CaseCompletionAnalysis
+            analysis={caseCompletion}
+            refreshing={
+              caseCompletionMutation.isPending
+            }
+            onRefresh={() =>
+              handleCaseCompletion(true)
+            }
+            selectedMissingParties={
+              selectedMissingParties
+            }
+            onToggleMissingParty={
+              toggleMissingParty
+            }
+            onAddSelectedMissingParties={
+              handleAddSelectedMissingParties
+            }
+            addingMissingParties={
+              addMissingPartiesMutation.isPending
+            }
+            selectedCaseUpdates={
+              selectedCaseUpdates
+            }
+            onToggleCaseUpdate={
+              toggleCaseUpdate
+            }
+            onApplySelectedCaseUpdates={
+              handleApplySelectedCaseUpdates
+            }
+            applyingCaseUpdates={
+              applyCaseUpdatesMutation.isPending
+            }
+            canManageParties={
+              canManageParties
+            }
+            canEditCase={
+              canEditCase
+            }
+          />
+        </>
+      )}
 
       {/* ==================================================
           MAIN INFORMATION
@@ -2321,9 +2448,8 @@ const handleApplySelectedCaseUpdates = () => {
 
                 {caseItem.clients.map(
                   (client) => (
-                    <Link
+                    <div
                       key={client.id}
-                      to={`/clients/${client.id}`}
                       className="
                         flex
                         items-center
@@ -2333,12 +2459,7 @@ const handleApplySelectedCaseUpdates = () => {
                         border
                         border-gray-100
                         p-3
-                        transition
-                        hover:border-blue-200
-                        hover:bg-blue-50/30
                         dark:border-white/[0.05]
-                        dark:hover:border-blue-500/20
-                        dark:hover:bg-blue-500/[0.025]
                       "
                     >
 
@@ -2384,11 +2505,16 @@ const handleApplySelectedCaseUpdates = () => {
 
                       </div>
 
-                      <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                        Görüntüle
-                      </span>
+                      {canViewClients && (
+                        <Link
+                          to={`/clients/${client.id}`}
+                          className="text-xs font-medium text-blue-600 transition hover:text-blue-700 dark:text-blue-400"
+                        >
+                          Görüntüle
+                        </Link>
+                      )}
 
-                    </Link>
+                    </div>
                   )
                 )}
 
@@ -2514,14 +2640,16 @@ const handleApplySelectedCaseUpdates = () => {
                 </Link>
               )}
 
-              <Link
-                to={`/cases/${caseItem.id}/parties/create`}
-              >
-                <Button size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Taraf Ekle
-                </Button>
-              </Link>
+              {canManageParties && (
+                <Link
+                  to={`/cases/${caseItem.id}/parties/create`}
+                >
+                  <Button size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Taraf Ekle
+                  </Button>
+                </Link>
+              )}
 
             </div>
 
@@ -2717,7 +2845,8 @@ const handleApplySelectedCaseUpdates = () => {
 
         {/* DOCUMENTS */}
 
-        <Card>
+        {canViewDocuments && (
+          <Card>
 
           <Card.Header>
 
@@ -2756,14 +2885,16 @@ const handleApplySelectedCaseUpdates = () => {
 
               </div>
 
-              <Link
-                to={`/documents/upload?case=${caseItem.id}`}
-              >
-                <Button size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Belge
-                </Button>
-              </Link>
+              {canUploadDocuments && (
+                <Link
+                  to={`/documents/upload?case=${caseItem.id}`}
+                >
+                  <Button size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Belge
+                  </Button>
+                </Link>
+              )}
 
             </div>
 
@@ -2828,32 +2959,34 @@ const handleApplySelectedCaseUpdates = () => {
 
                       </Link>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleDownload(
-                            doc
-                          )
-                        }
-                        className="
-                          inline-flex
-                          h-8
-                          w-8
-                          shrink-0
-                          items-center
-                          justify-center
-                          rounded-lg
-                          text-gray-400
-                          transition
-                          hover:bg-blue-50
-                          hover:text-blue-600
-                          dark:hover:bg-blue-500/[0.08]
-                          dark:hover:text-blue-400
-                        "
-                        title="İndir"
-                      >
-                        <Download className="h-4 w-4" />
-                      </button>
+                      {canDownloadDocuments && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDownload(
+                              doc
+                            )
+                          }
+                          className="
+                            inline-flex
+                            h-8
+                            w-8
+                            shrink-0
+                            items-center
+                            justify-center
+                            rounded-lg
+                            text-gray-400
+                            transition
+                            hover:bg-blue-50
+                            hover:text-blue-600
+                            dark:hover:bg-blue-500/[0.08]
+                            dark:hover:text-blue-400
+                          "
+                          title="İndir"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                      )}
 
                     </div>
                   )
@@ -2864,11 +2997,13 @@ const handleApplySelectedCaseUpdates = () => {
 
           </Card.Body>
 
-        </Card>
+          </Card>
+        )}
 
         {/* TASKS */}
 
-        <Card>
+        {canViewTasks && (
+          <Card>
 
           <Card.Header>
 
@@ -2907,14 +3042,16 @@ const handleApplySelectedCaseUpdates = () => {
 
               </div>
 
-              <Link
-                to={`/tasks/create?case_id=${caseItem.id}`}
-              >
-                <Button size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Görev
-                </Button>
-              </Link>
+              {canCreateTasks && (
+                <Link
+                  to={`/tasks/create?case_id=${caseItem.id}`}
+                >
+                  <Button size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Görev
+                  </Button>
+                </Link>
+              )}
 
             </div>
 
@@ -3015,7 +3152,8 @@ const handleApplySelectedCaseUpdates = () => {
 
           </Card.Body>
 
-        </Card>
+          </Card>
+        )}
 
       </div>
 
@@ -3023,7 +3161,8 @@ const handleApplySelectedCaseUpdates = () => {
           HEARINGS
       ================================================== */}
 
-      <Card>
+      {canViewEvents && (
+        <Card>
 
         <Card.Header>
 
@@ -3062,14 +3201,16 @@ const handleApplySelectedCaseUpdates = () => {
 
             </div>
 
-            <Link
-              to={`/events/create?case=${caseItem.id}`}
-            >
-              <Button size="sm">
-                <Plus className="mr-2 h-4 w-4" />
-                Duruşma
-              </Button>
-            </Link>
+            {canCreateEvents && (
+              <Link
+                to={`/events/create?case=${caseItem.id}`}
+              >
+                <Button size="sm">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Duruşma
+                </Button>
+              </Link>
+            )}
 
           </div>
 
@@ -3174,7 +3315,8 @@ const handleApplySelectedCaseUpdates = () => {
 
         </Card.Body>
 
-      </Card>
+        </Card>
+      )}
 
     </div>
   );

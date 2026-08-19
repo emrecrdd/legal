@@ -11,7 +11,13 @@ import {
 import {
   logger,
 } from '../../config/logger.js';
+import {
+  hasPermission,
+} from '../../middlewares/auth.middleware.js';
 
+import {
+  PERMISSION_KEYS,
+} from '../../constants/roles.js';
 import {
   AuditLog,
 } from '../../models/AuditLog.js';
@@ -96,16 +102,67 @@ export const taskController = {
   // CREATE
   // ====================================================
 
+    // ====================================================
+  // CREATE
+  // ====================================================
+
   async create(
     req,
     res
   ) {
     try {
+      const canAssignTasks =
+        hasPermission(
+          req.user,
+          PERMISSION_KEYS.ASSIGN_TASKS
+        );
+
+      const requestedAssignee =
+        req.body?.assigned_to ||
+        null;
+
+      /*
+       * assign_tasks yetkisi olmayan kullanıcı
+       * request'i elle değiştirerek başka kullanıcıya
+       * görev atayamaz.
+       *
+       * Yetkisi yoksa görev otomatik kendisine atanır.
+       */
+      const assignedTo =
+        canAssignTasks
+          ? requestedAssignee
+          : req.user.id;
+
+      /*
+       * Workflow alanlarını client belirleyemez.
+       * Yeni görev her zaman pending / %0 başlar.
+       */
+      const {
+        created_by,
+        status,
+        progress,
+        approved_by,
+        approved_at,
+        started_at,
+        completed_at,
+        actual_hours,
+        ...safeBody
+      } = req.body;
+
       const taskData = {
-        ...req.body,
+        ...safeBody,
 
         created_by:
           req.user.id,
+
+        assigned_to:
+          assignedTo,
+
+        status:
+          'pending',
+
+        progress:
+          0,
       };
 
       const task =
@@ -140,7 +197,8 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
+        error.message ||
+          'Görev oluşturulamadı',
         400
       );
     }
@@ -325,15 +383,45 @@ export const taskController = {
   // UPDATE
   // ====================================================
 
+    // ====================================================
+  // UPDATE
+  // ====================================================
+
   async update(
     req,
     res
   ) {
     try {
+      const {
+        assigned_to,
+        status,
+        approved_by,
+        approved_at,
+        progress,
+        started_at,
+        completed_at,
+        actual_hours,
+        ...safeUpdateData
+      } = req.body;
+
+      /*
+       * Genel update endpoint'i workflow veya assignment
+       * alanlarını değiştiremez.
+       *
+       * Bunların ayrı endpoint'leri var:
+       *
+       * PATCH /tasks/:id/assign
+       * POST  /tasks/:id/start
+       * POST  /tasks/:id/complete
+       * POST  /tasks/:id/approve
+       * PATCH /tasks/:id/progress
+       * PATCH /tasks/:id/status
+       */
+
       const task =
         await taskService.update(
           req.params.id,
-          req.body
+          safeUpdateData
         );
 
       await createAuditLog({
@@ -592,7 +680,36 @@ export const taskController = {
       );
     }
   },
+  // ====================================================
+  // ASSIGNABLE USERS
+  // ====================================================
 
+  async getAssignableUsers(
+    req,
+    res
+  ) {
+    try {
+      const users =
+        await taskService.getAssignableUsers();
+
+      return successResponse(
+        res,
+        users,
+        'Assignable users fetched successfully'
+      );
+    } catch (error) {
+      logger.error(
+        'Get assignable users error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
+    }
+  },
   // ====================================================
   // STATISTICS
   // ====================================================

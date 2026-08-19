@@ -7,9 +7,17 @@ import {
   useAuth,
 } from '../providers/auth.provider.jsx';
 
+import {
+  hasPermission,
+  hasAllPermissions,
+} from '../../constants/roles.js';
+
 const PrivateRoute = ({
   requiredRole,
   allowedRoles,
+
+  requiredPermission,
+  requiredPermissions,
 }) => {
   const {
     isAuthenticated,
@@ -50,13 +58,13 @@ const PrivateRoute = ({
 
   // ====================================================
   // SINGLE ROLE
-  // Backward compatibility:
-  // <PrivateRoute requiredRole="admin" />
+  // Backward compatibility
   // ====================================================
 
   if (
     requiredRole &&
-    userRole !== requiredRole
+    userRole !==
+      requiredRole
   ) {
     return (
       <Navigate
@@ -68,18 +76,14 @@ const PrivateRoute = ({
 
   // ====================================================
   // MULTIPLE ROLES
-  //
-  // Örnek:
-  // <PrivateRoute
-  //   allowedRoles={['admin', 'lawyer']}
-  // />
   // ====================================================
 
   if (
     Array.isArray(
       allowedRoles
     ) &&
-    allowedRoles.length > 0 &&
+    allowedRoles.length >
+      0 &&
     !allowedRoles.includes(
       userRole
     )
@@ -91,6 +95,67 @@ const PrivateRoute = ({
       />
     );
   }
+
+  // ====================================================
+  // SINGLE PERMISSION
+  //
+  // Örnek:
+  // <PrivateRoute
+  //   requiredPermission="view_documents"
+  // />
+  // ====================================================
+
+  if (
+    requiredPermission &&
+    !hasPermission(
+      user,
+      requiredPermission
+    )
+  ) {
+    return (
+      <Navigate
+        to="/dashboard"
+        replace
+      />
+    );
+  }
+
+  // ====================================================
+  // MULTIPLE PERMISSIONS
+  //
+  // Tüm permission'lar gerekli.
+  //
+  // Örnek:
+  // <PrivateRoute
+  //   requiredPermissions={[
+  //     'view_cases',
+  //     'edit_cases',
+  //   ]}
+  // />
+  // ====================================================
+
+  if (
+    Array.isArray(
+      requiredPermissions
+    ) &&
+    requiredPermissions.length >
+      0 &&
+    !hasAllPermissions(
+      user,
+      requiredPermissions
+    )
+  ) {
+    return (
+      <Navigate
+        to="/dashboard"
+        replace
+      />
+    );
+  }
+
+  // ====================================================
+  // ALLOWED
+  // ====================================================
 
   return <Outlet />;
 };

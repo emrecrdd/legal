@@ -14,12 +14,26 @@ import {
   useTask,
   useUpdateTask,
   useDeleteTask,
+  useAssignableUsers,
+  useAssignTask,
 } from '../../features/tasks/task.query.js';
 
-import { useUsers } from '../../features/users/user.query.js';
-import { useCases } from '../../features/cases/case.query.js';
-import { useClients } from '../../features/clients/client.query.js';
-import { useAuth } from '../../app/providers/auth.provider.jsx';
+import {
+  useCases,
+} from '../../features/cases/case.query.js';
+
+import {
+  useClients,
+} from '../../features/clients/client.query.js';
+
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
 
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
@@ -65,36 +79,68 @@ const PRIORITY_LABELS = {
 // DATE HELPERS
 // ======================================================
 
-const formatForDateTimeLocal = (date) => {
+const formatForDateTimeLocal = (
+  date
+) => {
   if (!date) {
     return '';
   }
 
   try {
-    const parsed = new Date(date);
+    const parsed =
+      new Date(date);
 
-    if (Number.isNaN(parsed.getTime())) {
+    if (
+      Number.isNaN(
+        parsed.getTime()
+      )
+    ) {
       return '';
     }
 
-    const parts = new Intl.DateTimeFormat(
-      'en-CA',
-      {
-        timeZone: 'Europe/Istanbul',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }
-    ).formatToParts(parsed);
+    const parts =
+      new Intl.DateTimeFormat(
+        'en-CA',
+        {
+          timeZone:
+            'Europe/Istanbul',
+
+          year:
+            'numeric',
+
+          month:
+            '2-digit',
+
+          day:
+            '2-digit',
+
+          hour:
+            '2-digit',
+
+          minute:
+            '2-digit',
+
+          hour12:
+            false,
+        }
+      ).formatToParts(
+        parsed
+      );
 
     const map = {};
 
-    for (const part of parts) {
-      if (part.type !== 'literal') {
-        map[part.type] = part.value;
+    for (
+      const part
+      of parts
+    ) {
+      if (
+        part.type !==
+        'literal'
+      ) {
+        map[
+          part.type
+        ] =
+          part.value;
       }
     }
 
@@ -108,59 +154,92 @@ const formatForDateTimeLocal = (date) => {
 // STATUS HELPERS
 // ======================================================
 
-const getDisplayStatus = (task) => {
+const getDisplayStatus = (
+  task
+) => {
   if (
-    task?.status === 'completed' &&
+    task?.status ===
+      'completed' &&
     !task?.approved_at
   ) {
     return {
-      label: 'Onay Bekliyor',
-      variant: 'warning',
+      label:
+        'Onay Bekliyor',
+
+      variant:
+        'warning',
     };
   }
 
-  if (task?.approved_at) {
+  if (
+    task?.approved_at
+  ) {
     return {
-      label: 'Tamamlandı',
-      variant: 'success',
+      label:
+        'Tamamlandı',
+
+      variant:
+        'success',
     };
   }
 
-  switch (task?.status) {
+  switch (
+    task?.status
+  ) {
     case 'pending':
       return {
-        label: 'Bekliyor',
-        variant: 'warning',
+        label:
+          'Bekliyor',
+
+        variant:
+          'warning',
       };
 
     case 'in_progress':
       return {
-        label: 'Devam Ediyor',
-        variant: 'info',
+        label:
+          'Devam Ediyor',
+
+        variant:
+          'info',
       };
 
     case 'completed':
       return {
-        label: 'Tamamlandı',
-        variant: 'success',
+        label:
+          'Tamamlandı',
+
+        variant:
+          'success',
       };
 
     case 'cancelled':
       return {
-        label: 'İptal',
-        variant: 'danger',
+        label:
+          'İptal',
+
+        variant:
+          'danger',
       };
 
     default:
       return {
-        label: task?.status || 'Bilinmiyor',
-        variant: 'default',
+        label:
+          task?.status ||
+          'Bilinmiyor',
+
+        variant:
+          'default',
       };
   }
 };
 
-const getPriorityVariant = (priority) => {
-  switch (priority) {
+const getPriorityVariant = (
+  priority
+) => {
+  switch (
+    priority
+  ) {
     case 'critical':
       return 'danger';
 
@@ -177,12 +256,32 @@ const getPriorityVariant = (priority) => {
 // ======================================================
 
 const TaskEdit = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const { user } = useAuth();
+  const {
+    id,
+  } =
+    useParams();
 
-  const [formData, setFormData] = useState(INITIAL_FORM);
-  const [errors, setErrors] = useState({});
+  const navigate =
+    useNavigate();
+
+  const {
+    user,
+  } =
+    useAuth();
+
+  const [
+    formData,
+    setFormData,
+  ] =
+    useState(
+      INITIAL_FORM
+    );
+
+  const [
+    errors,
+    setErrors,
+  ] =
+    useState({});
 
   // ======================================================
   // QUERIES
@@ -190,117 +289,198 @@ const TaskEdit = () => {
 
   const {
     data,
-    isLoading: taskLoading,
-    error: taskError,
-  } = useTask(id);
+    isLoading:
+      taskLoading,
+    error:
+      taskError,
+  } =
+    useTask(id);
+
+  const canRequestAssignableUsers =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.ASSIGN_TASKS
+    );
 
   const {
-    data: usersData,
-  } = useUsers();
+    data:
+      assignableUsersData,
+    isFetching:
+      assignableUsersFetching,
+  } =
+    useAssignableUsers(
+      canRequestAssignableUsers
+    );
 
   const {
-    data: casesData,
-  } = useCases({
-    limit: 100,
-  });
+    data:
+      casesData,
+  } =
+    useCases({
+      limit: 100,
+    });
 
   const {
-    data: clientsData,
-  } = useClients({
-    limit: 100,
-  });
+    data:
+      clientsData,
+  } =
+    useClients({
+      limit: 100,
+    });
 
   // ======================================================
   // MUTATIONS
   // ======================================================
 
-  const updateMutation = useUpdateTask();
-  const deleteMutation = useDeleteTask();
+  const updateMutation =
+    useUpdateTask();
+
+  const assignMutation =
+    useAssignTask();
+
+  const deleteMutation =
+    useDeleteTask();
 
   // ======================================================
   // DATA
   // ======================================================
 
-  const task = data?.data?.data;
+  const task =
+    data?.data?.data;
 
-  const users = usersData?.data?.data || [];
-  const cases = casesData?.data?.data || [];
-  const clients = clientsData?.data?.data || [];
+  const assignableUsers =
+    Array.isArray(
+      assignableUsersData
+        ?.data
+        ?.data
+    )
+      ? assignableUsersData
+          .data
+          .data
+      : [];
+
+  const cases =
+    casesData
+      ?.data
+      ?.data ||
+    [];
+
+  const clients =
+    clientsData
+      ?.data
+      ?.data ||
+    [];
 
   // ======================================================
   // PERMISSIONS
   // ======================================================
 
-  const permissions = useMemo(() => {
-    const role = user?.role;
+  const permissions =
+    useMemo(() => {
+      const awaitingApproval =
+        task?.status ===
+          'completed' &&
+        !task?.approved_at;
 
-    const isAdmin = role === 'admin';
-    const isLawyer = role === 'lawyer';
-    const isSecretary = role === 'secretary';
+      const approved =
+        Boolean(
+          task?.approved_at
+        );
 
-    const awaitingApproval =
-      task?.status === 'completed' &&
-      !task?.approved_at;
+      const cancelled =
+        task?.status ===
+        'cancelled';
 
-    const approved = Boolean(task?.approved_at);
+      const workflowLocked =
+        awaitingApproval ||
+        approved ||
+        cancelled;
 
-    const cancelled =
-      task?.status === 'cancelled';
+      const hasEditPermission =
+        hasPermission(
+          user,
+          PERMISSION_KEYS.EDIT_TASKS
+        );
 
-    const workflowLocked =
-      awaitingApproval ||
-      approved ||
-      cancelled;
+      const hasAssignPermission =
+        hasPermission(
+          user,
+          PERMISSION_KEYS.ASSIGN_TASKS
+        );
 
-    return {
-      isAdmin,
-      isLawyer,
-      isSecretary,
+      const hasDeletePermission =
+        hasPermission(
+          user,
+          PERMISSION_KEYS.DELETE_TASKS
+        );
 
-      awaitingApproval,
-      approved,
-      cancelled,
-      workflowLocked,
+      const canViewCases =
+        hasPermission(
+          user,
+          PERMISSION_KEYS.VIEW_CASES
+        );
 
-      canEdit:
-        (isAdmin ||
-          isLawyer ||
-          isSecretary) &&
-        !workflowLocked,
+      const canViewClients =
+        hasPermission(
+          user,
+          PERMISSION_KEYS.VIEW_CLIENTS
+        );
 
-      canChangeAssignee:
-        isAdmin &&
-        !workflowLocked,
+      return {
+        awaitingApproval,
+        approved,
+        cancelled,
+        workflowLocked,
 
-      canDelete:
-        (isAdmin ||
-          isLawyer) &&
-        !approved,
-    };
-  }, [
-    user,
-    task,
-  ]);
+        canEdit:
+          hasEditPermission &&
+          !workflowLocked,
+
+        canChangeAssignee:
+          hasAssignPermission &&
+          !workflowLocked,
+
+        canDelete:
+          hasDeletePermission &&
+          !approved,
+
+        canViewCases,
+        canViewClients,
+      };
+    }, [
+      user,
+      task,
+    ]);
 
   const {
-    isAdmin,
     awaitingApproval,
     approved,
     cancelled,
     workflowLocked,
+
     canEdit,
     canChangeAssignee,
     canDelete,
-  } = permissions;
+
+    canViewCases,
+    canViewClients,
+  } =
+    permissions;
 
   // ======================================================
   // STATUS
   // ======================================================
 
-  const displayStatus = useMemo(
-    () => getDisplayStatus(task),
-    [task]
-  );
+  const displayStatus =
+    useMemo(
+      () =>
+        getDisplayStatus(
+          task
+        ),
+      [
+        task,
+      ]
+    );
 
   // ======================================================
   // FORM INIT
@@ -312,7 +492,9 @@ const TaskEdit = () => {
     }
 
     setFormData({
-      title: task.title || '',
+      title:
+        task.title ||
+        '',
 
       description:
         task.description ||
@@ -343,50 +525,68 @@ const TaskEdit = () => {
         task.estimated_hours ??
         '',
     });
-  }, [task]);
-
-  // ======================================================
-  // ASSIGNABLE USERS
-  // ======================================================
-
-  const assignableUsers = useMemo(() => {
-    if (!isAdmin) {
-      return [];
-    }
-
-    return users.filter(
-      (person) =>
-        person?.is_active !== false
-    );
   }, [
-    users,
-    isAdmin,
+    task,
   ]);
 
   // ======================================================
   // HANDLERS
   // ======================================================
 
-  const handleChange = (event) => {
-    if (!canEdit) {
-      return;
-    }
-
+  const handleChange = (
+    event
+  ) => {
     const {
       name,
       value,
-    } = event.target;
+    } =
+      event.target;
 
-    setFormData((current) => ({
-      ...current,
-      [name]: value,
-    }));
+    /*
+     * Atanan kişi ayrı permission ile korunur.
+     */
+    if (
+      name ===
+        'assigned_to' &&
+      !canChangeAssignee
+    ) {
+      return;
+    }
 
-    if (errors[name]) {
-      setErrors((current) => ({
+    if (
+      name !==
+        'assigned_to' &&
+      !canEdit
+    ) {
+      return;
+    }
+
+    setFormData(
+      (
+        current
+      ) => ({
         ...current,
-        [name]: '',
-      }));
+
+        [name]:
+          value,
+      })
+    );
+
+    if (
+      errors[
+        name
+      ]
+    ) {
+      setErrors(
+        (
+          current
+        ) => ({
+          ...current,
+
+          [name]:
+            '',
+        })
+      );
     }
   };
 
@@ -394,48 +594,77 @@ const TaskEdit = () => {
   // VALIDATION
   // ======================================================
 
-  const validateForm = () => {
-    const nextErrors = {};
+  const validateForm =
+    () => {
+      const nextErrors =
+        {};
 
-    if (!formData.title.trim()) {
-      nextErrors.title =
-        'Görev adı gereklidir';
-    }
+      if (
+        !formData
+          .title
+          .trim()
+      ) {
+        nextErrors.title =
+          'Görev adı gereklidir';
+      }
 
-    if (
-      formData.estimated_hours !== '' &&
-      (
-        !Number.isFinite(
+      if (
+        formData
+          .estimated_hours !==
+          '' &&
+        (
+          !Number.isFinite(
+            Number(
+              formData
+                .estimated_hours
+            )
+          ) ||
           Number(
-            formData.estimated_hours
-          )
-        ) ||
-        Number(
-          formData.estimated_hours
-        ) < 0
-      )
-    ) {
-      nextErrors.estimated_hours =
-        'Tahmini süre 0 veya daha büyük olmalıdır';
-    }
+            formData
+              .estimated_hours
+          ) <
+            0
+        )
+      ) {
+        nextErrors.estimated_hours =
+          'Tahmini süre 0 veya daha büyük olmalıdır';
+      }
 
-    setErrors(nextErrors);
-
-    return (
-      Object.keys(
+      setErrors(
         nextErrors
-      ).length === 0
-    );
-  };
+      );
+
+      return (
+        Object.keys(
+          nextErrors
+        ).length ===
+        0
+      );
+    };
 
   // ======================================================
   // SUBMIT
   // ======================================================
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (
+    event
+  ) => {
     event.preventDefault();
 
-    if (!canEdit) {
+    if (
+      !canEdit &&
+      !canChangeAssignee
+    ) {
+      toast.error(
+        'Bu görev üzerinde değişiklik yapma yetkiniz bulunmuyor.'
+      );
+
+      return;
+    }
+
+    if (
+      workflowLocked
+    ) {
       toast.error(
         'Bu görev mevcut iş akışı durumunda düzenlenemez.'
       );
@@ -443,118 +672,198 @@ const TaskEdit = () => {
       return;
     }
 
-    if (!validateForm()) {
+    if (
+      canEdit &&
+      !validateForm()
+    ) {
       return;
     }
 
-    const submitData = {
-      title:
-        formData.title.trim(),
+    const updateData = {};
 
-      description:
-        formData.description
+    /*
+     * Genel görev bilgileri yalnızca edit_tasks
+     * yetkisiyle normal update endpoint'ine gider.
+     */
+    if (
+      canEdit
+    ) {
+      updateData.title =
+        formData
+          .title
+          .trim();
+
+      updateData.description =
+        formData
+          .description
           .trim() ||
-        null,
-
-      priority:
-        formData.priority,
-
-      due_date:
-        formData.due_date ||
-        null,
-
-      case_id:
-        formData.case_id ||
-        null,
-
-      client_id:
-        formData.client_id ||
-        null,
-
-      estimated_hours:
-        formData.estimated_hours !== ''
-          ? Number.parseFloat(
-              formData.estimated_hours
-            )
-          : null,
-    };
-
-    if (canChangeAssignee) {
-      submitData.assigned_to =
-        formData.assigned_to ||
         null;
+
+      updateData.priority =
+        formData.priority;
+
+      updateData.due_date =
+        formData
+          .due_date ||
+        null;
+
+      updateData.estimated_hours =
+        formData
+          .estimated_hours !==
+        ''
+          ? Number.parseFloat(
+              formData
+                .estimated_hours
+            )
+          : null;
+
+      if (
+        canViewCases
+      ) {
+        updateData.case_id =
+          formData
+            .case_id ||
+          null;
+      }
+
+      if (
+        canViewClients
+      ) {
+        updateData.client_id =
+          formData
+            .client_id ||
+          null;
+      }
     }
 
     /*
-     * status özellikle gönderilmiyor.
-     * Workflow endpointleri:
-     * - start
-     * - complete
-     * - approve
-     * üzerinden yönetiliyor.
+     * Atama normal update endpoint'ine GİTMEZ.
+     * assign_tasks yetkisiyle ayrı /assign endpoint'i
+     * kullanılır.
      */
-    updateMutation.mutate(
-      {
-        id,
-        data: submitData,
-      },
-      {
-        onSuccess: () => {
-          toast.success(
-            'Görev bilgileri güncellendi'
+    const currentAssignee =
+      task.assigned_to ||
+      '';
+
+    const requestedAssignee =
+      formData.assigned_to ||
+      '';
+
+    const assignmentChanged =
+      canChangeAssignee &&
+      requestedAssignee !==
+        currentAssignee;
+
+    const hasGeneralUpdate =
+      Object.keys(
+        updateData
+      ).length >
+      0;
+
+    if (
+      !hasGeneralUpdate &&
+      !assignmentChanged
+    ) {
+      toast.error(
+        'Güncellenecek alan bulunamadı.'
+      );
+
+      return;
+    }
+
+    try {
+      if (
+        hasGeneralUpdate
+      ) {
+        await updateMutation.mutateAsync({
+          id,
+          data:
+            updateData,
+        });
+      }
+
+      if (
+        assignmentChanged
+      ) {
+        if (
+          !requestedAssignee
+        ) {
+          toast.error(
+            'Görev ataması boş bırakılamaz.'
           );
 
-          navigate(
-            `/tasks/${id}`
-          );
-        },
+          return;
+        }
+
+        await assignMutation.mutateAsync({
+          id,
+          assigned_to:
+            requestedAssignee,
+        });
       }
-    );
+
+      navigate(
+        `/tasks/${id}`
+      );
+    } catch {
+      /*
+       * Mutation hata mesajlarını kendi onError
+       * callback'leri gösteriyor.
+       */
+    }
   };
 
   // ======================================================
   // DELETE
   // ======================================================
 
-  const handleDelete = () => {
-    if (!canDelete) {
-      toast.error(
-        'Bu görevi silme yetkiniz bulunmuyor.'
-      );
+  const handleDelete =
+    () => {
+      if (
+        !canDelete
+      ) {
+        toast.error(
+          'Bu görevi silme yetkiniz bulunmuyor.'
+        );
 
-      return;
-    }
-
-    const confirmed =
-      window.confirm(
-        `"${task?.title}" görevini silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
-    deleteMutation.mutate(
-      id,
-      {
-        onSuccess: () => {
-          toast.success(
-            'Görev silindi'
-          );
-
-          navigate(
-            '/tasks'
-          );
-        },
+        return;
       }
-    );
-  };
+
+      const confirmed =
+        window.confirm(
+          `"${task?.title}" görevini silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`
+        );
+
+      if (
+        !confirmed
+      ) {
+        return;
+      }
+
+      deleteMutation.mutate(
+        id,
+        {
+          onSuccess:
+            () => {
+              toast.success(
+                'Görev silindi'
+              );
+
+              navigate(
+                '/tasks'
+              );
+            },
+        }
+      );
+    };
 
   // ======================================================
   // LOADING
   // ======================================================
 
-  if (taskLoading) {
+  if (
+    taskLoading
+  ) {
     return (
       <div className="flex h-64 items-center justify-center">
 
@@ -674,15 +983,15 @@ const TaskEdit = () => {
                   displayStatus.variant
                 }
               >
-                {
-                  displayStatus.label
-                }
+                {displayStatus.label}
               </Badge>
 
               <Badge
-                variant={getPriorityVariant(
-                  task.priority
-                )}
+                variant={
+                  getPriorityVariant(
+                    task.priority
+                  )
+                }
               >
                 {PRIORITY_LABELS[
                   task.priority
@@ -728,13 +1037,12 @@ const TaskEdit = () => {
             <div>
 
               <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-                Görev yönetici onayı bekliyor
+                Görev onay bekliyor
               </p>
 
               <p className="mt-1 text-sm leading-6 text-amber-800 dark:text-amber-300">
                 Çalışma tamamlanmak üzere gönderildi.
-                Yönetici incelemesi tamamlanana kadar görev
-                bilgileri değiştirilemez.
+                Onay tamamlanana kadar görev bilgileri değiştirilemez.
               </p>
 
             </div>
@@ -768,7 +1076,7 @@ const TaskEdit = () => {
               </p>
 
               <p className="mt-1 text-sm leading-6 text-emerald-800 dark:text-emerald-300">
-                Onaylanmış görevlerin bilgileri normal düzenleme ekranından değiştirilemez.
+                Onaylanan görevlerin bilgileri normal düzenleme ekranından değiştirilemez.
               </p>
 
             </div>
@@ -813,29 +1121,35 @@ const TaskEdit = () => {
       )}
 
       {/* ==================================================
-          FORM CARD
+          FORM
       ================================================== */}
 
       <Card className="overflow-hidden border border-gray-200 shadow-sm dark:border-white/[0.06]">
 
         <form
-          onSubmit={handleSubmit}
+          onSubmit={
+            handleSubmit
+          }
           className="space-y-6 p-5 md:p-6"
         >
-
-          {/* TITLE */}
 
           <Input
             label="Görev Adı *"
             name="title"
-            value={formData.title}
-            onChange={handleChange}
-            error={errors.title}
-            disabled={!canEdit}
+            value={
+              formData.title
+            }
+            onChange={
+              handleChange
+            }
+            error={
+              errors.title
+            }
+            disabled={
+              !canEdit
+            }
             placeholder="Görev başlığı..."
           />
-
-          {/* DESCRIPTION */}
 
           <div>
 
@@ -845,10 +1159,16 @@ const TaskEdit = () => {
 
             <textarea
               name="description"
-              value={formData.description}
-              onChange={handleChange}
+              value={
+                formData.description
+              }
+              onChange={
+                handleChange
+              }
               rows="5"
-              disabled={!canEdit}
+              disabled={
+                !canEdit
+              }
               className="
                 w-full
                 resize-y
@@ -879,9 +1199,7 @@ const TaskEdit = () => {
 
           </div>
 
-          {/* ==================================================
-              STATUS
-          ================================================== */}
+          {/* STATUS */}
 
           <div
             className="
@@ -904,8 +1222,7 @@ const TaskEdit = () => {
                 </p>
 
                 <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">
-                  Durum bu ekrandan değiştirilemez.
-                  Başlatma, tamamlama ve onay işlemleri görev iş akışı üzerinden yönetilir.
+                  Durum bu ekrandan değiştirilmez. Başlatma, tamamlama ve onay işlemleri görev iş akışı üzerinden yönetilir.
                 </p>
 
               </div>
@@ -915,18 +1232,14 @@ const TaskEdit = () => {
                   displayStatus.variant
                 }
               >
-                {
-                  displayStatus.label
-                }
+                {displayStatus.label}
               </Badge>
 
             </div>
 
           </div>
 
-          {/* ==================================================
-              PRIORITY / DATE
-          ================================================== */}
+          {/* PRIORITY / DATE */}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
@@ -938,9 +1251,15 @@ const TaskEdit = () => {
 
               <select
                 name="priority"
-                value={formData.priority}
-                onChange={handleChange}
-                disabled={!canEdit}
+                value={
+                  formData.priority
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  !canEdit
+                }
                 className="
                   w-full
                   rounded-lg
@@ -952,20 +1271,16 @@ const TaskEdit = () => {
                   text-sm
                   text-gray-900
                   outline-none
-                  transition
                   focus:border-blue-500
                   focus:ring-2
                   focus:ring-blue-500/10
                   disabled:cursor-not-allowed
                   disabled:bg-gray-100
-                  disabled:text-gray-500
                   dark:border-white/[0.08]
                   dark:bg-white/[0.035]
                   dark:text-white
-                  dark:disabled:bg-white/[0.02]
                 "
               >
-
                 <option value="low">
                   Düşük
                 </option>
@@ -981,7 +1296,6 @@ const TaskEdit = () => {
                 <option value="critical">
                   Kritik
                 </option>
-
               </select>
 
             </div>
@@ -1003,115 +1317,73 @@ const TaskEdit = () => {
               <input
                 type="datetime-local"
                 name="due_date"
-                value={formData.due_date}
-                onChange={handleChange}
-                disabled={!canEdit}
-                className="
-                  w-full
-                  rounded-lg
-                  border
-                  border-gray-200
-                  bg-white
-                  px-3.5
-                  py-2.5
-                  text-sm
-                  text-gray-900
-                  outline-none
-                  transition
-                  focus:border-blue-500
-                  focus:ring-2
-                  focus:ring-blue-500/10
-                  disabled:cursor-not-allowed
-                  disabled:bg-gray-100
-                  disabled:text-gray-500
-                  dark:border-white/[0.08]
-                  dark:bg-white/[0.035]
-                  dark:text-white
-                  dark:disabled:bg-white/[0.02]
-                "
-              />
-
-            </div>
-
-          </div>
-
-          {/* ==================================================
-              ESTIMATED HOURS
-          ================================================== */}
-
-          <div>
-
-            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
-              Tahmini Süre
-            </label>
-
-            <div className="relative">
-
-              <input
-                type="number"
-                name="estimated_hours"
-                value={formData.estimated_hours}
-                onChange={handleChange}
-                min="0"
-                step="0.25"
-                disabled={!canEdit}
-                className="
-                  w-full
-                  rounded-lg
-                  border
-                  border-gray-200
-                  bg-white
-                  px-3.5
-                  py-2.5
-                  pr-14
-                  text-sm
-                  text-gray-900
-                  outline-none
-                  transition
-                  focus:border-blue-500
-                  focus:ring-2
-                  focus:ring-blue-500/10
-                  disabled:cursor-not-allowed
-                  disabled:bg-gray-100
-                  disabled:text-gray-500
-                  dark:border-white/[0.08]
-                  dark:bg-white/[0.035]
-                  dark:text-white
-                  dark:disabled:bg-white/[0.02]
-                "
-                placeholder="Örn: 2.5"
-              />
-
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                saat
-              </span>
-
-            </div>
-
-            {errors.estimated_hours && (
-              <p className="mt-1.5 text-sm text-red-600">
-                {
-                  errors.estimated_hours
+                value={
+                  formData.due_date
                 }
-              </p>
-            )}
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  !canEdit
+                }
+                className="
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  py-2.5
+                  text-sm
+                  text-gray-900
+                  outline-none
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  disabled:cursor-not-allowed
+                  disabled:bg-gray-100
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-white
+                "
+              />
+
+            </div>
 
           </div>
 
-          {/* ==================================================
-              ASSIGNEE
-          ================================================== */}
+          {/* ESTIMATED HOURS */}
+
+          <Input
+            label="Tahmini Süre"
+            type="number"
+            name="estimated_hours"
+            value={
+              formData.estimated_hours
+            }
+            onChange={
+              handleChange
+            }
+            min="0"
+            step="0.25"
+            disabled={
+              !canEdit
+            }
+            error={
+              errors.estimated_hours
+            }
+            placeholder="Örn: 2.5"
+          />
+
+          {/* ASSIGNEE */}
 
           <div>
 
             <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
 
               <span className="inline-flex items-center gap-1.5">
-
                 <UserRound className="h-4 w-4 text-gray-400" />
-
                 Atanan Kişi
-
               </span>
 
             </label>
@@ -1119,8 +1391,12 @@ const TaskEdit = () => {
             {canChangeAssignee ? (
               <select
                 name="assigned_to"
-                value={formData.assigned_to}
-                onChange={handleChange}
+                value={
+                  formData.assigned_to
+                }
+                onChange={
+                  handleChange
+                }
                 className="
                   w-full
                   rounded-lg
@@ -1132,7 +1408,6 @@ const TaskEdit = () => {
                   text-sm
                   text-gray-900
                   outline-none
-                  transition
                   focus:border-blue-500
                   focus:ring-2
                   focus:ring-blue-500/10
@@ -1143,97 +1418,53 @@ const TaskEdit = () => {
               >
 
                 <option value="">
-                  Atanacak kişi seçin
+                  {assignableUsersFetching
+                    ? 'Kullanıcılar yükleniyor...'
+                    : 'Atanacak kişi seçin'}
                 </option>
 
                 {assignableUsers.map(
-                  (person) => (
+                  (
+                    person
+                  ) => (
                     <option
-                      key={person.id}
-                      value={person.id}
+                      key={
+                        person.id
+                      }
+                      value={
+                        person.id
+                      }
                     >
                       {person.first_name}{' '}
                       {person.last_name}
-
-                      {person.role === 'admin' &&
-                        ' (Admin)'}
-
-                      {person.role === 'lawyer' &&
-                        ' (Avukat)'}
-
-                      {person.role === 'intern' &&
-                        ' (Stajyer)'}
-
-                      {person.role === 'secretary' &&
-                        ' (Sekreter)'}
                     </option>
                   )
                 )}
 
               </select>
             ) : (
-              <div
-                className="
-                  rounded-xl
-                  border
-                  border-gray-200
-                  bg-gray-50/70
-                  p-4
-                  dark:border-white/[0.06]
-                  dark:bg-white/[0.02]
-                "
-              >
+              <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
 
-                <div className="flex items-start gap-3">
+                <p className="text-xs text-gray-400">
+                  Atanan Kişi
+                </p>
 
-                  <div
-                    className="
-                      flex
-                      h-9
-                      w-9
-                      shrink-0
-                      items-center
-                      justify-center
-                      rounded-lg
-                      bg-blue-50
-                      text-blue-600
-                      dark:bg-blue-500/[0.08]
-                      dark:text-blue-400
-                    "
-                  >
-                    <UserRound className="h-4 w-4" />
-                  </div>
+                <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                  {task.assignee
+                    ? `${task.assignee.first_name || ''} ${task.assignee.last_name || ''}`.trim()
+                    : 'Atanmadı'}
+                </p>
 
-                  <div>
-
-                    <p className="text-xs text-gray-400">
-                      Atanan Kişi
-                    </p>
-
-                    <p className="mt-1 font-medium text-gray-900 dark:text-white">
-                      {task.assignee
-                        ? `${task.assignee.first_name || ''} ${task.assignee.last_name || ''}`.trim()
-                        : 'Atanmadı'}
-                    </p>
-
-                    {!isAdmin && (
-                      <p className="mt-1 text-xs text-gray-400">
-                        Atamayı yalnızca yönetici değiştirebilir.
-                      </p>
-                    )}
-
-                  </div>
-
-                </div>
+                <p className="mt-1 text-xs text-gray-400">
+                  Görev atamasını değiştirme yetkiniz bulunmuyor.
+                </p>
 
               </div>
             )}
 
           </div>
 
-          {/* ==================================================
-              RELATED
-          ================================================== */}
+          {/* RELATED */}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
@@ -1245,9 +1476,16 @@ const TaskEdit = () => {
 
               <select
                 name="case_id"
-                value={formData.case_id}
-                onChange={handleChange}
-                disabled={!canEdit}
+                value={
+                  formData.case_id
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  !canEdit ||
+                  !canViewCases
+                }
                 className="
                   w-full
                   rounded-lg
@@ -1259,29 +1497,29 @@ const TaskEdit = () => {
                   text-sm
                   text-gray-900
                   outline-none
-                  transition
-                  focus:border-blue-500
-                  focus:ring-2
-                  focus:ring-blue-500/10
                   disabled:cursor-not-allowed
                   disabled:bg-gray-100
-                  disabled:text-gray-500
                   dark:border-white/[0.08]
                   dark:bg-white/[0.035]
                   dark:text-white
-                  dark:disabled:bg-white/[0.02]
                 "
               >
 
                 <option value="">
-                  Dava seçin (isteğe bağlı)
+                  Dava seçin
                 </option>
 
                 {cases.map(
-                  (caseItem) => (
+                  (
+                    caseItem
+                  ) => (
                     <option
-                      key={caseItem.id}
-                      value={caseItem.id}
+                      key={
+                        caseItem.id
+                      }
+                      value={
+                        caseItem.id
+                      }
                     >
                       {caseItem.title}
                     </option>
@@ -1289,6 +1527,12 @@ const TaskEdit = () => {
                 )}
 
               </select>
+
+              {!canViewCases && (
+                <p className="mt-1.5 text-xs text-gray-400">
+                  Dava kayıtlarını görüntüleme yetkiniz bulunmuyor.
+                </p>
+              )}
 
             </div>
 
@@ -1300,9 +1544,16 @@ const TaskEdit = () => {
 
               <select
                 name="client_id"
-                value={formData.client_id}
-                onChange={handleChange}
-                disabled={!canEdit}
+                value={
+                  formData.client_id
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  !canEdit ||
+                  !canViewClients
+                }
                 className="
                   w-full
                   rounded-lg
@@ -1314,73 +1565,65 @@ const TaskEdit = () => {
                   text-sm
                   text-gray-900
                   outline-none
-                  transition
-                  focus:border-blue-500
-                  focus:ring-2
-                  focus:ring-blue-500/10
                   disabled:cursor-not-allowed
                   disabled:bg-gray-100
-                  disabled:text-gray-500
                   dark:border-white/[0.08]
                   dark:bg-white/[0.035]
                   dark:text-white
-                  dark:disabled:bg-white/[0.02]
                 "
               >
 
                 <option value="">
-                  Müvekkil seçin (isteğe bağlı)
+                  Müvekkil seçin
                 </option>
 
                 {clients.map(
-                  (client) => (
+                  (
+                    client
+                  ) => (
                     <option
-                      key={client.id}
-                      value={client.id}
+                      key={
+                        client.id
+                      }
+                      value={
+                        client.id
+                      }
                     >
                       {client.name}
-
-                      {client.company_name &&
-                        ` (${client.company_name})`}
                     </option>
                   )
                 )}
 
               </select>
 
+              {!canViewClients && (
+                <p className="mt-1.5 text-xs text-gray-400">
+                  Müvekkil kayıtlarını görüntüleme yetkiniz bulunmuyor.
+                </p>
+              )}
+
             </div>
 
           </div>
 
-          {/* ==================================================
-              ACTIONS
-          ================================================== */}
+          {/* ACTIONS */}
 
-          <div
-            className="
-              flex
-              flex-col
-              gap-3
-              border-t
-              border-gray-100
-              pt-5
-              dark:border-white/[0.05]
-              sm:flex-row
-              sm:items-center
-              sm:justify-between
-            "
-          >
+          <div className="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-white/[0.05] sm:flex-row sm:items-center sm:justify-between">
 
             <div className="flex flex-wrap gap-2">
 
-              {canEdit && (
+              {(canEdit ||
+                canChangeAssignee) && (
                 <Button
                   type="submit"
                   loading={
-                    updateMutation.isPending
+                    updateMutation.isPending ||
+                    assignMutation.isPending
                   }
                   disabled={
-                    updateMutation.isPending
+                    updateMutation.isPending ||
+                    assignMutation.isPending ||
+                    workflowLocked
                   }
                 >
                   <Save className="mr-2 h-4 w-4" />
@@ -1407,7 +1650,9 @@ const TaskEdit = () => {
               <Button
                 type="button"
                 variant="danger"
-                onClick={handleDelete}
+                onClick={
+                  handleDelete
+                }
                 loading={
                   deleteMutation.isPending
                 }

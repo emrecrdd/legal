@@ -13,19 +13,27 @@ import toast from 'react-hot-toast';
 // ======================================================
 
 export const TASK_QUERY_KEYS = {
-  all: ['tasks'],
+  all: [
+    'tasks',
+  ],
 
-  list: (params = {}) => [
+  list: (
+    params = {}
+  ) => [
     'tasks',
     params,
   ],
 
-  detail: (id) => [
+  detail: (
+    id
+  ) => [
     'task',
     id,
   ],
 
-  myTasks: (params = {}) => [
+  myTasks: (
+    params = {}
+  ) => [
     'my-tasks',
     params,
   ],
@@ -42,7 +50,13 @@ export const TASK_QUERY_KEYS = {
     'task-statistics',
   ],
 
-  notes: (id) => [
+  assignableUsers: () => [
+    'task-assignable-users',
+  ],
+
+  notes: (
+    id
+  ) => [
     'task-notes',
     id,
   ],
@@ -65,7 +79,9 @@ export const TASK_QUERY_KEYS = {
     params,
   ],
 
-  infinite: (params = {}) => [
+  infinite: (
+    params = {}
+  ) => [
     'tasks-infinite',
     params,
   ],
@@ -166,7 +182,9 @@ const invalidateClientTasks = (
   queryClient,
   clientId
 ) => {
-  if (clientId) {
+  if (
+    clientId
+  ) {
     queryClient.invalidateQueries({
       queryKey: [
         'client-tasks',
@@ -191,11 +209,6 @@ const invalidateClientTasks = (
     return;
   }
 
-  /*
-   * Mutation response/variables client_id vermiyorsa
-   * mevcut client cockpit cache'lerini genel olarak
-   * stale işaretle.
-   */
   queryClient.invalidateQueries({
     queryKey: [
       'client-tasks',
@@ -213,7 +226,9 @@ const invalidateCaseTasks = (
   queryClient,
   caseId
 ) => {
-  if (!caseId) {
+  if (
+    !caseId
+  ) {
     return;
   }
 
@@ -243,7 +258,8 @@ const failure = (
 ) => {
   toast.error(
     error?.response
-      ?.data?.message ||
+      ?.data
+      ?.message ||
       error?.message ||
       fallback
   );
@@ -296,7 +312,9 @@ export const useTask = (
       ),
 
     enabled:
-      Boolean(id),
+      Boolean(
+        id
+      ),
 
     staleTime:
       CACHE.NORMAL,
@@ -384,6 +402,37 @@ export const useTaskStatistics =
         CACHE.GC,
     });
   };
+
+// ======================================================
+// ASSIGNABLE USERS
+// ======================================================
+
+export const useAssignableUsers = (
+  enabled = true
+) => {
+  return useQuery({
+    queryKey:
+      TASK_QUERY_KEYS.assignableUsers(),
+
+    queryFn: () =>
+      taskApi.getAssignableUsers(),
+
+    enabled:
+      Boolean(
+        enabled
+      ),
+
+    staleTime:
+      CACHE.NORMAL,
+
+    gcTime:
+      CACHE.GC,
+  });
+};
+
+// ======================================================
+// TASK NOTES
+// ======================================================
 
 export const useTaskNotes = (
   taskId
@@ -516,12 +565,14 @@ export const useCreateTask =
 
         invalidateClientTasks(
           queryClient,
-          variables?.client_id
+          variables
+            ?.client_id
         );
 
         invalidateCaseTasks(
           queryClient,
-          variables?.case_id
+          variables
+            ?.case_id
         );
 
         queryClient.invalidateQueries({
@@ -580,13 +631,15 @@ export const useUpdateTask =
 
         invalidateClientTasks(
           queryClient,
-          variables?.data
+          variables
+            ?.data
             ?.client_id
         );
 
         invalidateCaseTasks(
           queryClient,
-          variables?.data
+          variables
+            ?.data
             ?.case_id
         );
 
@@ -1061,7 +1114,9 @@ export const useBulkUpdateTaskStatus =
         }) =>
           Promise.allSettled(
             ids.map(
-              (id) =>
+              (
+                id
+              ) =>
                 taskApi.updateStatus(
                   id,
                   status
@@ -1070,8 +1125,7 @@ export const useBulkUpdateTaskStatus =
           ),
 
       onSuccess: (
-        results,
-        variables
+        results
       ) => {
         invalidateTaskLists(
           queryClient
@@ -1083,7 +1137,9 @@ export const useBulkUpdateTaskStatus =
 
         const successful =
           results.filter(
-            (result) =>
+            (
+              result
+            ) =>
               result.status ===
               'fulfilled'
           ).length;
@@ -1103,12 +1159,14 @@ export const useBulkUpdateTaskStatus =
         }
 
         if (
-          successful > 0
+          successful >
+          0
         ) {
           toast(
             `${successful} görev güncellendi, ${failed} görev güncellenemedi`,
             {
-              icon: '⚠️',
+              icon:
+                '⚠️',
             }
           );
 
@@ -1164,7 +1222,9 @@ export const useInfiniteTasks = (
         lastPage?.data
           ?.pagination;
 
-      if (!pagination) {
+      if (
+        !pagination
+      ) {
         return undefined;
       }
 
@@ -1281,6 +1341,7 @@ export default {
   useMyUpcomingTasks,
 
   useTaskStatistics,
+  useAssignableUsers,
   useTaskNotes,
 
   useClientTasks,
@@ -1291,9 +1352,11 @@ export default {
   useDeleteTask,
   useUpdateTaskStatus,
   useAssignTask,
+
   useStartTask,
   useCompleteTask,
   useApproveTask,
+
   useAddNote,
   useUpdateProgress,
   useBulkUpdateTaskStatus,

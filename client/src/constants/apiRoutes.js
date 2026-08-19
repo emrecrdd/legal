@@ -158,6 +158,8 @@ export const API_ROUTES = {
     ASSIGN:
       (id) =>
         `/tasks/${id}/assign`,
+    ASSIGNABLE_USERS:
+        '/tasks/assignable-users',
 
     START:
       (id) =>

@@ -35,6 +35,11 @@ import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
 
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Badge from '../../components/ui/Badge.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -502,27 +507,75 @@ const ClientDetail = () => {
 
   // ======================================================
   // PERMISSIONS
+  // Merkezi permission sistemi kullanılır.
+  // Rol varsayılanı + kullanıcı override birlikte değerlendirilir.
   // ======================================================
 
-  const canEdit = [
-    'admin',
-    'lawyer',
-    'secretary',
-  ].includes(
-    user?.role
-  );
+  const canEdit =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_CLIENTS
+    );
 
-  const canCreatePOA =
-    canEdit;
+  const canViewCases =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_CASES
+    );
+
+  const canViewPayments =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_PAYMENTS
+    );
+
+  const canViewTasks =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_TASKS
+    );
 
   const canCreateTask =
-    canEdit;
+    hasPermission(
+      user,
+      PERMISSION_KEYS.CREATE_TASKS
+    );
+
+  const canViewMeetings =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_MEETINGS
+    );
 
   const canCreateMeeting =
-    canEdit;
+    hasPermission(
+      user,
+      PERMISSION_KEYS.CREATE_MEETINGS
+    );
+
+  const canViewDocuments =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_DOCUMENTS
+    );
 
   const canUploadDocument =
-    canEdit;
+    hasPermission(
+      user,
+      PERMISSION_KEYS.UPLOAD_DOCUMENTS
+    );
+
+  const canViewPOA =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_POWER_OF_ATTORNEY
+    );
+
+  const canCreatePOA =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.CREATE_POWER_OF_ATTORNEY
+    );
 
   // ======================================================
   // CLIENT
@@ -1207,9 +1260,11 @@ const ClientDetail = () => {
           </div>
 
           <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
-            {casesLoading
-              ? '...'
-              : cases.length}
+            {!canViewCases
+              ? '-'
+              : casesLoading
+                ? '...'
+                : cases.length}
           </p>
 
         </div>
@@ -1222,17 +1277,20 @@ const ClientDetail = () => {
           </div>
 
           <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
-            {(Number(
-              taskSummary.pending
-            ) || 0) +
-              (Number(
-                taskSummary.in_progress
-              ) || 0)}
+            {canViewTasks
+              ? (Number(
+                  taskSummary.pending
+                ) || 0) +
+                (Number(
+                  taskSummary.in_progress
+                ) || 0)
+              : '-'}
           </p>
 
-          {Number(
-            taskSummary.overdue
-          ) > 0 && (
+          {canViewTasks &&
+            Number(
+              taskSummary.overdue
+            ) > 0 && (
             <p className="mt-1 text-xs font-medium text-red-600">
               {taskSummary.overdue} gecikmiş
             </p>
@@ -1248,7 +1306,9 @@ const ClientDetail = () => {
           </div>
 
           <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
-            {upcomingMeetings.length}
+            {canViewMeetings
+              ? upcomingMeetings.length
+              : '-'}
           </p>
 
         </div>
@@ -1261,8 +1321,10 @@ const ClientDetail = () => {
           </div>
 
           <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
-            {documentPagination?.total ??
-              documents.length}
+            {canViewDocuments
+              ? documentPagination?.total ??
+                documents.length
+              : '-'}
           </p>
 
         </div>
@@ -1275,11 +1337,13 @@ const ClientDetail = () => {
           </div>
 
           <p className="mt-2 text-lg font-bold text-green-600">
-            {paymentsLoading
-              ? '...'
-              : formatMoney(
-                  financialSummary.received
-                )}
+            {!canViewPayments
+              ? '-'
+              : paymentsLoading
+                ? '...'
+                : formatMoney(
+                    financialSummary.received
+                  )}
           </p>
 
         </div>
@@ -1290,11 +1354,13 @@ const ClientDetail = () => {
           ALERTS
       ================================================== */}
 
-      {(Number(
-        taskSummary.overdue
-      ) > 0 ||
-        upcomingMeetings.length >
-          0) && (
+      {((canViewTasks &&
+        Number(
+          taskSummary.overdue
+        ) > 0) ||
+        (canViewMeetings &&
+          upcomingMeetings.length >
+            0)) && (
         <div className="grid gap-4 md:grid-cols-2">
 
           {Number(
@@ -1323,8 +1389,9 @@ const ClientDetail = () => {
             </div>
           )}
 
-          {upcomingMeetings.length >
-            0 && (
+          {canViewMeetings &&
+            upcomingMeetings.length >
+              0 && (
             <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-900/10">
 
               <div className="flex items-start gap-3">
@@ -1358,10 +1425,12 @@ const ClientDetail = () => {
           TASKS + MEETINGS
       ================================================== */}
 
+      {(canViewTasks || canViewMeetings) && (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
 
         {/* TASKS */}
 
+        {canViewTasks && (
         <Card>
 
           <Card.Header>
@@ -1480,9 +1549,11 @@ const ClientDetail = () => {
           </Card.Body>
 
         </Card>
+        )}
 
         {/* MEETINGS */}
 
+        {canViewMeetings && (
         <Card>
 
           <Card.Header>
@@ -1599,13 +1670,16 @@ const ClientDetail = () => {
           </Card.Body>
 
         </Card>
+        )}
 
       </div>
+      )}
 
       {/* ==================================================
           DOCUMENTS
       ================================================== */}
 
+      {canViewDocuments && (
       <Card>
 
         <Card.Header>
@@ -1735,6 +1809,7 @@ const ClientDetail = () => {
         </Card.Body>
 
       </Card>
+      )}
 
       {/* ==================================================
           INFO + FINANCE
@@ -1938,6 +2013,7 @@ const ClientDetail = () => {
 
         {/* FINANCE */}
 
+        {canViewPayments && (
         <Card>
 
           <Card.Header>
@@ -2125,6 +2201,7 @@ const ClientDetail = () => {
           </Card.Body>
 
         </Card>
+        )}
 
       </div>
 
@@ -2132,6 +2209,7 @@ const ClientDetail = () => {
           POWER OF ATTORNEYS
       ================================================== */}
 
+      {canViewPOA && (
       <Card>
 
         <Card.Header>
@@ -2272,11 +2350,13 @@ const ClientDetail = () => {
         </Card.Body>
 
       </Card>
+      )}
 
       {/* ==================================================
           CASES
       ================================================== */}
 
+      {canViewCases && (
       <Card>
 
         <Card.Header>
@@ -2447,6 +2527,7 @@ const ClientDetail = () => {
         </Card.Body>
 
       </Card>
+      )}
 
       {/* ==================================================
           FOOTER

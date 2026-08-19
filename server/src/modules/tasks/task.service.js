@@ -57,36 +57,100 @@ const notifySafely = async (
 
 export const taskService = {
   async create(data) {
-    const transaction = await sequelize.transaction();
+  const transaction =
+    await sequelize.transaction();
 
-    let task;
+  let task;
 
-    try {
-      task = await Task.create(data, {
-        transaction,
-      });
+  try {
+    // ==================================================
+    // ASSIGNEE VALIDATION
+    // ==================================================
 
-      if (shouldHaveReminders(task)) {
-        await reminderService.createTaskReminders(task, {
-          transaction,
-        });
+    if (
+      data.assigned_to
+    ) {
+      const assignee =
+        await User.findByPk(
+          data.assigned_to,
+          {
+            transaction,
+
+            attributes: [
+              'id',
+              'is_active',
+            ],
+          }
+        );
+
+      if (!assignee) {
+        throw new Error(
+          'Görev atanacak kullanıcı bulunamadı'
+        );
       }
 
-      await transaction.commit();
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
+      if (
+        assignee.is_active !==
+        true
+      ) {
+        throw new Error(
+          'Pasif kullanıcıya görev atanamaz'
+        );
+      }
     }
 
-    /*
-     * Kullanıcı bildirimi transaction sonrasında gönderilir.
-     * Harici bildirim hatası görev kaydını bozmamalıdır.
-     */
-    if (task.assigned_to) {
-      await notifySafely(
-        'task-assigned-on-create',
-        async () => {
-          const creator = await User.findByPk(
+    // ==================================================
+    // CREATE TASK
+    // ==================================================
+
+    task =
+      await Task.create(
+        data,
+        {
+          transaction,
+        }
+      );
+
+    // ==================================================
+    // REMINDERS
+    // ==================================================
+
+    if (
+      shouldHaveReminders(
+        task
+      )
+    ) {
+      await reminderService.createTaskReminders(
+        task,
+        {
+          transaction,
+        }
+      );
+    }
+
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+
+    throw error;
+  }
+
+  // ==================================================
+  // NOTIFICATION
+  //
+  // Transaction sonrası gönderiyoruz.
+  // Bildirim hatası görev oluşturmayı bozmaz.
+  // ==================================================
+
+  if (
+    task.assigned_to
+  ) {
+    await notifySafely(
+      'task-assigned-on-create',
+
+      async () => {
+        const creator =
+          await User.findByPk(
             task.created_by,
             {
               attributes: [
@@ -97,26 +161,43 @@ export const taskService = {
             }
           );
 
-          const creatorName = creator
-            ? `${creator.first_name} ${creator.last_name}`.trim()
+        const creatorName =
+          creator
+            ? [
+                creator.first_name,
+                creator.last_name,
+              ]
+                .filter(
+                  Boolean
+                )
+                .join(' ')
+                .trim()
             : 'Sistem';
 
-          await notificationService.notifyTaskAssigned(
-            task.assigned_to,
-            task.id,
-            task.title,
-            creatorName
-          );
-        },
-        {
-          taskId: task.id,
-          assignedTo: task.assigned_to,
-        }
-      );
-    }
+        await notificationService.notifyTaskAssigned(
+          task.assigned_to,
+          task.id,
+          task.title,
+          creatorName ||
+            'Sistem'
+        );
+      },
 
-    return task;
-  },
+      {
+        taskId:
+          task.id,
+
+        assignedTo:
+          task.assigned_to,
+
+        createdBy:
+          task.created_by,
+      }
+    );
+  }
+
+  return task;
+},
 
   async findAll({
   page,
@@ -246,6 +327,43 @@ if (client_id) {
         limitNum
       ),
     };
+  },
+    // ====================================================
+  // ASSIGNABLE USERS
+  //
+  // Sadece görev atamasında ihtiyaç duyulan
+  // güvenli kullanıcı alanlarını döndürür.
+  //
+  // /users endpoint'ini görev atayan kişilere
+  // açmak zorunda kalmayız.
+  // ====================================================
+
+  async getAssignableUsers() {
+    return User.findAll({
+      where: {
+        is_active: true,
+      },
+
+      attributes: [
+        'id',
+        'first_name',
+        'last_name',
+        'email',
+        'role',
+        'title',
+      ],
+
+      order: [
+        [
+          'first_name',
+          'ASC',
+        ],
+        [
+          'last_name',
+          'ASC',
+        ],
+      ],
+    });
   },
 
   async findOne(id) {

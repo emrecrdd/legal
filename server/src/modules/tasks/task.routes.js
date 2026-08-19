@@ -54,6 +54,18 @@ router.get(
 );
 
 // ======================================================
+// ASSIGNABLE USERS
+// ======================================================
+
+router.get(
+  '/assignable-users',
+  authorizePermission(
+    PERMISSION_KEYS.ASSIGN_TASKS
+  ),
+  taskController.getAssignableUsers
+);
+
+// ======================================================
 // STATISTICS
 // ======================================================
 

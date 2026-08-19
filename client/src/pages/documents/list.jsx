@@ -15,7 +15,10 @@ import {
   useDeleteDocument,
   useBulkDeleteDocuments,
 } from '../../features/documents/document.query.js';
-
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
 import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
@@ -329,28 +332,36 @@ const DocumentsList = () => {
       500
     );
 
-  // ====================================================
-  // PERMISSIONS
-  // ====================================================
+ 
+  
 
-  const canUpload = [
-    'admin',
-    'lawyer',
-    'secretary',
-  ].includes(
-    user?.role
+  // ====================================================
+// PERMISSIONS
+// ====================================================
+
+const canUpload =
+  hasPermission(
+    user,
+    PERMISSION_KEYS.UPLOAD_DOCUMENTS
   );
 
-  const canEdit =
-    canUpload;
-
-  const canDelete = [
-    'admin',
-    'lawyer',
-  ].includes(
-    user?.role
+const canEdit =
+  hasPermission(
+    user,
+    PERMISSION_KEYS.EDIT_DOCUMENTS
   );
 
+const canDelete =
+  hasPermission(
+    user,
+    PERMISSION_KEYS.DELETE_DOCUMENTS
+  );
+
+const canViewCases =
+  hasPermission(
+    user,
+    PERMISSION_KEYS.VIEW_CASES
+  );
   // ====================================================
   // QUERIES
   // ====================================================
@@ -1273,33 +1284,49 @@ const DocumentsList = () => {
                       <Table.Cell>
 
                         {doc.case ? (
-                          <Link
-                            to={`/cases/${doc.case.id}`}
-                            className="
-                              block
-                              max-w-[14rem]
-                              truncate
-                              text-sm
-                              font-medium
-                              text-gray-700
-                              transition
-                              hover:text-blue-600
-                              dark:text-slate-300
-                              dark:hover:text-blue-400
-                            "
-                            title={
-                              doc.case
-                                .title
-                            }
-                          >
-                            {doc.case
-                              .title}
-                          </Link>
-                        ) : (
-                          <span className="text-sm text-gray-400 dark:text-slate-600">
-                            -
-                          </span>
-                        )}
+  canViewCases ? (
+    <Link
+      to={`/cases/${doc.case.id}`}
+      className="
+        block
+        max-w-[14rem]
+        truncate
+        text-sm
+        font-medium
+        text-gray-700
+        transition
+        hover:text-blue-600
+        dark:text-slate-300
+        dark:hover:text-blue-400
+      "
+      title={
+        doc.case.title
+      }
+    >
+      {doc.case.title}
+    </Link>
+  ) : (
+    <span
+      className="
+        block
+        max-w-[14rem]
+        truncate
+        text-sm
+        text-gray-600
+        dark:text-slate-400
+      "
+      title={
+        doc.case.title
+      }
+    >
+      {doc.case.title}
+    </span>
+  )
+) : (
+  <span className="text-sm text-gray-400 dark:text-slate-600">
+    -
+  </span>
+)}
 
                       </Table.Cell>
 

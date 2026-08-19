@@ -11,13 +11,17 @@ import {
 import PrivateRoute from './private.routes.jsx';
 import PublicRoute from './public.routes.jsx';
 
+import {
+  PERMISSION_KEYS,
+} from '../../constants/roles.js';
+
 // ======================================================
 // LAYOUTS
 // ======================================================
 
 import AuthLayout from '../../layouts/auth.layout.jsx';
 import DashboardLayout from '../../layouts/dashboard.layout.jsx';
-import UserCreate from '../../pages/users/UserCreate.jsx';
+
 // ======================================================
 // AUTH
 // ======================================================
@@ -118,20 +122,18 @@ import Calendar from '../../pages/calendar/index.jsx';
 
 // ======================================================
 // LEGACY FINANCE
-//
-// Yeni payments sistemi tamamen hazır olana kadar
-// eski finans ekranlarını kaldırmıyoruz.
 // ======================================================
 
 import Finance from '../../pages/finance/index.jsx';
 import FinanceCreate from '../../pages/finance/create.jsx';
 
 // ======================================================
-// NEW PAYMENTS / PROFESSIONAL FINANCE
+// NEW PAYMENTS
 // ======================================================
 
 import PaymentPlanCreate from '../../pages/payments/PaymentPlanCreate.jsx';
 import PaymentPlanDetail from '../../pages/payments/PaymentPlanDetail.jsx';
+
 // ======================================================
 // AI / SEARCH / SETTINGS
 // ======================================================
@@ -145,6 +147,7 @@ import Settings from '../../pages/settings/index.jsx';
 // ======================================================
 
 import UserList from '../../pages/users/list.jsx';
+import UserCreate from '../../pages/users/UserCreate.jsx';
 
 // ======================================================
 // AUDIT LOG
@@ -173,8 +176,8 @@ const AppRouter = () => {
 
   if (loading) {
     return (
-      <div>
-        Loading...
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600 dark:border-white/[0.08] dark:border-b-blue-500" />
       </div>
     );
   }
@@ -227,7 +230,7 @@ const AppRouter = () => {
       </Route>
 
       {/* ==================================================
-          PRIVATE
+          AUTHENTICATED AREA
       ================================================== */}
 
       <Route
@@ -241,7 +244,9 @@ const AppRouter = () => {
           }
         >
 
-          {/* HOME */}
+          {/* ==================================================
+              HOME
+          ================================================== */}
 
           <Route
             path="/"
@@ -260,7 +265,10 @@ const AppRouter = () => {
             }
           />
 
-          {/* NOTIFICATIONS */}
+          {/* ==================================================
+              NOTIFICATIONS
+              Kullanıcının kendi bildirimleri.
+          ================================================== */}
 
           <Route
             path="/notifications"
@@ -270,362 +278,723 @@ const AppRouter = () => {
           />
 
           {/* ==================================================
-              CLIENTS
+              CLIENTS - VIEW
           ================================================== */}
 
           <Route
-            path="/clients"
             element={
-              <ClientsList />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_CLIENTS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/clients"
+              element={
+                <ClientsList />
+              }
+            />
+
+            <Route
+              path="/clients/:id"
+              element={
+                <ClientDetail />
+              }
+            />
+          </Route>
+
+          {/* CLIENTS - CREATE */}
 
           <Route
-            path="/clients/create"
             element={
-              <ClientCreate />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.CREATE_CLIENTS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/clients/create"
+              element={
+                <ClientCreate />
+              }
+            />
+          </Route>
+
+          {/* CLIENTS - EDIT */}
 
           <Route
-            path="/clients/:id"
             element={
-              <ClientDetail />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.EDIT_CLIENTS
+                }
+              />
             }
-          />
-
-          <Route
-            path="/clients/:id/edit"
-            element={
-              <ClientEdit />
-            }
-          />
+          >
+            <Route
+              path="/clients/:id/edit"
+              element={
+                <ClientEdit />
+              }
+            />
+          </Route>
 
           {/* ==================================================
-              CASES
+              CASES - VIEW
           ================================================== */}
 
           <Route
-            path="/cases"
             element={
-              <CasesList />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_CASES
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/cases"
+              element={
+                <CasesList />
+              }
+            />
+
+            <Route
+              path="/cases/:id"
+              element={
+                <CaseDetail />
+              }
+            />
+
+            <Route
+              path="/cases/:caseId/parties"
+              element={
+                <CasePartyList />
+              }
+            />
+
+            <Route
+              path="/cases/:caseId/parties/:id"
+              element={
+                <CasePartyDetail />
+              }
+            />
+          </Route>
+
+          {/* CASES - CREATE */}
 
           <Route
-            path="/cases/create"
             element={
-              <CaseCreate />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.CREATE_CASES
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/cases/create"
+              element={
+                <CaseCreate />
+              }
+            />
+          </Route>
+
+          {/* CASES - EDIT */}
 
           <Route
-            path="/cases/:id"
             element={
-              <CaseDetail />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.EDIT_CASES
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/cases/:id/edit"
+              element={
+                <CaseEdit />
+              }
+            />
+          </Route>
+
+          {/* CASE PARTIES - MANAGE */}
 
           <Route
-            path="/cases/:id/edit"
             element={
-              <CaseEdit />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.MANAGE_CASE_PARTIES
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/cases/:caseId/parties/create"
+              element={
+                <CasePartyCreate />
+              }
+            />
+
+            <Route
+              path="/cases/:caseId/parties/:id/edit"
+              element={
+                <CasePartyEdit />
+              }
+            />
+          </Route>
 
           {/* ==================================================
-              CASE PARTIES
+              DOCUMENTS - VIEW
           ================================================== */}
 
           <Route
-            path="/cases/:caseId/parties"
             element={
-              <CasePartyList />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_DOCUMENTS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/documents"
+              element={
+                <DocumentsList />
+              }
+            />
+
+            <Route
+              path="/documents/:id"
+              element={
+                <DocumentDetail />
+              }
+            />
+          </Route>
+
+          {/* DOCUMENT UPLOAD */}
 
           <Route
-            path="/cases/:caseId/parties/create"
             element={
-              <CasePartyCreate />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.UPLOAD_DOCUMENTS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/documents/upload"
+              element={
+                <DocumentUpload />
+              }
+            />
+          </Route>
+
+          {/* DOCUMENT EDIT */}
 
           <Route
-            path="/cases/:caseId/parties/:id/edit"
             element={
-              <CasePartyEdit />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.EDIT_DOCUMENTS
+                }
+              />
             }
-          />
-
-          <Route
-            path="/cases/:caseId/parties/:id"
-            element={
-              <CasePartyDetail />
-            }
-          />
+          >
+            <Route
+              path="/documents/:id/edit"
+              element={
+                <DocumentEdit />
+              }
+            />
+          </Route>
 
           {/* ==================================================
-              DOCUMENTS
+              TASKS - VIEW
           ================================================== */}
 
           <Route
-            path="/documents"
             element={
-              <DocumentsList />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_TASKS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/tasks"
+              element={
+                <TasksList />
+              }
+            />
+
+            <Route
+              path="/tasks/:id"
+              element={
+                <TaskDetail />
+              }
+            />
+          </Route>
+
+          {/* TASK CREATE */}
 
           <Route
-            path="/documents/upload"
             element={
-              <DocumentUpload />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.CREATE_TASKS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/tasks/create"
+              element={
+                <TaskCreate />
+              }
+            />
+          </Route>
+
+          {/* TASK EDIT */}
 
           <Route
-            path="/documents/:id"
             element={
-              <DocumentDetail />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.EDIT_TASKS
+                }
+              />
             }
-          />
-
-          <Route
-            path="/documents/:id/edit"
-            element={
-              <DocumentEdit />
-            }
-          />
+          >
+            <Route
+              path="/tasks/:id/edit"
+              element={
+                <TaskEdit />
+              }
+            />
+          </Route>
 
           {/* ==================================================
-              MEETINGS
+              MEETINGS - VIEW
           ================================================== */}
 
           <Route
-            path="/meetings"
             element={
-              <MeetingsList />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_MEETINGS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/meetings"
+              element={
+                <MeetingsList />
+              }
+            />
+
+            <Route
+              path="/meetings/:id"
+              element={
+                <MeetingDetail />
+              }
+            />
+          </Route>
+
+          {/* MEETING CREATE */}
 
           <Route
-            path="/meetings/create"
             element={
-              <MeetingCreate />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.CREATE_MEETINGS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/meetings/create"
+              element={
+                <MeetingCreate />
+              }
+            />
+          </Route>
+
+          {/* MEETING EDIT */}
 
           <Route
-            path="/meetings/:id"
             element={
-              <MeetingDetail />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.EDIT_MEETINGS
+                }
+              />
             }
-          />
-
-          <Route
-            path="/meetings/:id/edit"
-            element={
-              <MeetingEdit />
-            }
-          />
-
-          {/* ==================================================
-              TASKS
-          ================================================== */}
-
-          <Route
-            path="/tasks"
-            element={
-              <TasksList />
-            }
-          />
-
-          <Route
-            path="/tasks/create"
-            element={
-              <TaskCreate />
-            }
-          />
-
-          <Route
-            path="/tasks/:id"
-            element={
-              <TaskDetail />
-            }
-          />
-
-          <Route
-            path="/tasks/:id/edit"
-            element={
-              <TaskEdit />
-            }
-          />
+          >
+            <Route
+              path="/meetings/:id/edit"
+              element={
+                <MeetingEdit />
+              }
+            />
+          </Route>
 
           {/* ==================================================
               EVENTS
           ================================================== */}
 
           <Route
-            path="/events/create"
             element={
-              <EventCreate />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.CREATE_EVENTS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/events/create"
+              element={
+                <EventCreate />
+              }
+            />
+          </Route>
 
           <Route
-            path="/events/:id"
             element={
-              <EventDetail />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_EVENTS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/events/:id"
+              element={
+                <EventDetail />
+              }
+            />
+          </Route>
 
           <Route
-            path="/events/:id/edit"
             element={
-              <EventEdit />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.EDIT_EVENTS
+                }
+              />
             }
-          />
-
-          {/* ==================================================
-              TEMPLATES
-          ================================================== */}
-
-          <Route
-            path="/templates"
-            element={
-              <TemplatesList />
-            }
-          />
-
-          <Route
-            path="/templates/create"
-            element={
-              <TemplateCreate />
-            }
-          />
-
-          <Route
-            path="/templates/:id"
-            element={
-              <TemplateDetail />
-            }
-          />
-
-          <Route
-            path="/templates/:id/edit"
-            element={
-              <TemplateEdit />
-            }
-          />
+          >
+            <Route
+              path="/events/:id/edit"
+              element={
+                <EventEdit />
+              }
+            />
+          </Route>
 
           {/* ==================================================
               CALENDAR
           ================================================== */}
 
           <Route
-            path="/calendar"
             element={
-              <Calendar />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_CALENDAR
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/calendar"
+              element={
+                <Calendar />
+              }
+            />
+          </Route>
+
+          {/* ==================================================
+              TEMPLATES - VIEW
+          ================================================== */}
+
+          <Route
+            element={
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_TEMPLATES
+                }
+              />
+            }
+          >
+            <Route
+              path="/templates"
+              element={
+                <TemplatesList />
+              }
+            />
+
+            <Route
+              path="/templates/:id"
+              element={
+                <TemplateDetail />
+              }
+            />
+          </Route>
+
+          {/* TEMPLATE CREATE */}
+
+          <Route
+            element={
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.CREATE_TEMPLATES
+                }
+              />
+            }
+          >
+            <Route
+              path="/templates/create"
+              element={
+                <TemplateCreate />
+              }
+            />
+          </Route>
+
+          {/* TEMPLATE EDIT */}
+
+          <Route
+            element={
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.EDIT_TEMPLATES
+                }
+              />
+            }
+          >
+            <Route
+              path="/templates/:id/edit"
+              element={
+                <TemplateEdit />
+              }
+            />
+          </Route>
 
           {/* ==================================================
               LEGACY FINANCE
           ================================================== */}
 
           <Route
-            path="/finance"
             element={
-              <Finance />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_PAYMENTS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/finance"
+              element={
+                <Finance />
+              }
+            />
+          </Route>
 
           <Route
-            path="/finance/create"
             element={
-              <FinanceCreate />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.CREATE_PAYMENTS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/finance/create"
+              element={
+                <FinanceCreate />
+              }
+            />
+          </Route>
 
           {/* ==================================================
-              NEW PAYMENTS / PROFESSIONAL FINANCE
+              PROFESSIONAL PAYMENT PLANS
           ================================================== */}
 
           <Route
-            path="/payments/plans/create"
             element={
-              <PaymentPlanCreate />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.MANAGE_PAYMENT_PLANS
+                }
+              />
             }
-          />
-<Route
-  path="/payments/plans/:id"
-  element={
-    <PaymentPlanDetail />
-  }
-/>
+          >
+            <Route
+              path="/payments/plans/create"
+              element={
+                <PaymentPlanCreate />
+              }
+            />
+          </Route>
+
+          <Route
+            element={
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_PAYMENTS
+                }
+              />
+            }
+          >
+            <Route
+              path="/payments/plans/:id"
+              element={
+                <PaymentPlanDetail />
+              }
+            />
+          </Route>
+
           {/* ==================================================
               POWER OF ATTORNEY
           ================================================== */}
 
           <Route
-            path="/power-of-attorney"
             element={
-              <PowerOfAttorneyList />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_POWER_OF_ATTORNEY
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/power-of-attorney"
+              element={
+                <PowerOfAttorneyList />
+              }
+            />
+
+            <Route
+              path="/power-of-attorney/:id"
+              element={
+                <PowerOfAttorneyDetail />
+              }
+            />
+          </Route>
 
           <Route
-            path="/power-of-attorney/create"
             element={
-              <PowerOfAttorneyCreate />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.CREATE_POWER_OF_ATTORNEY
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/power-of-attorney/create"
+              element={
+                <PowerOfAttorneyCreate />
+              }
+            />
+          </Route>
 
           <Route
-            path="/power-of-attorney/:id"
             element={
-              <PowerOfAttorneyDetail />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.EDIT_POWER_OF_ATTORNEY
+                }
+              />
             }
-          />
-
-          <Route
-            path="/power-of-attorney/:id/edit"
-            element={
-              <PowerOfAttorneyEdit />
-            }
-          />
+          >
+            <Route
+              path="/power-of-attorney/:id/edit"
+              element={
+                <PowerOfAttorneyEdit />
+              }
+            />
+          </Route>
 
           {/* ==================================================
-              AI & SEARCH
+              AI
           ================================================== */}
 
           <Route
-            path="/ai"
             element={
-              <AIAssistant />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.USE_AI
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/ai"
+              element={
+                <AIAssistant />
+              }
+            />
+          </Route>
+
+          {/* ==================================================
+              SEARCH
+          ================================================== */}
 
           <Route
-            path="/search"
             element={
-              <Search />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.USE_SEARCH
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/search"
+              element={
+                <Search />
+              }
+            />
+          </Route>
 
           {/* ==================================================
               SETTINGS
           ================================================== */}
 
           <Route
-            path="/settings"
             element={
-              <Settings />
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_SETTINGS
+                }
+              />
             }
-          />
+          >
+            <Route
+              path="/settings"
+              element={
+                <Settings />
+              }
+            />
+          </Route>
 
           {/* ==================================================
               ADMIN ONLY
+
+              Kullanıcı ve audit yönetimini şimdilik
+              role=admin olarak bırakıyoruz.
           ================================================== */}
 
           <Route
@@ -636,13 +1005,16 @@ const AppRouter = () => {
             }
           >
             <Route
-  path="/users/create"
-  element={<UserCreate />}
-/>
-            <Route
               path="/users"
               element={
                 <UserList />
+              }
+            />
+
+            <Route
+              path="/users/create"
+              element={
+                <UserCreate />
               }
             />
 
@@ -671,7 +1043,7 @@ const AppRouter = () => {
       <Route
         path="*"
         element={
-          <div>
+          <div className="flex min-h-screen items-center justify-center">
             404 - Page Not Found
           </div>
         }

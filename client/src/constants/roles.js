@@ -13,17 +13,10 @@ export const ROLES_LIST =
 // ======================================================
 
 export const ROLE_LABELS = {
-  [ROLES.ADMIN]:
-    'Yönetici',
-
-  [ROLES.LAWYER]:
-    'Avukat',
-
-  [ROLES.INTERN]:
-    'Stajyer',
-
-  [ROLES.SECRETARY]:
-    'Sekreter',
+  [ROLES.ADMIN]: 'Yönetici',
+  [ROLES.LAWYER]: 'Avukat',
+  [ROLES.INTERN]: 'Stajyer',
+  [ROLES.SECRETARY]: 'Sekreter',
 };
 
 // ======================================================
@@ -60,239 +53,238 @@ export const ROLE_ICONS = {
 // ======================================================
 
 export const ROLE_OPTIONS =
-  ROLES_LIST.map(
-    (value) => ({
+  ROLES_LIST.map((value) => ({
+    value,
+    label:
+      ROLE_LABELS[value] ||
       value,
-      label:
-        ROLE_LABELS[value] ||
-        value,
-    })
+  }));
+
+// ======================================================
+// PERMISSION KEYS
+// Backend ile birebir aynı.
+// ======================================================
+
+export const PERMISSION_KEYS = {
+  VIEW_CLIENTS: 'view_clients',
+  CREATE_CLIENTS: 'create_clients',
+  EDIT_CLIENTS: 'edit_clients',
+  DELETE_CLIENTS: 'delete_clients',
+
+  VIEW_CASES: 'view_cases',
+  CREATE_CASES: 'create_cases',
+  EDIT_CASES: 'edit_cases',
+  DELETE_CASES: 'delete_cases',
+  CHANGE_CASE_STATUS: 'change_case_status',
+  MANAGE_CASE_PARTIES: 'manage_case_parties',
+
+  VIEW_DOCUMENTS: 'view_documents',
+  UPLOAD_DOCUMENTS: 'upload_documents',
+  EDIT_DOCUMENTS: 'edit_documents',
+  DELETE_DOCUMENTS: 'delete_documents',
+  DOWNLOAD_DOCUMENTS: 'download_documents',
+  MANAGE_DOCUMENT_VERSIONS: 'manage_document_versions',
+
+  VIEW_TASKS: 'view_tasks',
+  CREATE_TASKS: 'create_tasks',
+  EDIT_TASKS: 'edit_tasks',
+  DELETE_TASKS: 'delete_tasks',
+  ASSIGN_TASKS: 'assign_tasks',
+  WORK_ON_TASKS: 'work_on_tasks',
+  APPROVE_TASKS: 'approve_tasks',
+  VIEW_ALL_TASKS: 'view_all_tasks',
+
+  VIEW_EVENTS: 'view_events',
+  CREATE_EVENTS: 'create_events',
+  EDIT_EVENTS: 'edit_events',
+  DELETE_EVENTS: 'delete_events',
+
+  VIEW_CALENDAR: 'view_calendar',
+  MANAGE_CALENDAR: 'manage_calendar',
+
+  VIEW_MEETINGS: 'view_meetings',
+  CREATE_MEETINGS: 'create_meetings',
+  EDIT_MEETINGS: 'edit_meetings',
+  DELETE_MEETINGS: 'delete_meetings',
+
+  VIEW_PAYMENTS: 'view_payments',
+  CREATE_PAYMENTS: 'create_payments',
+  EDIT_PAYMENTS: 'edit_payments',
+  DELETE_PAYMENTS: 'delete_payments',
+  REVERSE_PAYMENTS: 'reverse_payments',
+  VIEW_FINANCE_REPORTS: 'view_finance_reports',
+  MANAGE_PAYMENT_PLANS: 'manage_payment_plans',
+
+  VIEW_NOTES: 'view_notes',
+  CREATE_NOTES: 'create_notes',
+  EDIT_NOTES: 'edit_notes',
+  DELETE_NOTES: 'delete_notes',
+
+  VIEW_POWER_OF_ATTORNEY: 'view_power_of_attorney',
+  CREATE_POWER_OF_ATTORNEY: 'create_power_of_attorney',
+  EDIT_POWER_OF_ATTORNEY: 'edit_power_of_attorney',
+  DELETE_POWER_OF_ATTORNEY: 'delete_power_of_attorney',
+
+  VIEW_TEMPLATES: 'view_templates',
+  CREATE_TEMPLATES: 'create_templates',
+  EDIT_TEMPLATES: 'edit_templates',
+  DELETE_TEMPLATES: 'delete_templates',
+
+  USE_SEARCH: 'use_search',
+  USE_AI: 'use_ai',
+
+  VIEW_USERS: 'view_users',
+  CREATE_USERS: 'create_users',
+  EDIT_USERS: 'edit_users',
+  DELETE_USERS: 'delete_users',
+  CHANGE_USER_ROLES: 'change_user_roles',
+  MANAGE_USER_STATUS: 'manage_user_status',
+  MANAGE_PERMISSIONS: 'manage_permissions',
+
+  VIEW_AUDIT_LOGS: 'view_audit_logs',
+
+  VIEW_SETTINGS: 'view_settings',
+  MANAGE_SETTINGS: 'manage_settings',
+};
+
+export const ALL_PERMISSIONS =
+  Object.values(
+    PERMISSION_KEYS
   );
 
 // ======================================================
-// PERMISSIONS
-// ======================================================
-
-export const PERMISSIONS = {
-  USERS_VIEW:
-    'users.view',
-
-  USERS_MANAGE:
-    'users.manage',
-
-  CLIENTS_VIEW:
-    'clients.view',
-
-  CLIENTS_CREATE:
-    'clients.create',
-
-  CLIENTS_UPDATE:
-    'clients.update',
-
-  CLIENTS_DELETE:
-    'clients.delete',
-
-  CASES_VIEW:
-    'cases.view',
-
-  CASES_CREATE:
-    'cases.create',
-
-  CASES_UPDATE:
-    'cases.update',
-
-  CASES_DELETE:
-    'cases.delete',
-
-  DOCUMENTS_VIEW:
-    'documents.view',
-
-  DOCUMENTS_CREATE:
-    'documents.create',
-
-  DOCUMENTS_UPDATE:
-    'documents.update',
-
-  DOCUMENTS_DELETE:
-    'documents.delete',
-
-  TASKS_VIEW:
-    'tasks.view',
-
-  TASKS_CREATE:
-    'tasks.create',
-
-  TASKS_UPDATE:
-    'tasks.update',
-
-  TASKS_DELETE:
-    'tasks.delete',
-
-  MEETINGS_VIEW:
-    'meetings.view',
-
-  MEETINGS_CREATE:
-    'meetings.create',
-
-  MEETINGS_UPDATE:
-    'meetings.update',
-
-  MEETINGS_DELETE:
-    'meetings.delete',
-
-  CALENDAR_VIEW:
-    'calendar.view',
-
-  CALENDAR_UPDATE:
-    'calendar.update',
-
-  FINANCE_VIEW:
-    'finance.view',
-
-  FINANCE_UPDATE:
-    'finance.update',
-
-  FINANCE_DELETE:
-    'finance.delete',
-
-  DOCUMENT_TEMPLATES_VIEW:
-    'templates.view',
-
-  DOCUMENT_TEMPLATES_CREATE:
-    'templates.create',
-
-  DOCUMENT_TEMPLATES_UPDATE:
-    'templates.update',
-
-  DOCUMENT_TEMPLATES_DELETE:
-    'templates.delete',
-
-  POWER_OF_ATTORNEY_VIEW:
-    'power_of_attorney.view',
-
-  POWER_OF_ATTORNEY_CREATE:
-    'power_of_attorney.create',
-
-  POWER_OF_ATTORNEY_UPDATE:
-    'power_of_attorney.update',
-
-  POWER_OF_ATTORNEY_DELETE:
-    'power_of_attorney.delete',
-
-  AUDIT_LOG_VIEW:
-    'audit_log.view',
-
-  AUDIT_LOG_DELETE:
-    'audit_log.delete',
-
-  AI_USE:
-    'ai.use',
-
-  SETTINGS_MANAGE:
-    'settings.manage',
-};
-
-// ======================================================
-// ROLE -> PERMISSIONS
-// Frontend fallback.
-// Asıl source of truth backend olmalı.
+// ROLE PERMISSIONS
+// Backend ile aynı fallback.
 // ======================================================
 
 export const ROLE_PERMISSIONS = {
   [ROLES.ADMIN]: [
-    '*',
+    'all',
   ],
 
   [ROLES.LAWYER]: [
-    PERMISSIONS.CLIENTS_VIEW,
-    PERMISSIONS.CLIENTS_CREATE,
-    PERMISSIONS.CLIENTS_UPDATE,
+    PERMISSION_KEYS.VIEW_CLIENTS,
+    PERMISSION_KEYS.CREATE_CLIENTS,
+    PERMISSION_KEYS.EDIT_CLIENTS,
 
-    PERMISSIONS.CASES_VIEW,
-    PERMISSIONS.CASES_CREATE,
-    PERMISSIONS.CASES_UPDATE,
+    PERMISSION_KEYS.VIEW_CASES,
+    PERMISSION_KEYS.CREATE_CASES,
+    PERMISSION_KEYS.EDIT_CASES,
+    PERMISSION_KEYS.CHANGE_CASE_STATUS,
+    PERMISSION_KEYS.MANAGE_CASE_PARTIES,
 
-    PERMISSIONS.DOCUMENTS_VIEW,
-    PERMISSIONS.DOCUMENTS_CREATE,
-    PERMISSIONS.DOCUMENTS_UPDATE,
+    PERMISSION_KEYS.VIEW_DOCUMENTS,
+    PERMISSION_KEYS.UPLOAD_DOCUMENTS,
+    PERMISSION_KEYS.EDIT_DOCUMENTS,
+    PERMISSION_KEYS.DOWNLOAD_DOCUMENTS,
+    PERMISSION_KEYS.MANAGE_DOCUMENT_VERSIONS,
 
-    PERMISSIONS.TASKS_VIEW,
-    PERMISSIONS.TASKS_CREATE,
-    PERMISSIONS.TASKS_UPDATE,
+    PERMISSION_KEYS.VIEW_TASKS,
+    PERMISSION_KEYS.CREATE_TASKS,
+    PERMISSION_KEYS.EDIT_TASKS,
+    PERMISSION_KEYS.WORK_ON_TASKS,
 
-    PERMISSIONS.MEETINGS_VIEW,
-    PERMISSIONS.MEETINGS_CREATE,
-    PERMISSIONS.MEETINGS_UPDATE,
+    PERMISSION_KEYS.VIEW_EVENTS,
+    PERMISSION_KEYS.CREATE_EVENTS,
+    PERMISSION_KEYS.EDIT_EVENTS,
+    PERMISSION_KEYS.VIEW_CALENDAR,
+    PERMISSION_KEYS.MANAGE_CALENDAR,
 
-    PERMISSIONS.CALENDAR_VIEW,
-    PERMISSIONS.CALENDAR_UPDATE,
+    PERMISSION_KEYS.VIEW_MEETINGS,
+    PERMISSION_KEYS.CREATE_MEETINGS,
+    PERMISSION_KEYS.EDIT_MEETINGS,
 
-    PERMISSIONS.FINANCE_VIEW,
-    PERMISSIONS.FINANCE_UPDATE,
+    PERMISSION_KEYS.VIEW_PAYMENTS,
+    PERMISSION_KEYS.CREATE_PAYMENTS,
+    PERMISSION_KEYS.EDIT_PAYMENTS,
+    PERMISSION_KEYS.MANAGE_PAYMENT_PLANS,
 
-    PERMISSIONS.DOCUMENT_TEMPLATES_VIEW,
-    PERMISSIONS.DOCUMENT_TEMPLATES_CREATE,
-    PERMISSIONS.DOCUMENT_TEMPLATES_UPDATE,
+    PERMISSION_KEYS.VIEW_NOTES,
+    PERMISSION_KEYS.CREATE_NOTES,
+    PERMISSION_KEYS.EDIT_NOTES,
 
-    PERMISSIONS.POWER_OF_ATTORNEY_VIEW,
-    PERMISSIONS.POWER_OF_ATTORNEY_CREATE,
-    PERMISSIONS.POWER_OF_ATTORNEY_UPDATE,
+    PERMISSION_KEYS.VIEW_POWER_OF_ATTORNEY,
+    PERMISSION_KEYS.CREATE_POWER_OF_ATTORNEY,
+    PERMISSION_KEYS.EDIT_POWER_OF_ATTORNEY,
 
-    PERMISSIONS.AI_USE,
+    PERMISSION_KEYS.VIEW_TEMPLATES,
+    PERMISSION_KEYS.CREATE_TEMPLATES,
+    PERMISSION_KEYS.EDIT_TEMPLATES,
+
+    PERMISSION_KEYS.USE_SEARCH,
+    PERMISSION_KEYS.USE_AI,
+
+    PERMISSION_KEYS.VIEW_SETTINGS,
   ],
 
   [ROLES.SECRETARY]: [
-    PERMISSIONS.CLIENTS_VIEW,
-    PERMISSIONS.CLIENTS_CREATE,
-    PERMISSIONS.CLIENTS_UPDATE,
+    PERMISSION_KEYS.VIEW_CLIENTS,
+    PERMISSION_KEYS.CREATE_CLIENTS,
+    PERMISSION_KEYS.EDIT_CLIENTS,
 
-    PERMISSIONS.CASES_VIEW,
-    PERMISSIONS.CASES_CREATE,
-    PERMISSIONS.CASES_UPDATE,
+    PERMISSION_KEYS.VIEW_CASES,
+    PERMISSION_KEYS.EDIT_CASES,
 
-    PERMISSIONS.DOCUMENTS_VIEW,
-    PERMISSIONS.DOCUMENTS_CREATE,
-    PERMISSIONS.DOCUMENTS_UPDATE,
+    PERMISSION_KEYS.VIEW_DOCUMENTS,
+    PERMISSION_KEYS.UPLOAD_DOCUMENTS,
+    PERMISSION_KEYS.EDIT_DOCUMENTS,
+    PERMISSION_KEYS.DOWNLOAD_DOCUMENTS,
 
-    PERMISSIONS.TASKS_VIEW,
-    PERMISSIONS.TASKS_CREATE,
-    PERMISSIONS.TASKS_UPDATE,
+    PERMISSION_KEYS.VIEW_TASKS,
+    PERMISSION_KEYS.CREATE_TASKS,
+    PERMISSION_KEYS.EDIT_TASKS,
+    PERMISSION_KEYS.WORK_ON_TASKS,
 
-    PERMISSIONS.MEETINGS_VIEW,
-    PERMISSIONS.MEETINGS_CREATE,
-    PERMISSIONS.MEETINGS_UPDATE,
+    PERMISSION_KEYS.VIEW_EVENTS,
+    PERMISSION_KEYS.CREATE_EVENTS,
+    PERMISSION_KEYS.EDIT_EVENTS,
+    PERMISSION_KEYS.VIEW_CALENDAR,
+    PERMISSION_KEYS.MANAGE_CALENDAR,
 
-    PERMISSIONS.CALENDAR_VIEW,
-    PERMISSIONS.CALENDAR_UPDATE,
+    PERMISSION_KEYS.VIEW_MEETINGS,
+    PERMISSION_KEYS.CREATE_MEETINGS,
+    PERMISSION_KEYS.EDIT_MEETINGS,
 
-    PERMISSIONS.FINANCE_VIEW,
-    PERMISSIONS.FINANCE_UPDATE,
+    PERMISSION_KEYS.VIEW_PAYMENTS,
+    PERMISSION_KEYS.CREATE_PAYMENTS,
 
-    PERMISSIONS.DOCUMENT_TEMPLATES_VIEW,
+    PERMISSION_KEYS.VIEW_NOTES,
+    PERMISSION_KEYS.CREATE_NOTES,
+    PERMISSION_KEYS.EDIT_NOTES,
 
-    PERMISSIONS.POWER_OF_ATTORNEY_VIEW,
-    PERMISSIONS.POWER_OF_ATTORNEY_CREATE,
-    PERMISSIONS.POWER_OF_ATTORNEY_UPDATE,
+    PERMISSION_KEYS.VIEW_POWER_OF_ATTORNEY,
+    PERMISSION_KEYS.CREATE_POWER_OF_ATTORNEY,
+    PERMISSION_KEYS.EDIT_POWER_OF_ATTORNEY,
+
+    PERMISSION_KEYS.VIEW_TEMPLATES,
+
+    PERMISSION_KEYS.USE_SEARCH,
+
+    PERMISSION_KEYS.VIEW_SETTINGS,
   ],
 
   [ROLES.INTERN]: [
-    PERMISSIONS.CLIENTS_VIEW,
+    PERMISSION_KEYS.VIEW_CLIENTS,
+    PERMISSION_KEYS.VIEW_CASES,
 
-    PERMISSIONS.CASES_VIEW,
+    PERMISSION_KEYS.VIEW_DOCUMENTS,
+    PERMISSION_KEYS.DOWNLOAD_DOCUMENTS,
 
-    PERMISSIONS.DOCUMENTS_VIEW,
+    PERMISSION_KEYS.VIEW_TASKS,
+    PERMISSION_KEYS.WORK_ON_TASKS,
 
-    PERMISSIONS.TASKS_VIEW,
+    PERMISSION_KEYS.VIEW_EVENTS,
+    PERMISSION_KEYS.VIEW_CALENDAR,
 
-    PERMISSIONS.MEETINGS_VIEW,
+    PERMISSION_KEYS.VIEW_MEETINGS,
 
-    PERMISSIONS.CALENDAR_VIEW,
+    PERMISSION_KEYS.VIEW_NOTES,
+    PERMISSION_KEYS.CREATE_NOTES,
 
-    PERMISSIONS.FINANCE_VIEW,
+    PERMISSION_KEYS.VIEW_POWER_OF_ATTORNEY,
+    PERMISSION_KEYS.VIEW_TEMPLATES,
 
-    PERMISSIONS.DOCUMENT_TEMPLATES_VIEW,
-
-    PERMISSIONS.POWER_OF_ATTORNEY_VIEW,
+    PERMISSION_KEYS.USE_SEARCH,
   ],
 };
 
@@ -300,24 +292,68 @@ export const ROLE_PERMISSIONS = {
 // PERMISSION HELPERS
 // ======================================================
 
+
+  
 export const hasPermission = (
-  userRole,
+  user,
   permission
 ) => {
-  if (
-    !userRole ||
-    !permission
-  ) {
+  if (!user) {
     return false;
+  }
+
+  /*
+   * Permission belirtilmemiş ekranlar
+   * authenticated kullanıcılara açıktır.
+   */
+  if (!permission) {
+    return true;
+  }
+
+  // Admin tam yetkili
+  if (
+    user.role ===
+    ROLES.ADMIN
+  ) {
+    return true;
+  }
+
+  const overrides =
+    user.permissions &&
+    typeof user.permissions ===
+      'object' &&
+    !Array.isArray(
+      user.permissions
+    )
+      ? user.permissions
+      : {};
+
+  /*
+   * Kullanıcıya özel override,
+   * rol varsayılanından önce gelir.
+   */
+  if (
+    Object.prototype.hasOwnProperty.call(
+      overrides,
+      permission
+    )
+  ) {
+    return (
+      overrides[
+        permission
+      ] === true
+    );
   }
 
   const permissions =
     ROLE_PERMISSIONS[
-      userRole
+      user.role
     ] || [];
 
   return (
-    permissions.includes('*') ||
+    permissions.includes(
+      'all'
+    ) ||
     permissions.includes(
       permission
     )
@@ -325,7 +361,7 @@ export const hasPermission = (
 };
 
 export const hasAnyPermission = (
-  userRole,
+  user,
   permissions = []
 ) => {
   if (
@@ -339,14 +375,14 @@ export const hasAnyPermission = (
   return permissions.some(
     (permission) =>
       hasPermission(
-        userRole,
+        user,
         permission
       )
   );
 };
 
 export const hasAllPermissions = (
-  userRole,
+  user,
   permissions = []
 ) => {
   if (
@@ -360,7 +396,7 @@ export const hasAllPermissions = (
   return permissions.every(
     (permission) =>
       hasPermission(
-        userRole,
+        user,
         permission
       )
   );
@@ -376,7 +412,9 @@ export const hasAnyRole = (
 ) => {
   if (
     !userRole ||
-    !Array.isArray(roles)
+    !Array.isArray(
+      roles
+    )
   ) {
     return false;
   }
@@ -422,6 +460,14 @@ export const hasRoleLevel = (
   );
 };
 
+// ======================================================
+// BACKWARD COMPATIBILITY
+// Eski importlar bir anda kırılmasın.
+// ======================================================
+
+export const PERMISSIONS =
+  PERMISSION_KEYS;
+
 export default {
   ROLES,
   ROLES_LIST,
@@ -431,7 +477,9 @@ export default {
   ROLE_ICONS,
   ROLE_OPTIONS,
 
+  PERMISSION_KEYS,
   PERMISSIONS,
+  ALL_PERMISSIONS,
   ROLE_PERMISSIONS,
 
   hasPermission,
