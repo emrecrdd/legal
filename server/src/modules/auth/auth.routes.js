@@ -20,7 +20,7 @@ const router =
   express.Router();
 
 // ======================================================
-// PUBLIC ROUTES
+// PUBLIC / TOKEN ROUTES
 // ======================================================
 
 router.post(
@@ -34,6 +34,17 @@ router.post(
 router.post(
   '/refresh-token',
   authController.refreshToken
+);
+
+/*
+ * Logout'u authenticate arkasına koymuyoruz.
+ *
+ * Access token süresi dolmuş olsa bile kullanıcı
+ * refresh token üzerinden oturumu kapatabilmeli.
+ */
+router.post(
+  '/logout',
+  authController.logout
 );
 
 router.post(
@@ -58,11 +69,6 @@ router.post(
 
 router.use(
   authenticate
-);
-
-router.post(
-  '/logout',
-  authController.logout
 );
 
 router.get(

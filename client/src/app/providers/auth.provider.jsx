@@ -173,42 +173,49 @@ export const AuthProvider = ({
   // LOGOUT
   // ====================================================
 
-  const logout =
-    useCallback(
-      async () => {
-        const refreshToken =
-          tokens?.refreshToken;
+  // ====================================================
+// LOGOUT
+// ====================================================
 
+const logout =
+  useCallback(
+    async () => {
+      const refreshToken =
+        tokens?.refreshToken;
+
+      try {
         /*
-         * UI logout için backend başarısız olsa bile
-         * local session temizlenmeli.
+         * Önce backend oturumunu kapat.
+         *
+         * Access token geçersiz olsa bile /auth/logout
+         * artık authenticate arkasında olmadığı için
+         * refresh token üzerinden çalışabilir.
+         */
+        await authApi.logout(
+          refreshToken
+        );
+      } catch (error) {
+        if (
+          import.meta.env.DEV
+        ) {
+          console.error(
+            'Logout error:',
+            error
+          );
+        }
+      } finally {
+        /*
+         * Backend başarılı veya başarısız olsun,
+         * kullanıcı cihazındaki session mutlaka temizlenir.
          */
         clearAuth();
-
-        try {
-          if (
-            refreshToken
-          ) {
-            await authApi.logout(
-              refreshToken
-            );
-          }
-        } catch (error) {
-          if (
-            import.meta.env.DEV
-          ) {
-            console.error(
-              'Logout error:',
-              error
-            );
-          }
-        }
-      },
-      [
-        tokens?.refreshToken,
-        clearAuth,
-      ]
-    );
+      }
+    },
+    [
+      tokens?.refreshToken,
+      clearAuth,
+    ]
+  );
 
   // ====================================================
   // REGISTER
