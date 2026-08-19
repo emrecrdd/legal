@@ -142,7 +142,7 @@ export const PERMISSION_KEYS = {
   MANAGE_PERMISSIONS: 'manage_permissions',
 
   VIEW_AUDIT_LOGS: 'view_audit_logs',
-
+  DELETE_AUDIT_LOGS: 'delete_audit_logs',
   VIEW_SETTINGS: 'view_settings',
   MANAGE_SETTINGS: 'manage_settings',
 };
@@ -294,6 +294,10 @@ export const ROLE_PERMISSIONS = {
 
 
   
+// ======================================================
+// PERMISSION HELPERS
+// ======================================================
+
 export const hasPermission = (
   user,
   permission
@@ -310,7 +314,20 @@ export const hasPermission = (
     return true;
   }
 
-  // Admin tam yetkili
+  /*
+   * Bilinmeyen permission key'lerde fail-closed.
+   */
+  if (
+    !ALL_PERMISSIONS.includes(
+      permission
+    )
+  ) {
+    return false;
+  }
+
+  /*
+   * Admin tam yetkili.
+   */
   if (
     user.role ===
     ROLES.ADMIN
@@ -329,8 +346,7 @@ export const hasPermission = (
       : {};
 
   /*
-   * Kullanıcıya özel override,
-   * rol varsayılanından önce gelir.
+   * Kullanıcı override'ı rol varsayılanından önce gelir.
    */
   if (
     Object.prototype.hasOwnProperty.call(
@@ -345,16 +361,16 @@ export const hasPermission = (
     );
   }
 
-  const permissions =
+  const rolePermissions =
     ROLE_PERMISSIONS[
       user.role
     ] || [];
 
   return (
-    permissions.includes(
+    rolePermissions.includes(
       'all'
     ) ||
-    permissions.includes(
+    rolePermissions.includes(
       permission
     )
   );
@@ -365,9 +381,12 @@ export const hasAnyPermission = (
   permissions = []
 ) => {
   if (
+    !user ||
     !Array.isArray(
       permissions
-    )
+    ) ||
+    permissions.length ===
+      0
   ) {
     return false;
   }
@@ -386,9 +405,12 @@ export const hasAllPermissions = (
   permissions = []
 ) => {
   if (
+    !user ||
     !Array.isArray(
       permissions
-    )
+    ) ||
+    permissions.length ===
+      0
   ) {
     return false;
   }
@@ -401,6 +423,7 @@ export const hasAllPermissions = (
       )
   );
 };
+
 
 // ======================================================
 // ROLE HELPERS

@@ -1,21 +1,88 @@
 import express from 'express';
-import { auditLogController } from './audit-log.controller.js';
-import { authenticate } from '../../middlewares/auth.middleware.js';
-import { authorize } from '../../middlewares/auth.middleware.js';
-import { ROLES } from '../../constants/roles.js';
 
-const router = express.Router();
+import {
+  auditLogController,
+} from './audit-log.controller.js';
 
-// ✅ Tüm route'lar için kimlik doğrulama
-router.use(authenticate);
+import {
+  authenticate,
+  authorizePermission,
+} from '../../middlewares/auth.middleware.js';
 
-// 📌 AuditLog Routes
-router.get('/', auditLogController.findAll);
-router.get('/:id', auditLogController.findOne);
+import {
+  PERMISSION_KEYS,
+} from '../../constants/roles.js';
 
-// ✅ Silme işlemleri (sadece admin)
-router.delete('/:id', authorize(ROLES.ADMIN), auditLogController.remove);
-router.post('/bulk-delete', authorize(ROLES.ADMIN), auditLogController.removeMany);
-router.delete('/clean-old', authorize(ROLES.ADMIN), auditLogController.cleanOldLogs);
+const router =
+  express.Router();
 
-export { router as auditLogRoutes };
+// ======================================================
+// AUTH
+// ======================================================
+
+router.use(
+  authenticate
+);
+
+// ======================================================
+// VIEW
+// ======================================================
+
+// Audit log listesi
+router.get(
+  '/',
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_AUDIT_LOGS
+  ),
+  auditLogController.findAll
+);
+
+// Audit log detayı
+router.get(
+  '/:id',
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_AUDIT_LOGS
+  ),
+  auditLogController.findOne
+);
+
+// ======================================================
+// DELETE
+// ======================================================
+
+// Tek audit log sil
+router.delete(
+  '/:id',
+  authorizePermission(
+    PERMISSION_KEYS.DELETE_AUDIT_LOGS
+  ),
+  auditLogController.remove
+);
+
+// Toplu audit log sil
+router.post(
+  '/bulk-delete',
+  authorizePermission(
+    PERMISSION_KEYS.DELETE_AUDIT_LOGS
+  ),
+  auditLogController.removeMany
+);
+
+// Eski audit logları temizle
+router.delete(
+  '/clean-old',
+  authorizePermission(
+    PERMISSION_KEYS.DELETE_AUDIT_LOGS
+  ),
+  auditLogController.cleanOldLogs
+);
+
+// ======================================================
+// EXPORT
+// ======================================================
+
+export {
+  router as auditLogRoutes,
+};
+
+export default router;

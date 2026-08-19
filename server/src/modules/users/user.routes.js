@@ -6,11 +6,11 @@ import {
 
 import {
   authenticate,
-  authorize,
+  authorizePermission,
 } from '../../middlewares/auth.middleware.js';
 
 import {
-  ROLES,
+  PERMISSION_KEYS,
 } from '../../constants/roles.js';
 
 const router =
@@ -25,14 +25,14 @@ router.use(
 );
 
 // ======================================================
-// ADMIN ONLY - COLLECTION
+// COLLECTION
 // ======================================================
 
 // Kullanıcı listesi
 router.get(
   '/',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_USERS
   ),
   userController.findAll
 );
@@ -40,8 +40,8 @@ router.get(
 // Yeni kullanıcı oluştur
 router.post(
   '/',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.CREATE_USERS
   ),
   userController.create
 );
@@ -50,14 +50,14 @@ router.post(
 // PERMISSION MANAGEMENT
 //
 // ÖNEMLİ:
-// Bunları genel /:id route'larından önce tutuyoruz.
+// Bunlar genel /:id route'larından önce kalmalı.
 // ======================================================
 
 // Kullanıcının rol + override + efektif yetkilerini getir
 router.get(
   '/:id/permissions',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.MANAGE_PERMISSIONS
   ),
   userController.getPermissions
 );
@@ -65,8 +65,8 @@ router.get(
 // Kullanıcıya özel yetkileri güncelle
 router.patch(
   '/:id/permissions',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.MANAGE_PERMISSIONS
   ),
   userController.updatePermissions
 );
@@ -75,8 +75,8 @@ router.patch(
 // Rol varsayılanlarına geri döner
 router.delete(
   '/:id/permissions',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.MANAGE_PERMISSIONS
   ),
   userController.resetPermissions
 );
@@ -84,8 +84,8 @@ router.delete(
 // Hazır yetki şablonu uygula
 router.post(
   '/:id/permissions/preset',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.MANAGE_PERMISSIONS
   ),
   userController.applyPermissionPreset
 );
@@ -97,8 +97,8 @@ router.post(
 // Rol değiştir
 router.patch(
   '/:id/role',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.CHANGE_USER_ROLES
   ),
   userController.changeRole
 );
@@ -106,8 +106,8 @@ router.patch(
 // Aktif / pasif
 router.patch(
   '/:id/toggle-active',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.MANAGE_USER_STATUS
   ),
   userController.toggleActive
 );
@@ -119,8 +119,8 @@ router.patch(
 // Detay
 router.get(
   '/:id',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_USERS
   ),
   userController.findOne
 );
@@ -128,8 +128,8 @@ router.get(
 // Profil bilgileri güncelle
 router.patch(
   '/:id',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_USERS
   ),
   userController.update
 );
@@ -137,8 +137,8 @@ router.patch(
 // Eski frontend çağrıları bozulmasın
 router.put(
   '/:id',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.EDIT_USERS
   ),
   userController.update
 );
@@ -149,8 +149,8 @@ router.put(
 
 router.delete(
   '/:id',
-  authorize(
-    ROLES.ADMIN
+  authorizePermission(
+    PERMISSION_KEYS.DELETE_USERS
   ),
   userController.delete
 );
@@ -158,3 +158,5 @@ router.delete(
 export {
   router as userRoutes,
 };
+
+export default router;

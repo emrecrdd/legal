@@ -297,9 +297,15 @@ const TaskCreate = () => {
     isLoading:
       casesLoading,
   } =
-    useCases({
-      limit: 100,
-    });
+    useCases(
+      {
+        limit: 100,
+      },
+      {
+        enabled:
+          canViewCases,
+      }
+    );
 
   const {
     data:
@@ -307,12 +313,22 @@ const TaskCreate = () => {
     isLoading:
       clientsLoading,
   } =
-    useClients({
-      limit: 100,
-    });
+    useClients(
+      {
+        limit: 100,
+      },
+      {
+        enabled:
+          canViewClients,
+      }
+    );
 
   const createMutation =
     useCreateTask();
+
+  // ====================================================
+  // DATA
+  // ====================================================
 
   const assignableUsers =
     Array.isArray(
@@ -327,16 +343,24 @@ const TaskCreate = () => {
 
   const cases =
     Array.isArray(
-      casesData?.data?.data
+      casesData
+        ?.data
+        ?.data
     )
-      ? casesData.data.data
+      ? casesData
+          .data
+          .data
       : [];
 
   const clients =
     Array.isArray(
-      clientsData?.data?.data
+      clientsData
+        ?.data
+        ?.data
     )
-      ? clientsData.data.data
+      ? clientsData
+          .data
+          .data
       : [];
 
   // ====================================================
@@ -430,9 +454,6 @@ const TaskCreate = () => {
 
   // ====================================================
   // DEFAULT ASSIGNEE
-  //
-  // assign_tasks yoksa kullanıcı yalnızca kendisine
-  // görev oluşturur.
   // ====================================================
 
   useEffect(() => {
@@ -445,6 +466,7 @@ const TaskCreate = () => {
           current
         ) => ({
           ...current,
+
           assigned_to:
             user.id,
         })
@@ -461,6 +483,12 @@ const TaskCreate = () => {
 
   const selectedCase =
     useMemo(() => {
+      if (
+        !canViewCases
+      ) {
+        return null;
+      }
+
       return cases.find(
         (
           item
@@ -471,10 +499,17 @@ const TaskCreate = () => {
     }, [
       cases,
       formData.case_id,
+      canViewCases,
     ]);
 
   const selectedClient =
     useMemo(() => {
+      if (
+        !canViewClients
+      ) {
+        return null;
+      }
+
       return clients.find(
         (
           item
@@ -485,6 +520,7 @@ const TaskCreate = () => {
     }, [
       clients,
       formData.client_id,
+      canViewClients,
     ]);
 
   // ====================================================
@@ -530,6 +566,7 @@ const TaskCreate = () => {
           current
         ) => ({
           ...current,
+
           [name]:
             value,
         })
@@ -543,12 +580,17 @@ const TaskCreate = () => {
             current
           ) => ({
             ...current,
+
             [name]:
               '',
           })
         );
       }
     };
+
+  // ====================================================
+  // SUBMIT
+  // ====================================================
 
   const handleSubmit =
     (
@@ -567,14 +609,21 @@ const TaskCreate = () => {
       }
 
       if (
-        formData.estimated_hours &&
-        Number(
-          formData.estimated_hours
-        ) <
-          0
+        formData.estimated_hours !==
+          '' &&
+        (
+          !Number.isFinite(
+            Number(
+              formData.estimated_hours
+            )
+          ) ||
+          Number(
+            formData.estimated_hours
+          ) < 0
+        )
       ) {
         newErrors.estimated_hours =
-          'Tahmini süre negatif olamaz';
+          'Tahmini süre 0 veya daha büyük olmalıdır';
       }
 
       if (
@@ -590,10 +639,6 @@ const TaskCreate = () => {
         return;
       }
 
-      /*
-       * assign_tasks yoksa frontend her zaman
-       * oturum açmış kullanıcıyı gönderir.
-       */
       const assignedTo =
         canAssignTasks
           ? formData.assigned_to
@@ -607,14 +652,6 @@ const TaskCreate = () => {
           formData.description
             ?.trim() ||
           null,
-
-        /*
-         * Yeni görev workflow'a pending olarak girer.
-         * Status daha sonra start/complete/approve
-         * endpointleri üzerinden ilerler.
-         */
-        status:
-          'pending',
 
         priority:
           formData.priority,
@@ -649,7 +686,8 @@ const TaskCreate = () => {
           null,
 
         estimated_hours:
-          formData.estimated_hours
+          formData.estimated_hours !==
+          ''
             ? Number(
                 formData.estimated_hours
               )
@@ -663,8 +701,10 @@ const TaskCreate = () => {
             response
           ) => {
             const taskId =
-              response?.data
-                ?.data?.id;
+              response
+                ?.data
+                ?.data
+                ?.id;
 
             if (
               taskId
@@ -683,6 +723,10 @@ const TaskCreate = () => {
         }
       );
     };
+
+  // ====================================================
+  // CANCEL
+  // ====================================================
 
   const handleCancel =
     () => {
@@ -731,6 +775,7 @@ const TaskCreate = () => {
           "
         >
           <ArrowLeft className="h-3.5 w-3.5" />
+
           Görevler
         </Link>
 
@@ -756,28 +801,11 @@ const TaskCreate = () => {
 
           <div>
 
-            <h1
-              className="
-                text-2xl
-                font-semibold
-                tracking-[-0.035em]
-                text-gray-900
-                dark:text-white
-              "
-            >
+            <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
               Yeni Görev
             </h1>
 
-            <p
-              className="
-                mt-1
-                max-w-2xl
-                text-sm
-                leading-6
-                text-gray-500
-                dark:text-slate-400
-              "
-            >
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-slate-400">
               Yapılacak işi, sorumlu kişiyi, önceliği ve ilişkili dosyaları tanımlayın.
             </p>
 
@@ -792,35 +820,11 @@ const TaskCreate = () => {
       ================================================== */}
 
       {isAiPrefill && (
-        <div
-          className="
-            rounded-xl
-            border
-            border-blue-200
-            bg-blue-50/70
-            p-4
-            dark:border-blue-500/20
-            dark:bg-blue-500/[0.05]
-          "
-        >
+        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-500/20 dark:bg-blue-500/[0.05]">
 
           <div className="flex items-start gap-3">
 
-            <div
-              className="
-                flex
-                h-9
-                w-9
-                shrink-0
-                items-center
-                justify-center
-                rounded-lg
-                bg-blue-100
-                text-blue-600
-                dark:bg-blue-500/[0.1]
-                dark:text-blue-400
-              "
-            >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-500/[0.1] dark:text-blue-400">
               <Sparkles size={17} />
             </div>
 
@@ -853,9 +857,7 @@ const TaskCreate = () => {
         className="space-y-5"
       >
 
-        {/* ==================================================
-            BASIC INFO
-        ================================================== */}
+        {/* BASIC INFO */}
 
         <Card>
 
@@ -863,20 +865,7 @@ const TaskCreate = () => {
 
             <div className="flex items-center gap-3">
 
-              <div
-                className="
-                  flex
-                  h-9
-                  w-9
-                  items-center
-                  justify-center
-                  rounded-lg
-                  bg-blue-50
-                  text-blue-600
-                  dark:bg-blue-500/[0.08]
-                  dark:text-blue-400
-                "
-              >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
                 <FileText size={17} />
               </div>
 
@@ -998,19 +987,13 @@ const TaskCreate = () => {
                 "
               />
 
-              <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
-                Bu not görev detayında ekip üyeleri tarafından görüntülenebilir.
-              </p>
-
             </div>
 
           </Card.Body>
 
         </Card>
 
-        {/* ==================================================
-            PLANNING
-        ================================================== */}
+        {/* PLANNING */}
 
         <Card>
 
@@ -1018,20 +1001,7 @@ const TaskCreate = () => {
 
             <div className="flex items-center gap-3">
 
-              <div
-                className="
-                  flex
-                  h-9
-                  w-9
-                  items-center
-                  justify-center
-                  rounded-lg
-                  bg-amber-50
-                  text-amber-600
-                  dark:bg-amber-500/[0.08]
-                  dark:text-amber-400
-                "
-              >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
                 <CalendarClock size={17} />
               </div>
 
@@ -1054,8 +1024,6 @@ const TaskCreate = () => {
           <Card.Body className="space-y-5">
 
             <div className="grid gap-4 md:grid-cols-2">
-
-              {/* PRIORITY */}
 
               <div>
 
@@ -1109,6 +1077,7 @@ const TaskCreate = () => {
                 </select>
 
                 <div className="mt-2">
+
                   <Badge
                     variant={
                       getPriorityVariant(
@@ -1126,11 +1095,10 @@ const TaskCreate = () => {
                     )?.label ||
                       formData.priority}
                   </Badge>
+
                 </div>
 
               </div>
-
-              {/* DUE DATE */}
 
               <div>
 
@@ -1197,16 +1165,14 @@ const TaskCreate = () => {
             </div>
 
             <div className="rounded-lg bg-gray-50 px-3 py-2.5 text-xs text-gray-500 dark:bg-white/[0.025] dark:text-slate-400">
-              Yeni görev <strong>Bekliyor</strong> durumunda oluşturulur. Görev durumu daha sonra görev iş akışından değiştirilir.
+              Yeni görev <strong>Bekliyor</strong> durumunda oluşturulur. Durum daha sonra görev iş akışı üzerinden ilerletilir.
             </div>
 
           </Card.Body>
 
         </Card>
 
-        {/* ==================================================
-            ASSIGNMENT
-        ================================================== */}
+        {/* ASSIGNMENT */}
 
         <Card>
 
@@ -1214,20 +1180,7 @@ const TaskCreate = () => {
 
             <div className="flex items-center gap-3">
 
-              <div
-                className="
-                  flex
-                  h-9
-                  w-9
-                  items-center
-                  justify-center
-                  rounded-lg
-                  bg-violet-50
-                  text-violet-600
-                  dark:bg-violet-500/[0.08]
-                  dark:text-violet-400
-                "
-              >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400">
                 <Users size={17} />
               </div>
 
@@ -1288,6 +1241,7 @@ const TaskCreate = () => {
                     dark:text-slate-300
                   "
                 >
+
                   <option value="">
                     {assignableUsersLoading
                       ? 'Kullanıcılar yükleniyor...'
@@ -1315,42 +1269,16 @@ const TaskCreate = () => {
                       </option>
                     )
                   )}
+
                 </select>
 
               </div>
             ) : (
-              <div
-                className="
-                  flex
-                  items-center
-                  justify-between
-                  rounded-xl
-                  border
-                  border-gray-100
-                  bg-gray-50
-                  p-4
-                  dark:border-white/[0.06]
-                  dark:bg-white/[0.025]
-                "
-              >
+              <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
 
                 <div className="flex items-center gap-3">
 
-                  <div
-                    className="
-                      flex
-                      h-10
-                      w-10
-                      items-center
-                      justify-center
-                      rounded-full
-                      bg-blue-100
-                      font-semibold
-                      text-blue-700
-                      dark:bg-blue-500/[0.1]
-                      dark:text-blue-400
-                    "
-                  >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700 dark:bg-blue-500/[0.1] dark:text-blue-400">
                     {user?.first_name?.[0] ||
                       ''}
                     {user?.last_name?.[0] ||
@@ -1392,9 +1320,7 @@ const TaskCreate = () => {
 
         </Card>
 
-        {/* ==================================================
-            RELATIONS
-        ================================================== */}
+        {/* RELATIONS */}
 
         <Card>
 
@@ -1402,20 +1328,7 @@ const TaskCreate = () => {
 
             <div className="flex items-center gap-3">
 
-              <div
-                className="
-                  flex
-                  h-9
-                  w-9
-                  items-center
-                  justify-center
-                  rounded-lg
-                  bg-emerald-50
-                  text-emerald-600
-                  dark:bg-emerald-500/[0.08]
-                  dark:text-emerald-400
-                "
-              >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400">
                 <BriefcaseBusiness size={17} />
               </div>
 
@@ -1438,8 +1351,6 @@ const TaskCreate = () => {
           <Card.Body>
 
             <div className="grid gap-4 md:grid-cols-2">
-
-              {/* CASE */}
 
               <div>
 
@@ -1480,6 +1391,7 @@ const TaskCreate = () => {
                     dark:text-slate-300
                   "
                 >
+
                   <option value="">
                     {!canViewCases
                       ? 'Dava görüntüleme yetkiniz yok'
@@ -1505,6 +1417,7 @@ const TaskCreate = () => {
                         </option>
                       )
                     )}
+
                 </select>
 
                 {isAiPrefill &&
@@ -1520,18 +1433,7 @@ const TaskCreate = () => {
                   )}
 
                 {selectedCase && (
-                  <div
-                    className="
-                      mt-3
-                      rounded-lg
-                      border
-                      border-gray-100
-                      bg-gray-50
-                      p-3
-                      dark:border-white/[0.05]
-                      dark:bg-white/[0.025]
-                    "
-                  >
+                  <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.025]">
 
                     <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
                       {selectedCase.title}
@@ -1547,8 +1449,6 @@ const TaskCreate = () => {
                 )}
 
               </div>
-
-              {/* CLIENT */}
 
               <div>
 
@@ -1589,6 +1489,7 @@ const TaskCreate = () => {
                     dark:text-slate-300
                   "
                 >
+
                   <option value="">
                     {!canViewClients
                       ? 'Müvekkil görüntüleme yetkiniz yok'
@@ -1611,46 +1512,20 @@ const TaskCreate = () => {
                           }
                         >
                           {client.name}
+
                           {client.company_name
                             ? ` · ${client.company_name}`
                             : ''}
                         </option>
                       )
                     )}
+
                 </select>
 
                 {selectedClient && (
-                  <div
-                    className="
-                      mt-3
-                      flex
-                      items-center
-                      gap-3
-                      rounded-lg
-                      border
-                      border-gray-100
-                      bg-gray-50
-                      p-3
-                      dark:border-white/[0.05]
-                      dark:bg-white/[0.025]
-                    "
-                  >
+                  <div className="mt-3 flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.025]">
 
-                    <div
-                      className="
-                        flex
-                        h-8
-                        w-8
-                        shrink-0
-                        items-center
-                        justify-center
-                        rounded-lg
-                        bg-blue-50
-                        text-blue-600
-                        dark:bg-blue-500/[0.08]
-                        dark:text-blue-400
-                      "
-                    >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
                       <UserRound size={15} />
                     </div>
 
@@ -1679,28 +1554,9 @@ const TaskCreate = () => {
 
         </Card>
 
-        {/* ==================================================
-            ACTIONS
-        ================================================== */}
+        {/* ACTIONS */}
 
-        <div
-          className="
-            flex
-            flex-col-reverse
-            gap-3
-            rounded-xl
-            border
-            border-gray-200
-            bg-white
-            p-4
-            shadow-sm
-            dark:border-white/[0.07]
-            dark:bg-[#0b1b33]
-            sm:flex-row
-            sm:items-center
-            sm:justify-end
-          "
-        >
+        <div className="flex flex-col-reverse gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.07] dark:bg-[#0b1b33] sm:flex-row sm:items-center sm:justify-end">
 
           <Button
             type="button"
@@ -1725,6 +1581,7 @@ const TaskCreate = () => {
             }
           >
             <Save className="h-4 w-4" />
+
             Görevi Oluştur
           </Button>
 

@@ -76,7 +76,28 @@ const PRIORITY_LABELS = {
 };
 
 // ======================================================
-// DATE HELPERS
+// HELPERS
+// ======================================================
+
+const normalizeId = (
+  value
+) => {
+  if (
+    value ===
+      undefined ||
+    value ===
+      null
+  ) {
+    return '';
+  }
+
+  return String(
+    value
+  );
+};
+
+// ======================================================
+// DATE
 // ======================================================
 
 const formatForDateTimeLocal = (
@@ -151,7 +172,7 @@ const formatForDateTimeLocal = (
 };
 
 // ======================================================
-// STATUS HELPERS
+// STATUS
 // ======================================================
 
 const getDisplayStatus = (
@@ -283,9 +304,43 @@ const TaskEdit = () => {
   ] =
     useState({});
 
-  // ======================================================
+  // ====================================================
+  // BASE PERMISSIONS
+  // ====================================================
+
+  const hasEditPermission =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_TASKS
+    );
+
+  const hasAssignPermission =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.ASSIGN_TASKS
+    );
+
+  const hasDeletePermission =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DELETE_TASKS
+    );
+
+  const canViewCases =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_CASES
+    );
+
+  const canViewClients =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_CLIENTS
+    );
+
+  // ====================================================
   // QUERIES
-  // ======================================================
+  // ====================================================
 
   const {
     data,
@@ -296,12 +351,6 @@ const TaskEdit = () => {
   } =
     useTask(id);
 
-  const canRequestAssignableUsers =
-    hasPermission(
-      user,
-      PERMISSION_KEYS.ASSIGN_TASKS
-    );
-
   const {
     data:
       assignableUsersData,
@@ -309,7 +358,7 @@ const TaskEdit = () => {
       assignableUsersFetching,
   } =
     useAssignableUsers(
-      canRequestAssignableUsers
+      hasAssignPermission
     );
 
   const {
@@ -328,9 +377,9 @@ const TaskEdit = () => {
       limit: 100,
     });
 
-  // ======================================================
+  // ====================================================
   // MUTATIONS
-  // ======================================================
+  // ====================================================
 
   const updateMutation =
     useUpdateTask();
@@ -341,9 +390,9 @@ const TaskEdit = () => {
   const deleteMutation =
     useDeleteTask();
 
-  // ======================================================
+  // ====================================================
   // DATA
-  // ======================================================
+  // ====================================================
 
   const task =
     data?.data?.data;
@@ -360,20 +409,30 @@ const TaskEdit = () => {
       : [];
 
   const cases =
-    casesData
-      ?.data
-      ?.data ||
-    [];
+    Array.isArray(
+      casesData
+        ?.data
+        ?.data
+    )
+      ? casesData
+          .data
+          .data
+      : [];
 
   const clients =
-    clientsData
-      ?.data
-      ?.data ||
-    [];
+    Array.isArray(
+      clientsData
+        ?.data
+        ?.data
+    )
+      ? clientsData
+          .data
+          .data
+      : [];
 
-  // ======================================================
-  // PERMISSIONS
-  // ======================================================
+  // ====================================================
+  // WORKFLOW + PERMISSIONS
+  // ====================================================
 
   const permissions =
     useMemo(() => {
@@ -396,36 +455,6 @@ const TaskEdit = () => {
         approved ||
         cancelled;
 
-      const hasEditPermission =
-        hasPermission(
-          user,
-          PERMISSION_KEYS.EDIT_TASKS
-        );
-
-      const hasAssignPermission =
-        hasPermission(
-          user,
-          PERMISSION_KEYS.ASSIGN_TASKS
-        );
-
-      const hasDeletePermission =
-        hasPermission(
-          user,
-          PERMISSION_KEYS.DELETE_TASKS
-        );
-
-      const canViewCases =
-        hasPermission(
-          user,
-          PERMISSION_KEYS.VIEW_CASES
-        );
-
-      const canViewClients =
-        hasPermission(
-          user,
-          PERMISSION_KEYS.VIEW_CLIENTS
-        );
-
       return {
         awaitingApproval,
         approved,
@@ -443,13 +472,12 @@ const TaskEdit = () => {
         canDelete:
           hasDeletePermission &&
           !approved,
-
-        canViewCases,
-        canViewClients,
       };
     }, [
-      user,
       task,
+      hasEditPermission,
+      hasAssignPermission,
+      hasDeletePermission,
     ]);
 
   const {
@@ -461,15 +489,12 @@ const TaskEdit = () => {
     canEdit,
     canChangeAssignee,
     canDelete,
-
-    canViewCases,
-    canViewClients,
   } =
     permissions;
 
-  // ======================================================
+  // ====================================================
   // STATUS
-  // ======================================================
+  // ====================================================
 
   const displayStatus =
     useMemo(
@@ -482,9 +507,9 @@ const TaskEdit = () => {
       ]
     );
 
-  // ======================================================
+  // ====================================================
   // FORM INIT
-  // ======================================================
+  // ====================================================
 
   useEffect(() => {
     if (!task) {
@@ -510,16 +535,19 @@ const TaskEdit = () => {
         ),
 
       assigned_to:
-        task.assigned_to ||
-        '',
+        normalizeId(
+          task.assigned_to
+        ),
 
       case_id:
-        task.case_id ||
-        '',
+        normalizeId(
+          task.case_id
+        ),
 
       client_id:
-        task.client_id ||
-        '',
+        normalizeId(
+          task.client_id
+        ),
 
       estimated_hours:
         task.estimated_hours ??
@@ -529,9 +557,9 @@ const TaskEdit = () => {
     task,
   ]);
 
-  // ======================================================
-  // HANDLERS
-  // ======================================================
+  // ====================================================
+  // CHANGE
+  // ====================================================
 
   const handleChange = (
     event
@@ -542,21 +570,33 @@ const TaskEdit = () => {
     } =
       event.target;
 
-    /*
-     * Atanan kişi ayrı permission ile korunur.
-     */
     if (
       name ===
-        'assigned_to' &&
-      !canChangeAssignee
+        'assigned_to'
+    ) {
+      if (
+        !canChangeAssignee
+      ) {
+        return;
+      }
+    } else if (
+      !canEdit
     ) {
       return;
     }
 
     if (
-      name !==
-        'assigned_to' &&
-      !canEdit
+      name ===
+        'case_id' &&
+      !canViewCases
+    ) {
+      return;
+    }
+
+    if (
+      name ===
+        'client_id' &&
+      !canViewClients
     ) {
       return;
     }
@@ -590,9 +630,9 @@ const TaskEdit = () => {
     }
   };
 
-  // ======================================================
+  // ====================================================
   // VALIDATION
-  // ======================================================
+  // ====================================================
 
   const validateForm =
     () => {
@@ -611,23 +651,23 @@ const TaskEdit = () => {
       if (
         formData
           .estimated_hours !==
-          '' &&
-        (
-          !Number.isFinite(
-            Number(
-              formData
-                .estimated_hours
-            )
-          ) ||
+          ''
+      ) {
+        const hours =
           Number(
             formData
               .estimated_hours
-          ) <
-            0
-        )
-      ) {
-        nextErrors.estimated_hours =
-          'Tahmini süre 0 veya daha büyük olmalıdır';
+          );
+
+        if (
+          !Number.isFinite(
+            hours
+          ) ||
+          hours < 0
+        ) {
+          nextErrors.estimated_hours =
+            'Tahmini süre 0 veya daha büyük olmalıdır';
+        }
       }
 
       setErrors(
@@ -642,14 +682,24 @@ const TaskEdit = () => {
       );
     };
 
-  // ======================================================
+  // ====================================================
   // SUBMIT
-  // ======================================================
+  // ====================================================
 
   const handleSubmit = async (
     event
   ) => {
     event.preventDefault();
+
+    if (
+      workflowLocked
+    ) {
+      toast.error(
+        'Bu görev mevcut iş akışı durumunda düzenlenemez.'
+      );
+
+      return;
+    }
 
     if (
       !canEdit &&
@@ -663,28 +713,19 @@ const TaskEdit = () => {
     }
 
     if (
-      workflowLocked
-    ) {
-      toast.error(
-        'Bu görev mevcut iş akışı durumunda düzenlenemez.'
-      );
-
-      return;
-    }
-
-    if (
       canEdit &&
       !validateForm()
     ) {
       return;
     }
 
-    const updateData = {};
+    // ==================================================
+    // GENERAL UPDATE DATA
+    // ==================================================
 
-    /*
-     * Genel görev bilgileri yalnızca edit_tasks
-     * yetkisiyle normal update endpoint'ine gider.
-     */
+    const updateData =
+      {};
+
     if (
       canEdit
     ) {
@@ -711,7 +752,7 @@ const TaskEdit = () => {
         formData
           .estimated_hours !==
         ''
-          ? Number.parseFloat(
+          ? Number(
               formData
                 .estimated_hours
             )
@@ -736,29 +777,45 @@ const TaskEdit = () => {
       }
     }
 
-    /*
-     * Atama normal update endpoint'ine GİTMEZ.
-     * assign_tasks yetkisiyle ayrı /assign endpoint'i
-     * kullanılır.
-     */
+    // ==================================================
+    // ASSIGNMENT
+    //
+    // Atama PUT /tasks/:id ile değil,
+    // PATCH /tasks/:id/assign ile yapılır.
+    // ==================================================
+
     const currentAssignee =
-      task.assigned_to ||
-      '';
+      normalizeId(
+        task.assigned_to
+      );
 
     const requestedAssignee =
-      formData.assigned_to ||
-      '';
+      normalizeId(
+        formData.assigned_to
+      );
 
     const assignmentChanged =
       canChangeAssignee &&
       requestedAssignee !==
         currentAssignee;
 
+    if (
+      assignmentChanged &&
+      !requestedAssignee
+    ) {
+      toast.error(
+        'Görev ataması boş bırakılamaz.'
+      );
+
+      return;
+    }
+
     const hasGeneralUpdate =
+      canEdit &&
       Object.keys(
         updateData
       ).length >
-      0;
+        0;
 
     if (
       !hasGeneralUpdate &&
@@ -777,6 +834,7 @@ const TaskEdit = () => {
       ) {
         await updateMutation.mutateAsync({
           id,
+
           data:
             updateData,
         });
@@ -785,18 +843,9 @@ const TaskEdit = () => {
       if (
         assignmentChanged
       ) {
-        if (
-          !requestedAssignee
-        ) {
-          toast.error(
-            'Görev ataması boş bırakılamaz.'
-          );
-
-          return;
-        }
-
         await assignMutation.mutateAsync({
           id,
+
           assigned_to:
             requestedAssignee,
         });
@@ -807,15 +856,15 @@ const TaskEdit = () => {
       );
     } catch {
       /*
-       * Mutation hata mesajlarını kendi onError
-       * callback'leri gösteriyor.
+       * Toast mesajları mutation hook'larında
+       * gösteriliyor.
        */
     }
   };
 
-  // ======================================================
+  // ====================================================
   // DELETE
-  // ======================================================
+  // ====================================================
 
   const handleDelete =
     () => {
@@ -845,10 +894,6 @@ const TaskEdit = () => {
         {
           onSuccess:
             () => {
-              toast.success(
-                'Görev silindi'
-              );
-
               navigate(
                 '/tasks'
               );
@@ -857,9 +902,9 @@ const TaskEdit = () => {
       );
     };
 
-  // ======================================================
+  // ====================================================
   // LOADING
-  // ======================================================
+  // ====================================================
 
   if (
     taskLoading
@@ -881,9 +926,9 @@ const TaskEdit = () => {
     );
   }
 
-  // ======================================================
+  // ====================================================
   // ERROR
-  // ======================================================
+  // ====================================================
 
   if (
     taskError ||
@@ -923,9 +968,9 @@ const TaskEdit = () => {
     );
   }
 
-  // ======================================================
+  // ====================================================
   // RENDER
-  // ======================================================
+  // ====================================================
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -956,56 +1001,44 @@ const TaskEdit = () => {
           Görev Detayı
         </Link>
 
-        <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="mt-3">
 
-          <div>
+          <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
+            Görev Düzenle
+          </h1>
 
-            <h1
-              className="
-                text-2xl
-                font-semibold
-                tracking-[-0.035em]
-                text-gray-900
-                dark:text-white
-              "
+          <p className="mt-1.5 text-sm text-gray-500 dark:text-slate-400">
+            {task.title}
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+
+            <Badge
+              variant={
+                displayStatus.variant
+              }
             >
-              Görev Düzenle
-            </h1>
+              {displayStatus.label}
+            </Badge>
 
-            <p className="mt-1.5 text-sm text-gray-500 dark:text-slate-400">
-              {task.title}
-            </p>
-
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-
-              <Badge
-                variant={
-                  displayStatus.variant
-                }
-              >
-                {displayStatus.label}
-              </Badge>
-
-              <Badge
-                variant={
-                  getPriorityVariant(
-                    task.priority
-                  )
-                }
-              >
-                {PRIORITY_LABELS[
+            <Badge
+              variant={
+                getPriorityVariant(
                   task.priority
-                ] ||
-                  task.priority}
+                )
+              }
+            >
+              {PRIORITY_LABELS[
+                task.priority
+              ] ||
+                task.priority}
+            </Badge>
+
+            {approved && (
+              <Badge variant="success">
+                Onaylandı
               </Badge>
-
-              {approved && (
-                <Badge variant="success">
-                  Onaylandı
-                </Badge>
-              )}
-
-            </div>
+            )}
 
           </div>
 
@@ -1018,17 +1051,7 @@ const TaskEdit = () => {
       ================================================== */}
 
       {awaitingApproval && (
-        <div
-          className="
-            rounded-xl
-            border
-            border-amber-200
-            bg-amber-50
-            p-4
-            dark:border-amber-500/20
-            dark:bg-amber-500/[0.06]
-          "
-        >
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.06]">
 
           <div className="flex items-start gap-3">
 
@@ -1041,8 +1064,7 @@ const TaskEdit = () => {
               </p>
 
               <p className="mt-1 text-sm leading-6 text-amber-800 dark:text-amber-300">
-                Çalışma tamamlanmak üzere gönderildi.
-                Onay tamamlanana kadar görev bilgileri değiştirilemez.
+                Çalışma tamamlanmak üzere gönderildi. Onay tamamlanana kadar görev bilgileri değiştirilemez.
               </p>
 
             </div>
@@ -1053,17 +1075,7 @@ const TaskEdit = () => {
       )}
 
       {approved && (
-        <div
-          className="
-            rounded-xl
-            border
-            border-emerald-200
-            bg-emerald-50
-            p-4
-            dark:border-emerald-500/20
-            dark:bg-emerald-500/[0.06]
-          "
-        >
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/[0.06]">
 
           <div className="flex items-start gap-3">
 
@@ -1087,17 +1099,7 @@ const TaskEdit = () => {
       )}
 
       {cancelled && (
-        <div
-          className="
-            rounded-xl
-            border
-            border-red-200
-            bg-red-50
-            p-4
-            dark:border-red-500/20
-            dark:bg-red-500/[0.06]
-          "
-        >
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-500/20 dark:bg-red-500/[0.06]">
 
           <div className="flex items-start gap-3">
 
@@ -1151,6 +1153,8 @@ const TaskEdit = () => {
             placeholder="Görev başlığı..."
           />
 
+          {/* DESCRIPTION */}
+
           <div>
 
             <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
@@ -1165,7 +1169,7 @@ const TaskEdit = () => {
               onChange={
                 handleChange
               }
-              rows="5"
+              rows={5}
               disabled={
                 !canEdit
               }
@@ -1182,7 +1186,6 @@ const TaskEdit = () => {
                 leading-6
                 text-gray-900
                 outline-none
-                transition
                 focus:border-blue-500
                 focus:ring-2
                 focus:ring-blue-500/10
@@ -1194,24 +1197,13 @@ const TaskEdit = () => {
                 dark:text-white
                 dark:disabled:bg-white/[0.02]
               "
-              placeholder="Görev açıklaması..."
             />
 
           </div>
 
           {/* STATUS */}
 
-          <div
-            className="
-              rounded-xl
-              border
-              border-gray-200
-              bg-gray-50/70
-              p-4
-              dark:border-white/[0.06]
-              dark:bg-white/[0.02]
-            "
-          >
+          <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
 
             <div className="flex items-center justify-between gap-4">
 
@@ -1281,6 +1273,7 @@ const TaskEdit = () => {
                   dark:text-white
                 "
               >
+
                 <option value="low">
                   Düşük
                 </option>
@@ -1296,6 +1289,7 @@ const TaskEdit = () => {
                 <option value="critical">
                   Kritik
                 </option>
+
               </select>
 
             </div>
@@ -1352,7 +1346,7 @@ const TaskEdit = () => {
 
           </div>
 
-          {/* ESTIMATED HOURS */}
+          {/* HOURS */}
 
           <Input
             label="Tahmini Süre"
@@ -1382,8 +1376,11 @@ const TaskEdit = () => {
             <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
 
               <span className="inline-flex items-center gap-1.5">
+
                 <UserRound className="h-4 w-4 text-gray-400" />
+
                 Atanan Kişi
+
               </span>
 
             </label>
@@ -1396,6 +1393,9 @@ const TaskEdit = () => {
                 }
                 onChange={
                   handleChange
+                }
+                disabled={
+                  assignableUsersFetching
                 }
                 className="
                   w-full
@@ -1411,6 +1411,8 @@ const TaskEdit = () => {
                   focus:border-blue-500
                   focus:ring-2
                   focus:ring-blue-500/10
+                  disabled:cursor-not-allowed
+                  disabled:opacity-50
                   dark:border-white/[0.08]
                   dark:bg-white/[0.035]
                   dark:text-white
@@ -1432,7 +1434,9 @@ const TaskEdit = () => {
                         person.id
                       }
                       value={
-                        person.id
+                        normalizeId(
+                          person.id
+                        )
                       }
                     >
                       {person.first_name}{' '}
@@ -1509,22 +1513,25 @@ const TaskEdit = () => {
                   Dava seçin
                 </option>
 
-                {cases.map(
-                  (
-                    caseItem
-                  ) => (
-                    <option
-                      key={
-                        caseItem.id
-                      }
-                      value={
-                        caseItem.id
-                      }
-                    >
-                      {caseItem.title}
-                    </option>
-                  )
-                )}
+                {canViewCases &&
+                  cases.map(
+                    (
+                      caseItem
+                    ) => (
+                      <option
+                        key={
+                          caseItem.id
+                        }
+                        value={
+                          normalizeId(
+                            caseItem.id
+                          )
+                        }
+                      >
+                        {caseItem.title}
+                      </option>
+                    )
+                  )}
 
               </select>
 
@@ -1577,22 +1584,25 @@ const TaskEdit = () => {
                   Müvekkil seçin
                 </option>
 
-                {clients.map(
-                  (
-                    client
-                  ) => (
-                    <option
-                      key={
-                        client.id
-                      }
-                      value={
-                        client.id
-                      }
-                    >
-                      {client.name}
-                    </option>
-                  )
-                )}
+                {canViewClients &&
+                  clients.map(
+                    (
+                      client
+                    ) => (
+                      <option
+                        key={
+                          client.id
+                        }
+                        value={
+                          normalizeId(
+                            client.id
+                          )
+                        }
+                      >
+                        {client.name}
+                      </option>
+                    )
+                  )}
 
               </select>
 

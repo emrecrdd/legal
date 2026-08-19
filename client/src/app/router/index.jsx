@@ -991,47 +991,74 @@ const AppRouter = () => {
           </Route>
 
           {/* ==================================================
-              ADMIN ONLY
+    USERS - VIEW
+================================================== */}
 
-              Kullanıcı ve audit yönetimini şimdilik
-              role=admin olarak bırakıyoruz.
-          ================================================== */}
+<Route
+  element={
+    <PrivateRoute
+      requiredPermission={
+        PERMISSION_KEYS.VIEW_USERS
+      }
+    />
+  }
+>
+  <Route
+    path="/users"
+    element={
+      <UserList />
+    }
+  />
+</Route>
 
-          <Route
-            element={
-              <PrivateRoute
-                requiredRole="admin"
-              />
-            }
-          >
-            <Route
-              path="/users"
-              element={
-                <UserList />
-              }
-            />
+{/* ==================================================
+    USERS - CREATE
+================================================== */}
 
-            <Route
-              path="/users/create"
-              element={
-                <UserCreate />
-              }
-            />
+<Route
+  element={
+    <PrivateRoute
+      requiredPermission={
+        PERMISSION_KEYS.CREATE_USERS
+      }
+    />
+  }
+>
+  <Route
+    path="/users/create"
+    element={
+      <UserCreate />
+    }
+  />
+</Route>
 
-            <Route
-              path="/audit-logs"
-              element={
-                <AuditLogList />
-              }
-            />
+{/* ==================================================
+    AUDIT LOGS - VIEW
+================================================== */}
 
-            <Route
-              path="/audit-logs/:id"
-              element={
-                <AuditLogDetail />
-              }
-            />
-          </Route>
+<Route
+  element={
+    <PrivateRoute
+      requiredPermission={
+        PERMISSION_KEYS.VIEW_AUDIT_LOGS
+      }
+    />
+  }
+>
+  <Route
+    path="/audit-logs"
+    element={
+      <AuditLogList />
+    }
+  />
+
+  <Route
+    path="/audit-logs/:id"
+    element={
+      <AuditLogDetail />
+    }
+  />
+</Route>
 
         </Route>
       </Route>

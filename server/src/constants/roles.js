@@ -270,12 +270,15 @@ export const PERMISSION_KEYS = {
   MANAGE_PERMISSIONS:
     'manage_permissions',
 
-  // ----------------------------------------------------
-  // AUDIT
-  // ----------------------------------------------------
+ // ----------------------------------------------------
+// AUDIT
+// ----------------------------------------------------
 
-  VIEW_AUDIT_LOGS:
-    'view_audit_logs',
+VIEW_AUDIT_LOGS:
+  'view_audit_logs',
+
+DELETE_AUDIT_LOGS:
+  'delete_audit_logs',
 
   // ----------------------------------------------------
   // SETTINGS
@@ -635,18 +638,21 @@ export const PERMISSION_GROUPS = {
   },
 
   administration: {
-    label: 'Yönetim',
-    permissions: [
-      PERMISSION_KEYS.VIEW_USERS,
-      PERMISSION_KEYS.CREATE_USERS,
-      PERMISSION_KEYS.EDIT_USERS,
-      PERMISSION_KEYS.DELETE_USERS,
-      PERMISSION_KEYS.CHANGE_USER_ROLES,
-      PERMISSION_KEYS.MANAGE_USER_STATUS,
-      PERMISSION_KEYS.MANAGE_PERMISSIONS,
-      PERMISSION_KEYS.VIEW_AUDIT_LOGS,
-    ],
-  },
+  label: 'Yönetim',
+
+  permissions: [
+    PERMISSION_KEYS.VIEW_USERS,
+    PERMISSION_KEYS.CREATE_USERS,
+    PERMISSION_KEYS.EDIT_USERS,
+    PERMISSION_KEYS.DELETE_USERS,
+    PERMISSION_KEYS.CHANGE_USER_ROLES,
+    PERMISSION_KEYS.MANAGE_USER_STATUS,
+    PERMISSION_KEYS.MANAGE_PERMISSIONS,
+
+    PERMISSION_KEYS.VIEW_AUDIT_LOGS,
+    PERMISSION_KEYS.DELETE_AUDIT_LOGS,
+  ],
+},
 };
 
 // ======================================================

@@ -11,6 +11,7 @@ import {
 import {
   logger,
 } from '../../config/logger.js';
+
 import {
   hasPermission,
 } from '../../middlewares/auth.middleware.js';
@@ -18,6 +19,7 @@ import {
 import {
   PERMISSION_KEYS,
 } from '../../constants/roles.js';
+
 import {
   AuditLog,
 } from '../../models/AuditLog.js';
@@ -58,12 +60,7 @@ const createAuditLog = async ({
     });
   } catch (error) {
     /*
-     * Audit log hatası ana CRUD işlemini bozmasın.
-     *
-     * Görev başarıyla oluşturulmuş/güncellenmişken
-     * audit insert hatası yüzünden kullanıcıya
-     * başarısız response dönmek duplicate işlem
-     * riskine yol açabilir.
+     * Audit log hatası ana işlemi bozmasın.
      */
     logger.error(
       'Task audit log error:',
@@ -94,15 +91,75 @@ const getUserDisplayName = (
 };
 
 // ======================================================
+// ACCESS CONTEXT
+// ======================================================
+
+const getTaskAccessContext = (
+  user
+) => {
+  return {
+    userId:
+      user.id,
+
+    canViewAllTasks:
+      hasPermission(
+        user,
+        PERMISSION_KEYS.VIEW_ALL_TASKS
+      ),
+  };
+};
+
+// ======================================================
+// ERROR STATUS HELPER
+// ======================================================
+
+const getTaskErrorStatus = (
+  error,
+  fallback = 400
+) => {
+  const message =
+    String(
+      error?.message ||
+      ''
+    ).toLowerCase();
+
+  if (
+    message.includes(
+      'not found'
+    ) ||
+    message.includes(
+      'bulunamadı'
+    )
+  ) {
+    return 404;
+  }
+
+  if (
+    message.includes(
+      'erişim yetkiniz'
+    ) ||
+    message.includes(
+      'yetkiniz bulunmuyor'
+    ) ||
+    message.includes(
+      'permission'
+    ) ||
+    message.includes(
+      'size atanmamış'
+    )
+  ) {
+    return 403;
+  }
+
+  return fallback;
+};
+
+// ======================================================
 // CONTROLLER
 // ======================================================
 
 export const taskController = {
   // ====================================================
-  // CREATE
-  // ====================================================
-
-    // ====================================================
   // CREATE
   // ====================================================
 
@@ -122,11 +179,11 @@ export const taskController = {
         null;
 
       /*
-       * assign_tasks yetkisi olmayan kullanıcı
+       * ASSIGN_TASKS yetkisi olmayan kullanıcı
        * request'i elle değiştirerek başka kullanıcıya
        * görev atayamaz.
        *
-       * Yetkisi yoksa görev otomatik kendisine atanır.
+       * Görev otomatik kendisine atanır.
        */
       const assignedTo =
         canAssignTasks
@@ -134,11 +191,12 @@ export const taskController = {
           : req.user.id;
 
       /*
-       * Workflow alanlarını client belirleyemez.
-       * Yeni görev her zaman pending / %0 başlar.
+       * Sistem / workflow alanları create request'i
+       * üzerinden belirlenemez.
        */
       const {
         created_by,
+        assigned_to,
         status,
         progress,
         approved_by,
@@ -147,7 +205,7 @@ export const taskController = {
         completed_at,
         actual_hours,
         ...safeBody
-      } = req.body;
+      } = req.body || {};
 
       const taskData = {
         ...safeBody,
@@ -186,7 +244,7 @@ export const taskController = {
       return successResponse(
         res,
         task,
-        'Task created successfully',
+        'Görev başarıyla oluşturuldu',
         201
       );
     } catch (error) {
@@ -199,7 +257,9 @@ export const taskController = {
         res,
         error.message ||
           'Görev oluşturulamadı',
-        400
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -224,6 +284,11 @@ export const taskController = {
         client_id,
       } = req.query;
 
+      const access =
+        getTaskAccessContext(
+          req.user
+        );
+
       const result =
         await taskService.findAll({
           page,
@@ -234,13 +299,19 @@ export const taskController = {
           assigned_to,
           case_id,
           client_id,
+
+          userId:
+            access.userId,
+
+          canViewAllTasks:
+            access.canViewAllTasks,
         });
 
       return paginatedResponse(
         res,
         result.data,
         result.pagination,
-        'Tasks fetched successfully'
+        'Görevler getirildi'
       );
     } catch (error) {
       logger.error(
@@ -250,8 +321,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Görevler getirilemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -271,6 +345,11 @@ export const taskController = {
         status,
       } = req.query;
 
+      const access =
+        getTaskAccessContext(
+          req.user
+        );
+
       const result =
         await taskService.getByClient(
           req.params.clientId,
@@ -278,6 +357,12 @@ export const taskController = {
             page,
             limit,
             status,
+
+            userId:
+              access.userId,
+
+            canViewAllTasks:
+              access.canViewAllTasks,
           }
         );
 
@@ -285,7 +370,7 @@ export const taskController = {
         res,
         result.data,
         result.pagination,
-        'Client tasks fetched successfully'
+        'Müvekkil görevleri getirildi'
       );
     } catch (error) {
       logger.error(
@@ -295,14 +380,17 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Müvekkil görevleri getirilemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
 
   // ====================================================
-  // CLIENT COCKPIT OVERVIEW
+  // CLIENT OVERVIEW
   // ====================================================
 
   async getClientOverview(
@@ -315,6 +403,11 @@ export const taskController = {
         recent_limit = 5,
       } = req.query;
 
+      const access =
+        getTaskAccessContext(
+          req.user
+        );
+
       const overview =
         await taskService.getClientOverview(
           req.params.clientId,
@@ -324,13 +417,19 @@ export const taskController = {
 
             recentLimit:
               recent_limit,
+
+            userId:
+              access.userId,
+
+            canViewAllTasks:
+              access.canViewAllTasks,
           }
         );
 
       return successResponse(
         res,
         overview,
-        'Client task overview fetched successfully'
+        'Müvekkil görev özeti getirildi'
       );
     } catch (error) {
       logger.error(
@@ -340,8 +439,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Müvekkil görev özeti getirilemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -355,15 +457,27 @@ export const taskController = {
     res
   ) {
     try {
+      const access =
+        getTaskAccessContext(
+          req.user
+        );
+
       const task =
         await taskService.findOne(
-          req.params.id
+          req.params.id,
+          {
+            userId:
+              access.userId,
+
+            canViewAllTasks:
+              access.canViewAllTasks,
+          }
         );
 
       return successResponse(
         res,
         task,
-        'Task fetched successfully'
+        'Görev getirildi'
       );
     } catch (error) {
       logger.error(
@@ -373,18 +487,21 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        404
+        error.message ||
+          'Görev getirilemedi',
+        getTaskErrorStatus(
+          error,
+          404
+        )
       );
     }
   },
 
   // ====================================================
   // UPDATE
-  // ====================================================
-
-    // ====================================================
-  // UPDATE
+  //
+  // Assignment ve workflow alanları buradan
+  // değiştirilemez.
   // ====================================================
 
   async update(
@@ -394,34 +511,33 @@ export const taskController = {
     try {
       const {
         assigned_to,
+        created_by,
         status,
+        progress,
         approved_by,
         approved_at,
-        progress,
         started_at,
         completed_at,
         actual_hours,
         ...safeUpdateData
-      } = req.body;
+      } = req.body || {};
 
-      /*
-       * Genel update endpoint'i workflow veya assignment
-       * alanlarını değiştiremez.
-       *
-       * Bunların ayrı endpoint'leri var:
-       *
-       * PATCH /tasks/:id/assign
-       * POST  /tasks/:id/start
-       * POST  /tasks/:id/complete
-       * POST  /tasks/:id/approve
-       * PATCH /tasks/:id/progress
-       * PATCH /tasks/:id/status
-       */
+      const access =
+        getTaskAccessContext(
+          req.user
+        );
 
       const task =
         await taskService.update(
           req.params.id,
-          safeUpdateData
+          safeUpdateData,
+          {
+            userId:
+              access.userId,
+
+            canViewAllTasks:
+              access.canViewAllTasks,
+          }
         );
 
       await createAuditLog({
@@ -440,7 +556,7 @@ export const taskController = {
       return successResponse(
         res,
         task,
-        'Task updated successfully'
+        'Görev başarıyla güncellendi'
       );
     } catch (error) {
       logger.error(
@@ -450,8 +566,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Görev güncellenemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -465,13 +584,36 @@ export const taskController = {
     res
   ) {
     try {
+      const access =
+        getTaskAccessContext(
+          req.user
+        );
+
+      /*
+       * Silmeden önce başlık audit log için alınır.
+       * findOne record-level erişimi de kontrol eder.
+       */
       const task =
         await taskService.findOne(
-          req.params.id
+          req.params.id,
+          {
+            userId:
+              access.userId,
+
+            canViewAllTasks:
+              access.canViewAllTasks,
+          }
         );
 
       await taskService.remove(
-        req.params.id
+        req.params.id,
+        {
+          userId:
+            access.userId,
+
+          canViewAllTasks:
+            access.canViewAllTasks,
+        }
       );
 
       await createAuditLog({
@@ -490,7 +632,7 @@ export const taskController = {
       return successResponse(
         res,
         null,
-        'Task deleted successfully'
+        'Görev başarıyla silindi'
       );
     } catch (error) {
       logger.error(
@@ -500,14 +642,26 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Görev silinemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
 
   // ====================================================
   // UPDATE STATUS
+  //
+  // Normal iş akışı için:
+  //
+  // pending -> start
+  // in_progress -> complete
+  // completed -> approve
+  //
+  // Bu endpoint yalnızca yönetimsel olarak
+  // pending / cancelled işlemlerinde kullanılır.
   // ====================================================
 
   async updateStatus(
@@ -517,12 +671,48 @@ export const taskController = {
     try {
       const {
         status,
-      } = req.body;
+      } = req.body || {};
 
       if (!status) {
         return errorResponse(
           res,
-          'Task status is required',
+          'Görev durumu gereklidir',
+          400
+        );
+      }
+
+      /*
+       * EDIT_TASKS route kontrolüne ek olarak,
+       * doğrudan durum yönetimi için tüm görevleri
+       * görebilme yetkisi gerekir.
+       */
+      const canManageAllTasks =
+        hasPermission(
+          req.user,
+          PERMISSION_KEYS.VIEW_ALL_TASKS
+        );
+
+      if (!canManageAllTasks) {
+        return errorResponse(
+          res,
+          'Görev durumunu doğrudan değiştirme yetkiniz bulunmuyor',
+          403
+        );
+      }
+
+      const allowedStatuses = [
+        'pending',
+        'cancelled',
+      ];
+
+      if (
+        !allowedStatuses.includes(
+          status
+        )
+      ) {
+        return errorResponse(
+          res,
+          'Bu durum doğrudan değiştirilemez. Görev iş akışı kullanılmalıdır.',
           400
         );
       }
@@ -530,7 +720,14 @@ export const taskController = {
       const task =
         await taskService.updateStatus(
           req.params.id,
-          status
+          status,
+          {
+            userId:
+              req.user.id,
+
+            canViewAllTasks:
+              true,
+          }
         );
 
       await createAuditLog({
@@ -549,7 +746,7 @@ export const taskController = {
       return successResponse(
         res,
         task,
-        'Task status updated successfully'
+        'Görev durumu güncellendi'
       );
     } catch (error) {
       logger.error(
@@ -559,8 +756,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Görev durumu güncellenemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -576,21 +776,19 @@ export const taskController = {
     try {
       const {
         assigned_to,
-      } = req.body;
+      } = req.body || {};
 
       if (!assigned_to) {
         return errorResponse(
           res,
-          'Assigned user is required',
+          'Atanacak kullanıcı gereklidir',
           400
         );
       }
 
       /*
-       * Service'in üçüncü parametresi assignedBy.
-       *
-       * Böylece notification içerisinde görevi
-       * gerçekten kimin atadığı gösterilebilir.
+       * Route zaten ASSIGN_TASKS permission'ı ile
+       * korunuyor.
        */
       const assignedBy =
         getUserDisplayName(
@@ -620,7 +818,7 @@ export const taskController = {
       return successResponse(
         res,
         task,
-        'Task assigned successfully'
+        'Görev başarıyla atandı'
       );
     } catch (error) {
       logger.error(
@@ -630,8 +828,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Görev atanamadı',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -665,7 +866,7 @@ export const taskController = {
         res,
         result.data,
         result.pagination,
-        'My tasks fetched successfully'
+        'Görevlerim getirildi'
       );
     } catch (error) {
       logger.error(
@@ -675,11 +876,15 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Görevler getirilemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
+
   // ====================================================
   // ASSIGNABLE USERS
   // ====================================================
@@ -695,7 +900,7 @@ export const taskController = {
       return successResponse(
         res,
         users,
-        'Assignable users fetched successfully'
+        'Görev atanabilir kullanıcılar getirildi'
       );
     } catch (error) {
       logger.error(
@@ -705,11 +910,15 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Kullanıcılar getirilemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
+
   // ====================================================
   // STATISTICS
   // ====================================================
@@ -719,15 +928,24 @@ export const taskController = {
     res
   ) {
     try {
+      const canViewAllTasks =
+        hasPermission(
+          req.user,
+          PERMISSION_KEYS.VIEW_ALL_TASKS
+        );
+
       const stats =
         await taskService.getStatistics(
-          req.user.id
+          req.user.id,
+          {
+            canViewAllTasks,
+          }
         );
 
       return successResponse(
         res,
         stats,
-        'Task statistics fetched successfully'
+        'Görev istatistikleri getirildi'
       );
     } catch (error) {
       logger.error(
@@ -737,8 +955,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Görev istatistikleri getirilemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -760,7 +981,7 @@ export const taskController = {
       return successResponse(
         res,
         tasks,
-        'Overdue tasks fetched successfully'
+        'Geciken görevler getirildi'
       );
     } catch (error) {
       logger.error(
@@ -770,8 +991,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Geciken görevler getirilemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -793,7 +1017,7 @@ export const taskController = {
       return successResponse(
         res,
         tasks,
-        'Upcoming tasks fetched successfully'
+        'Yaklaşan görevler getirildi'
       );
     } catch (error) {
       logger.error(
@@ -803,8 +1027,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Yaklaşan görevler getirilemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -840,7 +1067,7 @@ export const taskController = {
       return successResponse(
         res,
         task,
-        'Task started successfully'
+        'Görev başlatıldı'
       );
     } catch (error) {
       logger.error(
@@ -850,8 +1077,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Görev başlatılamadı',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -868,7 +1098,7 @@ export const taskController = {
       const {
         note,
         actual_hours,
-      } = req.body;
+      } = req.body || {};
 
       const task =
         await taskService.completeTask(
@@ -890,13 +1120,13 @@ export const taskController = {
           task.id,
 
         description:
-          `"${task.title}" görevi tamamlandı`,
+          `"${task.title}" görevi tamamlanmaya gönderildi`,
       });
 
       return successResponse(
         res,
         task,
-        'Task completed successfully'
+        'Görev tamamlandı ve onaya gönderildi'
       );
     } catch (error) {
       logger.error(
@@ -906,8 +1136,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Görev tamamlanamadı',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -921,6 +1154,10 @@ export const taskController = {
     res
   ) {
     try {
+      /*
+       * Route zaten APPROVE_TASKS permission'ı ile
+       * korunuyor.
+       */
       const task =
         await taskService.approveTask(
           req.params.id,
@@ -943,7 +1180,7 @@ export const taskController = {
       return successResponse(
         res,
         task,
-        'Task approved successfully'
+        'Görev onaylandı'
       );
     } catch (error) {
       logger.error(
@@ -953,8 +1190,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Görev onaylanamadı',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -970,14 +1210,14 @@ export const taskController = {
     try {
       const {
         content,
-      } = req.body;
+      } = req.body || {};
 
       if (
         !content?.trim()
       ) {
         return errorResponse(
           res,
-          'Note content is required',
+          'Not içeriği gereklidir',
           400
         );
       }
@@ -994,7 +1234,7 @@ export const taskController = {
       const preview =
         String(
           note.content ||
-            ''
+          ''
         )
           .slice(
             0,
@@ -1015,13 +1255,18 @@ export const taskController = {
           note.id,
 
         description:
-          `"${preview}${note.content?.length > 50 ? '...' : ''}" notu eklendi`,
+          `"${preview}${
+            note.content?.length >
+            50
+              ? '...'
+              : ''
+          }" notu eklendi`,
       });
 
       return successResponse(
         res,
         note,
-        'Note added successfully',
+        'Not eklendi',
         201
       );
     } catch (error) {
@@ -1032,8 +1277,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Not eklenemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -1047,16 +1295,25 @@ export const taskController = {
     res
   ) {
     try {
+      const access =
+        getTaskAccessContext(
+          req.user
+        );
+
       const notes =
         await taskService.getNotes(
           req.params.id,
-          req.user.id
+          req.user.id,
+          {
+            canViewAllTasks:
+              access.canViewAllTasks,
+          }
         );
 
       return successResponse(
         res,
         notes,
-        'Notes fetched successfully'
+        'Notlar getirildi'
       );
     } catch (error) {
       logger.error(
@@ -1066,8 +1323,11 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'Notlar getirilemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
@@ -1083,7 +1343,7 @@ export const taskController = {
     try {
       const {
         progress,
-      } = req.body;
+      } = req.body || {};
 
       if (
         progress ===
@@ -1093,7 +1353,7 @@ export const taskController = {
       ) {
         return errorResponse(
           res,
-          'Progress is required',
+          'İlerleme değeri gereklidir',
           400
         );
       }
@@ -1108,7 +1368,7 @@ export const taskController = {
       return successResponse(
         res,
         task,
-        'Progress updated successfully'
+        'İlerleme güncellendi'
       );
     } catch (error) {
       logger.error(
@@ -1118,9 +1378,14 @@ export const taskController = {
 
       return errorResponse(
         res,
-        error.message,
-        400
+        error.message ||
+          'İlerleme güncellenemedi',
+        getTaskErrorStatus(
+          error
+        )
       );
     }
   },
 };
+
+export default taskController;
