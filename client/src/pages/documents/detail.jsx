@@ -58,6 +58,7 @@ const ALLOWED_EXTENSIONS = [
   '.webp',
   '.mp4',
   '.webm',
+  '.udf',
 ];
 
 // ======================================================
@@ -137,12 +138,34 @@ const getFileIcon = (
     case 'excel':
       return '📊';
 
+    case 'udf':
+      return '📑';
+
     case 'image':
       return '🖼️';
 
     default:
       return '📎';
   }
+};
+
+const getFileTypeLabel = (
+  fileType
+) => {
+  const labels = {
+    pdf: 'PDF',
+    word: 'Word',
+    excel: 'Excel',
+    udf: 'UDF',
+    image: 'Görsel',
+    other: 'Dosya',
+  };
+
+  return (
+    labels[fileType] ||
+    fileType?.toUpperCase() ||
+    'Dosya'
+  );
 };
 
 const formatFileSize = (
@@ -253,6 +276,568 @@ const getExtension = (
   return value
     .slice(index)
     .toLowerCase();
+};
+
+const isUdfDocument = (
+  document
+) => {
+  if (!document) {
+    return false;
+  }
+
+  if (
+    document.file_type ===
+    'udf'
+  ) {
+    return true;
+  }
+
+  return (
+    getExtension(
+      document.original_name ||
+        document.name
+    ) === '.udf'
+  );
+};
+
+// ======================================================
+// DOWNLOAD FILENAME
+// ======================================================
+
+const getFilenameFromContentDisposition = (
+  contentDisposition
+) => {
+  if (
+    !contentDisposition ||
+    typeof contentDisposition !==
+      'string'
+  ) {
+    return null;
+  }
+
+  const utf8Match =
+    contentDisposition.match(
+      /filename\*\s*=\s*UTF-8''([^;]+)/i
+    );
+
+  if (
+    utf8Match?.[1]
+  ) {
+    const value =
+      utf8Match[1]
+        .trim()
+        .replace(
+          /^["']|["']$/g,
+          ''
+        );
+
+    try {
+      return decodeURIComponent(
+        value
+      );
+    } catch {
+      return value;
+    }
+  }
+
+  const filenameMatch =
+    contentDisposition.match(
+      /filename\s*=\s*"([^"]+)"/i
+    ) ||
+    contentDisposition.match(
+      /filename\s*=\s*([^;]+)/i
+    );
+
+  if (
+    filenameMatch?.[1]
+  ) {
+    return filenameMatch[1]
+      .trim()
+      .replace(
+        /^["']|["']$/g,
+        ''
+      );
+  }
+
+  return null;
+};
+
+// ======================================================
+// UDF PARSER
+// ======================================================
+
+const parseUdfDocument = async (
+  blob
+) => {
+  if (!blob) {
+    throw new Error(
+      'UDF dosyası alınamadı'
+    );
+  }
+
+  const xmlText =
+    await blob.text();
+
+  if (
+    !xmlText?.trim()
+  ) {
+    throw new Error(
+      'UDF dosyası boş'
+    );
+  }
+
+  const parser =
+    new DOMParser();
+
+  const xmlDocument =
+    parser.parseFromString(
+      xmlText,
+      'application/xml'
+    );
+
+  const parserError =
+    xmlDocument.querySelector(
+      'parsererror'
+    );
+
+  if (parserError) {
+    throw new Error(
+      'UDF dosya yapısı okunamadı'
+    );
+  }
+
+  /*
+   * UYAP UDF yapısında asıl belge metni:
+   *
+   * <template>
+   *   <content><![CDATA[
+   *     belge metni
+   *   ]]></content>
+   * </template>
+   */
+  const contentNode =
+    xmlDocument.querySelector(
+      'template > content'
+    ) ||
+    xmlDocument.querySelector(
+      'content'
+    );
+
+  if (!contentNode) {
+    throw new Error(
+      'UDF belge içeriği bulunamadı'
+    );
+  }
+
+  const content =
+    contentNode.textContent ||
+    '';
+
+  if (
+    !content.trim()
+  ) {
+    throw new Error(
+      'UDF belge içeriği boş'
+    );
+  }
+
+  /*
+   * Sayfa ayarlarını da okuyabiliriz.
+   * Şimdilik margin değerleri yoksa A4 için
+   * varsayılan 15 mm kullanıyoruz.
+   */
+  const pageFormat =
+    xmlDocument.querySelector(
+      'pageFormat'
+    );
+
+  const leftMargin =
+    Number(
+      pageFormat?.getAttribute(
+        'leftMargin'
+      )
+    );
+
+  const rightMargin =
+    Number(
+      pageFormat?.getAttribute(
+        'rightMargin'
+      )
+    );
+
+  const topMargin =
+    Number(
+      pageFormat?.getAttribute(
+        'topMargin'
+      )
+    );
+
+  const bottomMargin =
+    Number(
+      pageFormat?.getAttribute(
+        'bottomMargin'
+      )
+    );
+
+  /*
+   * UYAP değerleri point benzeri ölçüler taşıyor.
+   * 1 pt ≈ 0.352778 mm
+   */
+  const pointToMm = (
+    value,
+    fallback = 15
+  ) => {
+    if (
+      !Number.isFinite(
+        value
+      ) ||
+      value <= 0
+    ) {
+      return fallback;
+    }
+
+    return Number(
+      (
+        value *
+        0.352778
+      ).toFixed(2)
+    );
+  };
+
+  return {
+    content,
+
+    margins: {
+      left:
+        pointToMm(
+          leftMargin
+        ),
+
+      right:
+        pointToMm(
+          rightMargin
+        ),
+
+      top:
+        pointToMm(
+          topMargin
+        ),
+
+      bottom:
+        pointToMm(
+          bottomMargin
+        ),
+    },
+  };
+};
+
+// ======================================================
+// UDF PREVIEW WINDOW
+// ======================================================
+
+const renderUdfPreview = ({
+  previewWindow,
+  document,
+  udf,
+}) => {
+  if (
+    !previewWindow
+  ) {
+    throw new Error(
+      'Önizleme penceresi açılamadı'
+    );
+  }
+
+  const previewDocument =
+    previewWindow.document;
+
+  /*
+   * Kullanıcıdan gelen hiçbir belge içeriğini
+   * innerHTML ile basmıyoruz.
+   *
+   * Belge metni aşağıda textContent ile ekleniyor.
+   */
+  previewDocument.open();
+
+  previewDocument.write(`
+    <!DOCTYPE html>
+    <html lang="tr">
+      <head>
+        <meta charset="UTF-8" />
+
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1.0"
+        />
+
+        <title>UDF Önizleme</title>
+      </head>
+
+      <body>
+        <div id="udf-toolbar">
+          <div id="udf-toolbar-left">
+            <strong>UYAP UDF Belgesi</strong>
+            <span id="udf-filename"></span>
+          </div>
+
+          <button
+            id="udf-print"
+            type="button"
+          >
+            Yazdır
+          </button>
+        </div>
+
+        <main id="udf-page">
+          <pre id="udf-content"></pre>
+        </main>
+      </body>
+    </html>
+  `);
+
+  previewDocument.close();
+
+  previewDocument.title =
+    document?.original_name ||
+    document?.name ||
+    'UDF Belgesi';
+
+  const style =
+    previewDocument.createElement(
+      'style'
+    );
+
+  style.textContent = `
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+    }
+
+    body {
+      background: #eef2f7;
+      color: #111827;
+      font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+    }
+
+    #udf-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+
+      min-height: 58px;
+
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+
+      gap: 20px;
+
+      padding: 10px 18px;
+
+      background: #ffffff;
+
+      border-bottom:
+        1px solid #dbe2ea;
+
+      box-shadow:
+        0 1px 3px
+        rgba(15, 23, 42, 0.08);
+    }
+
+    #udf-toolbar-left {
+      min-width: 0;
+
+      display: flex;
+      flex-direction: column;
+
+      gap: 3px;
+    }
+
+    #udf-toolbar strong {
+      font-size: 14px;
+      color: #0f172a;
+    }
+
+    #udf-filename {
+      max-width: 70vw;
+
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    #udf-print {
+      flex-shrink: 0;
+
+      border: 1px solid #cbd5e1;
+
+      border-radius: 8px;
+
+      padding: 8px 14px;
+
+      background: #ffffff;
+
+      color: #334155;
+
+      cursor: pointer;
+
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    #udf-print:hover {
+      background: #f8fafc;
+    }
+
+    #udf-page {
+      width: min(
+        210mm,
+        calc(100vw - 32px)
+      );
+
+      min-height: 297mm;
+
+      margin:
+        28px
+        auto
+        60px;
+
+      padding:
+        ${udf.margins.top}mm
+        ${udf.margins.right}mm
+        ${udf.margins.bottom}mm
+        ${udf.margins.left}mm;
+
+      background: #ffffff;
+
+      box-shadow:
+        0 10px 35px
+        rgba(15, 23, 42, 0.12);
+    }
+
+    #udf-content {
+      margin: 0;
+
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+
+      font-family:
+        "Times New Roman",
+        Times,
+        serif;
+
+      font-size: 12pt;
+      line-height: 1.5;
+
+      color: #111111;
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+      }
+
+      #udf-toolbar {
+        display: none;
+      }
+
+      #udf-page {
+        width: auto;
+        min-height: auto;
+
+        margin: 0;
+
+        box-shadow: none;
+      }
+
+      @page {
+        size: A4;
+        margin: 0;
+      }
+    }
+
+    @media (max-width: 720px) {
+      #udf-page {
+        width:
+          calc(100vw - 16px);
+
+        margin:
+          8px
+          auto
+          30px;
+
+        padding:
+          20px
+          16px;
+      }
+
+      #udf-content {
+        font-size: 11pt;
+      }
+    }
+  `;
+
+  previewDocument.head.appendChild(
+    style
+  );
+
+  const filenameElement =
+    previewDocument.getElementById(
+      'udf-filename'
+    );
+
+  const contentElement =
+    previewDocument.getElementById(
+      'udf-content'
+    );
+
+  const printButton =
+    previewDocument.getElementById(
+      'udf-print'
+    );
+
+  if (filenameElement) {
+    filenameElement.textContent =
+      document?.original_name ||
+      document?.name ||
+      'document.udf';
+  }
+
+  if (contentElement) {
+    /*
+     * ÇOK ÖNEMLİ:
+     * innerHTML değil textContent.
+     *
+     * Böylece UDF içindeki metin HTML/JS olarak
+     * çalıştırılamaz.
+     */
+    contentElement.textContent =
+      udf.content;
+  }
+
+  if (printButton) {
+    printButton.addEventListener(
+      'click',
+      () => {
+        previewWindow.print();
+      }
+    );
+  }
+
+  previewWindow.opener =
+    null;
 };
 
 // ======================================================
@@ -429,16 +1014,35 @@ const DocumentDetail = () => {
           targetDocument.id
         );
 
+      const contentType =
+        response.headers?.[
+          'content-type'
+        ] ||
+        targetDocument.mime_type ||
+        'application/octet-stream';
+
+      const contentDisposition =
+        response.headers?.[
+          'content-disposition'
+        ];
+
+      const serverFilename =
+        getFilenameFromContentDisposition(
+          contentDisposition
+        );
+
+      const downloadFilename =
+        serverFilename ||
+        targetDocument.original_name ||
+        targetDocument.name ||
+        'document';
+
       const blob =
         new Blob(
           [response.data],
           {
             type:
-              targetDocument.mime_type ||
-              response.headers?.[
-                'content-type'
-              ] ||
-              'application/octet-stream',
+              contentType,
           }
         );
 
@@ -456,9 +1060,7 @@ const DocumentDetail = () => {
         objectUrl;
 
       anchor.download =
-        targetDocument.original_name ||
-        targetDocument.name ||
-        'document';
+        downloadFilename;
 
       anchor.style.display =
         'none';
@@ -516,32 +1118,115 @@ const DocumentDetail = () => {
       return;
     }
 
+    /*
+     * Pencereyi kullanıcı tıklaması anında açıyoruz.
+     * Böylece popup blocker ihtimali azalır.
+     */
+    const previewWindow =
+      window.open(
+        '',
+        '_blank'
+      );
+
+    if (!previewWindow) {
+      toast.error(
+        'Önizleme penceresi açılamadı. Tarayıcı açılır pencere iznini kontrol edin.'
+      );
+
+      return;
+    }
+
     try {
       /*
-       * Popup engelleyicilerin daha az sorun çıkarması için
-       * pencereyi kullanıcı tıklaması sırasında açıyoruz.
+       * UDF ise XML kodunu browser'a doğrudan vermiyoruz.
+       * XML içindeki belge metnini okuyup kendimiz render ediyoruz.
        */
-      const previewWindow =
-        window.open(
-          '',
-          '_blank'
+      if (
+        isUdfDocument(
+          targetDocument
+        )
+      ) {
+        previewWindow.document.title =
+          'UDF yükleniyor...';
+
+        previewWindow.document.body.innerHTML =
+          '';
+
+        const loading =
+          previewWindow.document.createElement(
+            'div'
+          );
+
+        loading.textContent =
+          'UDF belgesi hazırlanıyor...';
+
+        loading.style.cssText = `
+          padding: 40px;
+          font-family: Arial, sans-serif;
+          color: #475569;
+          text-align: center;
+        `;
+
+        previewWindow.document.body.appendChild(
+          loading
         );
 
+        const response =
+          await documentApi.preview(
+            targetDocument.id
+          );
+
+        const blob =
+          response.data instanceof Blob
+            ? response.data
+            : new Blob(
+                [response.data],
+                {
+                  type:
+                    response.headers?.[
+                      'content-type'
+                    ] ||
+                    'application/octet-stream',
+                }
+              );
+
+        const udf =
+          await parseUdfDocument(
+            blob
+          );
+
+        renderUdfPreview({
+          previewWindow,
+          document:
+            targetDocument,
+          udf,
+        });
+
+        return;
+      }
+
+      /*
+       * PDF / görsel / browser'ın desteklediği diğer
+       * dosyalarda mevcut preview sistemi devam ediyor.
+       */
       const response =
         await documentApi.preview(
           targetDocument.id
         );
+
+      const contentType =
+        response.headers?.[
+          'content-type'
+        ] ||
+        targetDocument.mime_type ||
+        'application/octet-stream';
 
       const blob =
         new Blob(
           [response.data],
           {
             type:
-              targetDocument.mime_type ||
-              response.headers?.[
-                'content-type'
-              ] ||
-              'application/octet-stream',
+              contentType,
           }
         );
 
@@ -550,19 +1235,11 @@ const DocumentDetail = () => {
           blob
         );
 
-      if (previewWindow) {
-        previewWindow.opener =
-          null;
+      previewWindow.opener =
+        null;
 
-        previewWindow.location.href =
-          url;
-      } else {
-        window.open(
-          url,
-          '_blank',
-          'noopener,noreferrer'
-        );
-      }
+      previewWindow.location.href =
+        url;
 
       window.setTimeout(
         () => {
@@ -578,10 +1255,18 @@ const DocumentDetail = () => {
         previewError
       );
 
+      if (
+        previewWindow &&
+        !previewWindow.closed
+      ) {
+        previewWindow.close();
+      }
+
       toast.error(
+        previewError?.message ||
         previewError?.response
           ?.data?.message ||
-          'Belge önizlenemedi'
+        'Belge önizlenemedi'
       );
     }
   };
@@ -826,6 +1511,14 @@ const DocumentDetail = () => {
               {latestVersion}
             </Badge>
 
+            {currentDocument?.file_type && (
+              <Badge variant="default">
+                {getFileTypeLabel(
+                  currentDocument.file_type
+                )}
+              </Badge>
+            )}
+
             {documentItem.is_archived && (
               <Badge variant="warning">
                 Arşivlendi
@@ -858,7 +1551,7 @@ const DocumentDetail = () => {
           >
             <Eye className="mr-2 h-4 w-4" />
 
-            Günceli Önizle
+            Günceli Aç
           </Button>
 
           <Button
@@ -924,6 +1617,26 @@ const DocumentDetail = () => {
         </div>
       )}
 
+      {/* UDF INFO */}
+
+      {isUdfDocument(
+        currentDocument
+      ) && (
+        <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 dark:border-cyan-800 dark:bg-cyan-900/20">
+
+          <p className="font-medium text-cyan-900 dark:text-cyan-200">
+            📑 UYAP UDF Belgesi
+          </p>
+
+          <p className="mt-1 text-sm leading-6 text-cyan-800 dark:text-cyan-300">
+            Bu belge UDF formatındadır. Aç butonuyla belge
+            içeriğini doğrudan tarayıcıda görüntüleyebilirsiniz.
+            Orijinal UDF dosyası değiştirilmeden saklanır.
+          </p>
+
+        </div>
+      )}
+
       {/* FILE SUMMARY */}
 
       <Card>
@@ -975,7 +1688,9 @@ const DocumentDetail = () => {
 
                 {currentDocument?.file_type && (
                   <Badge variant="default">
-                    {currentDocument.file_type.toUpperCase()}
+                    {getFileTypeLabel(
+                      currentDocument.file_type
+                    )}
                   </Badge>
                 )}
 
@@ -1298,6 +2013,11 @@ const DocumentDetail = () => {
                     version.id ===
                     documentItem.id;
 
+                  const isUdf =
+                    isUdfDocument(
+                      version
+                    );
+
                   return (
                     <div
                       key={
@@ -1326,6 +2046,12 @@ const DocumentDetail = () => {
                           {isRoot && (
                             <Badge variant="default">
                               İlk Sürüm
+                            </Badge>
+                          )}
+
+                          {isUdf && (
+                            <Badge variant="info">
+                              UDF
                             </Badge>
                           )}
 
@@ -1470,7 +2196,7 @@ const DocumentDetail = () => {
                 />
 
                 <p className="mt-1 text-xs text-gray-500">
-                  Maksimum 10 MB
+                  PDF, Word, Excel, görsel, video ve UDF · Maksimum 10 MB
                 </p>
 
               </div>
@@ -1478,11 +2204,23 @@ const DocumentDetail = () => {
               {versionFile && (
                 <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
 
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {
-                      versionFile.name
-                    }
-                  </p>
+                  <div className="flex items-center gap-2">
+
+                    <span className="text-xl">
+                      {getExtension(
+                        versionFile.name
+                      ) === '.udf'
+                        ? '📑'
+                        : '📎'}
+                    </span>
+
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      {
+                        versionFile.name
+                      }
+                    </p>
+
+                  </div>
 
                   <p className="mt-1 text-xs text-gray-500">
                     {formatFileSize(

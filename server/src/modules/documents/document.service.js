@@ -129,7 +129,50 @@ const normalizeMetadata = (metadata) => {
   return {};
 };
 
-const detectFileType = (mimeType = '') => {
+/*
+ * UDF dosyaları XML tabanlı içerik taşıyabilse de
+ * tarayıcı / işletim sistemi tarafından text/xml,
+ * application/xml veya application/octet-stream
+ * şeklinde bildirilebilir.
+ *
+ * Sistemimizde UDF'nin XML olarak yorumlanmasını
+ * istemediğimiz için uzantı .udf ise MIME türünü
+ * application/octet-stream olarak normalize ediyoruz.
+ */
+const normalizeMimeType = (
+  originalName = '',
+  mimeType = ''
+) => {
+  const extension = path
+    .extname(originalName)
+    .toLowerCase();
+
+  if (extension === '.udf') {
+    return 'application/octet-stream';
+  }
+
+  return (
+    mimeType ||
+    'application/octet-stream'
+  );
+};
+
+const detectFileType = (
+  mimeType = '',
+  originalName = ''
+) => {
+  const extension = path
+    .extname(originalName)
+    .toLowerCase();
+
+  /*
+   * Document modelinde henüz "udf" ENUM değeri yok.
+   * Bu nedenle UDF şimdilik "other" olarak tutuluyor.
+   */
+  if (extension === '.udf') {
+    return 'udf';
+  }
+
   if (mimeType === 'application/pdf') {
     return 'pdf';
   }
@@ -262,6 +305,12 @@ export const documentService = {
         file.originalname
       );
 
+    const mimeType =
+      normalizeMimeType(
+        originalName,
+        file.mimetype
+      );
+
     const storedFilename =
       createStoredFilename(
         originalName
@@ -278,6 +327,12 @@ export const documentService = {
     let fileWritten = false;
 
     try {
+      /*
+       * Dosya içeriğine kesinlikle dokunmuyoruz.
+       *
+       * Özellikle UDF belgeleri olduğu gibi
+       * byte-for-byte saklanıyor.
+       */
       await fsPromises.writeFile(
         storedPath,
         file.buffer,
@@ -305,11 +360,12 @@ export const documentService = {
               file.size,
 
             mime_type:
-              file.mimetype,
+              mimeType,
 
             file_type:
               detectFileType(
-                file.mimetype
+                mimeType,
+                originalName
               ),
 
             category:
@@ -455,6 +511,12 @@ export const documentService = {
         file.originalname
       );
 
+    const mimeType =
+      normalizeMimeType(
+        originalName,
+        file.mimetype
+      );
+
     const storedFilename =
       createStoredFilename(
         originalName
@@ -471,6 +533,10 @@ export const documentService = {
     let fileWritten = false;
 
     try {
+      /*
+       * Yeni versiyon da hiçbir içerik dönüşümü
+       * yapılmadan olduğu gibi saklanır.
+       */
       await fsPromises.writeFile(
         storedPath,
         file.buffer,
@@ -498,11 +564,12 @@ export const documentService = {
               file.size,
 
             mime_type:
-              file.mimetype,
+              mimeType,
 
             file_type:
               detectFileType(
-                file.mimetype
+                mimeType,
+                originalName
               ),
 
             category:

@@ -10,6 +10,101 @@ import toast from 'react-hot-toast';
 // FILE HELPERS
 // ======================================================
 
+const getFilenameFromContentDisposition = (
+  contentDisposition
+) => {
+  if (
+    !contentDisposition ||
+    typeof contentDisposition !==
+      'string'
+  ) {
+    return null;
+  }
+
+  /*
+   * Öncelikle RFC 5987 / UTF-8 filename* değerini kullan.
+   *
+   * Örnek:
+   * attachment;
+   * filename="dilekce.udf";
+   * filename*=UTF-8''dilekce.udf
+   */
+  const utf8Match =
+    contentDisposition.match(
+      /filename\*\s*=\s*UTF-8''([^;]+)/i
+    );
+
+  if (
+    utf8Match?.[1]
+  ) {
+    try {
+      return decodeURIComponent(
+        utf8Match[1]
+          .trim()
+          .replace(
+            /^["']|["']$/g,
+            ''
+          )
+      );
+    } catch {
+      return utf8Match[1]
+        .trim()
+        .replace(
+          /^["']|["']$/g,
+          ''
+        );
+    }
+  }
+
+  /*
+   * Eski tarayıcı / fallback filename değeri.
+   */
+  const filenameMatch =
+    contentDisposition.match(
+      /filename\s*=\s*"([^"]+)"/i
+    ) ||
+    contentDisposition.match(
+      /filename\s*=\s*([^;]+)/i
+    );
+
+  if (
+    filenameMatch?.[1]
+  ) {
+    return filenameMatch[1]
+      .trim()
+      .replace(
+        /^["']|["']$/g,
+        ''
+      );
+  }
+
+  return null;
+};
+
+const getFileExtension = (
+  filename = ''
+) => {
+  const normalized =
+    String(filename)
+      .trim()
+      .toLowerCase();
+
+  const lastDot =
+    normalized.lastIndexOf(
+      '.'
+    );
+
+  if (
+    lastDot === -1
+  ) {
+    return '';
+  }
+
+  return normalized.slice(
+    lastDot
+  );
+};
+
 export const useFileUpload = () => {
   const validateFile = (
     file,
@@ -60,9 +155,33 @@ export const useFileUpload = () => {
     return true;
   };
 
+  /*
+   * filename ikinci parametre olarak opsiyoneldir.
+   *
+   * Eski kullanımlar:
+   * getFileIcon(mimeType)
+   *
+   * aynen çalışmaya devam eder.
+   *
+   * UDF için:
+   * getFileIcon(mimeType, originalName)
+   */
   const getFileIcon = (
-    mimeType
+    mimeType,
+    filename = ''
   ) => {
+    const extension =
+      getFileExtension(
+        filename
+      );
+
+    if (
+      extension ===
+      '.udf'
+    ) {
+      return '📑';
+    }
+
     if (!mimeType) {
       return '📎';
     }
@@ -196,15 +315,42 @@ export const useDocumentDownload =
               documentId
             );
 
+          const contentType =
+            response.headers?.[
+              'content-type'
+            ] ||
+            'application/octet-stream';
+
+          const contentDisposition =
+            response.headers?.[
+              'content-disposition'
+            ];
+
+          /*
+           * Backend tarafından gönderilen gerçek
+           * dosya adını kullan.
+           *
+           * Örneğin:
+           * istinaf.udf
+           * karar.pdf
+           * dilekce.docx
+           */
+          const serverFilename =
+            getFilenameFromContentDisposition(
+              contentDisposition
+            );
+
+          const downloadFilename =
+            serverFilename ||
+            filename ||
+            'document';
+
           const blob =
             new Blob(
               [response.data],
               {
                 type:
-                  response.headers?.[
-                    'content-type'
-                  ] ||
-                  'application/octet-stream',
+                  contentType,
               }
             );
 
@@ -221,9 +367,12 @@ export const useDocumentDownload =
           anchor.href =
             objectUrl;
 
+          /*
+           * Artık frontend kendi adını zorlamıyor.
+           * Backend'in original_name değeri öncelikli.
+           */
           anchor.download =
-            filename ||
-            'document';
+            downloadFilename;
 
           anchor.style.display =
             'none';

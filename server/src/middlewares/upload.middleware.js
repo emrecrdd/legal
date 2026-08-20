@@ -19,11 +19,30 @@ const fileFilter = (req, file, cb) => {
     'text/plain',
   ];
 
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`Dosya türü desteklenmiyor: ${file.mimetype}`));
+  const extension = path
+    .extname(file.originalname || '')
+    .toLowerCase();
+
+  /*
+   * UYAP UDF dosyaları çoğunlukla
+   * application/octet-stream olarak gönderilir.
+   *
+   * application/octet-stream'i genel olarak izinli
+   * yapmıyoruz; yalnızca .udf uzantısına izin veriyoruz.
+   */
+  if (extension === '.udf') {
+    return cb(null, true);
   }
+
+  if (allowedTypes.includes(file.mimetype)) {
+    return cb(null, true);
+  }
+
+  return cb(
+    new Error(
+      `Dosya türü desteklenmiyor: ${file.mimetype}`
+    )
+  );
 };
 
 export const upload = multer({
@@ -37,6 +56,7 @@ export const upload = multer({
 export const uploadSingle = (fieldName) => {
   return (req, res, next) => {
     const uploadMiddleware = upload.single(fieldName);
+
     uploadMiddleware(req, res, (err) => {
       if (err instanceof multer.MulterError) {
         if (err.code === 'FILE_TOO_LARGE') {
@@ -45,6 +65,7 @@ export const uploadSingle = (fieldName) => {
             message: 'Dosya boyutu 10MB\'dan büyük olamaz',
           });
         }
+
         return res.status(400).json({
           success: false,
           message: err.message,
@@ -55,6 +76,7 @@ export const uploadSingle = (fieldName) => {
           message: err.message,
         });
       }
+
       next();
     });
   };
@@ -62,7 +84,11 @@ export const uploadSingle = (fieldName) => {
 
 export const uploadMultiple = (fieldName, maxCount = 5) => {
   return (req, res, next) => {
-    const uploadMiddleware = upload.array(fieldName, maxCount);
+    const uploadMiddleware = upload.array(
+      fieldName,
+      maxCount
+    );
+
     uploadMiddleware(req, res, (err) => {
       if (err instanceof multer.MulterError) {
         if (err.code === 'FILE_TOO_LARGE') {
@@ -71,6 +97,7 @@ export const uploadMultiple = (fieldName, maxCount = 5) => {
             message: 'Dosya boyutu 10MB\'dan büyük olamaz',
           });
         }
+
         return res.status(400).json({
           success: false,
           message: err.message,
@@ -81,6 +108,7 @@ export const uploadMultiple = (fieldName, maxCount = 5) => {
           message: err.message,
         });
       }
+
       next();
     });
   };

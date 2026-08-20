@@ -137,6 +137,17 @@ const getExtension = (
 const getFileIcon = (
   file
 ) => {
+  const extension =
+    getExtension(
+      file?.name
+    );
+
+  if (
+    extension === '.udf'
+  ) {
+    return '📑';
+  }
+
   const type =
     file?.type || '';
 
@@ -1454,6 +1465,10 @@ const DocumentUpload = () => {
                       Video
                     </Badge>
 
+                    <Badge variant="info">
+                      UDF
+                    </Badge>
+
                     <Badge variant="default">
                       Maks. 10 MB / dosya
                     </Badge>
@@ -1630,6 +1645,14 @@ const DocumentUpload = () => {
                                   ) ||
                                   'dosya'}
                               </span>
+
+                              {getExtension(
+                                file.name
+                              ) === '.udf' && (
+                                <Badge variant="info">
+                                  UYAP UDF
+                                </Badge>
+                              )}
 
                             </div>
 

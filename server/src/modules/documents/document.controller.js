@@ -74,6 +74,35 @@ const encodeFilename = (
     );
 };
 
+const createSafeAsciiFilename = (
+  filename
+) => {
+  return (
+    filename ||
+    'document'
+  )
+    .replace(
+      /[^\x20-\x7E]/g,
+      '_'
+    )
+    .replace(
+      /["\\]/g,
+      '_'
+    );
+};
+
+const isUdfFilename = (
+  filename
+) => {
+  return (
+    typeof filename ===
+      'string' &&
+    filename
+      .toLowerCase()
+      .endsWith('.udf')
+  );
+};
+
 // ======================================================
 // CONTROLLER
 // ======================================================
@@ -538,20 +567,55 @@ export const documentController = {
           document
         );
 
+      const originalFilename =
+        document.original_name ||
+        document.name ||
+        'document';
+
       const encodedFilename =
         encodeFilename(
-          document.original_name
+          originalFilename
         );
 
+      const safeFilename =
+        createSafeAsciiFilename(
+          originalFilename
+        );
+
+      const isUdf =
+        isUdfFilename(
+          originalFilename
+        );
+
+      /*
+       * UDF dosyaları XML tabanlı görünse bile
+       * tarayıcı tarafından XML olarak işlenmemeli.
+       *
+       * application/octet-stream kullanarak dosyanın
+       * doğrudan .udf olarak indirilmesini sağlıyoruz.
+       *
+       * Diğer dosya türlerinin mevcut MIME davranışı
+       * aynen korunuyor.
+       */
       res.setHeader(
         'Content-Type',
-        document.mime_type ||
-          'application/octet-stream'
+        isUdf
+          ? 'application/octet-stream'
+          : document.mime_type ||
+              'application/octet-stream'
       );
 
+      /*
+       * filename:
+       * Eski / farklı tarayıcılar için ASCII fallback.
+       *
+       * filename*:
+       * Türkçe karakterli gerçek dosya adını UTF-8
+       * olarak korur.
+       */
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename*=UTF-8''${encodedFilename}`
+        `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodedFilename}`
       );
 
       res.setHeader(
@@ -588,7 +652,9 @@ export const documentController = {
           if (
             !res.headersSent
           ) {
-            res.status(500).end();
+            res
+              .status(500)
+              .end();
           } else {
             res.destroy();
           }
@@ -666,7 +732,9 @@ export const documentController = {
           if (
             !res.headersSent
           ) {
-            res.status(500).end();
+            res
+              .status(500)
+              .end();
           } else {
             res.destroy();
           }

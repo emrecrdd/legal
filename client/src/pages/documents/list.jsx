@@ -15,10 +15,12 @@ import {
   useDeleteDocument,
   useBulkDeleteDocuments,
 } from '../../features/documents/document.query.js';
+
 import {
   PERMISSION_KEYS,
   hasPermission,
 } from '../../constants/roles.js';
+
 import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
@@ -109,6 +111,27 @@ const getCategoryVariant = (
   );
 };
 
+const getFileTypeLabel = (
+  fileType
+) => {
+  const labels = {
+    pdf: 'PDF',
+    word: 'Word',
+    excel: 'Excel',
+    udf: 'UDF',
+    image: 'Görsel',
+    archive: 'Arşiv',
+    other: 'Dosya',
+  };
+
+  return (
+    labels[
+      fileType
+    ] ||
+    'Dosya'
+  );
+};
+
 const getFileIcon = (
   fileType
 ) => {
@@ -123,6 +146,9 @@ const getFileIcon = (
 
     case 'excel':
       return FileSpreadsheet;
+
+    case 'udf':
+      return FileText;
 
     case 'image':
       return FileImage;
@@ -149,6 +175,9 @@ const getFileIconClasses = (
 
     case 'excel':
       return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400';
+
+    case 'udf':
+      return 'bg-cyan-50 text-cyan-700 dark:bg-cyan-500/[0.08] dark:text-cyan-400';
 
     case 'image':
       return 'bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400';
@@ -332,36 +361,34 @@ const DocumentsList = () => {
       500
     );
 
- 
-  
-
   // ====================================================
-// PERMISSIONS
-// ====================================================
+  // PERMISSIONS
+  // ====================================================
 
-const canUpload =
-  hasPermission(
-    user,
-    PERMISSION_KEYS.UPLOAD_DOCUMENTS
-  );
+  const canUpload =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.UPLOAD_DOCUMENTS
+    );
 
-const canEdit =
-  hasPermission(
-    user,
-    PERMISSION_KEYS.EDIT_DOCUMENTS
-  );
+  const canEdit =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_DOCUMENTS
+    );
 
-const canDelete =
-  hasPermission(
-    user,
-    PERMISSION_KEYS.DELETE_DOCUMENTS
-  );
+  const canDelete =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DELETE_DOCUMENTS
+    );
 
-const canViewCases =
-  hasPermission(
-    user,
-    PERMISSION_KEYS.VIEW_CASES
-  );
+  const canViewCases =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_CASES
+    );
+
   // ====================================================
   // QUERIES
   // ====================================================
@@ -1230,6 +1257,12 @@ const canViewCases =
 
                             <div className="mt-2 flex flex-wrap gap-1.5">
 
+                              <Badge variant="info">
+                                {getFileTypeLabel(
+                                  doc.file_type
+                                )}
+                              </Badge>
+
                               {doc.is_public ? (
                                 <Badge
                                   variant="success"
@@ -1284,49 +1317,49 @@ const canViewCases =
                       <Table.Cell>
 
                         {doc.case ? (
-  canViewCases ? (
-    <Link
-      to={`/cases/${doc.case.id}`}
-      className="
-        block
-        max-w-[14rem]
-        truncate
-        text-sm
-        font-medium
-        text-gray-700
-        transition
-        hover:text-blue-600
-        dark:text-slate-300
-        dark:hover:text-blue-400
-      "
-      title={
-        doc.case.title
-      }
-    >
-      {doc.case.title}
-    </Link>
-  ) : (
-    <span
-      className="
-        block
-        max-w-[14rem]
-        truncate
-        text-sm
-        text-gray-600
-        dark:text-slate-400
-      "
-      title={
-        doc.case.title
-      }
-    >
-      {doc.case.title}
-    </span>
-  )
-) : (
-  <span className="text-sm text-gray-400 dark:text-slate-600">
-    -
-  </span>
-)}
+                          canViewCases ? (
+                            <Link
+                              to={`/cases/${doc.case.id}`}
+                              className="
+                                block
+                                max-w-[14rem]
+                                truncate
+                                text-sm
+                                font-medium
+                                text-gray-700
+                                transition
+                                hover:text-blue-600
+                                dark:text-slate-300
+                                dark:hover:text-blue-400
+                              "
+                              title={
+                                doc.case.title
+                              }
+                            >
+                              {doc.case.title}
+                            </Link>
+                          ) : (
+                            <span
+                              className="
+                                block
+                                max-w-[14rem]
+                                truncate
+                                text-sm
+                                text-gray-600
+                                dark:text-slate-400
+                              "
+                              title={
+                                doc.case.title
+                              }
+                            >
+                              {doc.case.title}
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-sm text-gray-400 dark:text-slate-600">
+                            -
+                          </span>
+                        )}
 
                       </Table.Cell>
 

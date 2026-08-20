@@ -137,12 +137,34 @@ const getFileIcon = (
     case 'excel':
       return '📊';
 
+    case 'udf':
+      return '📑';
+
     case 'image':
       return '🖼️';
 
     default:
       return '📎';
   }
+};
+
+const getFileTypeLabel = (
+  fileType
+) => {
+  const labels = {
+    pdf: 'PDF',
+    word: 'Word',
+    excel: 'Excel',
+    udf: 'UDF',
+    image: 'Görsel',
+    other: 'Dosya',
+  };
+
+  return (
+    labels[fileType] ||
+    fileType?.toUpperCase() ||
+    'Dosya'
+  );
 };
 
 const formatFileSize = (
@@ -651,9 +673,7 @@ const DocumentEdit = () => {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
 
-      {/* ==================================================
-          HEADER
-      ================================================== */}
+      {/* HEADER */}
 
       <div>
 
@@ -715,10 +735,29 @@ const DocumentEdit = () => {
               Belge ailesinin adı, sınıflandırması, ilişkileri ve erişim bilgilerini güncelleyin.
             </p>
 
-            <p className="mt-1 max-w-xl truncate text-xs text-gray-400 dark:text-slate-500">
-              {documentItem.original_name ||
-                documentItem.name}
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+
+              <p className="max-w-xl truncate text-xs text-gray-400 dark:text-slate-500">
+                {documentItem.original_name ||
+                  documentItem.name}
+              </p>
+
+              {documentItem.file_type && (
+                <Badge
+                  variant={
+                    documentItem.file_type ===
+                    'udf'
+                      ? 'info'
+                      : 'default'
+                  }
+                >
+                  {getFileTypeLabel(
+                    documentItem.file_type
+                  )}
+                </Badge>
+              )}
+
+            </div>
 
           </div>
 
@@ -726,9 +765,7 @@ const DocumentEdit = () => {
 
       </div>
 
-      {/* ==================================================
-          VERSION INFO
-      ================================================== */}
+      {/* VERSION INFO */}
 
       <div
         className="
@@ -764,9 +801,7 @@ const DocumentEdit = () => {
 
       </div>
 
-      {/* ==================================================
-          RELATION WARNING
-      ================================================== */}
+      {/* RELATION WARNING */}
 
       {hasRelationLoadError && (
         <div
@@ -809,9 +844,7 @@ const DocumentEdit = () => {
         className="space-y-5"
       >
 
-        {/* ==================================================
-            ORIGINAL FILE
-        ================================================== */}
+        {/* ORIGINAL FILE */}
 
         <Card>
 
@@ -872,7 +905,7 @@ const DocumentEdit = () => {
             >
 
               <div
-                className="
+                className={`
                   flex
                   h-14
                   w-14
@@ -884,7 +917,13 @@ const DocumentEdit = () => {
                   text-3xl
                   shadow-sm
                   dark:bg-white/[0.04]
-                "
+                  ${
+                    documentItem.file_type ===
+                    'udf'
+                      ? 'ring-1 ring-cyan-200 dark:ring-cyan-500/20'
+                      : ''
+                  }
+                `}
               >
                 {getFileIcon(
                   documentItem.file_type
@@ -906,6 +945,19 @@ const DocumentEdit = () => {
                       1}
                   </Badge>
 
+                  <Badge
+                    variant={
+                      documentItem.file_type ===
+                      'udf'
+                        ? 'info'
+                        : 'default'
+                    }
+                  >
+                    {getFileTypeLabel(
+                      documentItem.file_type
+                    )}
+                  </Badge>
+
                 </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-slate-500">
@@ -924,6 +976,19 @@ const DocumentEdit = () => {
                     {documentItem.mime_type ||
                       'Dosya türü bilinmiyor'}
                   </span>
+
+                  {documentItem.file_type ===
+                    'udf' && (
+                    <>
+                      <span className="hidden sm:inline">
+                        •
+                      </span>
+
+                      <span className="font-medium text-cyan-700 dark:text-cyan-400">
+                        UYAP UDF Belgesi
+                      </span>
+                    </>
+                  )}
 
                 </div>
 
@@ -958,9 +1023,7 @@ const DocumentEdit = () => {
 
         </Card>
 
-        {/* ==================================================
-            DOCUMENT INFO
-        ================================================== */}
+        {/* DOCUMENT INFO */}
 
         <Card>
 
@@ -1100,9 +1163,7 @@ const DocumentEdit = () => {
 
         </Card>
 
-        {/* ==================================================
-            RELATIONS
-        ================================================== */}
+        {/* RELATIONS */}
 
         <Card>
 
@@ -1339,9 +1400,7 @@ const DocumentEdit = () => {
 
         </Card>
 
-        {/* ==================================================
-            TAGS & DESCRIPTION
-        ================================================== */}
+        {/* TAGS & DESCRIPTION */}
 
         <Card>
 
@@ -1481,9 +1540,7 @@ const DocumentEdit = () => {
 
         </Card>
 
-        {/* ==================================================
-            ACCESS
-        ================================================== */}
+        {/* ACCESS */}
 
         <Card>
 
@@ -1611,9 +1668,7 @@ const DocumentEdit = () => {
 
         </Card>
 
-        {/* ==================================================
-            SUMMARY
-        ================================================== */}
+        {/* SUMMARY */}
 
         <div
           className="
@@ -1690,9 +1745,7 @@ const DocumentEdit = () => {
 
         </div>
 
-        {/* ==================================================
-            ACTIONS
-        ================================================== */}
+        {/* ACTIONS */}
 
         <div
           className="
