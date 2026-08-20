@@ -72,6 +72,7 @@ const ALLOWED_EXTENSIONS = [
   '.webp',
   '.mp4',
   '.webm',
+  '.udf',
 ];
 
 const CATEGORY_OPTIONS = [
