@@ -31,22 +31,34 @@ const ALLOWED_FILE_TYPES = new Map([
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, callback) => {
-  const allowedExtensions = ALLOWED_FILE_TYPES.get(file.mimetype);
-
-  if (!allowedExtensions) {
-    return callback(
-      new Error(`Desteklenmeyen dosya türü: ${file.mimetype}`)
-    );
-  }
-
   const extension = path
     .extname(file.originalname || '')
     .toLowerCase();
 
+  // UYAP UDF dosyaları tarayıcı tarafından
+  // application/octet-stream olarak gönderilebilir.
+  // Bu nedenle yalnızca .udf uzantısına özel izin veriyoruz.
+  if (extension === '.udf') {
+    return callback(null, true);
+  }
+
+  const allowedExtensions =
+    ALLOWED_FILE_TYPES.get(file.mimetype);
+
+  if (!allowedExtensions) {
+    return callback(
+      new Error(
+        `Desteklenmeyen dosya türü: ${file.mimetype}`
+      )
+    );
+  }
+
   if (!allowedExtensions.includes(extension)) {
     return callback(
       new Error(
-        `Dosya uzantısı ile MIME türü uyuşmuyor: ${extension || 'uzantı yok'}`
+        `Dosya uzantısı ile MIME türü uyuşmuyor: ${
+          extension || 'uzantı yok'
+        }`
       )
     );
   }
