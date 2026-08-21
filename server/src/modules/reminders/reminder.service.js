@@ -34,6 +34,10 @@ export class ReminderServiceError extends Error {
   }
 }
 
+// ======================================================
+// CONSTANTS
+// ======================================================
+
 const REMINDER_CHANNELS = new Set([
   'in_app',
   'email',
@@ -59,27 +63,44 @@ const DEFAULT_OFFSETS = {
     24 * 60,
     60,
   ],
+
   event: [
     24 * 60,
     60,
   ],
+
   meeting: [
     24 * 60,
     60,
   ],
 };
 
-const normalizeDate = (value, fieldName) => {
-  const date = value instanceof Date
-    ? value
-    : new Date(value);
+// ======================================================
+// DATE HELPERS
+// ======================================================
 
-  if (Number.isNaN(date.getTime())) {
+const normalizeDate = (
+  value,
+  fieldName
+) => {
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     throw new ReminderServiceError(
       `${fieldName} geçerli bir tarih olmalıdır.`,
       {
-        code: 'INVALID_REMINDER_DATE',
-        statusCode: 400,
+        code:
+          'INVALID_REMINDER_DATE',
+
+        statusCode:
+          400,
       }
     );
   }
@@ -87,25 +108,73 @@ const normalizeDate = (value, fieldName) => {
   return date;
 };
 
-const normalizeOffsets = (offsets) => {
-  if (!Array.isArray(offsets)) {
+const normalizeOffsets = (
+  offsets
+) => {
+  if (
+    !Array.isArray(
+      offsets
+    )
+  ) {
     return [];
   }
 
   return [
     ...new Set(
       offsets
-        .map((value) => Number(value))
+        .map(
+          (value) =>
+            Number(value)
+        )
         .filter(
           (value) =>
-            Number.isInteger(value) &&
+            Number.isInteger(
+              value
+            ) &&
             value >= 0
         )
     ),
-  ].sort((a, b) => b - a);
+  ].sort(
+    (a, b) =>
+      b - a
+  );
 };
 
+// ======================================================
+// USER ID HELPERS
+// ======================================================
+
+const normalizeUserIds = (
+  values = []
+) => {
+  return [
+    ...new Set(
+      values
+        .map(
+          (value) =>
+            value
+              ? String(
+                  value
+                ).trim()
+              : null
+        )
+        .filter(
+          Boolean
+        )
+    ),
+  ];
+};
+
+// ======================================================
+// SERVICE
+// ======================================================
+
 class ReminderService {
+
+  // ====================================================
+  // CREATE SINGLE REMINDER
+  // ====================================================
+
   /**
    * Tek bir hatırlatma kaydı oluşturur.
    */
@@ -132,57 +201,103 @@ class ReminderService {
     });
 
     const normalizedRemindAt =
-      normalizeDate(remindAt, 'remindAt');
+      normalizeDate(
+        remindAt,
+        'remindAt'
+      );
 
     const sourceField =
-      SOURCE_FIELDS[sourceType];
+      SOURCE_FIELDS[
+        sourceType
+      ];
 
     const deduplicationKey =
       this.createDeduplicationKey({
         userId,
         sourceType,
         sourceId,
-        remindAt: normalizedRemindAt,
+
+        remindAt:
+          normalizedRemindAt,
+
         channel,
       });
 
     const payload = {
-      user_id: userId,
-      created_by: createdBy,
-      task_id: null,
-      event_id: null,
-      meeting_id: null,
-      title: title.trim(),
+      user_id:
+        userId,
+
+      created_by:
+        createdBy,
+
+      task_id:
+        null,
+
+      event_id:
+        null,
+
+      meeting_id:
+        null,
+
+      title:
+        title.trim(),
+
       message:
-        typeof message === 'string' &&
+        typeof message ===
+          'string' &&
         message.trim()
           ? message.trim()
           : null,
-      remind_at: normalizedRemindAt,
+
+      remind_at:
+        normalizedRemindAt,
+
       channel,
-      status: 'pending',
-      attempt_count: 0,
-      max_attempts: 3,
-      next_attempt_at: normalizedRemindAt,
-      deduplication_key: deduplicationKey,
+
+      status:
+        'pending',
+
+      attempt_count:
+        0,
+
+      max_attempts:
+        3,
+
+      next_attempt_at:
+        normalizedRemindAt,
+
+      deduplication_key:
+        deduplicationKey,
+
       metadata:
         metadata &&
-        typeof metadata === 'object' &&
-        !Array.isArray(metadata)
+        typeof metadata ===
+          'object' &&
+        !Array.isArray(
+          metadata
+        )
           ? metadata
           : {},
     };
 
-    payload[sourceField] = sourceId;
+    payload[
+      sourceField
+    ] = sourceId;
 
     try {
-      const [reminder, created] =
+      const [
+        reminder,
+        created,
+      ] =
         await Reminder.findOrCreate({
           where: {
             deduplication_key:
               deduplicationKey,
           },
-          defaults: payload,
+
+          defaults:
+            payload,
+
           transaction,
         });
 
@@ -190,9 +305,15 @@ class ReminderService {
         logger.debug(
           'Hatırlatma zaten mevcut',
           {
-            reminderId: reminder.id,
+            reminderId:
+              reminder.id,
+
             sourceType,
+
             sourceId,
+
+            userId,
+
             remindAt:
               normalizedRemindAt.toISOString(),
           }
@@ -205,30 +326,45 @@ class ReminderService {
         'Hatırlatma oluşturulamadı',
         {
           sourceType,
+
           sourceId,
+
           userId,
+
           remindAt:
             normalizedRemindAt.toISOString(),
-          message: error.message,
+
+          message:
+            error.message,
         }
       );
 
       throw new ReminderServiceError(
         'Hatırlatma oluşturulamadı.',
         {
-          code: 'REMINDER_CREATE_FAILED',
-          statusCode: 500,
-          cause: error,
+          code:
+            'REMINDER_CREATE_FAILED',
+
+          statusCode:
+            500,
+
+          cause:
+            error,
         }
       );
     }
   }
+
+  // ====================================================
+  // CREATE REMINDERS FOR SOURCE
+  // ====================================================
 
   /**
    * Bir kaydın tarihine göre birden fazla
    * hatırlatma oluşturur.
    *
    * offsetsMinutes örneği:
+   *
    * [1440, 60, 15]
    */
   async createForSource({
@@ -249,31 +385,50 @@ class ReminderService {
         'targetDate'
       );
 
-    const offsets = normalizeOffsets(
-      offsetsMinutes ??
-        DEFAULT_OFFSETS[sourceType] ??
-        []
-    );
+    const offsets =
+      normalizeOffsets(
+        offsetsMinutes ??
+          DEFAULT_OFFSETS[
+            sourceType
+          ] ??
+          []
+      );
 
-    if (offsets.length === 0) {
+    if (
+      offsets.length ===
+      0
+    ) {
       return [];
     }
 
-    const now = new Date();
-    const reminders = [];
+    const now =
+      new Date();
 
-    for (const offsetMinutes of offsets) {
-      const remindAt = new Date(
-        normalizedTargetDate.getTime() -
-          offsetMinutes * 60 * 1000
-      );
+    const reminders =
+      [];
+
+    for (
+      const offsetMinutes
+      of offsets
+    ) {
+      const remindAt =
+        new Date(
+          normalizedTargetDate.getTime() -
+            offsetMinutes *
+              60 *
+              1000
+        );
 
       /*
        * Geçmişte kalan hatırlatmaları oluşturma.
-       * Böylece eski görevler sisteme eklendiğinde
+       *
+       * Böylece eski kayıtlar sisteme eklendiğinde
        * anında bildirim yağmuru oluşmaz.
        */
-      if (remindAt <= now) {
+      if (
+        remindAt <=
+        now
+      ) {
         continue;
       }
 
@@ -285,105 +440,319 @@ class ReminderService {
       const reminder =
         await this.create({
           userId,
+
           createdBy,
+
           sourceType,
+
           sourceId,
+
           title:
             `${sourceTitle} – ${reminderLabel}`,
+
           message:
             `"${sourceTitle}" için ${reminderLabel.toLowerCase()} hatırlatma.`,
+
           remindAt,
+
           channel,
+
           metadata: {
             ...metadata,
+
             targetDate:
               normalizedTargetDate.toISOString(),
+
             offsetMinutes,
+
             reminderLabel,
           },
+
           transaction,
         });
 
-      reminders.push(reminder);
+      reminders.push(
+        reminder
+      );
     }
 
     return reminders;
   }
+
+  // ====================================================
+  // TASK ASSIGNEES
+  // ====================================================
+
+  /**
+   * Görevin hatırlatma alacak kullanıcılarını bulur.
+   *
+   * Öncelik:
+   *
+   * 1. task.assignees yüklenmişse onu kullan.
+   * 2. Yüklenmemişse belongsToMany getAssignees()
+   *    üzerinden task_assignees tablosunu sorgula.
+   * 3. Hiç sorumlu yoksa görevi oluşturan kullanıcıya
+   *    reminder oluştur.
+   *
+   * Aynı kullanıcı hiçbir zaman iki kez dönmez.
+   */
+  async getTaskReminderUserIds(
+    task,
+    {
+      transaction = null,
+    } = {}
+  ) {
+    if (
+      !task?.id
+    ) {
+      return [];
+    }
+
+    let assigneeIds =
+      [];
+
+    // ==================================================
+    // ALREADY LOADED ASSIGNEES
+    // ==================================================
+
+    if (
+      Array.isArray(
+        task.assignees
+      )
+    ) {
+      assigneeIds =
+        task.assignees
+          .map(
+            (user) =>
+              user?.id
+          )
+          .filter(
+            Boolean
+          );
+    }
+
+    // ==================================================
+    // LOAD FROM task_assignees
+    // ==================================================
+
+    else if (
+      typeof task.getAssignees ===
+      'function'
+    ) {
+      const assignees =
+        await task.getAssignees({
+          attributes: [
+            'id',
+          ],
+
+          joinTableAttributes:
+            [],
+
+          transaction,
+        });
+
+      assigneeIds =
+        assignees
+          .map(
+            (user) =>
+              user?.id
+          )
+          .filter(
+            Boolean
+          );
+    }
+
+    assigneeIds =
+      normalizeUserIds(
+        assigneeIds
+      );
+
+    /*
+     * Göreve kimse atanmamışsa oluşturan kullanıcı
+     * kendi görevi için hatırlatma almaya devam eder.
+     *
+     * Eski sistemdeki:
+     *
+     * assigned_to || created_by
+     *
+     * davranışının çoklu atama karşılığıdır.
+     */
+    if (
+      assigneeIds.length ===
+        0 &&
+      task.created_by
+    ) {
+      return [
+        String(
+          task.created_by
+        ),
+      ];
+    }
+
+    return assigneeIds;
+  }
+
+  // ====================================================
+  // TASK REMINDERS
+  // ====================================================
 
   async createTaskReminders(
     task,
     {
       offsetsMinutes =
         DEFAULT_OFFSETS.task,
+
       channel = 'both',
+
       transaction = null,
     } = {}
   ) {
-    if (!task?.id) {
+    if (
+      !task?.id
+    ) {
       throw new ReminderServiceError(
         'Geçerli bir görev zorunludur.',
         {
-          code: 'INVALID_TASK',
-          statusCode: 400,
+          code:
+            'INVALID_TASK',
+
+          statusCode:
+            400,
         }
       );
     }
 
-    if (!task.due_date) {
+    if (
+      !task.due_date
+    ) {
       return [];
     }
 
-    const userId =
-      task.assigned_to ||
-      task.created_by;
+    const userIds =
+      await this.getTaskReminderUserIds(
+        task,
+        {
+          transaction,
+        }
+      );
 
-    if (!userId) {
+    if (
+      userIds.length ===
+      0
+    ) {
       return [];
     }
 
-    return this.createForSource({
-      userId,
-      createdBy: task.created_by,
-      sourceType: 'task',
-      sourceId: task.id,
-      sourceTitle: task.title,
-      targetDate: task.due_date,
-      offsetsMinutes,
-      channel,
-      metadata: {
-        taskId: task.id,
-        priority: task.priority,
-        caseId: task.case_id,
-        clientId: task.client_id,
-        link: `/tasks/${task.id}`,
-      },
-      transaction,
-    });
+    const reminders =
+      [];
+
+    /*
+     * Bir göreve birden fazla kullanıcı atanmışsa
+     * her kullanıcı için ayrı reminder kayıtları
+     * oluşturulur.
+     *
+     * Deduplication key içerisinde userId bulunduğu için
+     * kullanıcıların reminder kayıtları birbirleriyle
+     * çakışmaz.
+     */
+    for (
+      const userId
+      of userIds
+    ) {
+      const userReminders =
+        await this.createForSource({
+          userId,
+
+          createdBy:
+            task.created_by,
+
+          sourceType:
+            'task',
+
+          sourceId:
+            task.id,
+
+          sourceTitle:
+            task.title,
+
+          targetDate:
+            task.due_date,
+
+          offsetsMinutes,
+
+          channel,
+
+          metadata: {
+            taskId:
+              task.id,
+
+            priority:
+              task.priority,
+
+            caseId:
+              task.case_id,
+
+            clientId:
+              task.client_id,
+
+            assigneeUserId:
+              userId,
+
+            link:
+              `/tasks/${task.id}`,
+          },
+
+          transaction,
+        });
+
+      reminders.push(
+        ...userReminders
+      );
+    }
+
+    return reminders;
   }
+
+  // ====================================================
+  // EVENT REMINDERS
+  // ====================================================
 
   async createEventReminders(
     event,
     {
       offsetsMinutes =
         DEFAULT_OFFSETS.event,
+
       channel = 'both',
+
       transaction = null,
     } = {}
   ) {
-    if (!event?.id) {
+    if (
+      !event?.id
+    ) {
       throw new ReminderServiceError(
         'Geçerli bir etkinlik zorunludur.',
         {
-          code: 'INVALID_EVENT',
-          statusCode: 400,
+          code:
+            'INVALID_EVENT',
+
+          statusCode:
+            400,
         }
       );
     }
 
-    if (!event.start_date) {
+    if (
+      !event.start_date
+    ) {
       return [];
     }
 
+    /*
+     * Event sistemi şu an tek assignee mantığında.
+     * Bu davranışa dokunmuyoruz.
+     */
     const userId =
       event.assigned_to ||
       event.created_by;
@@ -394,47 +763,87 @@ class ReminderService {
 
     return this.createForSource({
       userId,
-      createdBy: event.created_by,
-      sourceType: 'event',
-      sourceId: event.id,
-      sourceTitle: event.title,
-      targetDate: event.start_date,
+
+      createdBy:
+        event.created_by,
+
+      sourceType:
+        'event',
+
+      sourceId:
+        event.id,
+
+      sourceTitle:
+        event.title,
+
+      targetDate:
+        event.start_date,
+
       offsetsMinutes,
+
       channel,
+
       metadata: {
-        eventId: event.id,
-        eventType: event.event_type,
-        location: event.location,
-        caseId: event.case_id,
-        link: `/events/${event.id}`,
+        eventId:
+          event.id,
+
+        eventType:
+          event.event_type,
+
+        location:
+          event.location,
+
+        caseId:
+          event.case_id,
+
+        link:
+          `/events/${event.id}`,
       },
+
       transaction,
     });
   }
+
+  // ====================================================
+  // MEETING REMINDERS
+  // ====================================================
 
   async createMeetingReminders(
     meeting,
     {
       offsetsMinutes =
         DEFAULT_OFFSETS.meeting,
+
       channel = 'both',
+
       transaction = null,
     } = {}
   ) {
-    if (!meeting?.id) {
+    if (
+      !meeting?.id
+    ) {
       throw new ReminderServiceError(
         'Geçerli bir toplantı zorunludur.',
         {
-          code: 'INVALID_MEETING',
-          statusCode: 400,
+          code:
+            'INVALID_MEETING',
+
+          statusCode:
+            400,
         }
       );
     }
 
-    if (!meeting.start_date) {
+    if (
+      !meeting.start_date
+    ) {
       return [];
     }
 
+    /*
+     * Meeting sistemi şu an tek assignee mantığında.
+     * Bu davranışa dokunmuyoruz.
+     */
     const userId =
       meeting.assigned_to ||
       meeting.created_by;
@@ -445,28 +854,62 @@ class ReminderService {
 
     return this.createForSource({
       userId,
-      createdBy: meeting.created_by,
-      sourceType: 'meeting',
-      sourceId: meeting.id,
-      sourceTitle: meeting.title,
-      targetDate: meeting.start_date,
+
+      createdBy:
+        meeting.created_by,
+
+      sourceType:
+        'meeting',
+
+      sourceId:
+        meeting.id,
+
+      sourceTitle:
+        meeting.title,
+
+      targetDate:
+        meeting.start_date,
+
       offsetsMinutes,
+
       channel,
+
       metadata: {
-        meetingId: meeting.id,
-        meetingType: meeting.meeting_type,
-        location: meeting.location,
-        meetingLink: meeting.meeting_link,
-        caseId: meeting.case_id,
-        clientId: meeting.client_id,
-        link: `/meetings/${meeting.id}`,
+        meetingId:
+          meeting.id,
+
+        meetingType:
+          meeting.meeting_type,
+
+        location:
+          meeting.location,
+
+        meetingLink:
+          meeting.meeting_link,
+
+        caseId:
+          meeting.case_id,
+
+        clientId:
+          meeting.client_id,
+
+        link:
+          `/meetings/${meeting.id}`,
       },
+
       transaction,
     });
   }
 
+  // ====================================================
+  // CANCEL SOURCE
+  // ====================================================
+
   /**
    * Kaynağın bekleyen hatırlatmalarını iptal eder.
+   *
+   * Task için birden fazla kullanıcıya oluşturulmuş
+   * reminder varsa tamamını iptal eder.
    */
   async cancelForSource({
     sourceType,
@@ -474,29 +917,48 @@ class ReminderService {
     transaction = null,
   }) {
     const sourceField =
-      SOURCE_FIELDS[sourceType];
+      SOURCE_FIELDS[
+        sourceType
+      ];
 
-    if (!sourceField || !sourceId) {
+    if (
+      !sourceField ||
+      !sourceId
+    ) {
       throw new ReminderServiceError(
         'Geçerli bir hatırlatma kaynağı zorunludur.',
         {
-          code: 'INVALID_REMINDER_SOURCE',
-          statusCode: 400,
+          code:
+            'INVALID_REMINDER_SOURCE',
+
+          statusCode:
+            400,
         }
       );
     }
 
-    const [affectedCount] =
+    const [
+      affectedCount,
+    ] =
       await Reminder.update(
         {
-          status: 'cancelled',
-          locked_at: null,
-          locked_by: null,
-          next_attempt_at: null,
+          status:
+            'cancelled',
+
+          locked_at:
+            null,
+
+          locked_by:
+            null,
+
+          next_attempt_at:
+            null,
         },
         {
           where: {
-            [sourceField]: sourceId,
+            [sourceField]:
+              sourceId,
+
             status: {
               [Op.in]: [
                 'pending',
@@ -505,6 +967,7 @@ class ReminderService {
               ],
             },
           },
+
           transaction,
         }
       );
@@ -512,19 +975,33 @@ class ReminderService {
     return affectedCount;
   }
 
+  // ====================================================
+  // RESCHEDULE TASK
+  // ====================================================
+
   /**
-   * Tarihi veya kullanıcı ataması değişen kayıtların
-   * hatırlatmalarını yeniden oluşturur.
+   * Görev tarihi veya görev sorumluları değiştiğinde:
+   *
+   * 1. Görevin mevcut tüm pending reminder kayıtlarını
+   *    iptal eder.
+   *
+   * 2. task_assignees tablosundaki güncel kullanıcılar
+   *    için yeniden oluşturur.
    */
   async rescheduleTask(
     task,
     options = {}
   ) {
     await this.cancelForSource({
-      sourceType: 'task',
-      sourceId: task.id,
+      sourceType:
+        'task',
+
+      sourceId:
+        task.id,
+
       transaction:
-        options.transaction || null,
+        options.transaction ||
+        null,
     });
 
     return this.createTaskReminders(
@@ -533,15 +1010,24 @@ class ReminderService {
     );
   }
 
+  // ====================================================
+  // RESCHEDULE EVENT
+  // ====================================================
+
   async rescheduleEvent(
     event,
     options = {}
   ) {
     await this.cancelForSource({
-      sourceType: 'event',
-      sourceId: event.id,
+      sourceType:
+        'event',
+
+      sourceId:
+        event.id,
+
       transaction:
-        options.transaction || null,
+        options.transaction ||
+        null,
     });
 
     return this.createEventReminders(
@@ -550,15 +1036,24 @@ class ReminderService {
     );
   }
 
+  // ====================================================
+  // RESCHEDULE MEETING
+  // ====================================================
+
   async rescheduleMeeting(
     meeting,
     options = {}
   ) {
     await this.cancelForSource({
-      sourceType: 'meeting',
-      sourceId: meeting.id,
+      sourceType:
+        'meeting',
+
+      sourceId:
+        meeting.id,
+
       transaction:
-        options.transaction || null,
+        options.transaction ||
+        null,
     });
 
     return this.createMeetingReminders(
@@ -566,6 +1061,10 @@ class ReminderService {
       options
     );
   }
+
+  // ====================================================
+  // CANCEL BY ID
+  // ====================================================
 
   /**
    * Bir hatırlatmayı kullanıcı tarafından iptal eder.
@@ -577,8 +1076,11 @@ class ReminderService {
     const reminder =
       await Reminder.findOne({
         where: {
-          id: reminderId,
-          user_id: userId,
+          id:
+            reminderId,
+
+          user_id:
+            userId,
         },
       });
 
@@ -586,14 +1088,20 @@ class ReminderService {
       throw new ReminderServiceError(
         'Hatırlatma bulunamadı.',
         {
-          code: 'REMINDER_NOT_FOUND',
-          statusCode: 404,
+          code:
+            'REMINDER_NOT_FOUND',
+
+          statusCode:
+            404,
         }
       );
     }
 
     if (
-      ['sent', 'cancelled'].includes(
+      [
+        'sent',
+        'cancelled',
+      ].includes(
         reminder.status
       )
     ) {
@@ -601,14 +1109,25 @@ class ReminderService {
     }
 
     await reminder.update({
-      status: 'cancelled',
-      locked_at: null,
-      locked_by: null,
-      next_attempt_at: null,
+      status:
+        'cancelled',
+
+      locked_at:
+        null,
+
+      locked_by:
+        null,
+
+      next_attempt_at:
+        null,
     });
 
     return reminder;
   }
+
+  // ====================================================
+  // LIST UPCOMING
+  // ====================================================
 
   /**
    * Kullanıcının yaklaşan hatırlatmalarını listeler.
@@ -617,38 +1136,71 @@ class ReminderService {
     userId,
     limit = 50,
   }) {
-    const safeLimit = Math.min(
-      Math.max(Number(limit) || 50, 1),
-      100
-    );
+    const safeLimit =
+      Math.min(
+        Math.max(
+          Number(limit) ||
+            50,
+          1
+        ),
+        100
+      );
 
     return Reminder.findAll({
       where: {
-        user_id: userId,
-        status: 'pending',
+        user_id:
+          userId,
+
+        status:
+          'pending',
+
         remind_at: {
-          [Op.gte]: new Date(),
+          [Op.gte]:
+            new Date(),
         },
       },
+
       include: [
         {
-          model: Task,
-          as: 'task',
-          required: false,
+          model:
+            Task,
+
+          as:
+            'task',
+
+          required:
+            false,
         },
+
         {
-          model: Event,
-          as: 'event',
-          required: false,
+          model:
+            Event,
+
+          as:
+            'event',
+
+          required:
+            false,
         },
+
         {
-          model: Meeting,
-          as: 'meeting',
-          required: false,
+          model:
+            Meeting,
+
+          as:
+            'meeting',
+
+          required:
+            false,
         },
+
         {
-          model: User,
-          as: 'user',
+          model:
+            User,
+
+          as:
+            'user',
+
           attributes: [
             'id',
             'first_name',
@@ -657,12 +1209,22 @@ class ReminderService {
           ],
         },
       ],
+
       order: [
-        ['remind_at', 'ASC'],
+        [
+          'remind_at',
+          'ASC',
+        ],
       ],
-      limit: safeLimit,
+
+      limit:
+        safeLimit,
     });
   }
+
+  // ====================================================
+  // VALIDATE
+  // ====================================================
 
   validateCreateInput({
     userId,
@@ -677,8 +1239,11 @@ class ReminderService {
       throw new ReminderServiceError(
         'Hatırlatma kullanıcısı zorunludur.',
         {
-          code: 'REMINDER_USER_REQUIRED',
-          statusCode: 400,
+          code:
+            'REMINDER_USER_REQUIRED',
+
+          statusCode:
+            400,
         }
       );
     }
@@ -687,18 +1252,28 @@ class ReminderService {
       throw new ReminderServiceError(
         'Hatırlatmayı oluşturan kullanıcı zorunludur.',
         {
-          code: 'REMINDER_CREATOR_REQUIRED',
-          statusCode: 400,
+          code:
+            'REMINDER_CREATOR_REQUIRED',
+
+          statusCode:
+            400,
         }
       );
     }
 
-    if (!SOURCE_FIELDS[sourceType]) {
+    if (
+      !SOURCE_FIELDS[
+        sourceType
+      ]
+    ) {
       throw new ReminderServiceError(
         'Geçersiz hatırlatma kaynak türü.',
         {
-          code: 'INVALID_REMINDER_SOURCE_TYPE',
-          statusCode: 400,
+          code:
+            'INVALID_REMINDER_SOURCE_TYPE',
+
+          statusCode:
+            400,
         }
       );
     }
@@ -707,21 +1282,28 @@ class ReminderService {
       throw new ReminderServiceError(
         'Hatırlatma kaynak kimliği zorunludur.',
         {
-          code: 'REMINDER_SOURCE_REQUIRED',
-          statusCode: 400,
+          code:
+            'REMINDER_SOURCE_REQUIRED',
+
+          statusCode:
+            400,
         }
       );
     }
 
     if (
-      typeof title !== 'string' ||
+      typeof title !==
+        'string' ||
       !title.trim()
     ) {
       throw new ReminderServiceError(
         'Hatırlatma başlığı zorunludur.',
         {
-          code: 'REMINDER_TITLE_REQUIRED',
-          statusCode: 400,
+          code:
+            'REMINDER_TITLE_REQUIRED',
+
+          statusCode:
+            400,
         }
       );
     }
@@ -730,22 +1312,36 @@ class ReminderService {
       throw new ReminderServiceError(
         'Hatırlatma zamanı zorunludur.',
         {
-          code: 'REMINDER_DATE_REQUIRED',
-          statusCode: 400,
+          code:
+            'REMINDER_DATE_REQUIRED',
+
+          statusCode:
+            400,
         }
       );
     }
 
-    if (!REMINDER_CHANNELS.has(channel)) {
+    if (
+      !REMINDER_CHANNELS.has(
+        channel
+      )
+    ) {
       throw new ReminderServiceError(
         'Geçersiz hatırlatma kanalı.',
         {
-          code: 'INVALID_REMINDER_CHANNEL',
-          statusCode: 400,
+          code:
+            'INVALID_REMINDER_CHANNEL',
+
+          statusCode:
+            400,
         }
       );
     }
   }
+
+  // ====================================================
+  // DEDUPLICATION
+  // ====================================================
 
   createDeduplicationKey({
     userId,
@@ -755,7 +1351,9 @@ class ReminderService {
     channel,
   }) {
     return crypto
-      .createHash('sha256')
+      .createHash(
+        'sha256'
+      )
       .update(
         [
           userId,
@@ -765,25 +1363,50 @@ class ReminderService {
           channel,
         ].join(':')
       )
-      .digest('hex');
+      .digest(
+        'hex'
+      );
   }
 
-  formatOffsetLabel(minutes) {
-    if (minutes === 0) {
+  // ====================================================
+  // OFFSET LABEL
+  // ====================================================
+
+  formatOffsetLabel(
+    minutes
+  ) {
+    if (
+      minutes === 0
+    ) {
       return 'Tam zamanında';
     }
 
     if (
-      minutes % (24 * 60) === 0
+      minutes %
+        (
+          24 *
+          60
+        ) ===
+      0
     ) {
       const days =
-        minutes / (24 * 60);
+        minutes /
+        (
+          24 *
+          60
+        );
 
       return `${days} gün önce`;
     }
 
-    if (minutes % 60 === 0) {
-      const hours = minutes / 60;
+    if (
+      minutes %
+        60 ===
+      0
+    ) {
+      const hours =
+        minutes /
+        60;
 
       return `${hours} saat önce`;
     }
@@ -791,8 +1414,16 @@ class ReminderService {
     return `${minutes} dakika önce`;
   }
 
-  isValidStatus(status) {
-    return REMINDER_STATUSES.has(status);
+  // ====================================================
+  // STATUS
+  // ====================================================
+
+  isValidStatus(
+    status
+  ) {
+    return REMINDER_STATUSES.has(
+      status
+    );
   }
 }
 

@@ -91,6 +91,76 @@ const getUserDisplayName = (
 };
 
 // ======================================================
+// ASSIGNEE HELPERS
+// ======================================================
+
+const normalizeAssigneeIds = (
+  value
+) => {
+  if (!value) {
+    return [];
+  }
+
+  const values =
+    Array.isArray(value)
+      ? value
+      : [value];
+
+  return [
+    ...new Set(
+      values
+        .map(
+          (id) =>
+            String(id).trim()
+        )
+        .filter(Boolean)
+    ),
+  ];
+};
+
+/*
+ * Yeni request formatı:
+ *
+ * assignee_ids: [
+ *   "uuid-1",
+ *   "uuid-2"
+ * ]
+ *
+ * Eski frontend geçiş sürecinde:
+ *
+ * assigned_to: "uuid-1"
+ *
+ * gönderirse onu da destekliyoruz.
+ */
+const getRequestedAssigneeIds = (
+  body = {}
+) => {
+  if (
+    Object.prototype.hasOwnProperty.call(
+      body,
+      'assignee_ids'
+    )
+  ) {
+    return normalizeAssigneeIds(
+      body.assignee_ids
+    );
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      body,
+      'assigned_to'
+    )
+  ) {
+    return normalizeAssigneeIds(
+      body.assigned_to
+    );
+  }
+
+  return [];
+};
+
+// ======================================================
 // ACCESS CONTEXT
 // ======================================================
 
@@ -159,6 +229,7 @@ const getTaskErrorStatus = (
 // ======================================================
 
 export const taskController = {
+
   // ====================================================
   // CREATE
   // ====================================================
@@ -174,9 +245,10 @@ export const taskController = {
           PERMISSION_KEYS.ASSIGN_TASKS
         );
 
-      const requestedAssignee =
-        req.body?.assigned_to ||
-        null;
+      const requestedAssigneeIds =
+        getRequestedAssigneeIds(
+          req.body
+        );
 
       /*
        * ASSIGN_TASKS yetkisi olmayan kullanıcı
@@ -185,18 +257,24 @@ export const taskController = {
        *
        * Görev otomatik kendisine atanır.
        */
-      const assignedTo =
+      const assigneeIds =
         canAssignTasks
-          ? requestedAssignee
-          : req.user.id;
+          ? requestedAssigneeIds
+          : [
+              req.user.id,
+            ];
 
       /*
        * Sistem / workflow alanları create request'i
        * üzerinden belirlenemez.
+       *
+       * assignee_ids Task tablosunun doğrudan kolonu
+       * değildir. taskService ilişkileri oluşturur.
        */
       const {
         created_by,
         assigned_to,
+        assignee_ids,
         status,
         progress,
         approved_by,
@@ -213,8 +291,8 @@ export const taskController = {
         created_by:
           req.user.id,
 
-        assigned_to:
-          assignedTo,
+        assignee_ids:
+          assigneeIds,
 
         status:
           'pending',
@@ -228,6 +306,13 @@ export const taskController = {
           taskData
         );
 
+      const assigneeCount =
+        Array.isArray(
+          task?.assignees
+        )
+          ? task.assignees.length
+          : assigneeIds.length;
+
       await createAuditLog({
         req,
 
@@ -238,7 +323,11 @@ export const taskController = {
           task.id,
 
         description:
-          `"${task.title}" görevi oluşturuldu`,
+          `"${task.title}" görevi oluşturuldu${
+            assigneeCount > 0
+              ? ` ve ${assigneeCount} kullanıcıya atandı`
+              : ''
+          }`,
       });
 
       return successResponse(
@@ -279,7 +368,15 @@ export const taskController = {
         search,
         status,
         priority,
+
+        /*
+         * Query parametresi şimdilik geriye dönük
+         * uyumluluk için assigned_to olarak kalıyor.
+         *
+         * Service bunu task_assignees üzerinden filtreler.
+         */
         assigned_to,
+
         case_id,
         client_id,
       } = req.query;
@@ -511,6 +608,7 @@ export const taskController = {
     try {
       const {
         assigned_to,
+        assignee_ids,
         created_by,
         status,
         progress,
@@ -653,15 +751,6 @@ export const taskController = {
 
   // ====================================================
   // UPDATE STATUS
-  //
-  // Normal iş akışı için:
-  //
-  // pending -> start
-  // in_progress -> complete
-  // completed -> approve
-  //
-  // Bu endpoint yalnızca yönetimsel olarak
-  // pending / cancelled işlemlerinde kullanılır.
   // ====================================================
 
   async updateStatus(
@@ -681,11 +770,6 @@ export const taskController = {
         );
       }
 
-      /*
-       * EDIT_TASKS route kontrolüne ek olarak,
-       * doğrudan durum yönetimi için tüm görevleri
-       * görebilme yetkisi gerekir.
-       */
       const canManageAllTasks =
         hasPermission(
           req.user,
@@ -766,7 +850,7 @@ export const taskController = {
   },
 
   // ====================================================
-  // ASSIGN
+  // ASSIGN MULTIPLE USERS
   // ====================================================
 
   async assignTask(
@@ -774,14 +858,43 @@ export const taskController = {
     res
   ) {
     try {
-      const {
-        assigned_to,
-      } = req.body || {};
+      /*
+       * Yeni format:
+       *
+       * {
+       *   "assignee_ids": [
+       *     "uuid-1",
+       *     "uuid-2"
+       *   ]
+       * }
+       *
+       * Eski frontend:
+       *
+       * {
+       *   "assigned_to": "uuid-1"
+       * }
+       *
+       * gönderirse geçici olarak desteklenir.
+       */
+      const assigneeIds =
+        getRequestedAssigneeIds(
+          req.body
+        );
 
-      if (!assigned_to) {
+      /*
+       * Burada boş array'e izin vermiyoruz.
+       *
+       * İleride "tüm atamaları kaldır" özelliği
+       * istersek ayrıca açık bir endpoint/işlem
+       * tanımlamak daha güvenli olur.
+       */
+      if (
+        assigneeIds.length ===
+        0
+      ) {
         return errorResponse(
           res,
-          'Atanacak kullanıcı gereklidir',
+          'En az bir atanacak kullanıcı gereklidir',
           400
         );
       }
@@ -798,9 +911,16 @@ export const taskController = {
       const task =
         await taskService.assignTask(
           req.params.id,
-          assigned_to,
+          assigneeIds,
           assignedBy
         );
+
+      const assigneeCount =
+        Array.isArray(
+          task?.assignees
+        )
+          ? task.assignees.length
+          : assigneeIds.length;
 
       await createAuditLog({
         req,
@@ -812,13 +932,13 @@ export const taskController = {
           task.id,
 
         description:
-          `"${task.title}" görevi kullanıcıya atandı`,
+          `"${task.title}" görevi ${assigneeCount} kullanıcıya atandı`,
       });
 
       return successResponse(
         res,
         task,
-        'Görev başarıyla atandı'
+        'Görev sorumluları başarıyla güncellendi'
       );
     } catch (error) {
       logger.error(

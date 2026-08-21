@@ -44,11 +44,13 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
+  Check,
   CheckCircle2,
   FileLock2,
   Save,
   Trash2,
   UserRound,
+  Users,
 } from 'lucide-react';
 
 import toast from 'react-hot-toast';
@@ -62,7 +64,18 @@ const INITIAL_FORM = {
   description: '',
   priority: 'normal',
   due_date: '',
-  assigned_to: '',
+
+  /*
+   * Eski:
+   *
+   * assigned_to: ''
+   *
+   * Yeni:
+   *
+   * assignee_ids: []
+   */
+  assignee_ids: [],
+
   case_id: '',
   client_id: '',
   estimated_hours: '',
@@ -96,6 +109,174 @@ const normalizeId = (
   );
 };
 
+const normalizeIds = (
+  values
+) => {
+  if (
+    !Array.isArray(
+      values
+    )
+  ) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      values
+        .map(
+          (
+            value
+          ) =>
+            normalizeId(
+              value
+            )
+        )
+        .filter(
+          Boolean
+        )
+    ),
+  ];
+};
+
+const getTaskAssigneeIds = (
+  task
+) => {
+  if (
+    Array.isArray(
+      task?.assignees
+    )
+  ) {
+    return normalizeIds(
+      task.assignees.map(
+        (
+          person
+        ) =>
+          person?.id
+      )
+    );
+  }
+
+  /*
+   * Geçiş dönemi fallback.
+   *
+   * Yeni backend assignees[] döndürür.
+   */
+  if (
+    task?.assignee?.id
+  ) {
+    return [
+      normalizeId(
+        task.assignee.id
+      ),
+    ];
+  }
+
+  return [];
+};
+
+const arraysHaveSameValues = (
+  first,
+  second
+) => {
+  const a =
+    normalizeIds(
+      first
+    ).sort();
+
+  const b =
+    normalizeIds(
+      second
+    ).sort();
+
+  if (
+    a.length !==
+    b.length
+  ) {
+    return false;
+  }
+
+  return a.every(
+    (
+      value,
+      index
+    ) =>
+      value ===
+      b[index]
+  );
+};
+
+const getUserName = (
+  person,
+  fallback = 'Kullanıcı'
+) => {
+  if (!person) {
+    return fallback;
+  }
+
+  const name = [
+    person.first_name,
+    person.last_name,
+  ]
+    .filter(
+      Boolean
+    )
+    .join(' ')
+    .trim();
+
+  return (
+    name ||
+    fallback
+  );
+};
+
+const getUserInitials = (
+  person
+) => {
+  const first =
+    person
+      ?.first_name
+      ?.[0] ||
+    '';
+
+  const last =
+    person
+      ?.last_name
+      ?.[0] ||
+    '';
+
+  return (
+    `${first}${last}`
+      .toUpperCase() ||
+    '?'
+  );
+};
+
+const getRoleLabel = (
+  role
+) => {
+  const labels = {
+    admin:
+      'Yönetici',
+
+    lawyer:
+      'Avukat',
+
+    intern:
+      'Stajyer',
+
+    secretary:
+      'Sekreter',
+  };
+
+  return (
+    labels[
+      role
+    ] ||
+    role ||
+    'Kullanıcı'
+  );
+};
+
 // ======================================================
 // DATE
 // ======================================================
@@ -109,7 +290,9 @@ const formatForDateTimeLocal = (
 
   try {
     const parsed =
-      new Date(date);
+      new Date(
+        date
+      );
 
     if (
       Number.isNaN(
@@ -148,7 +331,8 @@ const formatForDateTimeLocal = (
         parsed
       );
 
-    const map = {};
+    const map =
+      {};
 
     for (
       const part
@@ -349,7 +533,9 @@ const TaskEdit = () => {
     error:
       taskError,
   } =
-    useTask(id);
+    useTask(
+      id
+    );
 
   const {
     data:
@@ -366,7 +552,8 @@ const TaskEdit = () => {
       casesData,
   } =
     useCases({
-      limit: 100,
+      limit:
+        100,
     });
 
   const {
@@ -374,7 +561,8 @@ const TaskEdit = () => {
       clientsData,
   } =
     useClients({
-      limit: 100,
+      limit:
+        100,
     });
 
   // ====================================================
@@ -435,50 +623,53 @@ const TaskEdit = () => {
   // ====================================================
 
   const permissions =
-    useMemo(() => {
-      const awaitingApproval =
-        task?.status ===
-          'completed' &&
-        !task?.approved_at;
+    useMemo(
+      () => {
+        const awaitingApproval =
+          task?.status ===
+            'completed' &&
+          !task?.approved_at;
 
-      const approved =
-        Boolean(
-          task?.approved_at
-        );
+        const approved =
+          Boolean(
+            task?.approved_at
+          );
 
-      const cancelled =
-        task?.status ===
-        'cancelled';
+        const cancelled =
+          task?.status ===
+          'cancelled';
 
-      const workflowLocked =
-        awaitingApproval ||
-        approved ||
-        cancelled;
+        const workflowLocked =
+          awaitingApproval ||
+          approved ||
+          cancelled;
 
-      return {
-        awaitingApproval,
-        approved,
-        cancelled,
-        workflowLocked,
+        return {
+          awaitingApproval,
+          approved,
+          cancelled,
+          workflowLocked,
 
-        canEdit:
-          hasEditPermission &&
-          !workflowLocked,
+          canEdit:
+            hasEditPermission &&
+            !workflowLocked,
 
-        canChangeAssignee:
-          hasAssignPermission &&
-          !workflowLocked,
+          canChangeAssignee:
+            hasAssignPermission &&
+            !workflowLocked,
 
-        canDelete:
-          hasDeletePermission &&
-          !approved,
-      };
-    }, [
-      task,
-      hasEditPermission,
-      hasAssignPermission,
-      hasDeletePermission,
-    ]);
+          canDelete:
+            hasDeletePermission &&
+            !approved,
+        };
+      },
+      [
+        task,
+        hasEditPermission,
+        hasAssignPermission,
+        hasDeletePermission,
+      ]
+    );
 
   const {
     awaitingApproval,
@@ -511,51 +702,99 @@ const TaskEdit = () => {
   // FORM INIT
   // ====================================================
 
-  useEffect(() => {
-    if (!task) {
-      return;
-    }
+  useEffect(
+    () => {
+      if (!task) {
+        return;
+      }
 
-    setFormData({
-      title:
-        task.title ||
-        '',
+      setFormData({
+        title:
+          task.title ||
+          '',
 
-      description:
-        task.description ||
-        '',
+        description:
+          task.description ||
+          '',
 
-      priority:
-        task.priority ||
-        'normal',
+        priority:
+          task.priority ||
+          'normal',
 
-      due_date:
-        formatForDateTimeLocal(
-          task.due_date
-        ),
+        due_date:
+          formatForDateTimeLocal(
+            task.due_date
+          ),
 
-      assigned_to:
-        normalizeId(
-          task.assigned_to
-        ),
+        assignee_ids:
+          getTaskAssigneeIds(
+            task
+          ),
 
-      case_id:
-        normalizeId(
-          task.case_id
-        ),
+        case_id:
+          normalizeId(
+            task.case_id
+          ),
 
-      client_id:
-        normalizeId(
-          task.client_id
-        ),
+        client_id:
+          normalizeId(
+            task.client_id
+          ),
 
-      estimated_hours:
-        task.estimated_hours ??
-        '',
-    });
-  }, [
-    task,
-  ]);
+        estimated_hours:
+          task.estimated_hours ??
+          '',
+      });
+    },
+    [
+      task,
+    ]
+  );
+
+  // ====================================================
+  // SELECTED ASSIGNEES
+  // ====================================================
+
+  const selectedAssignees =
+    useMemo(
+      () => {
+        /*
+         * assignable-users yalnız yetkili kullanıcıya
+         * çağrıldığı için izin yoksa task.assignees
+         * üzerinden gösteriyoruz.
+         */
+        if (
+          !canChangeAssignee
+        ) {
+          return Array.isArray(
+            task?.assignees
+          )
+            ? task.assignees
+            : task?.assignee
+              ? [
+                  task.assignee,
+                ]
+              : [];
+        }
+
+        return assignableUsers.filter(
+          (
+            person
+          ) =>
+            formData.assignee_ids.includes(
+              normalizeId(
+                person.id
+              )
+            )
+        );
+      },
+      [
+        task,
+        assignableUsers,
+        formData.assignee_ids,
+        canChangeAssignee,
+      ]
+    );
 
   // ====================================================
   // CHANGE
@@ -571,15 +810,6 @@ const TaskEdit = () => {
       event.target;
 
     if (
-      name ===
-        'assigned_to'
-    ) {
-      if (
-        !canChangeAssignee
-      ) {
-        return;
-      }
-    } else if (
       !canEdit
     ) {
       return;
@@ -631,6 +861,92 @@ const TaskEdit = () => {
   };
 
   // ====================================================
+  // ASSIGNEE TOGGLE
+  // ====================================================
+
+  const handleAssigneeToggle = (
+    userId
+  ) => {
+    if (
+      !canChangeAssignee
+    ) {
+      return;
+    }
+
+    const normalizedId =
+      normalizeId(
+        userId
+      );
+
+    setFormData(
+      (
+        current
+      ) => {
+        const exists =
+          current.assignee_ids.includes(
+            normalizedId
+          );
+
+        return {
+          ...current,
+
+          assignee_ids:
+            exists
+              ? current.assignee_ids.filter(
+                  (
+                    idValue
+                  ) =>
+                    idValue !==
+                    normalizedId
+                )
+              : [
+                  ...current.assignee_ids,
+                  normalizedId,
+                ],
+        };
+      }
+    );
+  };
+
+  const handleSelectAllAssignees =
+    () => {
+      if (
+        !canChangeAssignee
+      ) {
+        return;
+      }
+
+      const allIds =
+        normalizeIds(
+          assignableUsers.map(
+            (
+              person
+            ) =>
+              person.id
+          )
+        );
+
+      const allSelected =
+        arraysHaveSameValues(
+          formData.assignee_ids,
+          allIds
+        );
+
+      setFormData(
+        (
+          current
+        ) => ({
+          ...current,
+
+          assignee_ids:
+            allSelected
+              ? []
+              : allIds,
+        })
+      );
+    };
+
+  // ====================================================
   // VALIDATION
   // ====================================================
 
@@ -651,7 +967,7 @@ const TaskEdit = () => {
       if (
         formData
           .estimated_hours !==
-          ''
+        ''
       ) {
         const hours =
           Number(
@@ -686,181 +1002,186 @@ const TaskEdit = () => {
   // SUBMIT
   // ====================================================
 
-  const handleSubmit = async (
-    event
-  ) => {
-    event.preventDefault();
-
-    if (
-      workflowLocked
-    ) {
-      toast.error(
-        'Bu görev mevcut iş akışı durumunda düzenlenemez.'
-      );
-
-      return;
-    }
-
-    if (
-      !canEdit &&
-      !canChangeAssignee
-    ) {
-      toast.error(
-        'Bu görev üzerinde değişiklik yapma yetkiniz bulunmuyor.'
-      );
-
-      return;
-    }
-
-    if (
-      canEdit &&
-      !validateForm()
-    ) {
-      return;
-    }
-
-    // ==================================================
-    // GENERAL UPDATE DATA
-    // ==================================================
-
-    const updateData =
-      {};
-
-    if (
-      canEdit
-    ) {
-      updateData.title =
-        formData
-          .title
-          .trim();
-
-      updateData.description =
-        formData
-          .description
-          .trim() ||
-        null;
-
-      updateData.priority =
-        formData.priority;
-
-      updateData.due_date =
-        formData
-          .due_date ||
-        null;
-
-      updateData.estimated_hours =
-        formData
-          .estimated_hours !==
-        ''
-          ? Number(
-              formData
-                .estimated_hours
-            )
-          : null;
+  const handleSubmit =
+    async (
+      event
+    ) => {
+      event.preventDefault();
 
       if (
-        canViewCases
+        workflowLocked
       ) {
-        updateData.case_id =
+        toast.error(
+          'Bu görev mevcut iş akışı durumunda düzenlenemez.'
+        );
+
+        return;
+      }
+
+      if (
+        !canEdit &&
+        !canChangeAssignee
+      ) {
+        toast.error(
+          'Bu görev üzerinde değişiklik yapma yetkiniz bulunmuyor.'
+        );
+
+        return;
+      }
+
+      if (
+        canEdit &&
+        !validateForm()
+      ) {
+        return;
+      }
+
+      // ==================================================
+      // GENERAL UPDATE
+      // ==================================================
+
+      const updateData =
+        {};
+
+      if (
+        canEdit
+      ) {
+        updateData.title =
           formData
-            .case_id ||
-          null;
-      }
+            .title
+            .trim();
 
-      if (
-        canViewClients
-      ) {
-        updateData.client_id =
+        updateData.description =
           formData
-            .client_id ||
+            .description
+            .trim() ||
           null;
-      }
-    }
 
-    // ==================================================
-    // ASSIGNMENT
-    //
-    // Atama PUT /tasks/:id ile değil,
-    // PATCH /tasks/:id/assign ile yapılır.
-    // ==================================================
+        updateData.priority =
+          formData.priority;
 
-    const currentAssignee =
-      normalizeId(
-        task.assigned_to
-      );
+        updateData.due_date =
+          formData.due_date ||
+          null;
 
-    const requestedAssignee =
-      normalizeId(
-        formData.assigned_to
-      );
+        updateData.estimated_hours =
+          formData
+            .estimated_hours !==
+          ''
+            ? Number(
+                formData
+                  .estimated_hours
+              )
+            : null;
 
-    const assignmentChanged =
-      canChangeAssignee &&
-      requestedAssignee !==
-        currentAssignee;
+        if (
+          canViewCases
+        ) {
+          updateData.case_id =
+            formData.case_id ||
+            null;
+        }
 
-    if (
-      assignmentChanged &&
-      !requestedAssignee
-    ) {
-      toast.error(
-        'Görev ataması boş bırakılamaz.'
-      );
-
-      return;
-    }
-
-    const hasGeneralUpdate =
-      canEdit &&
-      Object.keys(
-        updateData
-      ).length >
-        0;
-
-    if (
-      !hasGeneralUpdate &&
-      !assignmentChanged
-    ) {
-      toast.error(
-        'Güncellenecek alan bulunamadı.'
-      );
-
-      return;
-    }
-
-    try {
-      if (
-        hasGeneralUpdate
-      ) {
-        await updateMutation.mutateAsync({
-          id,
-
-          data:
-            updateData,
-        });
+        if (
+          canViewClients
+        ) {
+          updateData.client_id =
+            formData.client_id ||
+            null;
+        }
       }
 
-      if (
-        assignmentChanged
-      ) {
-        await assignMutation.mutateAsync({
-          id,
+      // ==================================================
+      // MULTIPLE ASSIGNMENT
+      // ==================================================
 
-          assigned_to:
-            requestedAssignee,
-        });
-      }
+      const currentAssigneeIds =
+        getTaskAssigneeIds(
+          task
+        );
 
-      navigate(
-        `/tasks/${id}`
-      );
-    } catch {
+      const requestedAssigneeIds =
+        normalizeIds(
+          formData.assignee_ids
+        );
+
+      const assignmentChanged =
+        canChangeAssignee &&
+        !arraysHaveSameValues(
+          currentAssigneeIds,
+          requestedAssigneeIds
+        );
+
       /*
-       * Toast mesajları mutation hook'larında
-       * gösteriliyor.
+       * Controller tarafında assign endpoint'i boş
+       * array kabul etmiyor.
+       *
+       * Bu yüzden düzenleme ekranında son sorumluyu
+       * kaldırmaya izin vermiyoruz.
        */
-    }
-  };
+      if (
+        assignmentChanged &&
+        requestedAssigneeIds.length ===
+          0
+      ) {
+        toast.error(
+          'Görevde en az bir sorumlu kullanıcı bulunmalıdır.'
+        );
+
+        return;
+      }
+
+      const hasGeneralUpdate =
+        canEdit &&
+        Object.keys(
+          updateData
+        ).length >
+          0;
+
+      if (
+        !hasGeneralUpdate &&
+        !assignmentChanged
+      ) {
+        toast.error(
+          'Güncellenecek alan bulunamadı.'
+        );
+
+        return;
+      }
+
+      try {
+        if (
+          hasGeneralUpdate
+        ) {
+          await updateMutation.mutateAsync({
+            id,
+
+            data:
+              updateData,
+          });
+        }
+
+        if (
+          assignmentChanged
+        ) {
+          await assignMutation.mutateAsync({
+            id,
+
+            assignee_ids:
+              requestedAssigneeIds,
+          });
+        }
+
+        navigate(
+          `/tasks/${id}`
+        );
+      } catch {
+        /*
+         * Toast mesajları mutation hook'larında
+         * gösteriliyor.
+         */
+      }
+    };
 
   // ====================================================
   // DELETE
@@ -1369,97 +1690,375 @@ const TaskEdit = () => {
             placeholder="Örn: 2.5"
           />
 
-          {/* ASSIGNEE */}
+          {/* ==================================================
+              MULTIPLE ASSIGNEES
+          ================================================== */}
 
-          <div>
+          <div className="space-y-3">
 
-            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+            <div className="flex flex-wrap items-start justify-between gap-3">
 
-              <span className="inline-flex items-center gap-1.5">
+              <div>
 
-                <UserRound className="h-4 w-4 text-gray-400" />
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">
 
-                Atanan Kişi
+                  <span className="inline-flex items-center gap-1.5">
 
-              </span>
+                    <Users className="h-4 w-4 text-gray-400" />
 
-            </label>
+                    Atanan Kişiler
+
+                  </span>
+
+                </label>
+
+                <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                  Görevi bir veya birden fazla kullanıcıya atayabilirsiniz.
+                </p>
+
+              </div>
+
+              {formData.assignee_ids.length >
+                0 && (
+                <Badge variant="primary">
+                  {formData.assignee_ids.length}{' '}
+                  kişi
+                </Badge>
+              )}
+
+            </div>
 
             {canChangeAssignee ? (
-              <select
-                name="assigned_to"
-                value={
-                  formData.assigned_to
-                }
-                onChange={
-                  handleChange
-                }
-                disabled={
-                  assignableUsersFetching
-                }
-                className="
-                  w-full
-                  rounded-lg
-                  border
-                  border-gray-200
-                  bg-white
-                  px-3.5
-                  py-2.5
-                  text-sm
-                  text-gray-900
-                  outline-none
-                  focus:border-blue-500
-                  focus:ring-2
-                  focus:ring-blue-500/10
-                  disabled:cursor-not-allowed
-                  disabled:opacity-50
-                  dark:border-white/[0.08]
-                  dark:bg-white/[0.035]
-                  dark:text-white
-                "
-              >
+              <>
 
-                <option value="">
-                  {assignableUsersFetching
-                    ? 'Kullanıcılar yükleniyor...'
-                    : 'Atanacak kişi seçin'}
-                </option>
+                <div className="flex justify-end">
 
-                {assignableUsers.map(
-                  (
-                    person
-                  ) => (
-                    <option
-                      key={
-                        person.id
+                  {assignableUsers.length >
+                    0 && (
+                    <button
+                      type="button"
+                      onClick={
+                        handleSelectAllAssignees
                       }
-                      value={
-                        normalizeId(
-                          person.id
-                        )
+                      disabled={
+                        assignableUsersFetching
                       }
+                      className="
+                        rounded-lg
+                        border
+                        border-gray-200
+                        bg-white
+                        px-3
+                        py-1.5
+                        text-xs
+                        font-medium
+                        text-gray-600
+                        transition
+                        hover:border-blue-200
+                        hover:bg-blue-50
+                        hover:text-blue-600
+                        disabled:cursor-not-allowed
+                        disabled:opacity-50
+                        dark:border-white/[0.08]
+                        dark:bg-white/[0.025]
+                        dark:text-slate-400
+                        dark:hover:border-blue-500/20
+                        dark:hover:bg-blue-500/[0.06]
+                        dark:hover:text-blue-400
+                      "
                     >
-                      {person.first_name}{' '}
-                      {person.last_name}
-                    </option>
-                  )
+                      {formData.assignee_ids.length ===
+                      assignableUsers.length
+                        ? 'Seçimi Temizle'
+                        : 'Tümünü Seç'}
+                    </button>
+                  )}
+
+                </div>
+
+                {assignableUsersFetching ? (
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-5 text-center text-sm text-gray-500 dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-400">
+                    Kullanıcılar yükleniyor...
+                  </div>
+                ) : assignableUsers.length ===
+                  0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-200 p-5 text-center text-sm text-gray-500 dark:border-white/[0.08] dark:text-slate-400">
+                    Görev atanabilecek aktif kullanıcı bulunamadı.
+                  </div>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+
+                    {assignableUsers.map(
+                      (
+                        person
+                      ) => {
+                        const personId =
+                          normalizeId(
+                            person.id
+                          );
+
+                        const selected =
+                          formData.assignee_ids.includes(
+                            personId
+                          );
+
+                        return (
+                          <button
+                            key={
+                              person.id
+                            }
+                            type="button"
+                            onClick={() =>
+                              handleAssigneeToggle(
+                                personId
+                              )
+                            }
+                            className={`
+                              flex
+                              w-full
+                              items-center
+                              gap-3
+                              rounded-xl
+                              border
+                              p-3
+                              text-left
+                              transition
+                              ${
+                                selected
+                                  ? `
+                                    border-blue-300
+                                    bg-blue-50/70
+                                    ring-1
+                                    ring-blue-500/10
+                                    dark:border-blue-500/30
+                                    dark:bg-blue-500/[0.07]
+                                  `
+                                  : `
+                                    border-gray-200
+                                    bg-white
+                                    hover:border-gray-300
+                                    hover:bg-gray-50
+                                    dark:border-white/[0.07]
+                                    dark:bg-white/[0.02]
+                                    dark:hover:bg-white/[0.04]
+                                  `
+                              }
+                            `}
+                          >
+
+                            <div
+                              className={`
+                                flex
+                                h-10
+                                w-10
+                                shrink-0
+                                items-center
+                                justify-center
+                                rounded-full
+                                text-xs
+                                font-semibold
+                                ${
+                                  selected
+                                    ? `
+                                      bg-blue-100
+                                      text-blue-700
+                                      dark:bg-blue-500/[0.12]
+                                      dark:text-blue-300
+                                    `
+                                    : `
+                                      bg-gray-100
+                                      text-gray-600
+                                      dark:bg-white/[0.06]
+                                      dark:text-slate-300
+                                    `
+                                }
+                              `}
+                            >
+                              {getUserInitials(
+                                person
+                              )}
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+
+                              <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                                {getUserName(
+                                  person
+                                )}
+                              </p>
+
+                              <p className="mt-0.5 truncate text-xs text-gray-400 dark:text-slate-500">
+                                {getRoleLabel(
+                                  person.role
+                                )}
+
+                                {person.title
+                                  ? ` · ${person.title}`
+                                  : ''}
+                              </p>
+
+                            </div>
+
+                            <div
+                              className={`
+                                flex
+                                h-6
+                                w-6
+                                shrink-0
+                                items-center
+                                justify-center
+                                rounded-full
+                                border
+                                ${
+                                  selected
+                                    ? `
+                                      border-blue-600
+                                      bg-blue-600
+                                      text-white
+                                    `
+                                    : `
+                                      border-gray-300
+                                      bg-white
+                                      text-transparent
+                                      dark:border-white/[0.15]
+                                      dark:bg-white/[0.03]
+                                    `
+                                }
+                              `}
+                            >
+                              <Check size={14} />
+                            </div>
+
+                          </button>
+                        );
+                      }
+                    )}
+
+                  </div>
                 )}
 
-              </select>
+                {selectedAssignees.length >
+                  0 && (
+                  <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-500/15 dark:bg-blue-500/[0.04]">
+
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                      Seçilen Sorumlular
+                    </p>
+
+                    <div className="flex flex-wrap gap-2">
+
+                      {selectedAssignees.map(
+                        (
+                          person
+                        ) => (
+                          <button
+                            key={
+                              person.id
+                            }
+                            type="button"
+                            onClick={() =>
+                              handleAssigneeToggle(
+                                person.id
+                              )
+                            }
+                            title="Seçimi kaldır"
+                            className="
+                              inline-flex
+                              items-center
+                              gap-2
+                              rounded-full
+                              border
+                              border-blue-200
+                              bg-white
+                              px-2.5
+                              py-1.5
+                              text-xs
+                              font-medium
+                              text-blue-700
+                              transition
+                              hover:border-red-200
+                              hover:bg-red-50
+                              hover:text-red-600
+                              dark:border-blue-500/20
+                              dark:bg-white/[0.04]
+                              dark:text-blue-300
+                              dark:hover:border-red-500/20
+                              dark:hover:bg-red-500/[0.06]
+                              dark:hover:text-red-400
+                            "
+                          >
+
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[9px] font-bold text-blue-700 dark:bg-blue-500/[0.12] dark:text-blue-300">
+                              {getUserInitials(
+                                person
+                              )}
+                            </span>
+
+                            {getUserName(
+                              person
+                            )}
+
+                          </button>
+                        )
+                      )}
+
+                    </div>
+
+                  </div>
+                )}
+
+                {formData.assignee_ids.length ===
+                  0 &&
+                  !assignableUsersFetching && (
+                    <div className="rounded-lg bg-amber-50 px-3 py-2.5 text-xs text-amber-700 dark:bg-amber-500/[0.06] dark:text-amber-300">
+                      En az bir sorumlu kullanıcı seçmelisiniz.
+                    </div>
+                  )}
+
+              </>
             ) : (
               <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
 
-                <p className="text-xs text-gray-400">
-                  Atanan Kişi
-                </p>
+                {selectedAssignees.length ===
+                0 ? (
+                  <p className="text-sm text-gray-500 dark:text-slate-400">
+                    Atanmış kullanıcı bulunmuyor.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
 
-                <p className="mt-1 font-medium text-gray-900 dark:text-white">
-                  {task.assignee
-                    ? `${task.assignee.first_name || ''} ${task.assignee.last_name || ''}`.trim()
-                    : 'Atanmadı'}
-                </p>
+                    {selectedAssignees.map(
+                      (
+                        person
+                      ) => (
+                        <div
+                          key={
+                            person.id
+                          }
+                          className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 dark:border-white/[0.07] dark:bg-white/[0.03]"
+                        >
 
-                <p className="mt-1 text-xs text-gray-400">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-50 text-[9px] font-bold text-blue-700 dark:bg-blue-500/[0.1] dark:text-blue-300">
+                            {getUserInitials(
+                              person
+                            )}
+                          </div>
+
+                          <span className="text-xs font-medium text-gray-700 dark:text-slate-300">
+                            {getUserName(
+                              person
+                            )}
+                          </span>
+
+                        </div>
+                      )
+                    )}
+
+                  </div>
+                )}
+
+                <p className="mt-3 flex items-center gap-1.5 text-xs text-gray-400">
+                  <UserRound className="h-3.5 w-3.5" />
                   Görev atamasını değiştirme yetkiniz bulunmuyor.
                 </p>
 

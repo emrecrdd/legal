@@ -1,16 +1,23 @@
 import axios from '../../app/config/axios.js';
-import { API_ROUTES } from '../../constants/apiRoutes.js';
+
+import {
+  API_ROUTES,
+} from '../../constants/apiRoutes.js';
 
 const {
   TASKS,
-} = API_ROUTES;
+} =
+  API_ROUTES;
 
 const taskApi = {
+
   // ======================================================
   // LIST
   // ======================================================
 
-  getAll: (params = {}) => {
+  getAll: (
+    params = {}
+  ) => {
     return axios.get(
       TASKS.GET_ALL,
       {
@@ -23,9 +30,13 @@ const taskApi = {
   // DETAIL
   // ======================================================
 
-  getOne: (id) => {
+  getOne: (
+    id
+  ) => {
     return axios.get(
-      TASKS.GET_ONE(id)
+      TASKS.GET_ONE(
+        id
+      )
     );
   },
 
@@ -33,7 +44,9 @@ const taskApi = {
   // CREATE
   // ======================================================
 
-  create: (data) => {
+  create: (
+    data
+  ) => {
     return axios.post(
       TASKS.CREATE,
       data
@@ -44,9 +57,14 @@ const taskApi = {
   // UPDATE
   // ======================================================
 
-  update: (id, data) => {
+  update: (
+    id,
+    data
+  ) => {
     return axios.put(
-      TASKS.UPDATE(id),
+      TASKS.UPDATE(
+        id
+      ),
       data
     );
   },
@@ -55,9 +73,13 @@ const taskApi = {
   // DELETE
   // ======================================================
 
-  delete: (id) => {
+  delete: (
+    id
+  ) => {
     return axios.delete(
-      TASKS.DELETE(id)
+      TASKS.DELETE(
+        id
+      )
     );
   },
 
@@ -70,7 +92,9 @@ const taskApi = {
     status
   ) => {
     return axios.patch(
-      TASKS.UPDATE_STATUS(id),
+      TASKS.UPDATE_STATUS(
+        id
+      ),
       {
         status,
       }
@@ -78,29 +102,44 @@ const taskApi = {
   },
 
   // ======================================================
-  // ASSIGN
+  // ASSIGN MULTIPLE USERS
   // ======================================================
 
+  /*
+   * Body:
+   *
+   * {
+   *   assignee_ids: [
+   *     'user-uuid-1',
+   *     'user-uuid-2'
+   *   ]
+   * }
+   */
   assignTask: (
     id,
-    assigned_to
+    assignee_ids
   ) => {
     return axios.patch(
-      TASKS.ASSIGN(id),
+      TASKS.ASSIGN(
+        id
+      ),
       {
-        assigned_to,
+        assignee_ids,
       }
     );
   },
+
   // ======================================================
   // ASSIGNABLE USERS
   // ======================================================
 
-  getAssignableUsers: () => {
-    return axios.get(
-      TASKS.ASSIGNABLE_USERS
-    );
-  },
+  getAssignableUsers:
+    () => {
+      return axios.get(
+        TASKS.ASSIGNABLE_USERS
+      );
+    },
+
   // ======================================================
   // MY TASKS
   // ======================================================
@@ -116,27 +155,30 @@ const taskApi = {
     );
   },
 
-  getMyOverdue: () => {
-    return axios.get(
-      TASKS.MY_OVERDUE
-    );
-  },
+  getMyOverdue:
+    () => {
+      return axios.get(
+        TASKS.MY_OVERDUE
+      );
+    },
 
-  getMyUpcoming: () => {
-    return axios.get(
-      TASKS.MY_UPCOMING
-    );
-  },
+  getMyUpcoming:
+    () => {
+      return axios.get(
+        TASKS.MY_UPCOMING
+      );
+    },
 
   // ======================================================
   // STATISTICS
   // ======================================================
 
-  getStatistics: () => {
-    return axios.get(
-      TASKS.STATISTICS
-    );
-  },
+  getStatistics:
+    () => {
+      return axios.get(
+        TASKS.STATISTICS
+      );
+    },
 
   // ======================================================
   // CLIENT TASKS
@@ -178,9 +220,13 @@ const taskApi = {
   // START
   // ======================================================
 
-  startTask: (id) => {
+  startTask: (
+    id
+  ) => {
     return axios.post(
-      TASKS.START(id)
+      TASKS.START(
+        id
+      )
     );
   },
 
@@ -193,7 +239,9 @@ const taskApi = {
     data
   ) => {
     return axios.post(
-      TASKS.COMPLETE(id),
+      TASKS.COMPLETE(
+        id
+      ),
       data
     );
   },
@@ -207,7 +255,9 @@ const taskApi = {
     progress
   ) => {
     return axios.patch(
-      TASKS.PROGRESS(id),
+      TASKS.PROGRESS(
+        id
+      ),
       {
         progress,
       }
@@ -218,9 +268,13 @@ const taskApi = {
   // APPROVE
   // ======================================================
 
-  approveTask: (id) => {
+  approveTask: (
+    id
+  ) => {
     return axios.post(
-      TASKS.APPROVE(id)
+      TASKS.APPROVE(
+        id
+      )
     );
   },
 
@@ -233,16 +287,22 @@ const taskApi = {
     content
   ) => {
     return axios.post(
-      TASKS.NOTES(id),
+      TASKS.NOTES(
+        id
+      ),
       {
         content,
       }
     );
   },
 
-  getNotes: (id) => {
+  getNotes: (
+    id
+  ) => {
     return axios.get(
-      TASKS.NOTES(id)
+      TASKS.NOTES(
+        id
+      )
     );
   },
 };

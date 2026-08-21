@@ -41,6 +41,7 @@ import {
   ArrowLeft,
   BriefcaseBusiness,
   CalendarClock,
+  Check,
   CheckSquare2,
   Clock3,
   FileText,
@@ -59,7 +60,18 @@ const INITIAL_FORM = {
   description: '',
   priority: 'normal',
   due_date: '',
-  assigned_to: '',
+
+  /*
+   * Çoklu görev atama.
+   *
+   * Eski:
+   * assigned_to: ''
+   *
+   * Yeni:
+   * assignee_ids: []
+   */
+  assignee_ids: [],
+
   case_id: '',
   client_id: '',
   estimated_hours: '',
@@ -148,6 +160,24 @@ const getPriorityVariant = (
     variants[priority] ||
     'default'
   );
+};
+
+const getInitials = (
+  person
+) => {
+  const first =
+    person
+      ?.first_name
+      ?.[0] ||
+    '';
+
+  const last =
+    person
+      ?.last_name
+      ?.[0] ||
+    '';
+
+  return `${first}${last}`.toUpperCase();
 };
 
 // ======================================================
@@ -456,6 +486,10 @@ const TaskCreate = () => {
   // DEFAULT ASSIGNEE
   // ====================================================
 
+  /*
+   * ASSIGN_TASKS yetkisi olmayan kullanıcı
+   * otomatik kendisine atanır.
+   */
   useEffect(() => {
     if (
       !canAssignTasks &&
@@ -467,8 +501,9 @@ const TaskCreate = () => {
         ) => ({
           ...current,
 
-          assigned_to:
+          assignee_ids: [
             user.id,
+          ],
         })
       );
     }
@@ -523,6 +558,33 @@ const TaskCreate = () => {
       canViewClients,
     ]);
 
+  const selectedAssignees =
+    useMemo(() => {
+      if (
+        !canAssignTasks
+      ) {
+        return user
+          ? [
+              user,
+            ]
+          : [];
+      }
+
+      return assignableUsers.filter(
+        (
+          person
+        ) =>
+          formData.assignee_ids.includes(
+            person.id
+          )
+      );
+    }, [
+      assignableUsers,
+      formData.assignee_ids,
+      canAssignTasks,
+      user,
+    ]);
+
   // ====================================================
   // HANDLERS
   // ====================================================
@@ -536,14 +598,6 @@ const TaskCreate = () => {
         value,
       } =
         event.target;
-
-      if (
-        name ===
-          'assigned_to' &&
-        !canAssignTasks
-      ) {
-        return;
-      }
 
       if (
         name ===
@@ -586,6 +640,102 @@ const TaskCreate = () => {
           })
         );
       }
+    };
+
+  // ====================================================
+  // ASSIGNEE TOGGLE
+  // ====================================================
+
+  const handleAssigneeToggle =
+    (
+      userId
+    ) => {
+      if (
+        !canAssignTasks
+      ) {
+        return;
+      }
+
+      setFormData(
+        (
+          current
+        ) => {
+          const exists =
+            current.assignee_ids.includes(
+              userId
+            );
+
+          return {
+            ...current,
+
+            assignee_ids:
+              exists
+                ? current.assignee_ids.filter(
+                    (
+                      id
+                    ) =>
+                      id !==
+                      userId
+                  )
+                : [
+                    ...current.assignee_ids,
+                    userId,
+                  ],
+          };
+        }
+      );
+
+      if (
+        errors.assignee_ids
+      ) {
+        setErrors(
+          (
+            current
+          ) => ({
+            ...current,
+
+            assignee_ids:
+              '',
+          })
+        );
+      }
+    };
+
+  // ====================================================
+  // SELECT ALL
+  // ====================================================
+
+  const handleSelectAllAssignees =
+    () => {
+      if (
+        !canAssignTasks
+      ) {
+        return;
+      }
+
+      const allSelected =
+        assignableUsers.length >
+          0 &&
+        formData.assignee_ids.length ===
+          assignableUsers.length;
+
+      setFormData(
+        (
+          current
+        ) => ({
+          ...current,
+
+          assignee_ids:
+            allSelected
+              ? []
+              : assignableUsers.map(
+                  (
+                    person
+                  ) =>
+                    person.id
+                ),
+        })
+      );
     };
 
   // ====================================================
@@ -639,10 +789,14 @@ const TaskCreate = () => {
         return;
       }
 
-      const assignedTo =
+      const assigneeIds =
         canAssignTasks
-          ? formData.assigned_to
-          : user?.id;
+          ? formData.assignee_ids
+          : user?.id
+            ? [
+                user.id,
+              ]
+            : [];
 
       const submitData = {
         title:
@@ -661,9 +815,11 @@ const TaskCreate = () => {
             ?.trim() ||
           '',
 
-        assigned_to:
-          assignedTo ||
-          null,
+        /*
+         * Çoklu atama.
+         */
+        assignee_ids:
+          assigneeIds,
 
         case_id:
           canViewCases
@@ -806,7 +962,7 @@ const TaskCreate = () => {
             </h1>
 
             <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-slate-400">
-              Yapılacak işi, sorumlu kişiyi, önceliği ve ilişkili dosyaları tanımlayın.
+              Yapılacak işi, sorumlu kişileri, önceliği ve ilişkili dosyaları tanımlayın.
             </p>
 
           </div>
@@ -836,7 +992,7 @@ const TaskCreate = () => {
 
               <p className="mt-1 text-xs leading-5 text-blue-700/80 dark:text-blue-300/70">
                 Bazı alanlar dava analizindeki öneriden otomatik dolduruldu.
-                Kaydetmeden önce görev içeriğini, sorumlu kişiyi ve son tarihi kontrol edin.
+                Kaydetmeden önce görev içeriğini, sorumlu kişileri ve son tarihi kontrol edin.
               </p>
 
             </div>
@@ -857,7 +1013,9 @@ const TaskCreate = () => {
         className="space-y-5"
       >
 
-        {/* BASIC INFO */}
+        {/* ==================================================
+            BASIC INFO
+        ================================================== */}
 
         <Card>
 
@@ -993,7 +1151,9 @@ const TaskCreate = () => {
 
         </Card>
 
-        {/* PLANNING */}
+        {/* ==================================================
+            PLANNING
+        ================================================== */}
 
         <Card>
 
@@ -1165,114 +1325,405 @@ const TaskCreate = () => {
             </div>
 
             <div className="rounded-lg bg-gray-50 px-3 py-2.5 text-xs text-gray-500 dark:bg-white/[0.025] dark:text-slate-400">
-              Yeni görev <strong>Bekliyor</strong> durumunda oluşturulur. Durum daha sonra görev iş akışı üzerinden ilerletilir.
+              Yeni görev <strong>Bekliyor</strong> durumunda oluşturulur.
+              Durum daha sonra görev iş akışı üzerinden ilerletilir.
             </div>
 
           </Card.Body>
 
         </Card>
 
-        {/* ASSIGNMENT */}
+        {/* ==================================================
+            MULTIPLE ASSIGNMENT
+        ================================================== */}
 
         <Card>
 
           <Card.Header>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-4">
 
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400">
-                <Users size={17} />
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400">
+                  <Users size={17} />
+                </div>
+
+                <div>
+
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Görev Ataması
+                  </h2>
+
+                  <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                    Görevden sorumlu bir veya birden fazla kullanıcı seçebilirsiniz
+                  </p>
+
+                </div>
+
               </div>
 
-              <div>
-
-                <h2 className="font-semibold text-gray-900 dark:text-white">
-                  Görev Ataması
-                </h2>
-
-                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Görevden sorumlu kullanıcıyı belirleyin
-                </p>
-
-              </div>
+              {canAssignTasks &&
+                formData.assignee_ids.length >
+                  0 && (
+                  <Badge
+                    variant="primary"
+                  >
+                    {formData.assignee_ids.length}{' '}
+                    kişi seçildi
+                  </Badge>
+                )}
 
             </div>
 
           </Card.Header>
 
-          <Card.Body>
+          <Card.Body className="space-y-4">
 
             {canAssignTasks ? (
-              <div>
+              <>
 
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Atanan Kişi
-                </label>
+                {/* SELECT HEADER */}
 
-                <select
-                  name="assigned_to"
-                  value={
-                    formData.assigned_to
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  disabled={
-                    assignableUsersLoading
-                  }
-                  className="
-                    h-10
-                    w-full
-                    rounded-lg
-                    border
-                    border-gray-200
-                    bg-white
-                    px-3.5
-                    text-sm
-                    text-gray-700
-                    outline-none
-                    disabled:cursor-not-allowed
-                    disabled:opacity-50
-                    focus:border-blue-500
-                    focus:ring-2
-                    focus:ring-blue-500/10
-                    dark:border-white/[0.08]
-                    dark:bg-white/[0.035]
-                    dark:text-slate-300
-                  "
-                >
+                <div className="flex flex-wrap items-center justify-between gap-3">
 
-                  <option value="">
-                    {assignableUsersLoading
-                      ? 'Kullanıcılar yükleniyor...'
-                      : 'Atanacak kişi seçin'}
-                  </option>
+                  <div>
 
-                  {assignableUsers.map(
-                    (
-                      person
-                    ) => (
-                      <option
-                        key={
-                          person.id
-                        }
-                        value={
-                          person.id
-                        }
-                      >
-                        {person.first_name}{' '}
-                        {person.last_name}
-                        {' · '}
-                        {getRoleLabel(
-                          person.role
-                        )}
-                      </option>
-                    )
+                    <p className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                      Sorumlu Kişiler
+                    </p>
+
+                    <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                      Görevi birlikte yürütecek tüm kullanıcıları seçebilirsiniz.
+                    </p>
+
+                  </div>
+
+                  {assignableUsers.length >
+                    0 && (
+                    <button
+                      type="button"
+                      onClick={
+                        handleSelectAllAssignees
+                      }
+                      className="
+                        rounded-lg
+                        border
+                        border-gray-200
+                        bg-white
+                        px-3
+                        py-1.5
+                        text-xs
+                        font-medium
+                        text-gray-600
+                        transition
+                        hover:border-blue-200
+                        hover:bg-blue-50
+                        hover:text-blue-600
+                        dark:border-white/[0.08]
+                        dark:bg-white/[0.025]
+                        dark:text-slate-400
+                        dark:hover:border-blue-500/20
+                        dark:hover:bg-blue-500/[0.06]
+                        dark:hover:text-blue-400
+                      "
+                    >
+                      {formData.assignee_ids.length ===
+                      assignableUsers.length
+                        ? 'Seçimi Temizle'
+                        : 'Tümünü Seç'}
+                    </button>
                   )}
 
-                </select>
+                </div>
 
-              </div>
+                {/* LOADING */}
+
+                {assignableUsersLoading && (
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-5 text-center text-sm text-gray-500 dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-400">
+                    Kullanıcılar yükleniyor...
+                  </div>
+                )}
+
+                {/* EMPTY */}
+
+                {!assignableUsersLoading &&
+                  assignableUsers.length ===
+                    0 && (
+                    <div className="rounded-xl border border-dashed border-gray-200 p-5 text-center text-sm text-gray-500 dark:border-white/[0.08] dark:text-slate-400">
+                      Görev atanabilecek aktif kullanıcı bulunamadı.
+                    </div>
+                  )}
+
+                {/* USERS */}
+
+                {!assignableUsersLoading &&
+                  assignableUsers.length >
+                    0 && (
+                    <div className="grid gap-2 sm:grid-cols-2">
+
+                      {assignableUsers.map(
+                        (
+                          person
+                        ) => {
+                          const selected =
+                            formData.assignee_ids.includes(
+                              person.id
+                            );
+
+                          return (
+                            <button
+                              key={
+                                person.id
+                              }
+                              type="button"
+                              onClick={() =>
+                                handleAssigneeToggle(
+                                  person.id
+                                )
+                              }
+                              className={`
+                                flex
+                                w-full
+                                items-center
+                                gap-3
+                                rounded-xl
+                                border
+                                p-3
+                                text-left
+                                transition
+                                ${
+                                  selected
+                                    ? `
+                                      border-blue-300
+                                      bg-blue-50/70
+                                      ring-1
+                                      ring-blue-500/10
+                                      dark:border-blue-500/30
+                                      dark:bg-blue-500/[0.07]
+                                    `
+                                    : `
+                                      border-gray-200
+                                      bg-white
+                                      hover:border-gray-300
+                                      hover:bg-gray-50
+                                      dark:border-white/[0.07]
+                                      dark:bg-white/[0.02]
+                                      dark:hover:bg-white/[0.04]
+                                    `
+                                }
+                              `}
+                            >
+
+                              {/* AVATAR */}
+
+                              <div
+                                className={`
+                                  flex
+                                  h-10
+                                  w-10
+                                  shrink-0
+                                  items-center
+                                  justify-center
+                                  rounded-full
+                                  text-xs
+                                  font-semibold
+                                  ${
+                                    selected
+                                      ? `
+                                        bg-blue-100
+                                        text-blue-700
+                                        dark:bg-blue-500/[0.12]
+                                        dark:text-blue-300
+                                      `
+                                      : `
+                                        bg-gray-100
+                                        text-gray-600
+                                        dark:bg-white/[0.06]
+                                        dark:text-slate-300
+                                      `
+                                  }
+                                `}
+                              >
+                                {getInitials(
+                                  person
+                                )}
+                              </div>
+
+                              {/* USER */}
+
+                              <div className="min-w-0 flex-1">
+
+                                <p
+                                  className={`
+                                    truncate
+                                    text-sm
+                                    font-semibold
+                                    ${
+                                      selected
+                                        ? 'text-blue-900 dark:text-blue-200'
+                                        : 'text-gray-900 dark:text-white'
+                                    }
+                                  `}
+                                >
+                                  {person.first_name}{' '}
+                                  {person.last_name}
+                                </p>
+
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+
+                                  <span className="text-xs text-gray-500 dark:text-slate-500">
+                                    {getRoleLabel(
+                                      person.role
+                                    )}
+                                  </span>
+
+                                  {person.title && (
+                                    <>
+                                      <span className="text-gray-300 dark:text-slate-700">
+                                        ·
+                                      </span>
+
+                                      <span className="truncate text-xs text-gray-400 dark:text-slate-500">
+                                        {person.title}
+                                      </span>
+                                    </>
+                                  )}
+
+                                </div>
+
+                              </div>
+
+                              {/* CHECK */}
+
+                              <div
+                                className={`
+                                  flex
+                                  h-6
+                                  w-6
+                                  shrink-0
+                                  items-center
+                                  justify-center
+                                  rounded-full
+                                  border
+                                  transition
+                                  ${
+                                    selected
+                                      ? `
+                                        border-blue-600
+                                        bg-blue-600
+                                        text-white
+                                      `
+                                      : `
+                                        border-gray-300
+                                        bg-white
+                                        text-transparent
+                                        dark:border-white/[0.15]
+                                        dark:bg-white/[0.03]
+                                      `
+                                  }
+                                `}
+                              >
+                                <Check size={14} />
+                              </div>
+
+                            </button>
+                          );
+                        }
+                      )}
+
+                    </div>
+                  )}
+
+                {/* SELECTED USERS */}
+
+                {selectedAssignees.length >
+                  0 && (
+                  <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-500/15 dark:bg-blue-500/[0.04]">
+
+                    <div className="mb-3 flex items-center justify-between gap-3">
+
+                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                        Seçilen Sorumlular
+                      </p>
+
+                      <span className="text-xs text-blue-600/70 dark:text-blue-400/70">
+                        {selectedAssignees.length}{' '}
+                        kişi
+                      </span>
+
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+
+                      {selectedAssignees.map(
+                        (
+                          person
+                        ) => (
+                          <button
+                            key={
+                              person.id
+                            }
+                            type="button"
+                            onClick={() =>
+                              handleAssigneeToggle(
+                                person.id
+                              )
+                            }
+                            className="
+                              inline-flex
+                              items-center
+                              gap-2
+                              rounded-full
+                              border
+                              border-blue-200
+                              bg-white
+                              px-2.5
+                              py-1.5
+                              text-xs
+                              font-medium
+                              text-blue-700
+                              transition
+                              hover:border-red-200
+                              hover:bg-red-50
+                              hover:text-red-600
+                              dark:border-blue-500/20
+                              dark:bg-white/[0.04]
+                              dark:text-blue-300
+                              dark:hover:border-red-500/20
+                              dark:hover:bg-red-500/[0.06]
+                              dark:hover:text-red-400
+                            "
+                            title="Seçimi kaldır"
+                          >
+
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[9px] font-bold text-blue-700 dark:bg-blue-500/[0.12] dark:text-blue-300">
+                              {getInitials(
+                                person
+                              )}
+                            </span>
+
+                            {person.first_name}{' '}
+                            {person.last_name}
+
+                          </button>
+                        )
+                      )}
+
+                    </div>
+
+                  </div>
+                )}
+
+                {formData.assignee_ids.length ===
+                  0 &&
+                  !assignableUsersLoading && (
+                    <div className="rounded-lg bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-700 dark:bg-amber-500/[0.06] dark:text-amber-300">
+                      Henüz sorumlu seçilmedi. Görev sorumlusuz olarak oluşturulabilir ve daha sonra kullanıcı atanabilir.
+                    </div>
+                  )}
+
+              </>
             ) : (
               <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
 
@@ -1320,7 +1771,9 @@ const TaskCreate = () => {
 
         </Card>
 
-        {/* RELATIONS */}
+        {/* ==================================================
+            RELATIONS
+        ================================================== */}
 
         <Card>
 
@@ -1351,6 +1804,8 @@ const TaskCreate = () => {
           <Card.Body>
 
             <div className="grid gap-4 md:grid-cols-2">
+
+              {/* CASE */}
 
               <div>
 
@@ -1449,6 +1904,8 @@ const TaskCreate = () => {
                 )}
 
               </div>
+
+              {/* CLIENT */}
 
               <div>
 
@@ -1554,7 +2011,9 @@ const TaskCreate = () => {
 
         </Card>
 
-        {/* ACTIONS */}
+        {/* ==================================================
+            ACTIONS
+        ================================================== */}
 
         <div className="flex flex-col-reverse gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.07] dark:bg-[#0b1b33] sm:flex-row sm:items-center sm:justify-end">
 

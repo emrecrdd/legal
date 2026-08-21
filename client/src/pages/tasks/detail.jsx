@@ -328,8 +328,14 @@ const permissions =
     }
 
     const isAssignee =
-      task.assigned_to ===
-      user.id;
+      Array.isArray(
+        task.assignees
+      ) &&
+      task.assignees.some(
+        (person) =>
+          person?.id ===
+          user.id
+      );
 
     const isCreator =
       task.created_by ===
@@ -1238,22 +1244,61 @@ const {
 
               <div className="grid gap-4 md:grid-cols-2">
 
-                {/* ASSIGNEE */}
+                {/* ASSIGNEES */}
 
                 <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/[0.05] dark:bg-white/[0.02]">
 
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    <User className="h-4 w-4" />
+                  <div className="flex items-center justify-between gap-3">
 
-                    Atanan Kişi
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <Users className="h-4 w-4" />
+
+                      Atanan Kişiler
+                    </div>
+
+                    {Array.isArray(
+                      task.assignees
+                    ) &&
+                      task.assignees.length >
+                        0 && (
+                        <Badge variant="primary">
+                          {task.assignees.length}{' '}
+                          kişi
+                        </Badge>
+                      )}
+
                   </div>
 
-                  <p className="mt-2 font-semibold text-gray-900 dark:text-white">
-                    {getUserName(
-                      task.assignee,
-                      'Atanmadı'
-                    )}
-                  </p>
+                  {Array.isArray(
+                    task.assignees
+                  ) &&
+                  task.assignees.length >
+                    0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+
+                      {task.assignees.map(
+                        (person) => (
+                          <div
+                            key={
+                              person.id
+                            }
+                            className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
+                          >
+                            <User className="h-3.5 w-3.5 text-gray-400" />
+
+                            {getUserName(
+                              person
+                            )}
+                          </div>
+                        )
+                      )}
+
+                    </div>
+                  ) : (
+                    <p className="mt-2 font-semibold text-gray-900 dark:text-white">
+                      Atanmadı
+                    </p>
+                  )}
 
                 </div>
 

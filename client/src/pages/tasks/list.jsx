@@ -14,10 +14,12 @@ import {
 import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
+
 import {
   PERMISSION_KEYS,
   hasPermission,
 } from '../../constants/roles.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Table from '../../components/ui/Table.jsx';
@@ -31,12 +33,12 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  CheckCircle2,
   CheckSquare2,
   Clock3,
   Filter,
   Plus,
   Search,
+  Users,
   X,
 } from 'lucide-react';
 
@@ -275,6 +277,59 @@ const getUserName = (
   );
 };
 
+const getUserInitials = (
+  person
+) => {
+  if (!person) {
+    return '?';
+  }
+
+  const first =
+    person
+      ?.first_name
+      ?.[0] ||
+    '';
+
+  const last =
+    person
+      ?.last_name
+      ?.[0] ||
+    '';
+
+  return (
+    `${first}${last}`.toUpperCase() ||
+    '?'
+  );
+};
+
+const getTaskAssignees = (
+  task
+) => {
+  if (
+    Array.isArray(
+      task?.assignees
+    )
+  ) {
+    return task.assignees;
+  }
+
+  /*
+   * Geçiş döneminde backend'den eski assignee alanı
+   * gelirse ekran tamamen boş kalmasın.
+   *
+   * Yeni sistemin ana alanı task.assignees[].
+   */
+  if (
+    task?.assignee
+  ) {
+    return [
+      task.assignee,
+    ];
+  }
+
+  return [];
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -320,22 +375,22 @@ const TasksList = () => {
   // ====================================================
 
   const canCreateTask =
-  hasPermission(
-    user,
-    PERMISSION_KEYS.CREATE_TASKS
-  );
+    hasPermission(
+      user,
+      PERMISSION_KEYS.CREATE_TASKS
+    );
 
-const canApproveTask =
-  hasPermission(
-    user,
-    PERMISSION_KEYS.APPROVE_TASKS
-  );
+  const canApproveTask =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.APPROVE_TASKS
+    );
 
-const canViewCases =
-  hasPermission(
-    user,
-    PERMISSION_KEYS.VIEW_CASES
-  );
+  const canViewCases =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_CASES
+    );
 
   // ====================================================
   // QUERY
@@ -409,8 +464,14 @@ const canViewCases =
                 task.status
               );
 
+            const assignees =
+              getTaskAssignees(
+                task
+              );
+
             return {
               ...task,
+              assignees,
               displayStatus,
               isOverdue,
             };
@@ -633,7 +694,8 @@ const canViewCases =
       ================================================== */}
 
       {canApproveTask &&
-  awaitingApprovalCount > 0 && (
+        awaitingApprovalCount >
+          0 && (
           <div
             className="
               rounded-2xl
@@ -936,7 +998,7 @@ const canViewCases =
                 </Table.HeadCell>
 
                 <Table.HeadCell>
-                  Atanan
+                  Atananlar
                 </Table.HeadCell>
 
                 <Table.HeadCell>
@@ -1043,15 +1105,162 @@ const canViewCases =
 
                     </Table.Cell>
 
-                    {/* ASSIGNEE */}
+                    {/* ASSIGNEES */}
 
                     <Table.Cell>
 
-                      <span className="whitespace-nowrap text-sm text-gray-700 dark:text-slate-300">
-                        {getUserName(
-                          task.assignee
-                        )}
-                      </span>
+                      {task.assignees.length ===
+                      0 ? (
+                        <span className="text-sm text-gray-400 dark:text-slate-600">
+                          Atanmadı
+                        </span>
+                      ) : task.assignees.length ===
+                        1 ? (
+                        <div className="flex min-w-[150px] items-center gap-2">
+
+                          <div
+                            className="
+                              flex
+                              h-7
+                              w-7
+                              shrink-0
+                              items-center
+                              justify-center
+                              rounded-full
+                              bg-blue-50
+                              text-[9px]
+                              font-bold
+                              text-blue-700
+                              dark:bg-blue-500/[0.1]
+                              dark:text-blue-300
+                            "
+                          >
+                            {getUserInitials(
+                              task.assignees[0]
+                            )}
+                          </div>
+
+                          <span className="whitespace-nowrap text-sm text-gray-700 dark:text-slate-300">
+                            {getUserName(
+                              task.assignees[0]
+                            )}
+                          </span>
+
+                        </div>
+                      ) : (
+                        <div className="min-w-[180px]">
+
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-slate-400">
+                            <Users className="h-3.5 w-3.5" />
+
+                            {
+                              task.assignees.length
+                            }{' '}
+                            kişi
+                          </div>
+
+                          <div className="mt-2 flex max-w-[240px] flex-wrap gap-1.5">
+
+                            {task.assignees
+                              .slice(
+                                0,
+                                3
+                              )
+                              .map(
+                                (
+                                  person
+                                ) => (
+                                  <span
+                                    key={
+                                      person.id
+                                    }
+                                    title={
+                                      getUserName(
+                                        person
+                                      )
+                                    }
+                                    className="
+                                      inline-flex
+                                      max-w-[130px]
+                                      items-center
+                                      gap-1.5
+                                      rounded-full
+                                      border
+                                      border-gray-200
+                                      bg-gray-50
+                                      px-2
+                                      py-1
+                                      text-[10px]
+                                      font-medium
+                                      text-gray-600
+                                      dark:border-white/[0.07]
+                                      dark:bg-white/[0.03]
+                                      dark:text-slate-300
+                                    "
+                                  >
+
+                                    <span
+                                      className="
+                                        flex
+                                        h-4
+                                        w-4
+                                        shrink-0
+                                        items-center
+                                        justify-center
+                                        rounded-full
+                                        bg-blue-100
+                                        text-[7px]
+                                        font-bold
+                                        text-blue-700
+                                        dark:bg-blue-500/[0.12]
+                                        dark:text-blue-300
+                                      "
+                                    >
+                                      {getUserInitials(
+                                        person
+                                      )}
+                                    </span>
+
+                                    <span className="truncate">
+                                      {getUserName(
+                                        person
+                                      )}
+                                    </span>
+
+                                  </span>
+                                )
+                              )}
+
+                            {task.assignees.length >
+                              3 && (
+                              <span
+                                className="
+                                  inline-flex
+                                  items-center
+                                  rounded-full
+                                  border
+                                  border-gray-200
+                                  bg-gray-50
+                                  px-2
+                                  py-1
+                                  text-[10px]
+                                  font-semibold
+                                  text-gray-500
+                                  dark:border-white/[0.07]
+                                  dark:bg-white/[0.03]
+                                  dark:text-slate-400
+                                "
+                              >
+                                +
+                                {task.assignees.length -
+                                  3}
+                              </span>
+                            )}
+
+                          </div>
+
+                        </div>
+                      )}
 
                     </Table.Cell>
 
@@ -1060,45 +1269,50 @@ const canViewCases =
                     <Table.Cell>
 
                       {task.case ? (
-  canViewCases ? (
-    <Link
-      to={`/cases/${task.case.id}`}
-      className="
-        block
-        max-w-[14rem]
-        truncate
-        text-sm
-        font-medium
-        text-gray-700
-        transition
-        hover:text-blue-600
-        dark:text-slate-300
-        dark:hover:text-blue-400
-      "
-      title={task.case.title}
-    >
-      {task.case.title}
-    </Link>
-  ) : (
-    <span
-      className="
-        block
-        max-w-[14rem]
-        truncate
-        text-sm
-        text-gray-600
-        dark:text-slate-400
-      "
-      title={task.case.title}
-    >
-      {task.case.title}
-    </span>
-  )
-) : (
-  <span className="text-gray-400 dark:text-slate-600">
-    -
-  </span>
-)}
+                        canViewCases ? (
+                          <Link
+                            to={`/cases/${task.case.id}`}
+                            className="
+                              block
+                              max-w-[14rem]
+                              truncate
+                              text-sm
+                              font-medium
+                              text-gray-700
+                              transition
+                              hover:text-blue-600
+                              dark:text-slate-300
+                              dark:hover:text-blue-400
+                            "
+                            title={
+                              task.case.title
+                            }
+                          >
+                            {task.case.title}
+                          </Link>
+                        ) : (
+                          <span
+                            className="
+                              block
+                              max-w-[14rem]
+                              truncate
+                              text-sm
+                              text-gray-600
+                              dark:text-slate-400
+                            "
+                            title={
+                              task.case.title
+                            }
+                          >
+                            {task.case.title}
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-gray-400 dark:text-slate-600">
+                          -
+                        </span>
+                      )}
+
                     </Table.Cell>
 
                     {/* PRIORITY */}

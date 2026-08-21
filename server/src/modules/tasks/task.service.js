@@ -1,5 +1,6 @@
 import {
   Op,
+  Sequelize,
 } from 'sequelize';
 
 import {
@@ -53,6 +54,296 @@ const TERMINAL_STATUSES =
     'cancelled',
   ]);
 
+const ASSIGNEE_ATTRIBUTES = [
+  'id',
+  'first_name',
+  'last_name',
+  'email',
+];
+
+// ======================================================
+// ASSIGNEE HELPERS
+// ======================================================
+
+const normalizeAssigneeIds = (
+  value
+) => {
+  if (!value) {
+    return [];
+  }
+
+  const values =
+    Array.isArray(value)
+      ? value
+      : [value];
+
+  return [
+    ...new Set(
+      values
+        .map(
+          (id) =>
+            String(id).trim()
+        )
+        .filter(Boolean)
+    ),
+  ];
+};
+
+/*
+ * Yeni frontend:
+ *
+ * assignee_ids: [
+ *   "uuid-1",
+ *   "uuid-2"
+ * ]
+ *
+ * Eski frontend geçiş sürecinde:
+ *
+ * assigned_to: "uuid-1"
+ *
+ * gönderirse onu da destekliyoruz.
+ */
+const getRequestedAssigneeIds = (
+  data = {}
+) => {
+  if (
+    Object.prototype.hasOwnProperty.call(
+      data,
+      'assignee_ids'
+    )
+  ) {
+    return normalizeAssigneeIds(
+      data.assignee_ids
+    );
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      data,
+      'assigned_to'
+    )
+  ) {
+    return normalizeAssigneeIds(
+      data.assigned_to
+    );
+  }
+
+  return [];
+};
+
+const validateAssignees =
+  async (
+    assigneeIds,
+    {
+      transaction,
+    } = {}
+  ) => {
+    const ids =
+      normalizeAssigneeIds(
+        assigneeIds
+      );
+
+    if (
+      ids.length === 0
+    ) {
+      return [];
+    }
+
+    const users =
+      await User.findAll({
+        where: {
+          id: {
+            [Op.in]:
+              ids,
+          },
+        },
+
+        attributes: [
+          'id',
+          'first_name',
+          'last_name',
+          'email',
+          'is_active',
+        ],
+
+        transaction,
+      });
+
+    if (
+      users.length !==
+      ids.length
+    ) {
+      throw new Error(
+        'Görev atanacak kullanıcılardan biri veya birkaçı bulunamadı'
+      );
+    }
+
+    const inactiveUser =
+      users.find(
+        (user) =>
+          user.is_active !==
+          true
+      );
+
+    if (
+      inactiveUser
+    ) {
+      throw new Error(
+        'Pasif kullanıcıya görev atanamaz'
+      );
+    }
+
+    return users;
+  };
+
+const getLoadedAssigneeIds = (
+  task
+) => {
+  if (
+    !Array.isArray(
+      task?.assignees
+    )
+  ) {
+    return [];
+  }
+
+  return task.assignees
+    .map(
+      (user) =>
+        user?.id
+    )
+    .filter(Boolean);
+};
+
+const getTaskAssigneeIds =
+  async (
+    task,
+    {
+      transaction,
+    } = {}
+  ) => {
+    const loaded =
+      getLoadedAssigneeIds(
+        task
+      );
+
+    if (
+      loaded.length >
+      0
+    ) {
+      return loaded;
+    }
+
+    if (
+      !task ||
+      typeof task.getAssignees !==
+        'function'
+    ) {
+      return [];
+    }
+
+    const assignees =
+      await task.getAssignees({
+        attributes: [
+          'id',
+        ],
+
+        joinTableAttributes:
+          [],
+
+        transaction,
+      });
+
+    return assignees
+      .map(
+        (user) =>
+          user.id
+      )
+      .filter(Boolean);
+  };
+
+const isTaskAssignee =
+  async (
+    task,
+    userId,
+    {
+      transaction,
+    } = {}
+  ) => {
+    if (
+      !task ||
+      !userId
+    ) {
+      return false;
+    }
+
+    if (
+      Array.isArray(
+        task.assignees
+      )
+    ) {
+      return task.assignees.some(
+        (user) =>
+          user?.id ===
+          userId
+      );
+    }
+
+    if (
+      typeof task.hasAssignee ===
+      'function'
+    ) {
+      return task.hasAssignee(
+        userId,
+        {
+          transaction,
+        }
+      );
+    }
+
+    return false;
+  };
+
+// ======================================================
+// ASSIGNED TASK SQL SCOPE
+// ======================================================
+
+/*
+ * JOIN ile assignee filtrelemek yerine junction tablosunu
+ * subquery ile kullanıyoruz.
+ *
+ * Böylece include edilen assignees dizisi yalnız giriş
+ * yapan kullanıcıya düşmez; görevin TÜM sorumluları
+ * response içerisinde kalabilir.
+ */
+const buildAssignedTaskWhere = (
+  userId
+) => {
+  if (!userId) {
+    return {
+      id: null,
+    };
+  }
+
+  const escapedUserId =
+    sequelize.escape(
+      userId
+    );
+
+  return {
+    id: {
+      [Op.in]:
+        Sequelize.literal(
+          `(
+            SELECT "task_id"
+            FROM "task_assignees"
+            WHERE "user_id" = ${escapedUserId}
+          )`
+        ),
+    },
+  };
+};
+
 // ======================================================
 // REMINDER HELPERS
 // ======================================================
@@ -65,7 +356,6 @@ const shouldHaveReminders = (
       task?.due_date
     ) &&
     Boolean(
-      task?.assigned_to ||
       task?.created_by
     ) &&
     !TERMINAL_STATUSES.has(
@@ -73,6 +363,83 @@ const shouldHaveReminders = (
     )
   );
 };
+
+/*
+ * reminder.service şu anda büyük ihtimalle assigned_to
+ * bekliyor.
+ *
+ * Task modelinden assigned_to kaldırıldığı için reminder
+ * servisini güncelleyene kadar ilk assignee'yi geçici
+ * olarak instance üzerinde assigned_to şeklinde sunuyoruz.
+ *
+ * Bu kalıcı çözüm değil.
+ * Sonraki adım reminder.service.js olacak.
+ */
+const runWithReminderCompatibility =
+  async (
+    task,
+    callback,
+    {
+      transaction,
+    } = {}
+  ) => {
+    if (!task) {
+      return callback(
+        task
+      );
+    }
+
+    const assigneeIds =
+      await getTaskAssigneeIds(
+        task,
+        {
+          transaction,
+        }
+      );
+
+    const hadAssignedTo =
+      Object.prototype.hasOwnProperty.call(
+        task.dataValues ||
+          {},
+        'assigned_to'
+      );
+
+    const previousAssignedTo =
+      task.dataValues
+        ?.assigned_to;
+
+    if (
+      typeof task.setDataValue ===
+      'function'
+    ) {
+      task.setDataValue(
+        'assigned_to',
+        assigneeIds[0] ||
+          null
+      );
+    }
+
+    try {
+      return await callback(
+        task
+      );
+    } finally {
+      if (
+        task.dataValues
+      ) {
+        if (
+          hadAssignedTo
+        ) {
+          task.dataValues.assigned_to =
+            previousAssignedTo;
+        } else {
+          delete task
+            .dataValues
+            .assigned_to;
+        }
+      }
+    }
+  };
 
 // ======================================================
 // NOTIFICATION HELPER
@@ -114,10 +481,6 @@ const buildTaskAccessWhere = ({
   }
 
   if (!userId) {
-    /*
-     * Access context beklenen yerde kullanıcı yoksa
-     * fail-closed davran.
-     */
     return {
       id: null,
     };
@@ -126,14 +489,13 @@ const buildTaskAccessWhere = ({
   return {
     [Op.or]: [
       {
-        assigned_to:
-          userId,
-      },
-
-      {
         created_by:
           userId,
       },
+
+      buildAssignedTaskWhere(
+        userId
+      ),
     ],
   };
 };
@@ -174,73 +536,87 @@ const applyTaskAccessScope = (
   };
 };
 
-const canAccessTask = (
-  task,
-  {
-    userId,
-    canViewAllTasks = false,
-  } = {}
-) => {
-  if (!task) {
-    return false;
-  }
+const canAccessTask =
+  async (
+    task,
+    {
+      userId,
+      canViewAllTasks = false,
+      transaction,
+    } = {}
+  ) => {
+    if (!task) {
+      return false;
+    }
 
-  if (
-    canViewAllTasks
-  ) {
-    return true;
-  }
+    if (
+      canViewAllTasks
+    ) {
+      return true;
+    }
 
-  if (!userId) {
-    return false;
-  }
+    if (!userId) {
+      return false;
+    }
 
-  return (
-    task.assigned_to ===
-      userId ||
-    task.created_by ===
+    if (
+      task.created_by ===
       userId
-  );
-};
+    ) {
+      return true;
+    }
 
-const assertTaskAccess = (
-  task,
-  access = {}
-) => {
-  if (
-    !canAccessTask(
+    return isTaskAssignee(
       task,
-      access
-    )
-  ) {
-    throw new Error(
-      'Bu göreve erişim yetkiniz bulunmuyor'
+      userId,
+      {
+        transaction,
+      }
     );
-  }
-};
+  };
+
+const assertTaskAccess =
+  async (
+    task,
+    access = {}
+  ) => {
+    const allowed =
+      await canAccessTask(
+        task,
+        access
+      );
+
+    if (!allowed) {
+      throw new Error(
+        'Bu göreve erişim yetkiniz bulunmuyor'
+      );
+    }
+  };
 
 // ======================================================
 // COMMON INCLUDE
 // ======================================================
 
-const LIST_INCLUDE = [
-  {
-    model:
-      User,
+const ASSIGNEES_INCLUDE = {
+  model:
+    User,
 
-    as:
-      'assignee',
+  as:
+    'assignees',
 
-    attributes: [
-      'id',
-      'first_name',
-      'last_name',
-      'email',
-    ],
+  attributes:
+    ASSIGNEE_ATTRIBUTES,
 
-    required:
-      false,
+  through: {
+    attributes: [],
   },
+
+  required:
+    false,
+};
+
+const LIST_INCLUDE = [
+  ASSIGNEES_INCLUDE,
 
   {
     model:
@@ -249,12 +625,8 @@ const LIST_INCLUDE = [
     as:
       'creator',
 
-    attributes: [
-      'id',
-      'first_name',
-      'last_name',
-      'email',
-    ],
+    attributes:
+      ASSIGNEE_ATTRIBUTES,
 
     required:
       false,
@@ -298,6 +670,7 @@ const LIST_INCLUDE = [
 // ======================================================
 
 export const taskService = {
+
   // ====================================================
   // CREATE
   // ====================================================
@@ -309,67 +682,77 @@ export const taskService = {
       await sequelize.transaction();
 
     let task;
+    let assignees = [];
 
     try {
-      // ==================================================
-      // ASSIGNEE VALIDATION
-      // ==================================================
+      const assigneeIds =
+        getRequestedAssigneeIds(
+          data
+        );
 
-      if (
-        data.assigned_to
-      ) {
-        const assignee =
-          await User.findByPk(
-            data.assigned_to,
-            {
-              transaction,
-
-              attributes: [
-                'id',
-                'is_active',
-              ],
-            }
-          );
-
-        if (!assignee) {
-          throw new Error(
-            'Görev atanacak kullanıcı bulunamadı'
-          );
-        }
-
-        if (
-          assignee.is_active !==
-          true
-        ) {
-          throw new Error(
-            'Pasif kullanıcıya görev atanamaz'
-          );
-        }
-      }
-
-      // ==================================================
-      // CREATE
-      // ==================================================
-
-      task =
-        await Task.create(
-          data,
+      assignees =
+        await validateAssignees(
+          assigneeIds,
           {
             transaction,
           }
         );
 
-      // ==================================================
-      // REMINDERS
-      // ==================================================
+      /*
+       * assigned_to artık Task modelinde yok.
+       *
+       * assignee_ids de DB kolonu olmadığı için
+       * Task.create içerisine göndermiyoruz.
+       */
+      const {
+        assigned_to,
+        assignee_ids,
+        ...taskData
+      } = data || {};
+
+      task =
+        await Task.create(
+          taskData,
+          {
+            transaction,
+          }
+        );
+
+      if (
+        assignees.length >
+        0
+      ) {
+        await task.setAssignees(
+          assignees,
+          {
+            transaction,
+          }
+        );
+      }
+
+      task.setDataValue(
+        'assignees',
+        assignees
+      );
 
       if (
         shouldHaveReminders(
           task
         )
       ) {
-        await reminderService.createTaskReminders(
+        await runWithReminderCompatibility(
           task,
+
+          (
+            reminderTask
+          ) =>
+            reminderService.createTaskReminders(
+              reminderTask,
+              {
+                transaction,
+              }
+            ),
+
           {
             transaction,
           }
@@ -384,11 +767,12 @@ export const taskService = {
     }
 
     // ==================================================
-    // NOTIFICATION
+    // NOTIFICATIONS
     // ==================================================
 
     if (
-      task.assigned_to
+      assignees.length >
+      0
     ) {
       await notifySafely(
         'task-assigned-on-create',
@@ -419,21 +803,29 @@ export const taskService = {
                   .trim()
               : 'Sistem';
 
-          await notificationService.notifyTaskAssigned(
-            task.assigned_to,
-            task.id,
-            task.title,
-            creatorName ||
-              'Sistem'
-          );
+          for (
+            const assignee of
+            assignees
+          ) {
+            await notificationService.notifyTaskAssigned(
+              assignee.id,
+              task.id,
+              task.title,
+              creatorName ||
+                'Sistem'
+            );
+          }
         },
 
         {
           taskId:
             task.id,
 
-          assignedTo:
-            task.assigned_to,
+          assigneeIds:
+            assignees.map(
+              (user) =>
+                user.id
+            ),
 
           createdBy:
             task.created_by,
@@ -441,7 +833,13 @@ export const taskService = {
       );
     }
 
-    return task;
+    return this.findOne(
+      task.id,
+      {
+        canViewAllTasks:
+          true,
+      }
+    );
   },
 
   // ====================================================
@@ -454,7 +852,13 @@ export const taskService = {
     search,
     status,
     priority,
+
+    /*
+     * API geriye dönük uyumluluk için parametre adı
+     * şimdilik assigned_to kalabilir.
+     */
     assigned_to,
+
     case_id,
     client_id,
 
@@ -506,16 +910,30 @@ export const taskService = {
         priority;
     }
 
-    /*
-     * VIEW_ALL_TASKS olmayan kullanıcı
-     * assigned_to query parametresi göndererek
-     * başka kişinin görevlerini açamaz.
-     *
-     * Access scope aşağıda ayrıca uygulanıyor.
-     */
-    if (assigned_to) {
-      filters.assigned_to =
-        assigned_to;
+    if (
+      assigned_to
+    ) {
+      if (
+        !canViewAllTasks &&
+        assigned_to !==
+          userId
+      ) {
+        throw new Error(
+          'Başka bir kullanıcının görevleri filtrelenemez'
+        );
+      }
+
+      filters[
+        Op.and
+      ] = [
+        ...(filters[
+          Op.and
+        ] || []),
+
+        buildAssignedTaskWhere(
+          assigned_to
+        ),
+      ];
     }
 
     if (case_id) {
@@ -529,7 +947,7 @@ export const taskService = {
     }
 
     // ==================================================
-    // RECORD-LEVEL ACCESS
+    // ACCESS
     // ==================================================
 
     const where =
@@ -666,23 +1084,7 @@ export const taskService = {
         id,
         {
           include: [
-            {
-              model:
-                User,
-
-              as:
-                'assignee',
-
-              attributes: [
-                'id',
-                'first_name',
-                'last_name',
-                'email',
-              ],
-
-              required:
-                false,
-            },
+            ASSIGNEES_INCLUDE,
 
             {
               model:
@@ -691,12 +1093,8 @@ export const taskService = {
               as:
                 'creator',
 
-              attributes: [
-                'id',
-                'first_name',
-                'last_name',
-                'email',
-              ],
+              attributes:
+                ASSIGNEE_ATTRIBUTES,
 
               required:
                 false,
@@ -709,12 +1107,8 @@ export const taskService = {
               as:
                 'approver',
 
-              attributes: [
-                'id',
-                'first_name',
-                'last_name',
-                'email',
-              ],
+              attributes:
+                ASSIGNEE_ATTRIBUTES,
 
               required:
                 false,
@@ -807,12 +1201,8 @@ export const taskService = {
                   as:
                     'creator',
 
-                  attributes: [
-                    'id',
-                    'first_name',
-                    'last_name',
-                    'email',
-                  ],
+                  attributes:
+                    ASSIGNEE_ATTRIBUTES,
 
                   required:
                     false,
@@ -844,7 +1234,7 @@ export const taskService = {
       );
     }
 
-    assertTaskAccess(
+    await assertTaskAccess(
       task,
       access
     );
@@ -884,17 +1274,20 @@ export const taskService = {
         );
       }
 
-      assertTaskAccess(
+      await assertTaskAccess(
         task,
-        access
+        {
+          ...access,
+          transaction,
+        }
       );
 
       /*
-       * Controller zaten workflow alanlarını temizliyor.
-       * Service de ikinci savunma hattı olarak koruyor.
+       * Atama ayrı endpoint üzerinden yönetiliyor.
        */
       const {
         assigned_to,
+        assignee_ids,
         created_by,
         status,
         progress,
@@ -963,17 +1356,25 @@ export const taskService = {
           task
         )
       ) {
-        await reminderService.rescheduleTask(
+        await runWithReminderCompatibility(
           task,
+
+          (
+            reminderTask
+          ) =>
+            reminderService.rescheduleTask(
+              reminderTask,
+              {
+                transaction,
+              }
+            ),
+
           {
             transaction,
           }
         );
       } else if (
-        schedulingChanged &&
-        !shouldHaveReminders(
-          task
-        )
+        schedulingChanged
       ) {
         await reminderService.cancelForSource({
           sourceType:
@@ -988,7 +1389,13 @@ export const taskService = {
 
       await transaction.commit();
 
-      return task;
+      return this.findOne(
+        id,
+        {
+          canViewAllTasks:
+            true,
+        }
+      );
     } catch (error) {
       await transaction.rollback();
 
@@ -1025,9 +1432,12 @@ export const taskService = {
         );
       }
 
-      assertTaskAccess(
+      await assertTaskAccess(
         task,
-        access
+        {
+          ...access,
+          transaction,
+        }
       );
 
       await reminderService.cancelForSource({
@@ -1056,9 +1466,6 @@ export const taskService = {
 
   // ====================================================
   // UPDATE STATUS
-  //
-  // Controller doğrudan kullanılabilecek durumları
-  // ayrıca sınırlar.
   // ====================================================
 
   async updateStatus(
@@ -1087,9 +1494,12 @@ export const taskService = {
         );
       }
 
-      assertTaskAccess(
+      await assertTaskAccess(
         task,
-        access
+        {
+          ...access,
+          transaction,
+        }
       );
 
       const allowedStatuses = [
@@ -1111,10 +1521,6 @@ export const taskService = {
         status,
       };
 
-      /*
-       * Yeniden pending yapılırsa workflow alanlarını
-       * temizliyoruz.
-       */
       if (
         status ===
         'pending'
@@ -1164,8 +1570,19 @@ export const taskService = {
           task
         )
       ) {
-        await reminderService.rescheduleTask(
+        await runWithReminderCompatibility(
           task,
+
+          (
+            reminderTask
+          ) =>
+            reminderService.rescheduleTask(
+              reminderTask,
+              {
+                transaction,
+              }
+            ),
+
           {
             transaction,
           }
@@ -1174,7 +1591,13 @@ export const taskService = {
 
       await transaction.commit();
 
-      return task;
+      return this.findOne(
+        id,
+        {
+          canViewAllTasks:
+            true,
+        }
+      );
     } catch (error) {
       await transaction.rollback();
 
@@ -1183,19 +1606,20 @@ export const taskService = {
   },
 
   // ====================================================
-  // ASSIGN
+  // ASSIGN MULTIPLE USERS
   // ====================================================
 
   async assignTask(
     id,
-    assigned_to,
+    assigneeIds,
     assignedBy = null
   ) {
     const transaction =
       await sequelize.transaction();
 
     let task;
-    let oldAssignee;
+    let previousAssigneeIds = [];
+    let newAssignees = [];
 
     try {
       task =
@@ -1215,10 +1639,6 @@ export const taskService = {
         );
       }
 
-      /*
-       * Tamamlanmış / iptal edilmiş görev yeniden
-       * atanmasın.
-       */
       if (
         TERMINAL_STATUSES.has(
           task.status
@@ -1229,47 +1649,47 @@ export const taskService = {
         );
       }
 
-      const user =
-        await User.findByPk(
-          assigned_to,
+      const normalizedIds =
+        normalizeAssigneeIds(
+          assigneeIds
+        );
+
+      const previousAssignees =
+        await task.getAssignees({
+          attributes: [
+            'id',
+          ],
+
+          joinTableAttributes:
+            [],
+
+          transaction,
+        });
+
+      previousAssigneeIds =
+        previousAssignees.map(
+          (user) =>
+            user.id
+        );
+
+      newAssignees =
+        await validateAssignees(
+          normalizedIds,
           {
             transaction,
-
-            attributes: [
-              'id',
-              'email',
-              'first_name',
-              'last_name',
-              'is_active',
-            ],
           }
         );
 
-      if (!user) {
-        throw new Error(
-          'Atanacak kullanıcı bulunamadı'
-        );
-      }
-
-      if (
-        user.is_active !==
-        true
-      ) {
-        throw new Error(
-          'Pasif kullanıcıya görev atanamaz'
-        );
-      }
-
-      oldAssignee =
-        task.assigned_to;
-
-      await task.update(
-        {
-          assigned_to,
-        },
+      await task.setAssignees(
+        newAssignees,
         {
           transaction,
         }
+      );
+
+      task.setDataValue(
+        'assignees',
+        newAssignees
       );
 
       if (
@@ -1277,8 +1697,19 @@ export const taskService = {
           task
         )
       ) {
-        await reminderService.rescheduleTask(
+        await runWithReminderCompatibility(
           task,
+
+          (
+            reminderTask
+          ) =>
+            reminderService.rescheduleTask(
+              reminderTask,
+              {
+                transaction,
+              }
+            ),
+
           {
             transaction,
           }
@@ -1302,9 +1733,21 @@ export const taskService = {
       throw error;
     }
 
+    // ==================================================
+    // NOTIFY NEWLY ADDED USERS
+    // ==================================================
+
+    const newlyAdded =
+      newAssignees.filter(
+        (user) =>
+          !previousAssigneeIds.includes(
+            user.id
+          )
+      );
+
     if (
-      oldAssignee !==
-      assigned_to
+      newlyAdded.length >
+      0
     ) {
       await notifySafely(
         'task-assigned',
@@ -1322,12 +1765,17 @@ export const taskService = {
               assignedBy.trim();
           }
 
-          await notificationService.notifyTaskAssigned(
-            assigned_to,
-            task.id,
-            task.title,
-            assignerName
-          );
+          for (
+            const user of
+            newlyAdded
+          ) {
+            await notificationService.notifyTaskAssigned(
+              user.id,
+              task.id,
+              task.title,
+              assignerName
+            );
+          }
         },
 
         {
@@ -1335,15 +1783,24 @@ export const taskService = {
             task.id,
 
           assignedTo:
-            assigned_to,
+            newlyAdded.map(
+              (user) =>
+                user.id
+            ),
 
-          previousAssignee:
-            oldAssignee,
+          previousAssignees:
+            previousAssigneeIds,
         }
       );
     }
 
-    return task;
+    return this.findOne(
+      id,
+      {
+        canViewAllTasks:
+          true,
+      }
+    );
   },
 
   // ====================================================
@@ -1359,8 +1816,9 @@ export const taskService = {
     } = {}
   ) {
     const where = {
-      assigned_to:
-        userId,
+      ...buildAssignedTaskWhere(
+        userId
+      ),
     };
 
     if (status) {
@@ -1406,6 +1864,8 @@ export const taskService = {
         ...query,
 
         include: [
+          ASSIGNEES_INCLUDE,
+
           {
             model:
               Case,
@@ -1669,22 +2129,7 @@ export const taskService = {
             activeWhere,
 
           include: [
-            {
-              model:
-                User,
-
-              as:
-                'assignee',
-
-              attributes: [
-                'id',
-                'first_name',
-                'last_name',
-              ],
-
-              required:
-                false,
-            },
+            ASSIGNEES_INCLUDE,
 
             {
               model:
@@ -1722,6 +2167,9 @@ export const taskService = {
 
           limit:
             safeActiveLimit,
+
+          distinct:
+            true,
         }),
 
         Task.findAll({
@@ -1729,22 +2177,7 @@ export const taskService = {
             recentWhere,
 
           include: [
-            {
-              model:
-                User,
-
-              as:
-                'assignee',
-
-              attributes: [
-                'id',
-                'first_name',
-                'last_name',
-              ],
-
-              required:
-                false,
-            },
+            ASSIGNEES_INCLUDE,
 
             {
               model:
@@ -1835,10 +2268,10 @@ export const taskService = {
     const now =
       new Date();
 
-    const myScope = {
-      assigned_to:
-        userId,
-    };
+    const myScope =
+      buildAssignedTaskWhere(
+        userId
+      );
 
     const visibleScope =
       applyTaskAccessScope(
@@ -1936,57 +2369,64 @@ export const taskService = {
 
         Task.count({
           where: {
-            ...myScope,
-
-            status:
-              'pending',
+            [Op.and]: [
+              myScope,
+              {
+                status:
+                  'pending',
+              },
+            ],
           },
         }),
 
         Task.count({
           where: {
-            ...myScope,
-
-            status:
-              'in_progress',
+            [Op.and]: [
+              myScope,
+              {
+                status:
+                  'in_progress',
+              },
+            ],
           },
         }),
 
         Task.count({
           where: {
-            ...myScope,
-
-            status:
-              'completed',
+            [Op.and]: [
+              myScope,
+              {
+                status:
+                  'completed',
+              },
+            ],
           },
         }),
 
         Task.count({
           where: {
-            ...myScope,
+            [Op.and]: [
+              myScope,
 
-            due_date: {
-              [Op.lt]:
-                now,
-            },
+              {
+                due_date: {
+                  [Op.lt]:
+                    now,
+                },
 
-            status: {
-              [Op.notIn]: [
-                'completed',
-                'cancelled',
-              ],
-            },
+                status: {
+                  [Op.notIn]: [
+                    'completed',
+                    'cancelled',
+                  ],
+                },
+              },
+            ],
           },
         }),
       ]);
 
     return {
-      /*
-       * "total" artık kullanıcının görebildiği alanı
-       * temsil eder.
-       *
-       * VIEW_ALL_TASKS varsa gerçek sistem toplamıdır.
-       */
       total: {
         total:
           totalTasks,
@@ -2032,23 +2472,30 @@ export const taskService = {
   ) {
     return Task.findAll({
       where: {
-        assigned_to:
-          userId,
+        [Op.and]: [
+          buildAssignedTaskWhere(
+            userId
+          ),
 
-        due_date: {
-          [Op.lt]:
-            new Date(),
-        },
+          {
+            due_date: {
+              [Op.lt]:
+                new Date(),
+            },
 
-        status: {
-          [Op.notIn]: [
-            'completed',
-            'cancelled',
-          ],
-        },
+            status: {
+              [Op.notIn]: [
+                'completed',
+                'cancelled',
+              ],
+            },
+          },
+        ],
       },
 
       include: [
+        ASSIGNEES_INCLUDE,
+
         {
           model:
             Case,
@@ -2097,25 +2544,32 @@ export const taskService = {
 
     return Task.findAll({
       where: {
-        assigned_to:
-          userId,
+        [Op.and]: [
+          buildAssignedTaskWhere(
+            userId
+          ),
 
-        due_date: {
-          [Op.between]: [
-            now,
-            weekLater,
-          ],
-        },
+          {
+            due_date: {
+              [Op.between]: [
+                now,
+                weekLater,
+              ],
+            },
 
-        status: {
-          [Op.notIn]: [
-            'completed',
-            'cancelled',
-          ],
-        },
+            status: {
+              [Op.notIn]: [
+                'completed',
+                'cancelled',
+              ],
+            },
+          },
+        ],
       },
 
       include: [
+        ASSIGNEES_INCLUDE,
+
         {
           model:
             Case,
@@ -2171,10 +2625,16 @@ export const taskService = {
         );
       }
 
-      if (
-        task.assigned_to !==
-        userId
-      ) {
+      const assigned =
+        await isTaskAssignee(
+          task,
+          userId,
+          {
+            transaction,
+          }
+        );
+
+      if (!assigned) {
         throw new Error(
           'Bu görev size atanmamış'
         );
@@ -2245,8 +2705,19 @@ export const taskService = {
           task
         )
       ) {
-        await reminderService.createTaskReminders(
+        await runWithReminderCompatibility(
           task,
+
+          (
+            reminderTask
+          ) =>
+            reminderService.createTaskReminders(
+              reminderTask,
+              {
+                transaction,
+              }
+            ),
+
           {
             transaction,
           }
@@ -2298,10 +2769,16 @@ export const taskService = {
         );
       }
 
-      if (
-        task.assigned_to !==
-        userId
-      ) {
+      const assigned =
+        await isTaskAssignee(
+          task,
+          userId,
+          {
+            transaction,
+          }
+        );
+
+      if (!assigned) {
         throw new Error(
           'Bu görev size atanmamış'
         );
@@ -2470,6 +2947,7 @@ export const taskService = {
 
     let task;
     let approver;
+    let assigneeIds = [];
 
     try {
       task =
@@ -2526,6 +3004,14 @@ export const taskService = {
         );
       }
 
+      assigneeIds =
+        await getTaskAssigneeIds(
+          task,
+          {
+            transaction,
+          }
+        );
+
       await task.update(
         {
           approved_by:
@@ -2566,7 +3052,8 @@ export const taskService = {
     }
 
     if (
-      task.assigned_to
+      assigneeIds.length >
+      0
     ) {
       await notifySafely(
         'task-approved',
@@ -2583,13 +3070,18 @@ export const taskService = {
               .join(' ')
               .trim();
 
-          await notificationService.notifyTaskApproved(
-            task.assigned_to,
-            task.id,
-            task.title,
-            approverName ||
-              'Yönetici'
-          );
+          for (
+            const assigneeId of
+            assigneeIds
+          ) {
+            await notificationService.notifyTaskApproved(
+              assigneeId,
+              task.id,
+              task.title,
+              approverName ||
+                'Yönetici'
+            );
+          }
         },
 
         {
@@ -2598,6 +3090,8 @@ export const taskService = {
 
           approvedBy:
             userId,
+
+          assigneeIds,
         }
       );
     }
@@ -2627,15 +3121,13 @@ export const taskService = {
       );
     }
 
-    /*
-     * Çalışma notunu yalnızca görevin sorumlusu ekler.
-     * CREATE_NOTES route izni tek başına başka kişinin
-     * görevine not eklemeye yetmez.
-     */
-    if (
-      task.assigned_to !==
-      userId
-    ) {
+    const assigned =
+      await isTaskAssignee(
+        task,
+        userId
+      );
+
+    if (!assigned) {
       throw new Error(
         'Bu göreve not ekleme yetkiniz bulunmuyor'
       );
@@ -2675,12 +3167,8 @@ export const taskService = {
             as:
               'creator',
 
-            attributes: [
-              'id',
-              'first_name',
-              'last_name',
-              'email',
-            ],
+            attributes:
+              ASSIGNEE_ATTRIBUTES,
           },
         ],
       }
@@ -2709,15 +3197,16 @@ export const taskService = {
       );
     }
 
-    if (
-      !canAccessTask(
+    const allowed =
+      await canAccessTask(
         task,
         {
           userId,
           canViewAllTasks,
         }
-      )
-    ) {
+      );
+
+    if (!allowed) {
       throw new Error(
         'Bu görevin notlarını görüntüleme yetkiniz bulunmuyor'
       );
@@ -2792,10 +3281,16 @@ export const taskService = {
         );
       }
 
-      if (
-        task.assigned_to !==
-        userId
-      ) {
+      const assigned =
+        await isTaskAssignee(
+          task,
+          userId,
+          {
+            transaction,
+          }
+        );
+
+      if (!assigned) {
         throw new Error(
           'Bu görev size atanmamış'
         );

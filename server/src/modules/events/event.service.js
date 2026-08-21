@@ -1505,93 +1505,116 @@ export const eventService = {
       );
 
     const [
-      events,
-      tasks,
-    ] =
-      await Promise.all([
-        Event.findAll({
-          where: {
-            [Op.or]: [
-              {
-                created_by:
-                  userId,
-              },
-
-              {
-                assigned_to:
-                  userId,
-              },
-            ],
-
-            start_date: {
-              [Op.gte]:
-                rangeStart,
-
-              [Op.lt]:
-                rangeEnd,
-            },
+  events,
+  tasks,
+] =
+  await Promise.all([
+    Event.findAll({
+      where: {
+        [Op.or]: [
+          {
+            created_by:
+              userId,
           },
 
-          include: [
-            CASE_INCLUDE,
-          ],
-
-          order: [
-            [
-              'start_date',
-              'ASC',
-            ],
-          ],
-        }),
-
-        Task.findAll({
-          where: {
+          {
             assigned_to:
               userId,
+          },
+        ],
 
-            due_date: {
-              [Op.gte]:
-                rangeStart,
+        start_date: {
+          [Op.gte]:
+            rangeStart,
 
-              [Op.lt]:
-                rangeEnd,
-            },
+          [Op.lt]:
+            rangeEnd,
+        },
+      },
 
-            status: {
-              [Op.notIn]: [
-                'completed',
-                'cancelled',
-              ],
-            },
+      include: [
+        CASE_INCLUDE,
+      ],
+
+      order: [
+        [
+          'start_date',
+          'ASC',
+        ],
+      ],
+    }),
+
+    Task.findAll({
+      where: {
+        // ==================================================
+        // CREATOR OR ASSIGNEE
+        // ==================================================
+
+        [Op.or]: [
+          {
+            created_by:
+              userId,
           },
 
-          include: [
-            {
-              model:
-                Case,
-
-              as:
-                'case',
-
-              attributes: [
-                'id',
-                'title',
-                'case_number',
-              ],
-
-              required:
-                false,
+          {
+            id: {
+              [Op.in]:
+                sequelize.literal(
+                  `(
+                    SELECT "task_id"
+                    FROM "task_assignees"
+                    WHERE "user_id" = ${sequelize.escape(
+                      userId
+                    )}
+                  )`
+                ),
             },
+          },
+        ],
+
+        due_date: {
+          [Op.gte]:
+            rangeStart,
+
+          [Op.lt]:
+            rangeEnd,
+        },
+
+        status: {
+          [Op.notIn]: [
+            'completed',
+            'cancelled',
+          ],
+        },
+      },
+
+      include: [
+        {
+          model:
+            Case,
+
+          as:
+            'case',
+
+          attributes: [
+            'id',
+            'title',
+            'case_number',
           ],
 
-          order: [
-            [
-              'due_date',
-              'ASC',
-            ],
-          ],
-        }),
-      ]);
+          required:
+            false,
+        },
+      ],
+
+      order: [
+        [
+          'due_date',
+          'ASC',
+        ],
+      ],
+    }),
+  ]);
 
     const visibleEvents =
       events.filter(

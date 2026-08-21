@@ -287,6 +287,60 @@ class User extends Sequelize.Model {
   }
 
   // ======================================================
+  // ASSOCIATIONS
+  // ======================================================
+
+  static associate(
+    models
+  ) {
+    // ====================================================
+    // MULTIPLE TASK ASSIGNMENTS
+    // ====================================================
+
+    /*
+     * Bir kullanıcı birden fazla göreve atanabilir.
+     *
+     * User
+     *   ├── Task 1
+     *   ├── Task 2
+     *   └── Task 3
+     *
+     * Task tarafındaki:
+     *
+     * Task.belongsToMany(
+     *   models.User,
+     *   {
+     *     through: 'task_assignees',
+     *     foreignKey: 'task_id',
+     *     otherKey: 'user_id',
+     *     as: 'assignees'
+     *   }
+     * )
+     *
+     * ilişkisinin karşılığıdır.
+     */
+    User.belongsToMany(
+      models.Task,
+      {
+        through:
+          'task_assignees',
+
+        foreignKey:
+          'user_id',
+
+        otherKey:
+          'task_id',
+
+        as:
+          'assignedTasks',
+
+        timestamps:
+          false,
+      }
+    );
+  }
+
+  // ======================================================
   // PASSWORD CHECK
   // ======================================================
 

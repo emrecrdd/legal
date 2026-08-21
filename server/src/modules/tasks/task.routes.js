@@ -83,6 +83,7 @@ router.get(
 
 // ClientDetail cockpit için optimize özet.
 // /client/:clientId route'undan önce olmalı.
+
 router.get(
   '/client/:clientId/overview',
   authorizePermission(
@@ -92,6 +93,7 @@ router.get(
 );
 
 // Müvekkilin tüm görevleri
+
 router.get(
   '/client/:clientId',
   authorizePermission(
@@ -104,7 +106,15 @@ router.get(
 // MAIN COLLECTION CRUD
 // ======================================================
 
-// Görev oluştur
+// Görev oluştur.
+// Çoklu atama body:
+// {
+//   "assignee_ids": [
+//     "user-uuid-1",
+//     "user-uuid-2"
+//   ]
+// }
+
 router.post(
   '/',
   authorizePermission(
@@ -114,6 +124,7 @@ router.post(
 );
 
 // Görevleri listele
+
 router.get(
   '/',
   authorizePermission(
@@ -127,6 +138,7 @@ router.get(
 // ======================================================
 
 // Durum güncelle
+
 router.patch(
   '/:id/status',
   authorizePermission(
@@ -135,7 +147,28 @@ router.patch(
   taskController.updateStatus
 );
 
-// Görev ata
+// ======================================================
+// MULTIPLE TASK ASSIGNMENT
+// ======================================================
+
+// Görev sorumlularını güncelle.
+//
+// Body:
+// {
+//   "assignee_ids": [
+//     "user-uuid-1",
+//     "user-uuid-2",
+//     "user-uuid-3"
+//   ]
+// }
+//
+// Eski frontend geçiş sürecinde:
+// {
+//   "assigned_to": "user-uuid-1"
+// }
+//
+// gönderirse controller bunu da destekler.
+
 router.patch(
   '/:id/assign',
   authorizePermission(
@@ -145,6 +178,7 @@ router.patch(
 );
 
 // Görevi başlat
+
 router.post(
   '/:id/start',
   authorizePermission(
@@ -154,6 +188,7 @@ router.post(
 );
 
 // Görevi tamamla
+
 router.post(
   '/:id/complete',
   authorizePermission(
@@ -163,6 +198,7 @@ router.post(
 );
 
 // İlerleme güncelle
+
 router.patch(
   '/:id/progress',
   authorizePermission(
@@ -172,6 +208,7 @@ router.patch(
 );
 
 // Görev onayla
+
 router.post(
   '/:id/approve',
   authorizePermission(
@@ -180,7 +217,12 @@ router.post(
   taskController.approveTask
 );
 
+// ======================================================
+// TASK NOTES
+// ======================================================
+
 // Not ekle
+
 router.post(
   '/:id/notes',
   authorizePermission(
@@ -190,6 +232,7 @@ router.post(
 );
 
 // Notları getir
+
 router.get(
   '/:id/notes',
   authorizePermission(
@@ -204,6 +247,7 @@ router.get(
 // ======================================================
 
 // Görev detayı
+
 router.get(
   '/:id',
   authorizePermission(
@@ -213,6 +257,7 @@ router.get(
 );
 
 // Görev güncelle
+
 router.put(
   '/:id',
   authorizePermission(
@@ -222,6 +267,7 @@ router.put(
 );
 
 // Görev sil
+
 router.delete(
   '/:id',
   authorizePermission(

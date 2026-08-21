@@ -144,6 +144,18 @@ const invalidateTaskLists = (
       'my-upcoming-tasks',
     ],
   });
+
+  queryClient.invalidateQueries({
+    queryKey: [
+      'tasks-infinite',
+    ],
+  });
+
+  queryClient.invalidateQueries({
+    queryKey: [
+      'tasks-search',
+    ],
+  });
 };
 
 const invalidateTask = (
@@ -175,6 +187,15 @@ const invalidateTaskNotes = (
       TASK_QUERY_KEYS.notes(
         id
       ),
+  });
+};
+
+const invalidateTaskStatistics = (
+  queryClient
+) => {
+  queryClient.invalidateQueries({
+    queryKey:
+      TASK_QUERY_KEYS.statistics(),
   });
 };
 
@@ -575,10 +596,9 @@ export const useCreateTask =
             ?.case_id
         );
 
-        queryClient.invalidateQueries({
-          queryKey:
-            TASK_QUERY_KEYS.statistics(),
-        });
+        invalidateTaskStatistics(
+          queryClient
+        );
 
         success(
           'Görev başarıyla oluşturuldu'
@@ -695,10 +715,9 @@ export const useDeleteTask =
             ),
         });
 
-        queryClient.invalidateQueries({
-          queryKey:
-            TASK_QUERY_KEYS.statistics(),
-        });
+        invalidateTaskStatistics(
+          queryClient
+        );
 
         success(
           'Görev başarıyla silindi'
@@ -753,6 +772,10 @@ export const useUpdateTaskStatus =
           queryClient
         );
 
+        invalidateTaskStatistics(
+          queryClient
+        );
+
         success(
           'Görev durumu güncellendi'
         );
@@ -770,7 +793,7 @@ export const useUpdateTaskStatus =
   };
 
 // ======================================================
-// ASSIGN
+// ASSIGN MULTIPLE USERS
 // ======================================================
 
 export const useAssignTask =
@@ -782,11 +805,11 @@ export const useAssignTask =
       mutationFn:
         ({
           id,
-          assigned_to,
+          assignee_ids,
         }) =>
           taskApi.assignTask(
             id,
-            assigned_to
+            assignee_ids
           ),
 
       onSuccess: (
@@ -806,8 +829,22 @@ export const useAssignTask =
           queryClient
         );
 
+        /*
+         * Atama değiştiğinde kullanıcının:
+         *
+         * - benim görevlerim
+         * - geciken görevler
+         * - yaklaşan görevler
+         * - görev istatistikleri
+         *
+         * değerleri değişebilir.
+         */
+        invalidateTaskStatistics(
+          queryClient
+        );
+
         success(
-          'Görev başarıyla atandı'
+          'Görev sorumluları başarıyla güncellendi'
         );
       },
 
@@ -816,7 +853,7 @@ export const useAssignTask =
       ) => {
         failure(
           error,
-          'Görev atanamadı'
+          'Görev sorumluları güncellenemedi'
         );
       },
     });
@@ -858,6 +895,10 @@ export const useStartTask =
         );
 
         invalidateClientTasks(
+          queryClient
+        );
+
+        invalidateTaskStatistics(
           queryClient
         );
 
@@ -923,6 +964,10 @@ export const useCompleteTask =
           queryClient
         );
 
+        invalidateTaskStatistics(
+          queryClient
+        );
+
         success(
           'Görev tamamlandı. Onay bekleniyor.'
         );
@@ -975,6 +1020,10 @@ export const useApproveTask =
         );
 
         invalidateClientTasks(
+          queryClient
+        );
+
+        invalidateTaskStatistics(
           queryClient
         );
 
@@ -1081,6 +1130,10 @@ export const useUpdateProgress =
           queryClient
         );
 
+        invalidateTaskStatistics(
+          queryClient
+        );
+
         success(
           'İlerleme güncellendi'
         );
@@ -1132,6 +1185,10 @@ export const useBulkUpdateTaskStatus =
         );
 
         invalidateClientTasks(
+          queryClient
+        );
+
+        invalidateTaskStatistics(
           queryClient
         );
 
