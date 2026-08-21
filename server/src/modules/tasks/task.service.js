@@ -8,6 +8,10 @@ import {
 } from '../../models/Task.js';
 
 import {
+  TaskAssignee,
+} from '../../models/TaskAssignee.js';
+
+import {
   Note,
 } from '../../models/Note.js';
 
@@ -302,6 +306,324 @@ const isTaskAssignee =
     }
 
     return false;
+  };
+
+
+// ======================================================
+// ASSIGNEE PERFORMANCE HELPERS
+// ======================================================
+
+const getTaskAssignment =
+  async (
+    taskId,
+    userId,
+    {
+      transaction,
+      lock,
+    } = {}
+  ) => {
+    if (
+      !taskId ||
+      !userId
+    ) {
+      return null;
+    }
+
+    const query = {
+      where: {
+        task_id:
+          taskId,
+
+        user_id:
+          userId,
+      },
+
+      transaction,
+    };
+
+    if (lock) {
+      query.lock =
+        lock;
+    }
+
+    return TaskAssignee.findOne(
+      query
+    );
+  };
+
+const syncTaskFromAssignments =
+  async (
+    task,
+    {
+      transaction,
+      lock,
+    } = {}
+  ) => {
+    if (!task) {
+      return task;
+    }
+
+    /*
+     * İptal edilen görev global bir karardır.
+     * Assignee performansından tekrar açılmamalıdır.
+     */
+    if (
+      task.status ===
+      'cancelled'
+    ) {
+      return task;
+    }
+
+    const query = {
+      where: {
+        task_id:
+          task.id,
+      },
+
+      attributes: [
+        'task_id',
+        'user_id',
+        'status',
+        'progress',
+        'started_at',
+        'completed_at',
+        'actual_hours',
+      ],
+
+      transaction,
+    };
+
+    if (lock) {
+      query.lock =
+        lock;
+    }
+
+    const assignments =
+      await TaskAssignee.findAll(
+        query
+      );
+
+    if (
+      assignments.length ===
+      0
+    ) {
+      return task;
+    }
+
+    const allCompleted =
+      assignments.every(
+        (assignment) =>
+          assignment.status ===
+          'completed'
+      );
+
+    const anyStarted =
+      assignments.some(
+        (assignment) =>
+          assignment.status ===
+            'in_progress' ||
+          assignment.status ===
+            'completed'
+      );
+
+    const totalProgress =
+      assignments.reduce(
+        (
+          sum,
+          assignment
+        ) =>
+          sum +
+          (
+            Number(
+              assignment.progress
+            ) || 0
+          ),
+        0
+      );
+
+    const aggregateProgress =
+      allCompleted
+        ? 100
+        : Math.min(
+            99,
+            Math.max(
+              0,
+              Math.round(
+                totalProgress /
+                  assignments.length
+              )
+            )
+          );
+
+    const startedDates =
+      assignments
+        .map(
+          (assignment) =>
+            assignment.started_at
+              ? new Date(
+                  assignment.started_at
+                )
+              : null
+        )
+        .filter(
+          (value) =>
+            value &&
+            !Number.isNaN(
+              value.getTime()
+            )
+        );
+
+    const completedDates =
+      assignments
+        .map(
+          (assignment) =>
+            assignment.completed_at
+              ? new Date(
+                  assignment.completed_at
+                )
+              : null
+        )
+        .filter(
+          (value) =>
+            value &&
+            !Number.isNaN(
+              value.getTime()
+            )
+        );
+
+    const actualHourValues =
+      assignments
+        .map(
+          (assignment) =>
+            Number(
+              assignment.actual_hours
+            )
+        )
+        .filter(
+          (value) =>
+            Number.isFinite(
+              value
+            ) &&
+            value >= 0
+        );
+
+    const aggregateActualHours =
+      actualHourValues.length >
+      0
+        ? Number(
+            actualHourValues
+              .reduce(
+                (
+                  sum,
+                  value
+                ) =>
+                  sum +
+                  value,
+                0
+              )
+              .toFixed(
+                2
+              )
+          )
+        : null;
+
+    const firstStartedAt =
+      startedDates.length >
+      0
+        ? new Date(
+            Math.min(
+              ...startedDates.map(
+                (value) =>
+                  value.getTime()
+              )
+            )
+          )
+        : null;
+
+    const lastCompletedAt =
+      completedDates.length >
+      0
+        ? new Date(
+            Math.max(
+              ...completedDates.map(
+                (value) =>
+                  value.getTime()
+              )
+            )
+          )
+        : null;
+
+    const updateData = {
+      progress:
+        aggregateProgress,
+
+      actual_hours:
+        aggregateActualHours,
+    };
+
+    if (allCompleted) {
+      updateData.status =
+        'completed';
+
+      updateData.started_at =
+        firstStartedAt ||
+        task.started_at ||
+        new Date();
+
+      updateData.completed_at =
+        lastCompletedAt ||
+        new Date();
+    } else if (anyStarted) {
+      updateData.status =
+        'in_progress';
+
+      updateData.started_at =
+        firstStartedAt ||
+        task.started_at ||
+        new Date();
+
+      updateData.completed_at =
+        null;
+
+      /*
+       * Tamamlanmamış görev onaylı kalmamalıdır.
+       */
+      updateData.approved_by =
+        null;
+
+      updateData.approved_at =
+        null;
+    } else {
+      updateData.status =
+        'pending';
+
+      updateData.progress =
+        0;
+
+      updateData.started_at =
+        null;
+
+      updateData.completed_at =
+        null;
+
+      updateData.actual_hours =
+        null;
+
+      updateData.approved_by =
+        null;
+
+      updateData.approved_at =
+        null;
+    }
+
+    await task.update(
+      updateData,
+      {
+        transaction,
+      }
+    );
+
+    return task;
   };
 
 // ======================================================
@@ -605,7 +927,13 @@ const ASSIGNEES_INCLUDE = {
     ASSIGNEE_ATTRIBUTES,
 
   through: {
-    attributes: [],
+    attributes: [
+      'status',
+      'progress',
+      'started_at',
+      'completed_at',
+      'actual_hours',
+    ],
   },
 
   required:
@@ -1530,6 +1858,33 @@ export const taskService = {
 
         updateData.progress =
           0;
+
+        await TaskAssignee.update(
+          {
+            status:
+              'pending',
+
+            progress:
+              0,
+
+            started_at:
+              null,
+
+            completed_at:
+              null,
+
+            actual_hours:
+              null,
+          },
+          {
+            where: {
+              task_id:
+                task.id,
+            },
+
+            transaction,
+          }
+        );
       }
 
       await task.update(
@@ -1678,6 +2033,15 @@ export const taskService = {
       task.setDataValue(
         'assignees',
         newAssignees
+      );
+
+      await syncTaskFromAssignments(
+        task,
+        {
+          transaction,
+          lock:
+            transaction.LOCK.UPDATE,
+        }
       );
 
       if (
@@ -2610,30 +2974,6 @@ export const taskService = {
         );
       }
 
-      const assigned =
-        await isTaskAssignee(
-          task,
-          userId,
-          {
-            transaction,
-          }
-        );
-
-      if (!assigned) {
-        throw new Error(
-          'Bu görev size atanmamış'
-        );
-      }
-
-      if (
-        task.status ===
-        'completed'
-      ) {
-        throw new Error(
-          'Görev zaten tamamlanmış'
-        );
-      }
-
       if (
         task.status ===
         'cancelled'
@@ -2643,26 +2983,72 @@ export const taskService = {
         );
       }
 
-      if (
-        task.status ===
-        'in_progress'
-      ) {
+      const assignment =
+        await getTaskAssignment(
+          id,
+          userId,
+          {
+            transaction,
+
+            lock:
+              transaction.LOCK.UPDATE,
+          }
+        );
+
+      if (!assignment) {
         throw new Error(
-          'Görev zaten başlatılmış'
+          'Bu görev size atanmamış'
         );
       }
 
-      await task.update(
+      if (
+        assignment.status ===
+        'completed'
+      ) {
+        throw new Error(
+          'Bu görev sizin tarafınızdan zaten tamamlanmış'
+        );
+      }
+
+      if (
+        assignment.status ===
+        'in_progress'
+      ) {
+        throw new Error(
+          'Görevi zaten başlattınız'
+        );
+      }
+
+      const startedAt =
+        new Date();
+
+      await assignment.update(
         {
           status:
             'in_progress',
 
           started_at:
-            task.started_at ||
-            new Date(),
+            assignment.started_at ||
+            startedAt,
+
+          completed_at:
+            null,
+
+          actual_hours:
+            null,
         },
         {
           transaction,
+        }
+      );
+
+      await syncTaskFromAssignments(
+        task,
+        {
+          transaction,
+
+          lock:
+            transaction.LOCK.UPDATE,
         }
       );
 
@@ -2690,13 +3076,18 @@ export const taskService = {
           task
         )
       ) {
+        /*
+         * Birden fazla kullanıcı görevi farklı zamanlarda
+         * başlatabileceği için duplicate reminder üretmemek
+         * adına tüm reminder'ları yeniden kuruyoruz.
+         */
         await runWithReminderCompatibility(
           task,
 
           (
             reminderTask
           ) =>
-            reminderService.createTaskReminders(
+            reminderService.rescheduleTask(
               reminderTask,
               {
                 transaction,
@@ -2735,6 +3126,8 @@ export const taskService = {
       await sequelize.transaction();
 
     let task;
+    let taskCompleted =
+      false;
 
     try {
       task =
@@ -2754,36 +3147,48 @@ export const taskService = {
         );
       }
 
-      const assigned =
-        await isTaskAssignee(
-          task,
+      if (
+        task.status ===
+        'cancelled'
+      ) {
+        throw new Error(
+          'İptal edilmiş görev tamamlanamaz'
+        );
+      }
+
+      const assignment =
+        await getTaskAssignment(
+          id,
           userId,
           {
             transaction,
+
+            lock:
+              transaction.LOCK.UPDATE,
           }
         );
 
-      if (!assigned) {
+      if (!assignment) {
         throw new Error(
           'Bu görev size atanmamış'
         );
       }
 
       if (
-        task.status ===
+        assignment.status ===
         'completed'
       ) {
         throw new Error(
-          'Görev zaten tamamlanmış'
+          'Bu görev sizin tarafınızdan zaten tamamlanmış'
         );
       }
 
       if (
-        task.status !==
+        assignment.status !==
         'in_progress'
       ) {
         throw new Error(
-          'Görev önce başlatılmalıdır'
+          'Görevi önce başlatmalısınız'
         );
       }
 
@@ -2813,12 +3218,12 @@ export const taskService = {
       if (
         actualHours ===
           null &&
-        task.started_at
+        assignment.started_at
       ) {
         const diffMs =
           Date.now() -
           new Date(
-            task.started_at
+            assignment.started_at
           ).getTime();
 
         actualHours =
@@ -2836,24 +3241,41 @@ export const taskService = {
           );
       }
 
-      await task.update(
+      const completedAt =
+        new Date();
+
+      await assignment.update(
         {
           status:
             'completed',
 
+          progress:
+            100,
+
           completed_at:
-            new Date(),
+            completedAt,
 
           actual_hours:
             actualHours,
-
-          progress:
-            100,
         },
         {
           transaction,
         }
       );
+
+      await syncTaskFromAssignments(
+        task,
+        {
+          transaction,
+
+          lock:
+            transaction.LOCK.UPDATE,
+        }
+      );
+
+      taskCompleted =
+        task.status ===
+        'completed';
 
       await Note.create(
         {
@@ -2874,15 +3296,24 @@ export const taskService = {
         }
       );
 
-      await reminderService.cancelForSource({
-        sourceType:
-          'task',
+      /*
+       * Bir kişi bitirdi diye diğer kullanıcıların
+       * reminder'larını kapatmıyoruz.
+       *
+       * Ana görev ancak tüm assignee'ler tamamlayınca
+       * completed olur.
+       */
+      if (taskCompleted) {
+        await reminderService.cancelForSource({
+          sourceType:
+            'task',
 
-        sourceId:
-          task.id,
+          sourceId:
+            task.id,
 
-        transaction,
-      });
+          transaction,
+        });
+      }
 
       await transaction.commit();
     } catch (error) {
@@ -2891,7 +3322,13 @@ export const taskService = {
       throw error;
     }
 
+    /*
+     * Mevcut "task completed" bildiriminin anlamını
+     * koruyoruz: yalnız ekipteki herkes tamamlayınca
+     * creator'a gönderilir.
+     */
     if (
+      taskCompleted &&
       task.created_by
     ) {
       await notifySafely(
@@ -3266,27 +3703,39 @@ export const taskService = {
         );
       }
 
-      const assigned =
-        await isTaskAssignee(
-          task,
+      if (
+        task.status ===
+        'cancelled'
+      ) {
+        throw new Error(
+          'İptal edilmiş görevin ilerlemesi güncellenemez'
+        );
+      }
+
+      const assignment =
+        await getTaskAssignment(
+          id,
           userId,
           {
             transaction,
+
+            lock:
+              transaction.LOCK.UPDATE,
           }
         );
 
-      if (!assigned) {
+      if (!assignment) {
         throw new Error(
           'Bu görev size atanmamış'
         );
       }
 
       if (
-        task.status !==
+        assignment.status !==
         'in_progress'
       ) {
         throw new Error(
-          'Yalnızca devam eden görevlerin ilerlemesi güncellenebilir'
+          'Yalnızca başlattığınız görevin ilerlemesini güncelleyebilirsiniz'
         );
       }
 
@@ -3306,6 +3755,10 @@ export const taskService = {
         );
       }
 
+      /*
+       * %100 yalnız complete endpoint'i üzerinden verilir.
+       * Böylece completed_at ve actual_hours atlanmaz.
+       */
       const validatedProgress =
         Math.min(
           99,
@@ -3315,13 +3768,23 @@ export const taskService = {
           )
         );
 
-      await task.update(
+      await assignment.update(
         {
           progress:
             validatedProgress,
         },
         {
           transaction,
+        }
+      );
+
+      await syncTaskFromAssignments(
+        task,
+        {
+          transaction,
+
+          lock:
+            transaction.LOCK.UPDATE,
         }
       );
 
