@@ -24,6 +24,22 @@ const eventApi = {
     );
   },
 
+  // ======================================================
+  // CALENDAR / ICS
+  // ======================================================
+
+  downloadCalendar: (
+    id
+  ) => {
+    return axios.get(
+      `/events/${id}/calendar`,
+      {
+        responseType:
+          'blob',
+      }
+    );
+  },
+
   create: (
     data
   ) => {

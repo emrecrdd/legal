@@ -4,6 +4,7 @@ import {
 } from 'react-router-dom';
 
 import {
+  useMutation,
   useQuery,
 } from '@tanstack/react-query';
 
@@ -31,6 +32,8 @@ import {
   User,
   Users,
 } from 'lucide-react';
+
+import toast from 'react-hot-toast';
 
 // ======================================================
 // CONSTANTS
@@ -336,6 +339,68 @@ const formatDateTime = (
 };
 
 // ======================================================
+// CALENDAR FILE HELPER
+// ======================================================
+
+const createCalendarFileName = ({
+  title,
+  eventType,
+}) => {
+  const normalized =
+    String(
+      title ||
+        'etkinlik'
+    )
+      .trim()
+      .toLocaleLowerCase(
+        'tr-TR'
+      )
+      .replace(
+        /ı/g,
+        'i'
+      )
+      .replace(
+        /ğ/g,
+        'g'
+      )
+      .replace(
+        /ü/g,
+        'u'
+      )
+      .replace(
+        /ş/g,
+        's'
+      )
+      .replace(
+        /ö/g,
+        'o'
+      )
+      .replace(
+        /ç/g,
+        'c'
+      )
+      .replace(
+        /[^a-z0-9]+/g,
+        '-'
+      )
+      .replace(
+        /^-+|-+$/g,
+        ''
+      );
+
+  const prefix =
+    eventType ===
+    'hearing'
+      ? 'durusma'
+      : 'etkinlik';
+
+  return `derkenar-${prefix}-${
+    normalized ||
+    prefix
+  }.ics`;
+};
+
+// ======================================================
 // ATTENDEE HELPERS
 // ======================================================
 
@@ -418,6 +483,10 @@ const EventDetail = () => {
   } =
     useParams();
 
+  // ====================================================
+  // QUERY
+  // ====================================================
+
   const {
     data,
     isLoading,
@@ -444,6 +513,167 @@ const EventDetail = () => {
   const event =
     data?.data?.data ||
     null;
+
+  // ====================================================
+  // CALENDAR MUTATION
+  // ====================================================
+
+  const downloadCalendar =
+    useMutation({
+      mutationFn:
+        () =>
+          eventApi.downloadCalendar(
+            id
+          ),
+
+      onSuccess:
+        (
+          response
+        ) => {
+          try {
+            const rawData =
+              response?.data;
+
+            const blob =
+              rawData instanceof
+              Blob
+                ? rawData
+                : new Blob(
+                    [
+                      rawData,
+                    ],
+                    {
+                      type:
+                        'text/calendar;charset=utf-8',
+                    }
+                  );
+
+            const url =
+              window.URL
+                .createObjectURL(
+                  blob
+                );
+
+            const link =
+              document
+                .createElement(
+                  'a'
+                );
+
+            link.href =
+              url;
+
+            link.download =
+              createCalendarFileName({
+                title:
+                  event?.title,
+
+                eventType:
+                  event
+                    ?.event_type,
+              });
+
+            document.body
+              .appendChild(
+                link
+              );
+
+            link.click();
+
+            link.remove();
+
+            window.setTimeout(
+              () => {
+                window.URL
+                  .revokeObjectURL(
+                    url
+                  );
+              },
+              1000
+            );
+
+            toast.success(
+              event?.event_type ===
+                'hearing'
+                ? 'Duruşma takvim dosyası indirildi'
+                : 'Etkinlik takvim dosyası indirildi'
+            );
+          } catch (
+            fileError
+          ) {
+            console.error(
+              'Event calendar file error:',
+              fileError
+            );
+
+            toast.error(
+              'Takvim dosyası açılamadı'
+            );
+          }
+        },
+
+      onError:
+        async (
+          mutationError
+        ) => {
+          let message =
+            'Takvim dosyası indirilemedi';
+
+          try {
+            const errorData =
+              mutationError
+                ?.response
+                ?.data;
+
+            /*
+             * responseType blob olduğu için backend
+             * JSON hatası da Blob olarak gelebilir.
+             */
+            if (
+              errorData instanceof
+              Blob
+            ) {
+              const text =
+                await errorData
+                  .text();
+
+              try {
+                const parsed =
+                  JSON.parse(
+                    text
+                  );
+
+                message =
+                  parsed
+                    ?.message ||
+                  message;
+              } catch {
+                if (
+                  text?.trim()
+                ) {
+                  message =
+                    text.trim();
+                }
+              }
+            } else if (
+              errorData
+                ?.message
+            ) {
+              message =
+                errorData
+                  .message;
+            }
+          } catch {
+            /*
+             * Varsayılan hata mesajı kullanılır.
+             */
+          }
+
+          toast.error(
+            message
+          );
+        },
+    });
 
   /*
    * Backend artık Case + clients ilişkisini
@@ -633,15 +863,43 @@ const EventDetail = () => {
 
         </div>
 
-        <Link
-          to={`/events/${event.id}/edit`}
-        >
-          <Button variant="outline">
-            <Edit2 className="mr-2 h-4 w-4" />
+        {/* ACTIONS */}
 
-            Düzenle
-          </Button>
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+
+          {event.start_date && (
+            <Button
+              variant="outline"
+              onClick={() =>
+                downloadCalendar
+                  .mutate()
+              }
+              loading={
+                downloadCalendar
+                  .isPending
+              }
+              disabled={
+                downloadCalendar
+                  .isPending
+              }
+            >
+              <Calendar className="mr-2 h-4 w-4" />
+
+              Takvime Ekle
+            </Button>
+          )}
+
+          <Link
+            to={`/events/${event.id}/edit`}
+          >
+            <Button variant="outline">
+              <Edit2 className="mr-2 h-4 w-4" />
+
+              Düzenle
+            </Button>
+          </Link>
+
+        </div>
 
       </div>
 

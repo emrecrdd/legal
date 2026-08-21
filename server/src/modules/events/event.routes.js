@@ -30,11 +30,9 @@ router.use(
 
 router.get(
   '/calendar',
-
   authorizePermission(
     PERMISSION_KEYS.VIEW_CALENDAR
   ),
-
   eventController.getCalendarEvents
 );
 
@@ -44,11 +42,9 @@ router.get(
 
 router.get(
   '/my',
-
   authorizePermission(
     PERMISSION_KEYS.VIEW_EVENTS
   ),
-
   eventController.getMyEvents
 );
 
@@ -58,11 +54,9 @@ router.get(
 
 router.get(
   '/case/:caseId',
-
   authorizePermission(
     PERMISSION_KEYS.VIEW_EVENTS
   ),
-
   eventController.getByCase
 );
 
@@ -72,11 +66,9 @@ router.get(
 
 router.post(
   '/',
-
   authorizePermission(
     PERMISSION_KEYS.CREATE_EVENTS
   ),
-
   eventController.create
 );
 
@@ -86,11 +78,9 @@ router.post(
 
 router.get(
   '/',
-
   authorizePermission(
     PERMISSION_KEYS.VIEW_EVENTS
   ),
-
   eventController.findAll
 );
 
@@ -100,12 +90,27 @@ router.get(
 
 router.patch(
   '/:id/status',
-
   authorizePermission(
     PERMISSION_KEYS.EDIT_EVENTS
   ),
-
   eventController.updateStatus
+);
+
+// ======================================================
+// CALENDAR / ICS DOWNLOAD
+// ======================================================
+
+// Duruşma / etkinliği telefon veya harici takvime
+// eklemek için .ics dosyası üretir.
+//
+// Genel /:id route'undan önce olmalı.
+
+router.get(
+  '/:id/calendar',
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_EVENTS
+  ),
+  eventController.downloadCalendar
 );
 
 // ======================================================
@@ -114,11 +119,9 @@ router.patch(
 
 router.get(
   '/:id',
-
   authorizePermission(
     PERMISSION_KEYS.VIEW_EVENTS
   ),
-
   eventController.findOne
 );
 
@@ -128,11 +131,9 @@ router.get(
 
 router.patch(
   '/:id',
-
   authorizePermission(
     PERMISSION_KEYS.EDIT_EVENTS
   ),
-
   eventController.update
 );
 
@@ -142,11 +143,9 @@ router.patch(
 
 router.delete(
   '/:id',
-
   authorizePermission(
     PERMISSION_KEYS.DELETE_EVENTS
   ),
-
   eventController.remove
 );
 

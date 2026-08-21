@@ -16,6 +16,11 @@ import {
   AuditLog,
 } from '../../models/AuditLog.js';
 
+import {
+  createIcsEvent,
+  createIcsFileName,
+} from '../../utils/ics.util.js';
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -93,10 +98,94 @@ const createAuditLog = async ({
 };
 
 // ======================================================
+// CALENDAR HELPERS
+// ======================================================
+
+const isDateOnly = (
+  value
+) => {
+  return (
+    typeof value ===
+      'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(
+      value.trim()
+    )
+  );
+};
+
+/*
+ * Event kayıtlarında farklı isimlendirmeler varsa
+ * geriye dönük uyumluluk için birkaç alanı
+ * destekliyoruz.
+ *
+ * Ana tercih start_date / end_date.
+ */
+const getEventStart = (
+  event
+) => {
+  return (
+    event?.start_date ||
+    event?.event_date ||
+    event?.scheduled_at ||
+    event?.date ||
+    null
+  );
+};
+
+const getEventEnd = (
+  event
+) => {
+  return (
+    event?.end_date ||
+    null
+  );
+};
+
+const getEventLocation = (
+  event
+) => {
+  return (
+    event?.location ||
+    event?.court_name ||
+    event?.court ||
+    event?.address ||
+    ''
+  );
+};
+
+/*
+ * Tam gün etkinliklerde ICS DTEND bitiş gününü
+ * "exclusive" kabul eder.
+ *
+ * Aynı gün başlangıç/bitiş gelmişse util'in
+ * otomatik +1 gün üretmesine izin veriyoruz.
+ */
+const getSafeAllDayEnd = ({
+  start,
+  end,
+}) => {
+  if (
+    !isDateOnly(start) ||
+    !isDateOnly(end)
+  ) {
+    return null;
+  }
+
+  if (
+    end <= start
+  ) {
+    return null;
+  }
+
+  return end;
+};
+
+// ======================================================
 // CONTROLLER
 // ======================================================
 
 export const eventController = {
+
   // ====================================================
   // CREATE
   // ====================================================
@@ -378,6 +467,264 @@ export const eventController = {
         getHttpStatusFromError(
           error,
           404
+        )
+      );
+    }
+  },
+
+  // ====================================================
+  // DOWNLOAD CALENDAR / ICS
+  // ====================================================
+
+  async downloadCalendar(
+    req,
+    res
+  ) {
+    try {
+      /*
+       * Mevcut detay service metodunu kullanıyoruz.
+       * Route tarafında VIEW_EVENTS izniyle korunacak.
+       */
+      const event =
+        await eventService.findOne(
+          req.params.id
+        );
+
+      const start =
+        getEventStart(
+          event
+        );
+
+      const end =
+        getEventEnd(
+          event
+        );
+
+      if (!start) {
+        return errorResponse(
+          res,
+          'Duruşma / etkinliğin takvime eklenebilmesi için tarih bilgisi gereklidir',
+          400
+        );
+      }
+
+      // ==================================================
+      // ALL DAY
+      // ==================================================
+
+      const allDay =
+        isDateOnly(
+          start
+        );
+
+      const safeEnd =
+        allDay
+          ? getSafeAllDayEnd({
+              start,
+              end,
+            })
+          : end;
+
+      // ==================================================
+      // DESCRIPTION
+      // ==================================================
+
+      const descriptionParts =
+        [];
+
+      const isHearing =
+        event.event_type ===
+        'hearing';
+
+      descriptionParts.push(
+        isHearing
+          ? 'Derkenar duruşma kaydı'
+          : 'Derkenar etkinlik kaydı'
+      );
+
+      if (
+        event.description
+      ) {
+        descriptionParts.push(
+          '',
+          String(
+            event.description
+          ).trim()
+        );
+      }
+
+      if (
+        event.event_type
+      ) {
+        descriptionParts.push(
+          '',
+          `Tür: ${event.event_type}`
+        );
+      }
+
+      if (
+        event.case
+      ) {
+        const caseParts = [
+          event.case
+            .case_number,
+
+          event.case
+            .title,
+        ].filter(
+          Boolean
+        );
+
+        if (
+          caseParts.length >
+          0
+        ) {
+          descriptionParts.push(
+            `Dava: ${caseParts.join(
+              ' - '
+            )}`
+          );
+        }
+      }
+
+      if (
+        event.client
+      ) {
+        const clientName =
+          event.client.name ||
+          [
+            event.client
+              .first_name,
+
+            event.client
+              .last_name,
+          ]
+            .filter(
+              Boolean
+            )
+            .join(' ')
+            .trim();
+
+        if (
+          clientName
+        ) {
+          descriptionParts.push(
+            `Müvekkil: ${clientName}`
+          );
+        }
+      }
+
+      if (
+        event.notes
+      ) {
+        descriptionParts.push(
+          '',
+          `Not: ${String(
+            event.notes
+          ).trim()}`
+        );
+      }
+
+      // ==================================================
+      // CREATE ICS
+      // ==================================================
+
+      const icsContent =
+        createIcsEvent({
+          entityType:
+            isHearing
+              ? 'hearing'
+              : 'event',
+
+          entityId:
+            event.id,
+
+          title:
+            `${
+              isHearing
+                ? 'Duruşma'
+                : 'Etkinlik'
+            }: ${event.title}`,
+
+          description:
+            descriptionParts.join(
+              '\n'
+            ),
+
+          location:
+            getEventLocation(
+              event
+            ),
+
+          start,
+
+          end:
+            safeEnd,
+
+          allDay,
+
+          calendarName:
+            isHearing
+              ? 'Derkenar Duruşmaları'
+              : 'Derkenar Etkinlikleri',
+
+          status:
+            event.status ===
+              'cancelled'
+              ? 'CANCELLED'
+              : 'CONFIRMED',
+        });
+
+      const fileName =
+        createIcsFileName(
+          `derkenar-${
+            isHearing
+              ? 'durusma'
+              : 'etkinlik'
+          }-${event.title}`
+        );
+
+      // ==================================================
+      // RESPONSE
+      // ==================================================
+
+      res.setHeader(
+        'Content-Type',
+        'text/calendar; charset=utf-8'
+      );
+
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${fileName}"`
+      );
+
+      /*
+       * Dava / müvekkil bilgileri içerebileceği için
+       * dosyanın proxy veya browser cache'inde
+       * tutulmasını istemiyoruz.
+       */
+      res.setHeader(
+        'Cache-Control',
+        'private, no-store'
+      );
+
+      return res
+        .status(200)
+        .send(
+          icsContent
+        );
+    } catch (error) {
+      logger.error(
+        'Download event calendar error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message ||
+          'Duruşma / etkinlik takvim dosyası oluşturulamadı',
+        getHttpStatusFromError(
+          error
         )
       );
     }
