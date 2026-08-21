@@ -1,5 +1,5 @@
 import axios
-  from '@/lib/axios';
+  from '../../lib/axios.js';
 
 // ======================================================
 // ENDPOINTS
