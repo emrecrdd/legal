@@ -23,7 +23,10 @@ import {
 import {
   AuditLog,
 } from '../../models/AuditLog.js';
-
+import {
+  createIcsEvent,
+  createIcsFileName,
+} from '../../utils/ics.util.js';
 // ======================================================
 // HELPERS
 // ======================================================
@@ -589,6 +592,217 @@ export const taskController = {
         getTaskErrorStatus(
           error,
           404
+        )
+      );
+    }
+  },
+    // ====================================================
+  // DOWNLOAD CALENDAR / ICS
+  // ====================================================
+
+  async downloadCalendar(
+    req,
+    res
+  ) {
+    try {
+      /*
+       * Normal görev detayındaki record-level erişim
+       * kontrolünü aynen kullanıyoruz.
+       *
+       * Görevi göremeyen kullanıcı ICS dosyasını da
+       * indiremez.
+       */
+      const access =
+        getTaskAccessContext(
+          req.user
+        );
+
+      const task =
+        await taskService.findOne(
+          req.params.id,
+          {
+            userId:
+              access.userId,
+
+            canViewAllTasks:
+              access.canViewAllTasks,
+          }
+        );
+
+      if (
+        !task?.due_date
+      ) {
+        return errorResponse(
+          res,
+          'Görevin takvime eklenebilmesi için son tarih gereklidir',
+          400
+        );
+      }
+
+      // ==================================================
+      // ALL DAY DETECTION
+      // ==================================================
+
+      /*
+       * Sequelize DATEONLY kullanılıyorsa genellikle:
+       *
+       * 2026-08-25
+       *
+       * şeklinde string gelir.
+       *
+       * Bu durumda telefondaki takvimde tam gün
+       * etkinliği olarak gösteriyoruz.
+       *
+       * DATE / timestamp ise saatli etkinlik olur.
+       */
+      const dueDate =
+        task.due_date;
+
+      const allDay =
+        typeof dueDate ===
+          'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(
+          dueDate.trim()
+        );
+
+      // ==================================================
+      // DESCRIPTION
+      // ==================================================
+
+      const descriptionParts =
+        [];
+
+      descriptionParts.push(
+        'Derkenar görev kaydı'
+      );
+
+      if (
+        task.description
+      ) {
+        descriptionParts.push(
+          '',
+          String(
+            task.description
+          ).trim()
+        );
+      }
+
+      if (
+        task.case
+      ) {
+        const caseParts =
+          [
+            task.case
+              .case_number,
+
+            task.case
+              .title,
+          ].filter(
+            Boolean
+          );
+
+        if (
+          caseParts.length >
+          0
+        ) {
+          descriptionParts.push(
+            '',
+            `Dava: ${caseParts.join(
+              ' - '
+            )}`
+          );
+        }
+      }
+
+      if (
+        task.priority
+      ) {
+        descriptionParts.push(
+          `Öncelik: ${task.priority}`
+        );
+      }
+
+      // ==================================================
+      // CREATE ICS
+      // ==================================================
+
+      const icsContent =
+        createIcsEvent({
+          entityType:
+            'task',
+
+          entityId:
+            task.id,
+
+          title:
+            `Görev: ${task.title}`,
+
+          description:
+            descriptionParts.join(
+              '\n'
+            ),
+
+          start:
+            dueDate,
+
+          allDay,
+
+          calendarName:
+            'Derkenar Görevleri',
+
+          status:
+            task.status ===
+              'cancelled'
+              ? 'CANCELLED'
+              : 'CONFIRMED',
+        });
+
+      const fileName =
+        createIcsFileName(
+          `derkenar-gorev-${task.title}`
+        );
+
+      // ==================================================
+      // RESPONSE
+      // ==================================================
+
+      res.setHeader(
+        'Content-Type',
+        'text/calendar; charset=utf-8'
+      );
+
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${fileName}"`
+      );
+
+      /*
+       * Görev bilgisi kişisel / mesleki veri içerebilir.
+       * Tarayıcı veya ara proxy tarafından uzun süreli
+       * cache edilmesini istemiyoruz.
+       */
+      res.setHeader(
+        'Cache-Control',
+        'private, no-store'
+      );
+
+      return res
+        .status(200)
+        .send(
+          icsContent
+        );
+    } catch (error) {
+      logger.error(
+        'Download task calendar error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message ||
+          'Görev takvim dosyası oluşturulamadı',
+        getTaskErrorStatus(
+          error
         )
       );
     }

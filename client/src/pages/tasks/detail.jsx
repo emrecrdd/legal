@@ -18,6 +18,9 @@ import {
   useTaskNotes,
   useUpdateProgress,
 } from '../../features/tasks/task.query.js';
+
+import taskApi from '../../features/tasks/task.api.js';
+
 import {
   PERMISSION_KEYS,
   hasPermission,
@@ -285,6 +288,11 @@ const TaskDetail = () => {
     progressValue,
     setProgressValue,
   ] = useState(0);
+
+  const [
+    isCalendarDownloading,
+    setIsCalendarDownloading,
+  ] = useState(false);
 
   // ======================================================
   // QUERIES
@@ -936,6 +944,151 @@ const TaskDetail = () => {
   };
 
   // ======================================================
+  // CALENDAR / ICS
+  // ======================================================
+
+  const handleAddToCalendar =
+    async () => {
+      if (
+        !task?.id
+      ) {
+        return;
+      }
+
+      if (
+        !task.due_date
+      ) {
+        toast.error(
+          'Takvime eklemek için görev son tarihi gereklidir'
+        );
+
+        return;
+      }
+
+      try {
+        setIsCalendarDownloading(
+          true
+        );
+
+        const response =
+          await taskApi.downloadCalendar(
+            task.id
+          );
+
+        const blob =
+          response.data instanceof Blob
+            ? response.data
+            : new Blob(
+                [
+                  response.data,
+                ],
+                {
+                  type:
+                    'text/calendar;charset=utf-8',
+                }
+              );
+
+        const objectUrl =
+          window.URL.createObjectURL(
+            blob
+          );
+
+        const safeTitle =
+          String(
+            task.title ||
+              'gorev'
+          )
+            .toLocaleLowerCase(
+              'tr-TR'
+            )
+            .replace(
+              /ı/g,
+              'i'
+            )
+            .replace(
+              /ğ/g,
+              'g'
+            )
+            .replace(
+              /ü/g,
+              'u'
+            )
+            .replace(
+              /ş/g,
+              's'
+            )
+            .replace(
+              /ö/g,
+              'o'
+            )
+            .replace(
+              /ç/g,
+              'c'
+            )
+            .replace(
+              /[^a-z0-9]+/g,
+              '-'
+            )
+            .replace(
+              /^-+|-+$/g,
+              ''
+            );
+
+        const anchor =
+          document.createElement(
+            'a'
+          );
+
+        anchor.href =
+          objectUrl;
+
+        anchor.download =
+          `derkenar-gorev-${
+            safeTitle ||
+            task.id
+          }.ics`;
+
+        document.body.appendChild(
+          anchor
+        );
+
+        anchor.click();
+
+        anchor.remove();
+
+        window.setTimeout(
+          () => {
+            window.URL.revokeObjectURL(
+              objectUrl
+            );
+          },
+          1000
+        );
+
+        toast.success(
+          'Takvim dosyası hazırlandı'
+        );
+      } catch (calendarError) {
+        console.error(
+          'Task calendar download error:',
+          calendarError
+        );
+
+        toast.error(
+          calendarError
+            ?.response
+            ?.data
+            ?.message ||
+            'Takvim dosyası oluşturulamadı'
+        );
+      } finally {
+        setIsCalendarDownloading(
+          false
+        );
+      }
+    };
+
+  // ======================================================
   // NOTE
   // ======================================================
 
@@ -1175,6 +1328,26 @@ const TaskDetail = () => {
                 <ShieldCheck className="mr-2 h-4 w-4" />
 
                 Onayla
+              </Button>
+            )}
+
+            {task.due_date && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={
+                  handleAddToCalendar
+                }
+                loading={
+                  isCalendarDownloading
+                }
+                disabled={
+                  isCalendarDownloading
+                }
+              >
+                <CalendarDays className="mr-2 h-4 w-4" />
+
+                Takvime Ekle
               </Button>
             )}
 

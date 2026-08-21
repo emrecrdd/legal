@@ -240,6 +240,23 @@ router.get(
   ),
   taskController.getNotes
 );
+// ======================================================
+// TASK CALENDAR / ICS
+// ======================================================
+
+// Görevi telefon / harici takvime eklemek için
+// .ics dosyası üretir.
+//
+// Record-level erişim kontrolü controller içinde
+// taskService.findOne() üzerinden tekrar yapılır.
+
+router.get(
+  '/:id/calendar',
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TASKS
+  ),
+  taskController.downloadCalendar
+);
 
 // ======================================================
 // SINGLE TASK CRUD
