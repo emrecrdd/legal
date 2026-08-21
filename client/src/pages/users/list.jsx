@@ -127,6 +127,13 @@
       ],
     },
     {
+  key: 'performance',
+  label: 'Performans',
+  keywords: [
+    'performance',
+  ],
+},
+    {
       key: 'calendar',
       label: 'Takvim ve Etkinlikler',
       keywords: [
@@ -269,7 +276,11 @@
 
     view_all_tasks:
       'Tüm görevleri görüntüle',
+view_own_performance:
+  'Kendi performansını görüntüle',
 
+view_team_performance:
+  'Ekip performansını görüntüle',
     view_events:
       'Etkinlikleri görüntüle',
 

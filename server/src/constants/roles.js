@@ -121,6 +121,16 @@ export const PERMISSION_KEYS = {
     'view_all_tasks',
 
   // ----------------------------------------------------
+  // PERFORMANCE
+  // ----------------------------------------------------
+
+  VIEW_OWN_PERFORMANCE:
+    'view_own_performance',
+
+  VIEW_TEAM_PERFORMANCE:
+    'view_team_performance',
+
+  // ----------------------------------------------------
   // EVENTS / CALENDAR
   // ----------------------------------------------------
 
@@ -270,15 +280,15 @@ export const PERMISSION_KEYS = {
   MANAGE_PERMISSIONS:
     'manage_permissions',
 
- // ----------------------------------------------------
-// AUDIT
-// ----------------------------------------------------
+  // ----------------------------------------------------
+  // AUDIT
+  // ----------------------------------------------------
 
-VIEW_AUDIT_LOGS:
-  'view_audit_logs',
+  VIEW_AUDIT_LOGS:
+    'view_audit_logs',
 
-DELETE_AUDIT_LOGS:
-  'delete_audit_logs',
+  DELETE_AUDIT_LOGS:
+    'delete_audit_logs',
 
   // ----------------------------------------------------
   // SETTINGS
@@ -293,7 +303,6 @@ DELETE_AUDIT_LOGS:
 
 // ======================================================
 // ALL PERMISSIONS
-// Admin panelindeki permission ekranında kullanılabilir.
 // ======================================================
 
 export const ALL_PERMISSIONS =
@@ -303,9 +312,6 @@ export const ALL_PERMISSIONS =
 
 // ======================================================
 // DEFAULT ROLE PERMISSIONS
-//
-// Kullanıcıya özel permissions override yoksa
-// bu yetkiler uygulanır.
 // ======================================================
 
 export const PERMISSIONS = {
@@ -319,13 +325,6 @@ export const PERMISSIONS = {
 
   // ====================================================
   // LAWYER
-  //
-  // Standart avukat günlük hukuki operasyonları
-  // gerçekleştirebilir.
-  //
-  // Kritik silme, kullanıcı yönetimi, audit ve bazı
-  // yönetim işlemleri varsayılan olarak kapalıdır.
-  // Admin kişiye özel açabilir.
   // ====================================================
 
   [ROLES.LAWYER]: [
@@ -353,6 +352,9 @@ export const PERMISSIONS = {
     PERMISSION_KEYS.CREATE_TASKS,
     PERMISSION_KEYS.EDIT_TASKS,
     PERMISSION_KEYS.WORK_ON_TASKS,
+
+    // Performance
+    PERMISSION_KEYS.VIEW_OWN_PERFORMANCE,
 
     // Calendar / Events
     PERMISSION_KEYS.VIEW_EVENTS,
@@ -397,9 +399,6 @@ export const PERMISSIONS = {
 
   // ====================================================
   // SECRETARY
-  //
-  // Operasyonel işleri yürütebilir fakat hassas
-  // hukuk/finans/yönetim işlemleri sınırlıdır.
   // ====================================================
 
   [ROLES.SECRETARY]: [
@@ -423,6 +422,9 @@ export const PERMISSIONS = {
     PERMISSION_KEYS.CREATE_TASKS,
     PERMISSION_KEYS.EDIT_TASKS,
     PERMISSION_KEYS.WORK_ON_TASKS,
+
+    // Performance
+    PERMISSION_KEYS.VIEW_OWN_PERFORMANCE,
 
     // Calendar / Events
     PERMISSION_KEYS.VIEW_EVENTS,
@@ -462,11 +464,6 @@ export const PERMISSIONS = {
 
   // ====================================================
   // INTERN
-  //
-  // Varsayılan olarak ağırlıklı read-only.
-  // Görev üzerinde çalışma hakkı var.
-  //
-  // Admin gerekirse kişiye özel ek yetki açabilir.
   // ====================================================
 
   [ROLES.INTERN]: [
@@ -483,6 +480,9 @@ export const PERMISSIONS = {
     // Tasks
     PERMISSION_KEYS.VIEW_TASKS,
     PERMISSION_KEYS.WORK_ON_TASKS,
+
+    // Performance
+    PERMISSION_KEYS.VIEW_OWN_PERFORMANCE,
 
     // Calendar / Events
     PERMISSION_KEYS.VIEW_EVENTS,
@@ -508,14 +508,13 @@ export const PERMISSIONS = {
 
 // ======================================================
 // PERMISSION GROUPS
-//
-// Admin panelinde checkboxları düzgün gruplamak için.
-// Backend endpoint'inden frontend'e gönderilebilir.
 // ======================================================
 
 export const PERMISSION_GROUPS = {
   clients: {
-    label: 'Müvekkiller',
+    label:
+      'Müvekkiller',
+
     permissions: [
       PERMISSION_KEYS.VIEW_CLIENTS,
       PERMISSION_KEYS.CREATE_CLIENTS,
@@ -525,7 +524,9 @@ export const PERMISSION_GROUPS = {
   },
 
   cases: {
-    label: 'Davalar',
+    label:
+      'Davalar',
+
     permissions: [
       PERMISSION_KEYS.VIEW_CASES,
       PERMISSION_KEYS.CREATE_CASES,
@@ -537,7 +538,9 @@ export const PERMISSION_GROUPS = {
   },
 
   documents: {
-    label: 'Belgeler',
+    label:
+      'Belgeler',
+
     permissions: [
       PERMISSION_KEYS.VIEW_DOCUMENTS,
       PERMISSION_KEYS.UPLOAD_DOCUMENTS,
@@ -549,7 +552,9 @@ export const PERMISSION_GROUPS = {
   },
 
   tasks: {
-    label: 'Görevler',
+    label:
+      'Görevler',
+
     permissions: [
       PERMISSION_KEYS.VIEW_TASKS,
       PERMISSION_KEYS.CREATE_TASKS,
@@ -562,8 +567,24 @@ export const PERMISSION_GROUPS = {
     ],
   },
 
+  // ====================================================
+  // PERFORMANCE
+  // ====================================================
+
+  performance: {
+    label:
+      'Performans',
+
+    permissions: [
+      PERMISSION_KEYS.VIEW_OWN_PERFORMANCE,
+      PERMISSION_KEYS.VIEW_TEAM_PERFORMANCE,
+    ],
+  },
+
   calendar: {
-    label: 'Takvim ve Etkinlikler',
+    label:
+      'Takvim ve Etkinlikler',
+
     permissions: [
       PERMISSION_KEYS.VIEW_EVENTS,
       PERMISSION_KEYS.CREATE_EVENTS,
@@ -575,7 +596,9 @@ export const PERMISSION_GROUPS = {
   },
 
   meetings: {
-    label: 'Toplantılar',
+    label:
+      'Toplantılar',
+
     permissions: [
       PERMISSION_KEYS.VIEW_MEETINGS,
       PERMISSION_KEYS.CREATE_MEETINGS,
@@ -585,7 +608,9 @@ export const PERMISSION_GROUPS = {
   },
 
   finance: {
-    label: 'Finans',
+    label:
+      'Finans',
+
     permissions: [
       PERMISSION_KEYS.VIEW_PAYMENTS,
       PERMISSION_KEYS.CREATE_PAYMENTS,
@@ -598,7 +623,9 @@ export const PERMISSION_GROUPS = {
   },
 
   notes: {
-    label: 'Notlar',
+    label:
+      'Notlar',
+
     permissions: [
       PERMISSION_KEYS.VIEW_NOTES,
       PERMISSION_KEYS.CREATE_NOTES,
@@ -608,7 +635,9 @@ export const PERMISSION_GROUPS = {
   },
 
   powerOfAttorney: {
-    label: 'Vekaletnameler',
+    label:
+      'Vekaletnameler',
+
     permissions: [
       PERMISSION_KEYS.VIEW_POWER_OF_ATTORNEY,
       PERMISSION_KEYS.CREATE_POWER_OF_ATTORNEY,
@@ -618,7 +647,9 @@ export const PERMISSION_GROUPS = {
   },
 
   templates: {
-    label: 'Şablonlar',
+    label:
+      'Şablonlar',
+
     permissions: [
       PERMISSION_KEYS.VIEW_TEMPLATES,
       PERMISSION_KEYS.CREATE_TEMPLATES,
@@ -628,7 +659,9 @@ export const PERMISSION_GROUPS = {
   },
 
   system: {
-    label: 'Sistem',
+    label:
+      'Sistem',
+
     permissions: [
       PERMISSION_KEYS.USE_SEARCH,
       PERMISSION_KEYS.USE_AI,
@@ -638,29 +671,26 @@ export const PERMISSION_GROUPS = {
   },
 
   administration: {
-  label: 'Yönetim',
+    label:
+      'Yönetim',
 
-  permissions: [
-    PERMISSION_KEYS.VIEW_USERS,
-    PERMISSION_KEYS.CREATE_USERS,
-    PERMISSION_KEYS.EDIT_USERS,
-    PERMISSION_KEYS.DELETE_USERS,
-    PERMISSION_KEYS.CHANGE_USER_ROLES,
-    PERMISSION_KEYS.MANAGE_USER_STATUS,
-    PERMISSION_KEYS.MANAGE_PERMISSIONS,
+    permissions: [
+      PERMISSION_KEYS.VIEW_USERS,
+      PERMISSION_KEYS.CREATE_USERS,
+      PERMISSION_KEYS.EDIT_USERS,
+      PERMISSION_KEYS.DELETE_USERS,
+      PERMISSION_KEYS.CHANGE_USER_ROLES,
+      PERMISSION_KEYS.MANAGE_USER_STATUS,
+      PERMISSION_KEYS.MANAGE_PERMISSIONS,
 
-    PERMISSION_KEYS.VIEW_AUDIT_LOGS,
-    PERMISSION_KEYS.DELETE_AUDIT_LOGS,
-  ],
-},
+      PERMISSION_KEYS.VIEW_AUDIT_LOGS,
+      PERMISSION_KEYS.DELETE_AUDIT_LOGS,
+    ],
+  },
 };
 
 // ======================================================
 // PRESETS
-//
-// Admin tek tıkla kullanıcıya preset uygulayabilecek.
-//
-// Buradaki izinler USER OVERRIDE olarak kullanılacak.
 // ======================================================
 
 export const PERMISSION_PRESETS = {
@@ -727,6 +757,10 @@ export const PERMISSION_PRESETS = {
         true,
 
       [PERMISSION_KEYS.VIEW_ALL_TASKS]:
+        true,
+
+      // Performance
+      [PERMISSION_KEYS.VIEW_TEAM_PERFORMANCE]:
         true,
 
       [PERMISSION_KEYS.DELETE_MEETINGS]:
