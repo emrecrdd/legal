@@ -1555,6 +1555,35 @@ export const taskService = {
       access
     );
 
+    /*
+     * Çoklu görev atamasında frontend'in ortak task.status
+     * ile giriş yapan kullanıcının kişisel durumunu
+     * karıştırmaması için current_user_assignment alanını
+     * açıkça response'a ekliyoruz.
+     */
+    let currentUserAssignment =
+      null;
+
+    if (
+      access?.userId
+    ) {
+      currentUserAssignment =
+        await getTaskAssignment(
+          id,
+          access.userId
+        );
+    }
+
+    task.setDataValue(
+      'current_user_assignment',
+      currentUserAssignment
+        ? currentUserAssignment.get({
+            plain:
+              true,
+          })
+        : null
+    );
+
     return task;
   },
 

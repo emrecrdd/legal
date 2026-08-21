@@ -362,11 +362,19 @@ const TaskDetail = () => {
 
   const myAssignment =
     useMemo(
-      () =>
-        getAssignmentData(
+      () => {
+        if (
+          task?.current_user_assignment
+        ) {
+          return task.current_user_assignment;
+        }
+
+        return getAssignmentData(
           myAssignee
-        ),
+        );
+      },
       [
+        task,
         myAssignee,
       ]
     );
