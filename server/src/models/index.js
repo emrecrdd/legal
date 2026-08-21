@@ -4,6 +4,7 @@ import { Case } from './Case.js';
 import { CaseParty } from './CaseParty.js';
 import { Document } from './Document.js';
 import { Task } from './Task.js';
+import { TaskAssignee } from './TaskAssignee.js';
 import { Event } from './Event.js';
 import { Meeting } from './Meeting.js';
 import { Payment } from './Payment.js';
@@ -27,7 +28,10 @@ const initModels = (sequelize) => {
   Case.initModel(sequelize);
   CaseParty.initModel(sequelize);
   Document.initModel(sequelize);
+
   Task.initModel(sequelize);
+  TaskAssignee.initModel(sequelize);
+
   Event.initModel(sequelize);
   Meeting.initModel(sequelize);
 
@@ -78,52 +82,103 @@ const initModels = (sequelize) => {
   });
 
   // ======================================================
-// TASK USER ASSOCIATIONS
-// ======================================================
+  // TASK USER ASSOCIATIONS
+  // ======================================================
 
-User.belongsToMany(Task, {
-  through: 'task_assignees',
+  /*
+   * Çoklu görev ataması artık gerçek TaskAssignee
+   * modeli üzerinden yönetiliyor.
+   *
+   * task_assignees:
+   * - task_id
+   * - user_id
+   * - status
+   * - progress
+   * - started_at
+   * - completed_at
+   * - actual_hours
+   */
 
-  foreignKey: 'user_id',
+  User.belongsToMany(Task, {
+    through: TaskAssignee,
 
-  otherKey: 'task_id',
+    foreignKey: 'user_id',
 
-  as: 'assignedTasks',
+    otherKey: 'task_id',
 
-  timestamps: false,
-});
+    as: 'assignedTasks',
+  });
 
-Task.belongsToMany(User, {
-  through: 'task_assignees',
+  Task.belongsToMany(User, {
+    through: TaskAssignee,
 
-  foreignKey: 'task_id',
+    foreignKey: 'task_id',
 
-  otherKey: 'user_id',
+    otherKey: 'user_id',
 
-  as: 'assignees',
+    as: 'assignees',
+  });
 
-  timestamps: false,
-});
+  // ======================================================
+  // TASK ASSIGNEE DIRECT ASSOCIATIONS
+  // ======================================================
 
-User.hasMany(Task, {
-  foreignKey: 'created_by',
-  as: 'createdTasks',
-});
+  /*
+   * Performans kayıtlarına direkt erişim için:
+   *
+   * task.getAssignmentRecords()
+   * user.getTaskAssignments()
+   *
+   * kullanılabilecek.
+   */
 
-Task.belongsTo(User, {
-  foreignKey: 'created_by',
-  as: 'creator',
-});
+  Task.hasMany(TaskAssignee, {
+    foreignKey: 'task_id',
+    as: 'assignmentRecords',
+  });
 
-User.hasMany(Task, {
-  foreignKey: 'approved_by',
-  as: 'approvedTasks',
-});
+  TaskAssignee.belongsTo(Task, {
+    foreignKey: 'task_id',
+    as: 'task',
+  });
 
-Task.belongsTo(User, {
-  foreignKey: 'approved_by',
-  as: 'approver',
-});
+  User.hasMany(TaskAssignee, {
+    foreignKey: 'user_id',
+    as: 'taskAssignments',
+  });
+
+  TaskAssignee.belongsTo(User, {
+    foreignKey: 'user_id',
+    as: 'user',
+  });
+
+  // ======================================================
+  // TASK CREATOR
+  // ======================================================
+
+  User.hasMany(Task, {
+    foreignKey: 'created_by',
+    as: 'createdTasks',
+  });
+
+  Task.belongsTo(User, {
+    foreignKey: 'created_by',
+    as: 'creator',
+  });
+
+  // ======================================================
+  // TASK APPROVER
+  // ======================================================
+
+  User.hasMany(Task, {
+    foreignKey: 'approved_by',
+    as: 'approvedTasks',
+  });
+
+  Task.belongsTo(User, {
+    foreignKey: 'approved_by',
+    as: 'approver',
+  });
 
   User.hasMany(Note, {
     foreignKey: 'created_by',
@@ -473,208 +528,429 @@ Task.belongsTo(User, {
   // PAYMENT PLAN ASSOCIATIONS
   // ======================================================
 
-  PaymentPlan.hasMany(PaymentInstallment, {
-    foreignKey: 'payment_plan_id',
-    as: 'installments',
+  PaymentPlan.hasMany(
+    PaymentInstallment,
+    {
+      foreignKey:
+        'payment_plan_id',
 
-    onUpdate: 'CASCADE',
-    onDelete: 'CASCADE',
-  });
+      as:
+        'installments',
 
-  PaymentInstallment.belongsTo(PaymentPlan, {
-    foreignKey: 'payment_plan_id',
-    as: 'paymentPlan',
-  });
+      onUpdate:
+        'CASCADE',
 
-  PaymentPlan.hasMany(Payment, {
-    foreignKey: 'payment_plan_id',
-    as: 'payments',
+      onDelete:
+        'CASCADE',
+    }
+  );
 
-    onUpdate: 'CASCADE',
-    onDelete: 'SET NULL',
-  });
+  PaymentInstallment.belongsTo(
+    PaymentPlan,
+    {
+      foreignKey:
+        'payment_plan_id',
 
-  Payment.belongsTo(PaymentPlan, {
-    foreignKey: 'payment_plan_id',
-    as: 'paymentPlan',
-  });
+      as:
+        'paymentPlan',
+    }
+  );
+
+  PaymentPlan.hasMany(
+    Payment,
+    {
+      foreignKey:
+        'payment_plan_id',
+
+      as:
+        'payments',
+
+      onUpdate:
+        'CASCADE',
+
+      onDelete:
+        'SET NULL',
+    }
+  );
+
+  Payment.belongsTo(
+    PaymentPlan,
+    {
+      foreignKey:
+        'payment_plan_id',
+
+      as:
+        'paymentPlan',
+    }
+  );
 
   // ======================================================
   // PAYMENT INSTALLMENT ASSOCIATIONS
   // ======================================================
 
-  PaymentInstallment.hasMany(Payment, {
-    foreignKey: 'installment_id',
-    as: 'payments',
+  PaymentInstallment.hasMany(
+    Payment,
+    {
+      foreignKey:
+        'installment_id',
 
-    onUpdate: 'CASCADE',
-    onDelete: 'SET NULL',
-  });
+      as:
+        'payments',
 
-  Payment.belongsTo(PaymentInstallment, {
-    foreignKey: 'installment_id',
-    as: 'installment',
-  });
+      onUpdate:
+        'CASCADE',
+
+      onDelete:
+        'SET NULL',
+    }
+  );
+
+  Payment.belongsTo(
+    PaymentInstallment,
+    {
+      foreignKey:
+        'installment_id',
+
+      as:
+        'installment',
+    }
+  );
 
   // ======================================================
   // PAYMENT REVERSAL ASSOCIATIONS
   // ======================================================
 
-  Payment.belongsTo(Payment, {
-    foreignKey: 'reversed_payment_id',
-    as: 'reversedPayment',
-  });
+  Payment.belongsTo(
+    Payment,
+    {
+      foreignKey:
+        'reversed_payment_id',
 
-  Payment.hasMany(Payment, {
-    foreignKey: 'reversed_payment_id',
-    as: 'reversals',
-  });
+      as:
+        'reversedPayment',
+    }
+  );
+
+  Payment.hasMany(
+    Payment,
+    {
+      foreignKey:
+        'reversed_payment_id',
+
+      as:
+        'reversals',
+    }
+  );
 
   // ======================================================
   // DOCUMENT ASSOCIATIONS
   // ======================================================
 
-  Document.hasMany(Document, {
-    foreignKey: 'parent_id',
-    as: 'versions',
-  });
+  Document.hasMany(
+    Document,
+    {
+      foreignKey:
+        'parent_id',
 
-  Document.belongsTo(Document, {
-    foreignKey: 'parent_id',
-    as: 'parent',
-  });
+      as:
+        'versions',
+    }
+  );
 
-  PowerOfAttorney.hasMany(Document, {
-    foreignKey: 'power_of_attorney_id',
-    as: 'documents',
-  });
+  Document.belongsTo(
+    Document,
+    {
+      foreignKey:
+        'parent_id',
 
-  Document.belongsTo(PowerOfAttorney, {
-    foreignKey: 'power_of_attorney_id',
-    as: 'powerOfAttorney',
-  });
+      as:
+        'parent',
+    }
+  );
+
+  PowerOfAttorney.hasMany(
+    Document,
+    {
+      foreignKey:
+        'power_of_attorney_id',
+
+      as:
+        'documents',
+    }
+  );
+
+  Document.belongsTo(
+    PowerOfAttorney,
+    {
+      foreignKey:
+        'power_of_attorney_id',
+
+      as:
+        'powerOfAttorney',
+    }
+  );
 
   // ======================================================
   // TASK ASSOCIATIONS
   // ======================================================
 
-  Task.hasMany(Task, {
-    foreignKey: 'parent_task_id',
-    as: 'subtasks',
-  });
+  Task.hasMany(
+    Task,
+    {
+      foreignKey:
+        'parent_task_id',
 
-  Task.belongsTo(Task, {
-    foreignKey: 'parent_task_id',
-    as: 'parentTask',
-  });
+      as:
+        'subtasks',
+    }
+  );
 
-  Task.hasMany(Note, {
-    foreignKey: 'task_id',
-    as: 'taskNotes',
-  });
+  Task.belongsTo(
+    Task,
+    {
+      foreignKey:
+        'parent_task_id',
 
-  Note.belongsTo(Task, {
-    foreignKey: 'task_id',
-    as: 'task',
-  });
+      as:
+        'parentTask',
+    }
+  );
+
+  Task.hasMany(
+    Note,
+    {
+      foreignKey:
+        'task_id',
+
+      as:
+        'taskNotes',
+    }
+  );
+
+  Note.belongsTo(
+    Task,
+    {
+      foreignKey:
+        'task_id',
+
+      as:
+        'task',
+    }
+  );
 
   // ======================================================
   // AI ANALYSIS ASSOCIATIONS
   // ======================================================
 
-  User.hasMany(AIAnalysis, {
-    foreignKey: 'user_id',
-    as: 'aiAnalyses',
-  });
+  User.hasMany(
+    AIAnalysis,
+    {
+      foreignKey:
+        'user_id',
 
-  AIAnalysis.belongsTo(User, {
-    foreignKey: 'user_id',
-    as: 'user',
-  });
+      as:
+        'aiAnalyses',
+    }
+  );
 
-  Document.hasMany(AIAnalysis, {
-    foreignKey: 'document_id',
-    as: 'aiAnalyses',
-  });
+  AIAnalysis.belongsTo(
+    User,
+    {
+      foreignKey:
+        'user_id',
 
-  AIAnalysis.belongsTo(Document, {
-    foreignKey: 'document_id',
-    as: 'document',
-  });
+      as:
+        'user',
+    }
+  );
 
-  Case.hasMany(AIAnalysis, {
-    foreignKey: 'case_id',
-    as: 'aiAnalyses',
-  });
+  Document.hasMany(
+    AIAnalysis,
+    {
+      foreignKey:
+        'document_id',
 
-  AIAnalysis.belongsTo(Case, {
-    foreignKey: 'case_id',
-    as: 'case',
-  });
+      as:
+        'aiAnalyses',
+    }
+  );
+
+  AIAnalysis.belongsTo(
+    Document,
+    {
+      foreignKey:
+        'document_id',
+
+      as:
+        'document',
+    }
+  );
+
+  Case.hasMany(
+    AIAnalysis,
+    {
+      foreignKey:
+        'case_id',
+
+      as:
+        'aiAnalyses',
+    }
+  );
+
+  AIAnalysis.belongsTo(
+    Case,
+    {
+      foreignKey:
+        'case_id',
+
+      as:
+        'case',
+    }
+  );
 
   // ======================================================
   // REMINDER ASSOCIATIONS
   // ======================================================
 
-  User.hasMany(Reminder, {
-    foreignKey: 'user_id',
-    as: 'reminders',
-    onUpdate: 'CASCADE',
-    onDelete: 'CASCADE',
-  });
+  User.hasMany(
+    Reminder,
+    {
+      foreignKey:
+        'user_id',
 
-  Reminder.belongsTo(User, {
-    foreignKey: 'user_id',
-    as: 'user',
-  });
+      as:
+        'reminders',
 
-  User.hasMany(Reminder, {
-    foreignKey: 'created_by',
-    as: 'createdReminders',
-    onUpdate: 'CASCADE',
-    onDelete: 'RESTRICT',
-  });
+      onUpdate:
+        'CASCADE',
 
-  Reminder.belongsTo(User, {
-    foreignKey: 'created_by',
-    as: 'creator',
-  });
+      onDelete:
+        'CASCADE',
+    }
+  );
 
-  Task.hasMany(Reminder, {
-    foreignKey: 'task_id',
-    as: 'reminders',
-    onUpdate: 'CASCADE',
-    onDelete: 'CASCADE',
-  });
+  Reminder.belongsTo(
+    User,
+    {
+      foreignKey:
+        'user_id',
 
-  Reminder.belongsTo(Task, {
-    foreignKey: 'task_id',
-    as: 'task',
-  });
+      as:
+        'user',
+    }
+  );
 
-  Event.hasMany(Reminder, {
-    foreignKey: 'event_id',
-    as: 'reminders',
-    onUpdate: 'CASCADE',
-    onDelete: 'CASCADE',
-  });
+  User.hasMany(
+    Reminder,
+    {
+      foreignKey:
+        'created_by',
 
-  Reminder.belongsTo(Event, {
-    foreignKey: 'event_id',
-    as: 'event',
-  });
+      as:
+        'createdReminders',
 
-  Meeting.hasMany(Reminder, {
-    foreignKey: 'meeting_id',
-    as: 'reminders',
-    onUpdate: 'CASCADE',
-    onDelete: 'CASCADE',
-  });
+      onUpdate:
+        'CASCADE',
 
-  Reminder.belongsTo(Meeting, {
-    foreignKey: 'meeting_id',
-    as: 'meeting',
-  });
+      onDelete:
+        'RESTRICT',
+    }
+  );
+
+  Reminder.belongsTo(
+    User,
+    {
+      foreignKey:
+        'created_by',
+
+      as:
+        'creator',
+    }
+  );
+
+  Task.hasMany(
+    Reminder,
+    {
+      foreignKey:
+        'task_id',
+
+      as:
+        'reminders',
+
+      onUpdate:
+        'CASCADE',
+
+      onDelete:
+        'CASCADE',
+    }
+  );
+
+  Reminder.belongsTo(
+    Task,
+    {
+      foreignKey:
+        'task_id',
+
+      as:
+        'task',
+    }
+  );
+
+  Event.hasMany(
+    Reminder,
+    {
+      foreignKey:
+        'event_id',
+
+      as:
+        'reminders',
+
+      onUpdate:
+        'CASCADE',
+
+      onDelete:
+        'CASCADE',
+    }
+  );
+
+  Reminder.belongsTo(
+    Event,
+    {
+      foreignKey:
+        'event_id',
+
+      as:
+        'event',
+    }
+  );
+
+  Meeting.hasMany(
+    Reminder,
+    {
+      foreignKey:
+        'meeting_id',
+
+      as:
+        'reminders',
+
+      onUpdate:
+        'CASCADE',
+
+      onDelete:
+        'CASCADE',
+    }
+  );
+
+  Reminder.belongsTo(
+    Meeting,
+    {
+      foreignKey:
+        'meeting_id',
+
+      as:
+        'meeting',
+    }
+  );
 
   return sequelize;
 };
@@ -687,7 +963,10 @@ export {
   Case,
   CaseParty,
   Document,
+
   Task,
+  TaskAssignee,
+
   Event,
   Meeting,
 
