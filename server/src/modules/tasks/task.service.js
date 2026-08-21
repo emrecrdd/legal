@@ -598,10 +598,7 @@ const assertTaskAccess =
 // ======================================================
 
 const ASSIGNEES_INCLUDE = {
-  model:
-    User,
-
-  as:
+  association:
     'assignees',
 
   attributes:
@@ -619,10 +616,7 @@ const LIST_INCLUDE = [
   ASSIGNEES_INCLUDE,
 
   {
-    model:
-      User,
-
-    as:
+    association:
       'creator',
 
     attributes:
@@ -1087,10 +1081,7 @@ export const taskService = {
             ASSIGNEES_INCLUDE,
 
             {
-              model:
-                User,
-
-              as:
+              association:
                 'creator',
 
               attributes:
@@ -1101,10 +1092,7 @@ export const taskService = {
             },
 
             {
-              model:
-                User,
-
-              as:
+              association:
                 'approver',
 
               attributes:
@@ -1899,10 +1887,7 @@ export const taskService = {
           },
 
           {
-            model:
-              User,
-
-            as:
+            association:
               'creator',
 
             attributes: [
