@@ -47,7 +47,9 @@ import {
 import {
   reminderService,
 } from '../reminders/reminder.service.js';
-
+import {
+  googleCalendarSyncService,
+} from '../calendar-integration/google-calendar-sync.service.js';
 // ======================================================
 // CONSTANTS
 // ======================================================
@@ -787,7 +789,131 @@ const notifySafely =
       );
     }
   };
+// ======================================================
+// GOOGLE CALENDAR HELPERS
+// ======================================================
 
+const isDateOnlyValue = (
+  value
+) => {
+  return (
+    typeof value ===
+      'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(
+      value.trim()
+    )
+  );
+};
+
+const syncCreatedTaskToGoogleSafely =
+  async (
+    task,
+    assignees = []
+  ) => {
+    /*
+     * Tarihi olmayan görev Google Takvim'e
+     * gönderilmez.
+     */
+    if (
+      !task?.id ||
+      !task?.due_date
+    ) {
+      return;
+    }
+
+    /*
+     * Görev:
+     *
+     * - oluşturan/yönetici
+     * - atanmış tüm kullanıcılar
+     *
+     * için Google Calendar'a gönderilir.
+     *
+     * Aynı kişi hem creator hem assignee ise
+     * Set sayesinde yalnızca bir kez gönderilir.
+     */
+    const userIds = [
+      ...new Set(
+        [
+          task.created_by,
+
+          ...assignees.map(
+            (
+              user
+            ) =>
+              user?.id
+          ),
+        ].filter(
+          Boolean
+        )
+      ),
+    ];
+
+    if (
+      userIds.length ===
+      0
+    ) {
+      return;
+    }
+
+    const description = [
+      'Derkenar görevi',
+
+      task.description ||
+        null,
+
+      task.priority
+        ? `Öncelik: ${task.priority}`
+        : null,
+    ]
+      .filter(
+        Boolean
+      )
+      .join(
+        '\n\n'
+      );
+
+    /*
+     * Her kullanıcının kendi Google bağlantısı
+     * kontrol edilir.
+     *
+     * Google bağlı değilse servis otomatik skip eder.
+     * Google hata verirse görev oluşturma bozulmaz.
+     */
+    await Promise.all(
+      userIds.map(
+        (
+          userId
+        ) =>
+          googleCalendarSyncService
+            .upsertEventSafely({
+              userId,
+
+              entityType:
+                'task',
+
+              entityId:
+                task.id,
+
+              title:
+                `Görev: ${task.title}`,
+
+              description,
+
+              start:
+                task.due_date,
+
+              end:
+                null,
+
+              allDay:
+                isDateOnlyValue(
+                  task.due_date
+                ),
+            })
+      )
+    );
+  };
 // ======================================================
 // ACCESS HELPERS
 // ======================================================
@@ -1154,7 +1280,14 @@ export const taskService = {
         }
       );
     }
+// ==================================================
+// GOOGLE CALENDAR AUTO SYNC
+// ==================================================
 
+await syncCreatedTaskToGoogleSafely(
+  task,
+  assignees
+);
     return this.findOne(
       task.id,
       {
