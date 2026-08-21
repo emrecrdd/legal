@@ -363,19 +363,46 @@ const TaskDetail = () => {
   const myAssignment =
     useMemo(
       () => {
+        /*
+         * Kişisel workflow için ana kaynak, assignees dizisinde
+         * giriş yapan kullanıcıya ait junction kaydıdır.
+         *
+         * current_user_assignment kullanıcı değişiminde query
+         * cache'inden eski hesaba ait kalabileceği için yalnızca
+         * user_id gerçekten giriş yapan kullanıcıyla eşleşiyorsa
+         * fallback olarak kullanılır.
+         */
+        const assignmentFromAssignee =
+          getAssignmentData(
+            myAssignee
+          );
+
         if (
-          task?.current_user_assignment
+          assignmentFromAssignee
         ) {
-          return task.current_user_assignment;
+          return assignmentFromAssignee;
         }
 
-        return getAssignmentData(
-          myAssignee
-        );
+        const currentAssignment =
+          task?.current_user_assignment;
+
+        if (
+          currentAssignment &&
+          user?.id &&
+          String(
+            currentAssignment.user_id
+          ) ===
+            String(user.id)
+        ) {
+          return currentAssignment;
+        }
+
+        return null;
       },
       [
         task,
         myAssignee,
+        user,
       ]
     );
 
