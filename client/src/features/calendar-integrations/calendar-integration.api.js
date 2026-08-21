@@ -1,5 +1,5 @@
 import axios
-  from '../../lib/axios.js';
+  from '../../app/config/axios.js';
 
 // ======================================================
 // ENDPOINTS
