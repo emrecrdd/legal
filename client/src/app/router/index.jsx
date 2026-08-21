@@ -87,7 +87,11 @@ import TasksList from '../../pages/tasks/list.jsx';
 import TaskDetail from '../../pages/tasks/detail.jsx';
 import TaskCreate from '../../pages/tasks/create.jsx';
 import TaskEdit from '../../pages/tasks/edit.jsx';
+// ======================================================
+// PERFORMANCE
+// ======================================================
 
+import Performance from '../../pages/performance/index.jsx';
 // ======================================================
 // MEETINGS
 // ======================================================
@@ -580,6 +584,30 @@ const AppRouter = () => {
               }
             />
           </Route>
+          {/* ==================================================
+    PERFORMANCE
+    Kendi performansını görüntüleme.
+
+    Ekip performansı sayfanın kendi içinde ayrıca
+    VIEW_TEAM_PERFORMANCE yetkisine göre gösterilecek.
+================================================== */}
+
+<Route
+  element={
+    <PrivateRoute
+      requiredPermission={
+        PERMISSION_KEYS.VIEW_OWN_PERFORMANCE
+      }
+    />
+  }
+>
+  <Route
+    path="/performance"
+    element={
+      <Performance />
+    }
+  />
+</Route>
 
           {/* ==================================================
               MEETINGS - VIEW
