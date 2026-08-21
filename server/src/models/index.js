@@ -77,35 +77,53 @@ const initModels = (sequelize) => {
     as: 'assignee',
   });
 
-  User.hasMany(Task, {
-    foreignKey: 'assigned_to',
-    as: 'assignedTasks',
-  });
+  // ======================================================
+// TASK USER ASSOCIATIONS
+// ======================================================
 
-  Task.belongsTo(User, {
-    foreignKey: 'assigned_to',
-    as: 'assignee',
-  });
+User.belongsToMany(Task, {
+  through: 'task_assignees',
 
-  User.hasMany(Task, {
-    foreignKey: 'created_by',
-    as: 'createdTasks',
-  });
+  foreignKey: 'user_id',
 
-  Task.belongsTo(User, {
-    foreignKey: 'created_by',
-    as: 'creator',
-  });
+  otherKey: 'task_id',
 
-  User.hasMany(Task, {
-    foreignKey: 'approved_by',
-    as: 'approvedTasks',
-  });
+  as: 'assignedTasks',
 
-  Task.belongsTo(User, {
-    foreignKey: 'approved_by',
-    as: 'approver',
-  });
+  timestamps: false,
+});
+
+Task.belongsToMany(User, {
+  through: 'task_assignees',
+
+  foreignKey: 'task_id',
+
+  otherKey: 'user_id',
+
+  as: 'assignees',
+
+  timestamps: false,
+});
+
+User.hasMany(Task, {
+  foreignKey: 'created_by',
+  as: 'createdTasks',
+});
+
+Task.belongsTo(User, {
+  foreignKey: 'created_by',
+  as: 'creator',
+});
+
+User.hasMany(Task, {
+  foreignKey: 'approved_by',
+  as: 'approvedTasks',
+});
+
+Task.belongsTo(User, {
+  foreignKey: 'approved_by',
+  as: 'approver',
+});
 
   User.hasMany(Note, {
     foreignKey: 'created_by',
