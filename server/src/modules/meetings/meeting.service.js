@@ -31,6 +31,10 @@ import {
   reminderService,
 } from '../reminders/reminder.service.js';
 
+import {
+  googleCalendarSyncService,
+} from '../calendar-integration/google-calendar-sync.service.js';
+
 // ======================================================
 // CONSTANTS
 // ======================================================
@@ -419,6 +423,214 @@ const buildIncludes = ({
 };
 
 // ======================================================
+// GOOGLE CALENDAR HELPERS
+// ======================================================
+
+const getMeetingCalendarUserIds = (
+  meeting
+) => {
+  return [
+    ...new Set(
+      [
+        meeting?.created_by,
+        meeting?.assigned_to,
+      ].filter(
+        Boolean
+      )
+    ),
+  ];
+};
+
+const buildMeetingGoogleDescription = (
+  meeting
+) => {
+  return [
+    'Derkenar toplantısı',
+
+    meeting?.description ||
+      null,
+
+    meeting?.meeting_link
+      ? `Toplantı bağlantısı: ${meeting.meeting_link}`
+      : null,
+
+    meeting?.notes
+      ? `Notlar: ${meeting.notes}`
+      : null,
+  ]
+    .filter(
+      Boolean
+    )
+    .join(
+      '\n\n'
+    );
+};
+
+const upsertMeetingToGoogleForUserSafely =
+  async (
+    meeting,
+    userId
+  ) => {
+    if (
+      !meeting?.id ||
+      !meeting?.start_date ||
+      !userId
+    ) {
+      return;
+    }
+
+    await googleCalendarSyncService
+      .upsertEventSafely({
+        userId,
+
+        entityType:
+          'meeting',
+
+        entityId:
+          meeting.id,
+
+        title:
+          `Toplantı: ${meeting.title}`,
+
+        description:
+          buildMeetingGoogleDescription(
+            meeting
+          ),
+
+        location:
+          meeting.location ||
+          '',
+
+        start:
+          meeting.start_date,
+
+        end:
+          meeting.end_date ||
+          null,
+
+        /*
+         * Meeting modeli saatli toplantı mantığında.
+         */
+        allDay:
+          false,
+      });
+  };
+
+const deleteMeetingFromGoogleForUserSafely =
+  async (
+    meetingId,
+    userId
+  ) => {
+    if (
+      !meetingId ||
+      !userId
+    ) {
+      return;
+    }
+
+    await googleCalendarSyncService
+      .deleteEventSafely({
+        userId,
+
+        entityType:
+          'meeting',
+
+        entityId:
+          meetingId,
+      });
+  };
+
+const deleteMeetingFromGoogleForUsersSafely =
+  async (
+    meetingId,
+    userIds = []
+  ) => {
+    const uniqueUserIds = [
+      ...new Set(
+        userIds.filter(
+          Boolean
+        )
+      ),
+    ];
+
+    if (
+      !meetingId ||
+      uniqueUserIds.length ===
+        0
+    ) {
+      return;
+    }
+
+    await Promise.all(
+      uniqueUserIds.map(
+        (
+          userId
+        ) =>
+          deleteMeetingFromGoogleForUserSafely(
+            meetingId,
+            userId
+          )
+      )
+    );
+  };
+
+const syncMeetingToGoogleForUsersSafely =
+  async (
+    meeting,
+    userIds = []
+  ) => {
+    if (!meeting?.id) {
+      return;
+    }
+
+    const uniqueUserIds = [
+      ...new Set(
+        userIds.filter(
+          Boolean
+        )
+      ),
+    ];
+
+    if (
+      uniqueUserIds.length ===
+      0
+    ) {
+      return;
+    }
+
+    /*
+     * cancelled toplantılar Google'dan kaldırılır.
+     *
+     * completed toplantılar geçmiş kayıt olarak
+     * Google Takvim'de kalır.
+     */
+    if (
+      meeting.status ===
+        'cancelled' ||
+      !meeting.start_date
+    ) {
+      await deleteMeetingFromGoogleForUsersSafely(
+        meeting.id,
+        uniqueUserIds
+      );
+
+      return;
+    }
+
+    await Promise.all(
+      uniqueUserIds.map(
+        (
+          userId
+        ) =>
+          upsertMeetingToGoogleForUserSafely(
+            meeting,
+            userId
+          )
+      )
+    );
+  };
+
+// ======================================================
 // SERVICE
 // ======================================================
 
@@ -446,8 +658,10 @@ export const meetingService = {
     const transaction =
       await sequelize.transaction();
 
+    let meeting;
+
     try {
-      const meeting =
+      meeting =
         await Meeting.create(
           preparedData,
           {
@@ -470,13 +684,24 @@ export const meetingService = {
       }
 
       await transaction.commit();
-
-      return meeting;
     } catch (error) {
       await transaction.rollback();
 
       throw error;
     }
+
+    // ==================================================
+    // GOOGLE CALENDAR AUTO SYNC
+    // ==================================================
+
+    await syncMeetingToGoogleForUsersSafely(
+      meeting,
+      getMeetingCalendarUserIds(
+        meeting
+      )
+    );
+
+    return meeting;
   },
 
   // ====================================================
@@ -684,8 +909,12 @@ export const meetingService = {
     const transaction =
       await sequelize.transaction();
 
+    let meeting;
+    let previousCalendarUserIds = [];
+    let currentCalendarUserIds = [];
+
     try {
-      const meeting =
+      meeting =
         await Meeting.findByPk(
           id,
           {
@@ -702,6 +931,18 @@ export const meetingService = {
           'Meeting not found'
         );
       }
+
+      /*
+       * Update öncesindeki creator + assignee
+       * listesini saklıyoruz.
+       *
+       * assigned_to değişirse eski kullanıcının
+       * Google event'ini silmek için gerekecek.
+       */
+      previousCalendarUserIds =
+        getMeetingCalendarUserIds(
+          meeting
+        );
 
       const preparedData =
         prepareMeetingData(
@@ -838,14 +1079,47 @@ export const meetingService = {
           });
       }
 
-      await transaction.commit();
+      currentCalendarUserIds =
+        getMeetingCalendarUserIds(
+          meeting
+        );
 
-      return meeting;
+      await transaction.commit();
     } catch (error) {
       await transaction.rollback();
 
       throw error;
     }
+
+    // ==================================================
+    // GOOGLE CALENDAR ASSIGNMENT CLEANUP
+    // ==================================================
+
+    const removedCalendarUserIds =
+      previousCalendarUserIds.filter(
+        (
+          userId
+        ) =>
+          !currentCalendarUserIds.includes(
+            userId
+          )
+      );
+
+    await deleteMeetingFromGoogleForUsersSafely(
+      meeting.id,
+      removedCalendarUserIds
+    );
+
+    // ==================================================
+    // GOOGLE CALENDAR AUTO UPDATE
+    // ==================================================
+
+    await syncMeetingToGoogleForUsersSafely(
+      meeting,
+      currentCalendarUserIds
+    );
+
+    return meeting;
   },
 
   // ====================================================
@@ -858,8 +1132,11 @@ export const meetingService = {
     const transaction =
       await sequelize.transaction();
 
+    let meeting;
+    let calendarUserIds = [];
+
     try {
-      const meeting =
+      meeting =
         await Meeting.findByPk(
           id,
           {
@@ -877,6 +1154,15 @@ export const meetingService = {
         );
       }
 
+      /*
+       * Destroy'dan önce kimlerin Google
+       * takviminden silineceğini sakla.
+       */
+      calendarUserIds =
+        getMeetingCalendarUserIds(
+          meeting
+        );
+
       await reminderService
         .cancelForSource({
           sourceType:
@@ -893,13 +1179,22 @@ export const meetingService = {
       });
 
       await transaction.commit();
-
-      return meeting;
     } catch (error) {
       await transaction.rollback();
 
       throw error;
     }
+
+    // ==================================================
+    // GOOGLE CALENDAR DELETE
+    // ==================================================
+
+    await deleteMeetingFromGoogleForUsersSafely(
+      meeting.id,
+      calendarUserIds
+    );
+
+    return meeting;
   },
 
   // ====================================================
@@ -1037,9 +1332,6 @@ export const meetingService = {
 
   // ====================================================
   // CLIENT COCKPIT
-  //
-  // Müvekkil detay ekranı için bütün toplantı geçmişini
-  // çekmek yerine yaklaşan ve son toplantıları getirir.
   // ====================================================
 
   async getClientTimeline(
@@ -1256,8 +1548,11 @@ export const meetingService = {
     const transaction =
       await sequelize.transaction();
 
+    let meeting;
+    let calendarUserIds = [];
+
     try {
-      const meeting =
+      meeting =
         await Meeting.findByPk(
           id,
           {
@@ -1325,14 +1620,28 @@ export const meetingService = {
           );
       }
 
-      await transaction.commit();
+      calendarUserIds =
+        getMeetingCalendarUserIds(
+          meeting
+        );
 
-      return meeting;
+      await transaction.commit();
     } catch (error) {
       await transaction.rollback();
 
       throw error;
     }
+
+    // ==================================================
+    // GOOGLE CALENDAR STATUS SYNC
+    // ==================================================
+
+    await syncMeetingToGoogleForUsersSafely(
+      meeting,
+      calendarUserIds
+    );
+
+    return meeting;
   },
 };
 

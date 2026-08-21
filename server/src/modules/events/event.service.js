@@ -42,7 +42,9 @@ import {
 import {
   reminderService,
 } from '../reminders/reminder.service.js';
-
+import {
+  googleCalendarSyncService,
+} from '../calendar-integration/google-calendar-sync.service.js';
 // ======================================================
 // CONSTANTS
 // ======================================================
@@ -581,7 +583,255 @@ const assertCaseStillAvailable = (
     );
   }
 };
+// ======================================================
+// GOOGLE CALENDAR HELPERS
+// ======================================================
 
+const getEventCalendarUserIds = (
+  event
+) => {
+  return [
+    ...new Set(
+      [
+        event?.created_by,
+        event?.assigned_to,
+      ].filter(
+        Boolean
+      )
+    ),
+  ];
+};
+
+const getEventGoogleTitle = (
+  event
+) => {
+  if (
+    event?.event_type ===
+    'hearing'
+  ) {
+    return `Duruşma: ${event.title}`;
+  }
+
+  if (
+    event?.event_type ===
+    'deadline'
+  ) {
+    return `Son Tarih: ${event.title}`;
+  }
+
+  if (
+    event?.event_type ===
+    'reminder'
+  ) {
+    return `Hatırlatma: ${event.title}`;
+  }
+
+  if (
+    event?.event_type ===
+    'meeting'
+  ) {
+    return `Toplantı: ${event.title}`;
+  }
+
+  return `Etkinlik: ${event.title}`;
+};
+
+const buildEventGoogleDescription = (
+  event
+) => {
+  return [
+    event?.event_type ===
+      'hearing'
+      ? 'Derkenar duruşması'
+      : 'Derkenar etkinliği',
+
+    event?.description ||
+      null,
+
+    event?.court_room
+      ? `Duruşma salonu: ${event.court_room}`
+      : null,
+
+    event?.judge_name
+      ? `Hakim: ${event.judge_name}`
+      : null,
+
+    event?.opposing_counsel
+      ? `Karşı taraf vekili: ${event.opposing_counsel}`
+      : null,
+  ]
+    .filter(
+      Boolean
+    )
+    .join(
+      '\n\n'
+    );
+};
+
+const upsertEventToGoogleForUserSafely =
+  async (
+    event,
+    userId
+  ) => {
+    if (
+      !event?.id ||
+      !event?.start_date ||
+      !userId
+    ) {
+      return;
+    }
+
+    await googleCalendarSyncService
+      .upsertEventSafely({
+        userId,
+
+        entityType:
+          'event',
+
+        entityId:
+          event.id,
+
+        title:
+          getEventGoogleTitle(
+            event
+          ),
+
+        description:
+          buildEventGoogleDescription(
+            event
+          ),
+
+        location:
+          event.location ||
+          '',
+
+        start:
+          event.start_date,
+
+        end:
+          event.end_date ||
+          null,
+
+        allDay:
+          Boolean(
+            event.is_all_day
+          ),
+      });
+  };
+
+const deleteEventFromGoogleForUserSafely =
+  async (
+    eventId,
+    userId
+  ) => {
+    if (
+      !eventId ||
+      !userId
+    ) {
+      return;
+    }
+
+    await googleCalendarSyncService
+      .deleteEventSafely({
+        userId,
+
+        entityType:
+          'event',
+
+        entityId:
+          eventId,
+      });
+  };
+
+const deleteEventFromGoogleForUsersSafely =
+  async (
+    eventId,
+    userIds = []
+  ) => {
+    const uniqueUserIds = [
+      ...new Set(
+        userIds.filter(
+          Boolean
+        )
+      ),
+    ];
+
+    if (
+      !eventId ||
+      uniqueUserIds.length ===
+        0
+    ) {
+      return;
+    }
+
+    await Promise.all(
+      uniqueUserIds.map(
+        (
+          userId
+        ) =>
+          deleteEventFromGoogleForUserSafely(
+            eventId,
+            userId
+          )
+      )
+    );
+  };
+
+const syncEventToGoogleForUsersSafely =
+  async (
+    event,
+    userIds = []
+  ) => {
+    if (!event?.id) {
+      return;
+    }
+
+    const uniqueUserIds = [
+      ...new Set(
+        userIds.filter(
+          Boolean
+        )
+      ),
+    ];
+
+    if (
+      uniqueUserIds.length ===
+      0
+    ) {
+      return;
+    }
+
+    /*
+     * cancelled event Google'dan kaldırılır.
+     *
+     * completed event geçmiş kayıt olarak
+     * Google Takvim'de kalır.
+     */
+    if (
+      event.status ===
+        'cancelled' ||
+      !event.start_date
+    ) {
+      await deleteEventFromGoogleForUsersSafely(
+        event.id,
+        uniqueUserIds
+      );
+
+      return;
+    }
+
+    await Promise.all(
+      uniqueUserIds.map(
+        (
+          userId
+        ) =>
+          upsertEventToGoogleForUserSafely(
+            event,
+            userId
+          )
+      )
+    );
+  };
 // ======================================================
 // SERVICE
 // ======================================================
@@ -591,7 +841,7 @@ export const eventService = {
   // CREATE
   // ====================================================
 
-  async create(
+    async create(
     data
   ) {
     const normalizedData =
@@ -690,6 +940,17 @@ export const eventService = {
         }
       );
     }
+
+    // ==================================================
+    // GOOGLE CALENDAR AUTO SYNC
+    // ==================================================
+
+    await syncEventToGoogleForUsersSafely(
+      event,
+      getEventCalendarUserIds(
+        event
+      )
+    );
 
     return this.findOne(
       event.id
@@ -1024,7 +1285,7 @@ export const eventService = {
   // UPDATE
   // ====================================================
 
-  async update(
+    async update(
     id,
     data
   ) {
@@ -1035,6 +1296,12 @@ export const eventService = {
     let previousAssignedTo;
     let shouldNotifyAssignee =
       false;
+
+    let previousCalendarUserIds =
+      [];
+
+    let currentCalendarUserIds =
+      [];
 
     try {
       event =
@@ -1055,6 +1322,15 @@ export const eventService = {
           'Duruşma / etkinlik bulunamadı'
         );
       }
+
+      // ==================================================
+      // GOOGLE USERS BEFORE UPDATE
+      // ==================================================
+
+      previousCalendarUserIds =
+        getEventCalendarUserIds(
+          event
+        );
 
       /*
        * Sistem alanlarının body üzerinden
@@ -1240,12 +1516,21 @@ export const eventService = {
         previousAssignedTo !==
           event.assigned_to;
 
+      currentCalendarUserIds =
+        getEventCalendarUserIds(
+          event
+        );
+
       await transaction.commit();
     } catch (error) {
       await transaction.rollback();
 
       throw error;
     }
+
+    // ==================================================
+    // HEARING NOTIFICATION
+    // ==================================================
 
     if (
       shouldNotifyAssignee
@@ -1275,6 +1560,34 @@ export const eventService = {
       );
     }
 
+    // ==================================================
+    // GOOGLE CALENDAR OLD USER CLEANUP
+    // ==================================================
+
+    const removedCalendarUserIds =
+      previousCalendarUserIds.filter(
+        (
+          userId
+        ) =>
+          !currentCalendarUserIds.includes(
+            userId
+          )
+      );
+
+    await deleteEventFromGoogleForUsersSafely(
+      event.id,
+      removedCalendarUserIds
+    );
+
+    // ==================================================
+    // GOOGLE CALENDAR AUTO UPDATE
+    // ==================================================
+
+    await syncEventToGoogleForUsersSafely(
+      event,
+      currentCalendarUserIds
+    );
+
     return this.findOne(
       id
     );
@@ -1284,7 +1597,7 @@ export const eventService = {
   // STATUS
   // ====================================================
 
-  async updateStatus(
+    async updateStatus(
     id,
     status
   ) {
@@ -1301,8 +1614,12 @@ export const eventService = {
     const transaction =
       await sequelize.transaction();
 
+    let event;
+    let calendarUserIds =
+      [];
+
     try {
-      const event =
+      event =
         await Event.findByPk(
           id,
           {
@@ -1359,30 +1676,48 @@ export const eventService = {
           );
       }
 
-      await transaction.commit();
+      calendarUserIds =
+        getEventCalendarUserIds(
+          event
+        );
 
-      return this.findOne(
-        id
-      );
+      await transaction.commit();
     } catch (error) {
       await transaction.rollback();
 
       throw error;
     }
+
+    // ==================================================
+    // GOOGLE CALENDAR STATUS SYNC
+    // ==================================================
+
+    await syncEventToGoogleForUsersSafely(
+      event,
+      calendarUserIds
+    );
+
+    return this.findOne(
+      id
+    );
   },
 
   // ====================================================
   // REMOVE
   // ====================================================
 
-  async remove(
+    async remove(
     id
   ) {
     const transaction =
       await sequelize.transaction();
 
+    let event;
+    let calendarUserIds =
+      [];
+
     try {
-      const event =
+      event =
         await Event.findByPk(
           id,
           {
@@ -1401,6 +1736,15 @@ export const eventService = {
         );
       }
 
+      /*
+       * Destroy'dan önce Google kullanıcılarını
+       * saklıyoruz.
+       */
+      calendarUserIds =
+        getEventCalendarUserIds(
+          event
+        );
+
       await reminderService
         .cancelForSource({
           sourceType:
@@ -1417,13 +1761,22 @@ export const eventService = {
       });
 
       await transaction.commit();
-
-      return event;
     } catch (error) {
       await transaction.rollback();
 
       throw error;
     }
+
+    // ==================================================
+    // GOOGLE CALENDAR DELETE
+    // ==================================================
+
+    await deleteEventFromGoogleForUsersSafely(
+      event.id,
+      calendarUserIds
+    );
+
+    return event;
   },
 
   // ====================================================
