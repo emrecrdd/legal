@@ -207,6 +207,45 @@ const getUserName = (
   );
 };
 
+const getAssignmentData = (
+  person
+) => {
+  if (!person) {
+    return null;
+  }
+
+  return (
+    person.TaskAssignee ||
+    person.taskAssignee ||
+    person.task_assignee ||
+    person.task_assignees ||
+    null
+  );
+};
+
+const getNumericProgress = (
+  value
+) => {
+  const parsed =
+    Number(value);
+
+  if (
+    !Number.isFinite(
+      parsed
+    )
+  ) {
+    return 0;
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      parsed
+    )
+  );
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -293,168 +332,227 @@ const TaskDetail = () => {
     [];
 
   // ======================================================
+  // PERSONAL ASSIGNMENT
+  // ======================================================
+
+  const myAssignee =
+    useMemo(() => {
+      if (
+        !task ||
+        !user ||
+        !Array.isArray(
+          task.assignees
+        )
+      ) {
+        return null;
+      }
+
+      return (
+        task.assignees.find(
+          (person) =>
+            person?.id ===
+            user.id
+        ) ||
+        null
+      );
+    }, [
+      task,
+      user,
+    ]);
+
+  const myAssignment =
+    useMemo(
+      () =>
+        getAssignmentData(
+          myAssignee
+        ),
+      [
+        myAssignee,
+      ]
+    );
+
+  const myStatus =
+    myAssignee
+      ? (
+          myAssignment?.status ||
+          'pending'
+        )
+      : null;
+
+  const myProgress =
+    myAssignee
+      ? getNumericProgress(
+          myAssignment?.progress
+        )
+      : null;
+
+  const displayProgress =
+    myAssignee
+      ? myProgress
+      : getNumericProgress(
+          task?.progress
+        );
+
+  const displayStartedAt =
+    myAssignee
+      ? myAssignment?.started_at
+      : task?.started_at;
+
+  const displayCompletedAt =
+    myAssignee
+      ? myAssignment?.completed_at
+      : task?.completed_at;
+
+  const displayActualHours =
+    myAssignee
+      ? myAssignment?.actual_hours
+      : task?.actual_hours;
+
+  // ======================================================
   // PERMISSIONS
   // ======================================================
 
-  // ======================================================
-// PERMISSIONS
-//
-// İki katmanlı kontrol:
-//
-// 1. Kullanıcının sistem yetkisi var mı?
-// 2. Bu görev üzerinde işlem yapma koşulu sağlanıyor mu?
-// ======================================================
+  const permissions =
+    useMemo(() => {
+      if (
+        !task ||
+        !user
+      ) {
+        return {
+          isAssignee: false,
+          isCreator: false,
 
-const permissions =
-  useMemo(() => {
-    if (
-      !task ||
-      !user
-    ) {
+          canStart: false,
+          canComplete: false,
+          canApprove: false,
+          canUpdateProgress: false,
+          canAddNote: false,
+          canEdit: false,
+
+          canViewCase: false,
+          canViewClient: false,
+        };
+      }
+
+      const isAssignee =
+        Boolean(
+          myAssignee
+        );
+
+      const isCreator =
+        task.created_by ===
+        user.id;
+
+      // ================================================
+      // SYSTEM PERMISSIONS
+      // ================================================
+
+      const canWorkOnTasks =
+        hasPermission(
+          user,
+          PERMISSION_KEYS.WORK_ON_TASKS
+        );
+
+      const canApproveTasks =
+        hasPermission(
+          user,
+          PERMISSION_KEYS.APPROVE_TASKS
+        );
+
+      const canEditTasks =
+        hasPermission(
+          user,
+          PERMISSION_KEYS.EDIT_TASKS
+        );
+
+      const canViewCase =
+        hasPermission(
+          user,
+          PERMISSION_KEYS.VIEW_CASES
+        );
+
+      const canViewClient =
+        hasPermission(
+          user,
+          PERMISSION_KEYS.VIEW_CLIENTS
+        );
+
+      const taskCanBeWorked =
+        ![
+          'completed',
+          'cancelled',
+        ].includes(
+          task.status
+        );
+
       return {
-        isAssignee: false,
-        isCreator: false,
-
-        canStart: false,
-        canComplete: false,
-        canApprove: false,
-        canUpdateProgress: false,
-        canAddNote: false,
-        canEdit: false,
-
-        canViewCase: false,
-        canViewClient: false,
-      };
-    }
-
-    const isAssignee =
-      Array.isArray(
-        task.assignees
-      ) &&
-      task.assignees.some(
-        (person) =>
-          person?.id ===
-          user.id
-      );
-
-    const isCreator =
-      task.created_by ===
-      user.id;
-
-    // ================================================
-    // SYSTEM PERMISSIONS
-    // ================================================
-
-    const canWorkOnTasks =
-      hasPermission(
-        user,
-        PERMISSION_KEYS.WORK_ON_TASKS
-      );
-
-    const canApproveTasks =
-      hasPermission(
-        user,
-        PERMISSION_KEYS.APPROVE_TASKS
-      );
-
-    const canEditTasks =
-      hasPermission(
-        user,
-        PERMISSION_KEYS.EDIT_TASKS
-      );
-
-    const canViewCase =
-      hasPermission(
-        user,
-        PERMISSION_KEYS.VIEW_CASES
-      );
-
-    const canViewClient =
-      hasPermission(
-        user,
-        PERMISSION_KEYS.VIEW_CLIENTS
-      );
-
-    // ================================================
-    // TASK WORKFLOW
-    // ================================================
-
-    return {
-      isAssignee,
-      isCreator,
-
-      /*
-       * Bir görevi çalıştırabilmek için:
-       *
-       * - work_on_tasks yetkisi
-       * - görevin kullanıcıya atanmış olması
-       * - uygun workflow durumu
-       */
-      canStart:
-        canWorkOnTasks &&
-        isAssignee &&
-        task.status ===
-          'pending',
-
-      canComplete:
-        canWorkOnTasks &&
-        isAssignee &&
-        task.status ===
-          'in_progress',
-
-      canUpdateProgress:
-        canWorkOnTasks &&
-        isAssignee &&
-        task.status ===
-          'in_progress',
-
-      /*
-       * Artık sadece role=admin değil.
-       *
-       * Admin zaten hasPermission() üzerinden
-       * otomatik tam yetkili.
-       *
-       * Yönetici avukata approve_tasks verilirse
-       * o da görev onaylayabilir.
-       */
-      canApprove:
-        canApproveTasks &&
-        task.status ===
-          'completed' &&
-        !task.approved_at,
-
-      /*
-       * Mevcut iş kuralını koruyoruz:
-       * çalışma notunu görevin atanmış kişisi ekler.
-       */
-      canAddNote:
-        canWorkOnTasks &&
         isAssignee,
+        isCreator,
 
-      /*
-       * Görev metadata düzenleme ayrı permission.
-       */
-      canEdit:
-        canEditTasks,
+        /*
+         * Çoklu atamada workflow artık ana task.status
+         * üzerinden değil, giriş yapan kullanıcının
+         * TaskAssignee.status kaydı üzerinden ilerler.
+         */
+        canStart:
+          canWorkOnTasks &&
+          isAssignee &&
+          taskCanBeWorked &&
+          myStatus ===
+            'pending',
 
-      canViewCase,
-      canViewClient,
-    };
-  }, [
-    task,
-    user,
-  ]);
+        canComplete:
+          canWorkOnTasks &&
+          isAssignee &&
+          taskCanBeWorked &&
+          myStatus ===
+            'in_progress',
 
-const {
-  canStart,
-  canComplete,
-  canApprove,
-  canUpdateProgress,
-  canAddNote,
-  canEdit,
-  canViewCase,
-  canViewClient,
-} = permissions;
+        canUpdateProgress:
+          canWorkOnTasks &&
+          isAssignee &&
+          taskCanBeWorked &&
+          myStatus ===
+            'in_progress',
+
+        /*
+         * Onay, ekipteki herkes tamamladıktan sonra
+         * ana görev completed olduğunda yapılır.
+         */
+        canApprove:
+          canApproveTasks &&
+          task.status ===
+            'completed' &&
+          !task.approved_at,
+
+        canAddNote:
+          canWorkOnTasks &&
+          isAssignee,
+
+        canEdit:
+          canEditTasks,
+
+        canViewCase,
+        canViewClient,
+      };
+    }, [
+      task,
+      user,
+      myAssignee,
+      myStatus,
+    ]);
+
+  const {
+    isAssignee,
+    canStart,
+    canComplete,
+    canApprove,
+    canUpdateProgress,
+    canAddNote,
+    canEdit,
+    canViewCase,
+    canViewClient,
+  } = permissions;
 
 
   // ======================================================
@@ -477,30 +575,93 @@ const {
           task.approved_at
         );
 
-      return {
-        awaitingApproval,
-        approved,
+      const waitingForTeam =
+        Boolean(
+          isAssignee
+        ) &&
+        myStatus ===
+          'completed' &&
+        task.status !==
+          'completed' &&
+        task.status !==
+          'cancelled';
 
-        statusLabel:
+      const displayStatus =
+        task.status ===
+          'cancelled'
+          ? 'cancelled'
+          : isAssignee
+            ? (
+                myStatus ||
+                'pending'
+              )
+            : task.status;
+
+      let statusLabel;
+
+      if (
+        waitingForTeam
+      ) {
+        statusLabel =
+          'Sen Tamamladın';
+      } else if (
+        isAssignee &&
+        displayStatus ===
+          'completed' &&
+        task.status !==
+          'completed'
+      ) {
+        statusLabel =
+          'Tamamlandı';
+      } else if (
+        isAssignee &&
+        displayStatus !==
+          'completed'
+      ) {
+        statusLabel =
+          STATUS_LABELS[
+            displayStatus
+          ] ||
+          displayStatus ||
+          'Bilinmiyor';
+      } else {
+        statusLabel =
           getStatusLabel({
             status:
-              task.status,
+              displayStatus,
 
             approvedAt:
               task.approved_at,
-          }),
+          });
+      }
+
+      return {
+        awaitingApproval,
+        approved,
+        waitingForTeam,
+        displayStatus,
+
+        statusLabel,
 
         statusVariant:
           getStatusVariant({
             status:
-              task.status,
+              displayStatus,
 
             approvedAt:
-              task.approved_at,
+              isAssignee &&
+              displayStatus ===
+                'completed' &&
+              task.status !==
+                'completed'
+                ? true
+                : task.approved_at,
           }),
       };
     }, [
       task,
+      isAssignee,
+      myStatus,
     ]);
 
   // ======================================================
@@ -532,12 +693,14 @@ const {
     }
 
     setProgressValue(
-      Number(
-        task.progress
-      ) || 0
+      Math.min(
+        MAX_MANUAL_PROGRESS,
+        displayProgress
+      )
     );
   }, [
     task,
+    displayProgress,
   ]);
 
   // ======================================================
@@ -1005,6 +1168,39 @@ const {
           WORKFLOW ALERTS
       ================================================== */}
 
+      {workflow.waitingForTeam && (
+        <div
+          className="
+            rounded-xl
+            border
+            border-blue-200
+            bg-blue-50
+            p-4
+            dark:border-blue-500/20
+            dark:bg-blue-500/[0.06]
+          "
+        >
+          <div className="flex items-start gap-3">
+
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+
+            <div>
+
+              <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                Senin çalışman tamamlandı
+              </p>
+
+              <p className="mt-1 text-sm leading-6 text-blue-800 dark:text-blue-300">
+                Diğer sorumluların çalışmasını tamamlaması bekleniyor. Tüm sorumlular tamamladığında görev yönetici onayına geçecek.
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
       {workflow.awaitingApproval && (
         <div
           className="
@@ -1094,7 +1290,9 @@ const {
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.06] dark:bg-gray-800">
 
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-            Durum
+            {isAssignee
+              ? 'Benim Durumum'
+              : 'Durum'}
           </p>
 
           <div className="mt-3">
@@ -1171,8 +1369,7 @@ const {
           </p>
 
           <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">
-            {task.progress ||
-              0}
+            {displayProgress}
             %
           </p>
 
@@ -1185,8 +1382,7 @@ const {
                   100,
                   Math.max(
                     0,
-                    task.progress ||
-                      0
+                    displayProgress
                   )
                 )}%`,
               }}
@@ -1277,20 +1473,51 @@ const {
                     <div className="mt-3 flex flex-wrap gap-2">
 
                       {task.assignees.map(
-                        (person) => (
-                          <div
-                            key={
-                              person.id
-                            }
-                            className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
-                          >
-                            <User className="h-3.5 w-3.5 text-gray-400" />
-
-                            {getUserName(
+                        (person) => {
+                          const assignment =
+                            getAssignmentData(
                               person
-                            )}
-                          </div>
-                        )
+                            );
+
+                          const personStatus =
+                            assignment?.status ||
+                            'pending';
+
+                          const personProgress =
+                            getNumericProgress(
+                              assignment?.progress
+                            );
+
+                          return (
+                            <div
+                              key={
+                                person.id
+                              }
+                              className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
+                            >
+                              <User className="h-3.5 w-3.5 text-gray-400" />
+
+                              <span>
+                                {getUserName(
+                                  person
+                                )}
+                              </span>
+
+                              <span className="text-gray-400">
+                                ·
+                              </span>
+
+                              <span>
+                                {STATUS_LABELS[
+                                  personStatus
+                                ] ||
+                                  personStatus}
+                                {' '}
+                                %{personProgress}
+                              </span>
+                            </div>
+                          );
+                        }
                       )}
 
                     </div>
@@ -1413,11 +1640,15 @@ const {
                 <div>
 
                   <h2 className="font-semibold text-gray-900 dark:text-white">
-                    İlerleme ve Süre
+                    {isAssignee
+                      ? 'Benim İlerlemem ve Sürem'
+                      : 'İlerleme ve Süre'}
                   </h2>
 
                   <p className="mt-0.5 text-xs text-gray-400">
-                    Görevin tamamlanma oranı ve çalışma süresi
+                    {isAssignee
+                      ? 'Kendi ilerlemeniz ve çalışma süreniz'
+                      : 'Ekibin toplam ilerleme durumu ve çalışma süresi'}
                   </p>
 
                 </div>
@@ -1439,8 +1670,7 @@ const {
                   </span>
 
                   <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                    {task.progress ||
-                      0}
+                    {displayProgress}
                     %
                   </span>
 
@@ -1455,8 +1685,7 @@ const {
                         100,
                         Math.max(
                           0,
-                          task.progress ||
-                            0
+                          displayProgress
                         )
                       )}%`,
                     }}
@@ -1528,9 +1757,9 @@ const {
 
               {/* TIME */}
 
-              {(task.started_at ||
-                task.completed_at ||
-                task.actual_hours !=
+              {(displayStartedAt ||
+                displayCompletedAt ||
+                displayActualHours !=
                   null) && (
                 <div className="grid gap-4 border-t border-gray-100 pt-5 dark:border-white/[0.05] sm:grid-cols-3">
 
@@ -1541,9 +1770,9 @@ const {
                     </p>
 
                     <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-                      {task.started_at
+                      {displayStartedAt
                         ? formatDateTime(
-                            task.started_at
+                            displayStartedAt
                           )
                         : '-'}
                     </p>
@@ -1557,9 +1786,9 @@ const {
                     </p>
 
                     <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-                      {task.completed_at
+                      {displayCompletedAt
                         ? formatDateTime(
-                            task.completed_at
+                            displayCompletedAt
                           )
                         : '-'}
                     </p>
@@ -1573,9 +1802,9 @@ const {
                     </p>
 
                     <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-                      {task.actual_hours !=
+                      {displayActualHours !=
                       null
-                        ? `${task.actual_hours} saat`
+                        ? `${displayActualHours} saat`
                         : 'Otomatik'}
                     </p>
 
@@ -1900,13 +2129,13 @@ const {
                   <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
 
                   <h3 className="font-semibold text-gray-900 dark:text-white">
-                    Görevi Tamamla
+                    Çalışmamı Tamamla
                   </h3>
 
                 </div>
 
                 <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-slate-400">
-                  Görev yönetici onayına gönderilecek. Onay verilene kadar nihai olarak kapanmayacak.
+                  Kendi çalışmanızı tamamlayacaksınız. Tüm sorumlular tamamlandığında görev yönetici onayına geçecek.
                 </p>
 
               </div>
@@ -2030,7 +2259,7 @@ const {
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
 
                 <p>
-                  Bu işlem ilerlemeyi %100 yapar ve görevi yönetici onayına gönderir.
+                  Bu işlem yalnızca sizin ilerlemenizi %100 yapar. Diğer sorumluların durumu değişmez.
                 </p>
 
               </div>
@@ -2064,7 +2293,7 @@ const {
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
 
-                Yönetici Onayına Gönder
+                Çalışmamı Tamamla
               </Button>
 
             </div>
