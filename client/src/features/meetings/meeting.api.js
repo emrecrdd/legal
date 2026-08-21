@@ -1,26 +1,60 @@
 import axios from '../../app/config/axios.js';
-import { API_ROUTES } from '../../constants/apiRoutes.js';
 
-const { MEETINGS } = API_ROUTES;
+import {
+  API_ROUTES,
+} from '../../constants/apiRoutes.js';
+
+const {
+  MEETINGS,
+} =
+  API_ROUTES;
 
 const meetingApi = {
+
   // ======================================================
   // LIST
   // ======================================================
 
-  getAll: (params = {}) => {
-    return axios.get(MEETINGS.GET_ALL, {
-      params,
-    });
+  getAll: (
+    params = {}
+  ) => {
+    return axios.get(
+      MEETINGS.GET_ALL,
+      {
+        params,
+      }
+    );
   },
 
   // ======================================================
   // DETAIL
   // ======================================================
 
-  getOne: (id) => {
+  getOne: (
+    id
+  ) => {
     return axios.get(
-      MEETINGS.GET_ONE(id)
+      MEETINGS.GET_ONE(
+        id
+      )
+    );
+  },
+
+  // ======================================================
+  // CALENDAR / ICS
+  // ======================================================
+
+  downloadCalendar: (
+    id
+  ) => {
+    return axios.get(
+      `${MEETINGS.GET_ONE(
+        id
+      )}/calendar`,
+      {
+        responseType:
+          'blob',
+      }
     );
   },
 
@@ -28,7 +62,9 @@ const meetingApi = {
   // CREATE
   // ======================================================
 
-  create: (data) => {
+  create: (
+    data
+  ) => {
     return axios.post(
       MEETINGS.CREATE,
       data
@@ -39,9 +75,14 @@ const meetingApi = {
   // UPDATE
   // ======================================================
 
-  update: (id, data) => {
+  update: (
+    id,
+    data
+  ) => {
     return axios.put(
-      MEETINGS.UPDATE(id),
+      MEETINGS.UPDATE(
+        id
+      ),
       data
     );
   },
@@ -50,9 +91,13 @@ const meetingApi = {
   // DELETE
   // ======================================================
 
-  delete: (id) => {
+  delete: (
+    id
+  ) => {
     return axios.delete(
-      MEETINGS.DELETE(id)
+      MEETINGS.DELETE(
+        id
+      )
     );
   },
 
@@ -60,9 +105,14 @@ const meetingApi = {
   // STATUS
   // ======================================================
 
-  updateStatus: (id, status) => {
+  updateStatus: (
+    id,
+    status
+  ) => {
     return axios.patch(
-      MEETINGS.UPDATE_STATUS(id),
+      MEETINGS.UPDATE_STATUS(
+        id
+      ),
       {
         status,
       }
@@ -73,7 +123,9 @@ const meetingApi = {
   // MY MEETINGS
   // ======================================================
 
-  getMyMeetings: (params = {}) => {
+  getMyMeetings: (
+    params = {}
+  ) => {
     return axios.get(
       MEETINGS.MY_MEETINGS,
       {
@@ -86,7 +138,9 @@ const meetingApi = {
   // UPCOMING
   // ======================================================
 
-  getUpcoming: (params = {}) => {
+  getUpcoming: (
+    params = {}
+  ) => {
     return axios.get(
       MEETINGS.UPCOMING,
       {
@@ -104,7 +158,9 @@ const meetingApi = {
     params = {}
   ) => {
     return axios.get(
-      MEETINGS.BY_CASE(caseId),
+      MEETINGS.BY_CASE(
+        caseId
+      ),
       {
         params,
       }
@@ -120,7 +176,9 @@ const meetingApi = {
     params = {}
   ) => {
     return axios.get(
-      MEETINGS.BY_CLIENT(clientId),
+      MEETINGS.BY_CLIENT(
+        clientId
+      ),
       {
         params,
       }
@@ -136,7 +194,9 @@ const meetingApi = {
     params = {}
   ) => {
     return axios.get(
-      MEETINGS.CLIENT_TIMELINE(clientId),
+      MEETINGS.CLIENT_TIMELINE(
+        clientId
+      ),
       {
         params,
       }

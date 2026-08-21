@@ -86,7 +86,11 @@ const getStatusLabel = (status) => {
     cancelled: 'İptal',
   };
 
-  return labels[status] || status || 'Bilinmiyor';
+  return (
+    labels[status] ||
+    status ||
+    'Bilinmiyor'
+  );
 };
 
 // ======================================================
@@ -97,26 +101,34 @@ const getMeetingTypeInfo = (type) => {
   switch (type) {
     case 'client':
       return {
-        label: 'Müvekkil Görüşmesi',
-        icon: UserRound,
+        label:
+          'Müvekkil Görüşmesi',
+        icon:
+          UserRound,
       };
 
     case 'internal':
       return {
-        label: 'İç Toplantı',
-        icon: BriefcaseBusiness,
+        label:
+          'İç Toplantı',
+        icon:
+          BriefcaseBusiness,
       };
 
     case 'phone':
       return {
-        label: 'Telefon Görüşmesi',
-        icon: Phone,
+        label:
+          'Telefon Görüşmesi',
+        icon:
+          Phone,
       };
 
     default:
       return {
-        label: 'Diğer',
-        icon: UsersRound,
+        label:
+          'Diğer',
+        icon:
+          UsersRound,
       };
   }
 };
@@ -125,30 +137,52 @@ const getMeetingTypeInfo = (type) => {
 // DATE HELPER
 // ======================================================
 
-const formatDate = (date) => {
+const formatDate = (
+  date
+) => {
   if (!date) {
     return '-';
   }
 
   try {
-    const parsed = new Date(date);
+    const parsed =
+      new Date(date);
 
-    if (Number.isNaN(parsed.getTime())) {
+    if (
+      Number.isNaN(
+        parsed.getTime()
+      )
+    ) {
       return '-';
     }
 
     return new Intl.DateTimeFormat(
       'tr-TR',
       {
-        timeZone: 'Europe/Istanbul',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
+        timeZone:
+          'Europe/Istanbul',
+
+        day:
+          '2-digit',
+
+        month:
+          '2-digit',
+
+        year:
+          'numeric',
+
+        hour:
+          '2-digit',
+
+        minute:
+          '2-digit',
+
+        hour12:
+          false,
       }
-    ).format(parsed);
+    ).format(
+      parsed
+    );
   } catch {
     return '-';
   }
@@ -174,7 +208,65 @@ const getPersonName = (
     .join(' ')
     .trim();
 
-  return name || fallback;
+  return (
+    name ||
+    fallback
+  );
+};
+
+// ======================================================
+// FILE NAME HELPER
+// ======================================================
+
+const createCalendarFileName = (
+  title
+) => {
+  const normalized =
+    String(
+      title ||
+        'toplanti'
+    )
+      .trim()
+      .toLocaleLowerCase(
+        'tr-TR'
+      )
+      .replace(
+        /ı/g,
+        'i'
+      )
+      .replace(
+        /ğ/g,
+        'g'
+      )
+      .replace(
+        /ü/g,
+        'u'
+      )
+      .replace(
+        /ş/g,
+        's'
+      )
+      .replace(
+        /ö/g,
+        'o'
+      )
+      .replace(
+        /ç/g,
+        'c'
+      )
+      .replace(
+        /[^a-z0-9]+/g,
+        '-'
+      )
+      .replace(
+        /^-+|-+$/g,
+        ''
+      );
+
+  return `derkenar-toplanti-${
+    normalized ||
+    'toplanti'
+  }.ics`;
 };
 
 // ======================================================
@@ -182,7 +274,10 @@ const getPersonName = (
 // ======================================================
 
 const MeetingDetail = () => {
-  const { id } = useParams();
+  const {
+    id,
+  } =
+    useParams();
 
   // ======================================================
   // QUERY
@@ -193,43 +288,204 @@ const MeetingDetail = () => {
     isLoading,
     error,
     refetch,
-  } = useQuery({
-    queryKey: [
-      'meeting',
-      id,
-    ],
-    queryFn: () =>
-      meetingApi.getOne(id),
-    enabled: Boolean(id),
-  });
+  } =
+    useQuery({
+      queryKey: [
+        'meeting',
+        id,
+      ],
+
+      queryFn:
+        () =>
+          meetingApi.getOne(
+            id
+          ),
+
+      enabled:
+        Boolean(id),
+    });
 
   // ======================================================
-  // MUTATION
+  // STATUS MUTATION
   // ======================================================
 
   const updateStatus =
     useMutation({
-      mutationFn: (status) =>
-        meetingApi.updateStatus(
-          id,
+      mutationFn:
+        (
           status
-        ),
+        ) =>
+          meetingApi.updateStatus(
+            id,
+            status
+          ),
 
-      onSuccess: () => {
-        toast.success(
-          'Toplantı durumu güncellendi'
-        );
+      onSuccess:
+        () => {
+          toast.success(
+            'Toplantı durumu güncellendi'
+          );
 
-        refetch();
-      },
+          refetch();
+        },
 
-      onError: (error) => {
-        toast.error(
-          error?.response
-            ?.data?.message ||
-            'Durum güncellenemedi'
-        );
-      },
+      onError:
+        (
+          error
+        ) => {
+          toast.error(
+            error
+              ?.response
+              ?.data
+              ?.message ||
+              'Durum güncellenemedi'
+          );
+        },
+    });
+
+  // ======================================================
+  // CALENDAR MUTATION
+  // ======================================================
+
+  const downloadCalendar =
+    useMutation({
+      mutationFn:
+        () =>
+          meetingApi.downloadCalendar(
+            id
+          ),
+
+      onSuccess:
+        (
+          response
+        ) => {
+          try {
+            const rawData =
+              response?.data;
+
+            const blob =
+              rawData instanceof
+              Blob
+                ? rawData
+                : new Blob(
+                    [
+                      rawData,
+                    ],
+                    {
+                      type:
+                        'text/calendar;charset=utf-8',
+                    }
+                  );
+
+            const url =
+              window.URL.createObjectURL(
+                blob
+              );
+
+            const link =
+              document.createElement(
+                'a'
+              );
+
+            link.href =
+              url;
+
+            link.download =
+              createCalendarFileName(
+                meeting?.title
+              );
+
+            document.body.appendChild(
+              link
+            );
+
+            link.click();
+
+            link.remove();
+
+            window.setTimeout(
+              () => {
+                window.URL.revokeObjectURL(
+                  url
+                );
+              },
+              1000
+            );
+
+            toast.success(
+              'Takvim dosyası indirildi'
+            );
+          } catch (
+            error
+          ) {
+            console.error(
+              'Meeting calendar file error:',
+              error
+            );
+
+            toast.error(
+              'Takvim dosyası açılamadı'
+            );
+          }
+        },
+
+      onError:
+        async (
+          error
+        ) => {
+          /*
+           * responseType blob olduğu için backend hata
+           * mesajı da Blob olarak gelebilir.
+           */
+          let message =
+            'Takvim dosyası indirilemedi';
+
+          try {
+            const errorData =
+              error
+                ?.response
+                ?.data;
+
+            if (
+              errorData instanceof
+              Blob
+            ) {
+              const text =
+                await errorData.text();
+
+              try {
+                const parsed =
+                  JSON.parse(
+                    text
+                  );
+
+                message =
+                  parsed
+                    ?.message ||
+                  message;
+              } catch {
+                if (
+                  text?.trim()
+                ) {
+                  message =
+                    text.trim();
+                }
+              }
+            } else if (
+              errorData
+                ?.message
+            ) {
+              message =
+                errorData.message;
+            }
+          } catch {
+            // Varsayılan mesaj kullanılır.
+          }
+
+          toast.error(
+            message
+          );
+        },
     });
 
   // ======================================================
@@ -241,7 +497,8 @@ const MeetingDetail = () => {
 
   const meetingType =
     getMeetingTypeInfo(
-      meeting?.meeting_type
+      meeting
+        ?.meeting_type
     );
 
   const MeetingTypeIcon =
@@ -251,7 +508,9 @@ const MeetingDetail = () => {
   // LOADING
   // ======================================================
 
-  if (isLoading) {
+  if (
+    isLoading
+  ) {
     return (
       <div className="flex h-64 items-center justify-center">
 
@@ -293,7 +552,8 @@ const MeetingDetail = () => {
             ?.response
             ?.data
             ?.message ||
-            error?.message ||
+            error
+              ?.message ||
             'Toplantı bilgileri yüklenemedi'}
         </p>
 
@@ -391,14 +651,20 @@ const MeetingDetail = () => {
         <div className="flex flex-wrap items-center gap-2">
 
           <select
-            value={meeting.status}
-            onChange={(event) =>
+            value={
+              meeting.status
+            }
+            onChange={(
+              event
+            ) =>
               updateStatus.mutate(
-                event.target.value
+                event.target
+                  .value
               )
             }
             disabled={
-              updateStatus.isPending
+              updateStatus
+                .isPending
             }
             className="
               rounded-lg
@@ -424,7 +690,9 @@ const MeetingDetail = () => {
           >
 
             {STATUS_OPTIONS.map(
-              (status) => (
+              (
+                status
+              ) => (
                 <option
                   key={
                     status.value
@@ -433,12 +701,38 @@ const MeetingDetail = () => {
                     status.value
                   }
                 >
-                  {status.label}
+                  {
+                    status.label
+                  }
                 </option>
               )
             )}
 
           </select>
+
+          {/* TAKVİME EKLE */}
+
+          {meeting.start_date && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                downloadCalendar.mutate()
+              }
+              loading={
+                downloadCalendar
+                  .isPending
+              }
+              disabled={
+                downloadCalendar
+                  .isPending
+              }
+            >
+              <CalendarDays className="mr-2 h-4 w-4" />
+
+              Takvime Ekle
+            </Button>
+          )}
 
           <Link
             to={`/meetings/${meeting.id}/edit`}
@@ -941,7 +1235,9 @@ const MeetingDetail = () => {
             {/* ATTENDEES */}
 
             {meeting.attendees &&
-              meeting.attendees.length >
+              meeting
+                .attendees
+                .length >
                 0 && (
                 <>
                   <div className="border-t border-gray-100 dark:border-white/[0.05]" />
@@ -969,12 +1265,14 @@ const MeetingDetail = () => {
                             typeof attendee ===
                             'string'
                               ? attendee
-                              : attendee?.name;
+                              : attendee
+                                  ?.name;
 
                           const role =
                             typeof attendee ===
                             'object'
-                              ? attendee?.role
+                              ? attendee
+                                  ?.role
                               : null;
 
                           return (

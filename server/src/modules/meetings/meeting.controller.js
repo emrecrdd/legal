@@ -16,6 +16,11 @@ import {
   AuditLog,
 } from '../../models/AuditLog.js';
 
+import {
+  createIcsEvent,
+  createIcsFileName,
+} from '../../utils/ics.util.js';
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -62,10 +67,70 @@ const createAuditLog = async ({
 };
 
 // ======================================================
+// CALENDAR HELPERS
+// ======================================================
+
+const isDateOnly = (
+  value
+) => {
+  return (
+    typeof value ===
+      'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(
+      value.trim()
+    )
+  );
+};
+
+/*
+ * Meeting modelindeki tarih alanının adı projede
+ * farklı olabilir.
+ *
+ * Aşağıdaki sıra mevcut/yaygın alan isimlerini
+ * güvenli şekilde destekler.
+ *
+ * İlk bulunan dolu değer kullanılır.
+ */
+const getMeetingStart = (
+  meeting
+) => {
+  return (
+    meeting?.start_date ||
+    meeting?.start_time ||
+    meeting?.meeting_date ||
+    meeting?.scheduled_at ||
+    meeting?.date ||
+    null
+  );
+};
+
+const getMeetingEnd = (
+  meeting
+) => {
+  return (
+    meeting?.end_date ||
+    meeting?.end_time ||
+    null
+  );
+};
+
+const getMeetingLocation = (
+  meeting
+) => {
+  return (
+    meeting?.location ||
+    meeting?.meeting_location ||
+    meeting?.address ||
+    ''
+  );
+};
+
+// ======================================================
 // CONTROLLER
 // ======================================================
 
 export const meetingController = {
+
   // ====================================================
   // CREATE
   // ====================================================
@@ -205,6 +270,241 @@ export const meetingController = {
         res,
         error.message,
         404
+      );
+    }
+  },
+
+  // ====================================================
+  // DOWNLOAD CALENDAR / ICS
+  // ====================================================
+
+  async downloadCalendar(
+    req,
+    res
+  ) {
+    try {
+      /*
+       * Normal toplantı detayında kullanılan service
+       * metodunu kullanıyoruz.
+       *
+       * Route tarafındaki VIEW_MEETINGS yetkisi de
+       * ayrıca korunacak.
+       */
+      const meeting =
+        await meetingService.findOne(
+          req.params.id
+        );
+
+      const start =
+        getMeetingStart(
+          meeting
+        );
+
+      const end =
+        getMeetingEnd(
+          meeting
+        );
+
+      if (!start) {
+        return errorResponse(
+          res,
+          'Toplantının takvime eklenebilmesi için tarih bilgisi gereklidir',
+          400
+        );
+      }
+
+      // ==================================================
+      // ALL DAY
+      // ==================================================
+
+      const allDay =
+        isDateOnly(
+          start
+        );
+
+      /*
+       * Tam gün etkinlikte end değeri DATEONLY değilse
+       * göndermiyoruz.
+       *
+       * ICS util başlangıç tarihinden sonraki günü
+       * otomatik DTEND yapar.
+       */
+      const safeEnd =
+        allDay
+          ? (
+              isDateOnly(
+                end
+              )
+                ? end
+                : null
+            )
+          : end;
+
+      // ==================================================
+      // DESCRIPTION
+      // ==================================================
+
+      const descriptionParts =
+        [];
+
+      descriptionParts.push(
+        'Derkenar toplantı kaydı'
+      );
+
+      if (
+        meeting.description
+      ) {
+        descriptionParts.push(
+          '',
+          String(
+            meeting.description
+          ).trim()
+        );
+      }
+
+      if (
+        meeting.meeting_type
+      ) {
+        descriptionParts.push(
+          '',
+          `Toplantı Türü: ${meeting.meeting_type}`
+        );
+      }
+
+      if (
+        meeting.case
+      ) {
+        const caseParts = [
+          meeting.case
+            .case_number,
+
+          meeting.case
+            .title,
+        ].filter(
+          Boolean
+        );
+
+        if (
+          caseParts.length >
+          0
+        ) {
+          descriptionParts.push(
+            `Dava: ${caseParts.join(
+              ' - '
+            )}`
+          );
+        }
+      }
+
+      if (
+        meeting.client
+      ) {
+        const clientName =
+          meeting.client.name ||
+          [
+            meeting.client
+              .first_name,
+
+            meeting.client
+              .last_name,
+          ]
+            .filter(
+              Boolean
+            )
+            .join(' ')
+            .trim();
+
+        if (
+          clientName
+        ) {
+          descriptionParts.push(
+            `Müvekkil: ${clientName}`
+          );
+        }
+      }
+
+      // ==================================================
+      // CREATE ICS
+      // ==================================================
+
+      const icsContent =
+        createIcsEvent({
+          entityType:
+            'meeting',
+
+          entityId:
+            meeting.id,
+
+          title:
+            `Toplantı: ${meeting.title}`,
+
+          description:
+            descriptionParts.join(
+              '\n'
+            ),
+
+          location:
+            getMeetingLocation(
+              meeting
+            ),
+
+          start,
+
+          end:
+            safeEnd,
+
+          allDay,
+
+          calendarName:
+            'Derkenar Toplantıları',
+
+          status:
+            meeting.status ===
+              'cancelled'
+              ? 'CANCELLED'
+              : 'CONFIRMED',
+        });
+
+      const fileName =
+        createIcsFileName(
+          `derkenar-toplanti-${meeting.title}`
+        );
+
+      // ==================================================
+      // RESPONSE
+      // ==================================================
+
+      res.setHeader(
+        'Content-Type',
+        'text/calendar; charset=utf-8'
+      );
+
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${fileName}"`
+      );
+
+      res.setHeader(
+        'Cache-Control',
+        'private, no-store'
+      );
+
+      return res
+        .status(200)
+        .send(
+          icsContent
+        );
+    } catch (error) {
+      logger.error(
+        'Download meeting calendar error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message ||
+          'Toplantı takvim dosyası oluşturulamadı',
+        400
       );
     }
   },
@@ -586,3 +886,5 @@ export const meetingController = {
     }
   },
 };
+
+export default meetingController;

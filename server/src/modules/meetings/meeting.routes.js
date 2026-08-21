@@ -101,6 +101,27 @@ router.get(
   meetingController.findAll
 );
 
+// ======================================================
+// CALENDAR / ICS
+// ======================================================
+
+// Toplantıyı telefon / harici takvime eklemek için
+// .ics dosyası üretir.
+//
+// Genel /:id route'undan önce olmalı.
+
+router.get(
+  '/:id/calendar',
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_MEETINGS
+  ),
+  meetingController.downloadCalendar
+);
+
+// ======================================================
+// SINGLE MEETING
+// ======================================================
+
 // Detay
 router.get(
   '/:id',
