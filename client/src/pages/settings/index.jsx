@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -13,9 +14,13 @@ import {
 
 import {
   useMutation,
+  useQuery,
 } from '@tanstack/react-query';
 
 import authApi from '../../features/auth/auth.api.js';
+
+import calendarIntegrationApi
+  from '../../features/calendar-integrations/calendar-integration.api.js';
 
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -23,14 +28,18 @@ import Input from '../../components/ui/Input.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
+  CalendarDays,
   CheckCircle2,
   KeyRound,
+  Link2,
   LogOut,
   Moon,
+  RefreshCw,
   Save,
   Settings2,
   ShieldCheck,
   Sun,
+  Unlink2,
   UserRound,
 } from 'lucide-react';
 
@@ -59,6 +68,12 @@ const TABS = [
     description: 'Görünüm ve hesap',
     icon: Settings2,
   },
+  {
+    id: 'calendar',
+    label: 'Takvim',
+    description: 'Google Calendar',
+    icon: CalendarDays,
+  },
 ];
 
 // ======================================================
@@ -82,6 +97,19 @@ const getRoleLabel = (
   );
 };
 
+const getApiData = (
+  response
+) => {
+  return (
+    response
+      ?.data
+      ?.data ??
+    response
+      ?.data ??
+    null
+  );
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -99,12 +127,25 @@ const Settings = () => {
   } =
     useTheme();
 
+  const googlePopupRef =
+    useRef(
+      null
+    );
+
   const [
     activeTab,
     setActiveTab,
   ] =
     useState(
       'profile'
+    );
+
+  const [
+    isGoogleConnecting,
+    setIsGoogleConnecting,
+  ] =
+    useState(
+      false
     );
 
   const [
@@ -185,6 +226,147 @@ const Settings = () => {
   ]);
 
   // ====================================================
+  // GOOGLE CALENDAR STATUS
+  // ====================================================
+
+  const googleCalendarStatus =
+    useQuery({
+      queryKey: [
+        'calendar-integration',
+        'google',
+      ],
+
+      queryFn: async () => {
+        const response =
+          await calendarIntegrationApi
+            .getGoogleStatus();
+
+        return getApiData(
+          response
+        );
+      },
+
+      retry:
+        false,
+
+      refetchOnWindowFocus:
+        true,
+
+      /*
+       * Google popup açıkken backend'i periyodik
+       * olarak kontrol ediyoruz.
+       *
+       * Callback tamamlanınca calendar_integrations
+       * kaydı oluşur ve connected=true döner.
+       */
+      refetchInterval:
+        isGoogleConnecting
+          ? 1500
+          : false,
+    });
+
+  const googleIntegration =
+    googleCalendarStatus
+      .data;
+
+  const googleConnected =
+    Boolean(
+      googleIntegration
+        ?.connected &&
+      googleIntegration
+        ?.is_active !==
+        false
+    );
+
+  // ====================================================
+  // GOOGLE CONNECTION COMPLETED
+  // ====================================================
+
+  useEffect(() => {
+    if (
+      !isGoogleConnecting ||
+      !googleConnected
+    ) {
+      return;
+    }
+
+    setIsGoogleConnecting(
+      false
+    );
+
+    if (
+      googlePopupRef
+        .current &&
+      !googlePopupRef
+        .current
+        .closed
+    ) {
+      googlePopupRef
+        .current
+        .close();
+    }
+
+    googlePopupRef.current =
+      null;
+
+    toast.success(
+      'Google Calendar başarıyla bağlandı'
+    );
+  }, [
+    isGoogleConnecting,
+    googleConnected,
+  ]);
+
+  // ====================================================
+  // GOOGLE POPUP CLOSED
+  // ====================================================
+
+  useEffect(() => {
+    if (
+      !isGoogleConnecting
+    ) {
+      return undefined;
+    }
+
+    const interval =
+      window.setInterval(
+        () => {
+          const popup =
+            googlePopupRef
+              .current;
+
+          if (
+            popup &&
+            popup.closed
+          ) {
+            window.clearInterval(
+              interval
+            );
+
+            googlePopupRef.current =
+              null;
+
+            setIsGoogleConnecting(
+              false
+            );
+
+            googleCalendarStatus
+              .refetch();
+          }
+        },
+        500
+      );
+
+    return () => {
+      window.clearInterval(
+        interval
+      );
+    };
+  }, [
+    isGoogleConnecting,
+  ]);
+
+  // ====================================================
   // PROFILE UPDATE
   // ====================================================
 
@@ -259,6 +441,168 @@ const Settings = () => {
             ?.data
             ?.message ||
             'Şifre değiştirilemedi'
+        );
+      },
+    });
+
+  // ====================================================
+  // GOOGLE CONNECT
+  // ====================================================
+
+  const connectGoogle =
+    useMutation({
+      mutationFn: () =>
+        calendarIntegrationApi
+          .getGoogleConnectUrl(),
+
+      onSuccess: (
+        response
+      ) => {
+        const data =
+          getApiData(
+            response
+          );
+
+        const url =
+          data?.url;
+
+        if (!url) {
+          toast.error(
+            'Google bağlantı adresi alınamadı'
+          );
+
+          return;
+        }
+
+        const width =
+          520;
+
+        const height =
+          720;
+
+        const left =
+          Math.max(
+            0,
+            window.screenX +
+              (
+                window.outerWidth -
+                width
+              ) /
+                2
+          );
+
+        const top =
+          Math.max(
+            0,
+            window.screenY +
+              (
+                window.outerHeight -
+                height
+              ) /
+                2
+          );
+
+        const popup =
+          window.open(
+            url,
+            'derkenar-google-calendar',
+            [
+              `width=${width}`,
+              `height=${height}`,
+              `left=${Math.round(
+                left
+              )}`,
+              `top=${Math.round(
+                top
+              )}`,
+              'resizable=yes',
+              'scrollbars=yes',
+            ].join(',')
+          );
+
+        if (!popup) {
+          toast.error(
+            'Google bağlantı penceresi açılamadı. Tarayıcı popup engelini kontrol edin.'
+          );
+
+          return;
+        }
+
+        googlePopupRef.current =
+          popup;
+
+        setIsGoogleConnecting(
+          true
+        );
+
+        try {
+          popup.focus();
+        } catch {
+          // Popup focus desteklenmiyorsa
+          // bağlantı akışını engelleme.
+        }
+      },
+
+      onError: (
+        error
+      ) => {
+        toast.error(
+          error
+            ?.response
+            ?.data
+            ?.message ||
+            'Google Calendar bağlantısı başlatılamadı'
+        );
+      },
+    });
+
+  // ====================================================
+  // GOOGLE DISCONNECT
+  // ====================================================
+
+  const disconnectGoogle =
+    useMutation({
+      mutationFn: () =>
+        calendarIntegrationApi
+          .disconnectGoogle(),
+
+      onSuccess: async () => {
+        setIsGoogleConnecting(
+          false
+        );
+
+        if (
+          googlePopupRef
+            .current &&
+          !googlePopupRef
+            .current
+            .closed
+        ) {
+          googlePopupRef
+            .current
+            .close();
+        }
+
+        googlePopupRef.current =
+          null;
+
+        await googleCalendarStatus
+          .refetch();
+
+        toast.success(
+          'Google Calendar bağlantısı kaldırıldı'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        toast.error(
+          error
+            ?.response
+            ?.data
+            ?.message ||
+            'Google Calendar bağlantısı kaldırılamadı'
         );
       },
     });
@@ -399,6 +743,20 @@ const Settings = () => {
       });
     };
 
+  const handleGoogleDisconnect =
+    () => {
+      const confirmed =
+        window.confirm(
+          'Google Calendar bağlantısını kaldırmak istediğinize emin misiniz?'
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      disconnectGoogle.mutate();
+    };
+
   // ====================================================
   // RENDER
   // ====================================================
@@ -469,7 +827,7 @@ const Settings = () => {
 
         <Card.Body className="p-2">
 
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
 
             {TABS.map(
               (
@@ -617,8 +975,6 @@ const Settings = () => {
               className="space-y-5"
             >
 
-              {/* PROFILE SUMMARY */}
-
               <div
                 className="
                   flex
@@ -702,8 +1058,6 @@ const Settings = () => {
 
               </div>
 
-              {/* NAME */}
-
               <div className="grid gap-4 md:grid-cols-2">
 
                 <Input
@@ -732,8 +1086,6 @@ const Settings = () => {
 
               </div>
 
-              {/* PHONE / TITLE */}
-
               <div className="grid gap-4 md:grid-cols-2">
 
                 <Input
@@ -761,8 +1113,6 @@ const Settings = () => {
                 />
 
               </div>
-
-              {/* BIO */}
 
               <div>
 
@@ -811,8 +1161,6 @@ const Settings = () => {
                 </p>
 
               </div>
-
-              {/* ACTION */}
 
               <div className="flex justify-end border-t border-gray-100 pt-4 dark:border-white/[0.06]">
 
@@ -955,8 +1303,6 @@ const Settings = () => {
 
               </form>
 
-              {/* SECURITY INFO */}
-
               <div
                 className="
                   h-fit
@@ -1004,8 +1350,6 @@ const Settings = () => {
       {activeTab ===
         'preferences' && (
         <div className="space-y-4">
-
-          {/* THEME */}
 
           <Card>
 
@@ -1103,8 +1447,6 @@ const Settings = () => {
 
           </Card>
 
-          {/* ACCOUNT */}
-
           <Card>
 
             <Card.Header>
@@ -1199,8 +1541,6 @@ const Settings = () => {
 
           </Card>
 
-          {/* DANGER ZONE */}
-
           <Card
             className="
               border
@@ -1250,6 +1590,349 @@ const Settings = () => {
                 </Button>
 
               </div>
+
+            </Card.Body>
+
+          </Card>
+
+        </div>
+      )}
+
+      {/* ==================================================
+          CALENDAR
+      ================================================== */}
+
+      {activeTab ===
+        'calendar' && (
+        <div className="space-y-4">
+
+          <Card>
+
+            <Card.Header>
+
+              <div className="flex items-center gap-3">
+
+                <div
+                  className="
+                    flex
+                    h-9
+                    w-9
+                    items-center
+                    justify-center
+                    rounded-lg
+                    bg-blue-50
+                    text-blue-600
+                    dark:bg-blue-500/[0.08]
+                    dark:text-blue-400
+                  "
+                >
+                  <CalendarDays size={17} />
+                </div>
+
+                <div>
+
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Google Calendar
+                  </h2>
+
+                  <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                    Derkenar kayıtlarınızı Google Takvim hesabınızla senkronize edin
+                  </p>
+
+                </div>
+
+              </div>
+
+            </Card.Header>
+
+            <Card.Body>
+
+              {googleCalendarStatus
+                .isLoading ? (
+                <div
+                  className="
+                    flex
+                    items-center
+                    gap-3
+                    rounded-xl
+                    border
+                    border-gray-100
+                    p-4
+                    dark:border-white/[0.06]
+                  "
+                >
+                  <RefreshCw className="h-5 w-5 animate-spin text-gray-400" />
+
+                  <p className="text-sm text-gray-500 dark:text-slate-400">
+                    Google Calendar bağlantısı kontrol ediliyor...
+                  </p>
+                </div>
+              ) : googleCalendarStatus
+                  .isError ? (
+                <div
+                  className="
+                    rounded-xl
+                    border
+                    border-red-100
+                    bg-red-50/50
+                    p-4
+                    dark:border-red-500/10
+                    dark:bg-red-500/[0.025]
+                  "
+                >
+                  <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+                    Bağlantı durumu alınamadı
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">
+                    Google Calendar entegrasyon servisine erişilemedi.
+                  </p>
+
+                  <div className="mt-3">
+
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        googleCalendarStatus
+                          .refetch()
+                      }
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Tekrar Dene
+                    </Button>
+
+                  </div>
+                </div>
+              ) : googleConnected ? (
+                <div className="space-y-4">
+
+                  <div
+                    className="
+                      flex
+                      flex-col
+                      gap-4
+                      rounded-xl
+                      border
+                      border-emerald-100
+                      bg-emerald-50/40
+                      p-4
+                      dark:border-emerald-500/10
+                      dark:bg-emerald-500/[0.025]
+                      sm:flex-row
+                      sm:items-center
+                      sm:justify-between
+                    "
+                  >
+
+                    <div className="flex items-start gap-3">
+
+                      <div
+                        className="
+                          flex
+                          h-10
+                          w-10
+                          shrink-0
+                          items-center
+                          justify-center
+                          rounded-lg
+                          bg-emerald-100
+                          text-emerald-600
+                          dark:bg-emerald-500/[0.10]
+                          dark:text-emerald-400
+                        "
+                      >
+                        <CheckCircle2 size={19} />
+                      </div>
+
+                      <div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                            Google Calendar bağlı
+                          </p>
+
+                          <Badge
+                            variant="success"
+                            dot
+                          >
+                            Aktif
+                          </Badge>
+
+                        </div>
+
+                        <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">
+                          Derkenar, Google Calendar hesabınıza takvim kayıtları gönderebilir.
+                        </p>
+
+                        {googleIntegration
+                          ?.account_email && (
+                          <p className="mt-1 text-xs font-medium text-gray-600 dark:text-slate-300">
+                            {
+                              googleIntegration
+                                .account_email
+                            }
+                          </p>
+                        )}
+
+                      </div>
+
+                    </div>
+
+                    <Button
+                      variant="danger"
+                      onClick={
+                        handleGoogleDisconnect
+                      }
+                      loading={
+                        disconnectGoogle
+                          .isPending
+                      }
+                      disabled={
+                        disconnectGoogle
+                          .isPending
+                      }
+                    >
+                      <Unlink2 className="h-4 w-4" />
+                      Bağlantıyı Kes
+                    </Button>
+
+                  </div>
+
+                  <div
+                    className="
+                      rounded-xl
+                      border
+                      border-gray-100
+                      p-4
+                      dark:border-white/[0.06]
+                    "
+                  >
+
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                      Senkronizasyon
+                    </p>
+
+                    <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">
+                      Google hesabı bağlantısı hazır. Bir sonraki aşamada görev, toplantı ve duruşmaların Google Calendar'a otomatik gönderilmesini etkinleştireceğiz.
+                    </p>
+
+                    {googleIntegration
+                      ?.last_synced_at && (
+                      <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
+                        Son senkronizasyon:{' '}
+                        {new Date(
+                          googleIntegration
+                            .last_synced_at
+                        ).toLocaleString(
+                          'tr-TR'
+                        )}
+                      </p>
+                    )}
+
+                    {googleIntegration
+                      ?.last_error && (
+                      <div
+                        className="
+                          mt-3
+                          rounded-lg
+                          border
+                          border-red-100
+                          bg-red-50
+                          p-3
+                          text-xs
+                          text-red-600
+                          dark:border-red-500/10
+                          dark:bg-red-500/[0.04]
+                          dark:text-red-400
+                        "
+                      >
+                        {
+                          googleIntegration
+                            .last_error
+                        }
+                      </div>
+                    )}
+
+                  </div>
+
+                </div>
+              ) : (
+                <div
+                  className="
+                    flex
+                    flex-col
+                    gap-5
+                    rounded-xl
+                    border
+                    border-gray-100
+                    p-5
+                    dark:border-white/[0.06]
+                    sm:flex-row
+                    sm:items-center
+                    sm:justify-between
+                  "
+                >
+
+                  <div className="flex items-start gap-3">
+
+                    <div
+                      className="
+                        flex
+                        h-11
+                        w-11
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-xl
+                        bg-blue-50
+                        text-blue-600
+                        dark:bg-blue-500/[0.08]
+                        dark:text-blue-400
+                      "
+                    >
+                      <CalendarDays size={20} />
+                    </div>
+
+                    <div>
+
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                        Google Takviminizi bağlayın
+                      </p>
+
+                      <p className="mt-1 max-w-xl text-xs leading-5 text-gray-500 dark:text-slate-400">
+                        Google hesabınızı bağladıktan sonra Derkenar'daki görev, toplantı ve duruşmalarınızı Google Calendar ile senkronize edebilirsiniz.
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                  <Button
+                    onClick={() =>
+                      connectGoogle
+                        .mutate()
+                    }
+                    loading={
+                      connectGoogle
+                        .isPending ||
+                      isGoogleConnecting
+                    }
+                    disabled={
+                      connectGoogle
+                        .isPending ||
+                      isGoogleConnecting
+                    }
+                  >
+                    <Link2 className="h-4 w-4" />
+
+                    {isGoogleConnecting
+                      ? 'Google Bekleniyor...'
+                      : 'Google Takvimimi Bağla'}
+                  </Button>
+
+                </div>
+              )}
 
             </Card.Body>
 

@@ -17,6 +17,7 @@ import { PowerOfAttorney } from './PowerOfAttorney.js';
 import { Template } from './Template.js';
 import { AIAnalysis } from './AIAnalysis.js';
 import { Reminder } from './Reminder.js';
+import { CalendarIntegration } from './CalendarIntegration.js';
 
 const initModels = (sequelize) => {
   // ======================================================
@@ -46,6 +47,10 @@ const initModels = (sequelize) => {
   Template.initModel(sequelize);
   AIAnalysis.initModel(sequelize);
   Reminder.initModel(sequelize);
+
+  CalendarIntegration.initModel(
+    sequelize
+  );
 
   // ======================================================
   // USER ASSOCIATIONS
@@ -249,6 +254,52 @@ const initModels = (sequelize) => {
     foreignKey: 'assigned_to',
     as: 'assignee',
   });
+
+  // ======================================================
+  // CALENDAR INTEGRATION ASSOCIATIONS
+  // ======================================================
+
+  /*
+   * Bir kullanıcı ileride birden fazla takvim sağlayıcısı
+   * bağlayabilir:
+   *
+   * - google
+   * - microsoft
+   *
+   * Veritabanındaki unique constraint:
+   *
+   * user_id + provider
+   *
+   * kombinasyonunu tekilleştirir.
+   */
+
+  User.hasMany(
+    CalendarIntegration,
+    {
+      foreignKey:
+        'user_id',
+
+      as:
+        'calendarIntegrations',
+
+      onUpdate:
+        'CASCADE',
+
+      onDelete:
+        'CASCADE',
+    }
+  );
+
+  CalendarIntegration.belongsTo(
+    User,
+    {
+      foreignKey:
+        'user_id',
+
+      as:
+        'user',
+    }
+  );
 
   // ======================================================
   // PAYMENT USER ASSOCIATIONS
@@ -981,4 +1032,6 @@ export {
   Template,
   AIAnalysis,
   Reminder,
+
+  CalendarIntegration,
 };

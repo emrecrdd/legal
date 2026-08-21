@@ -5,8 +5,13 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 
-import { config } from './config/env.js';
-import { logger } from './config/logger.js';
+import {
+  config,
+} from './config/env.js';
+
+import {
+  logger,
+} from './config/logger.js';
 
 import {
   checkDatabaseHealth,
@@ -71,8 +76,10 @@ import {
 import {
   dashboardRoutes,
 } from './modules/dashboard/dashboard.routes.js';
+
 import performanceRoutes
   from './modules/performance/performance.routes.js';
+
 import {
   meetingRoutes,
 } from './modules/meetings/meeting.routes.js';
@@ -93,16 +100,24 @@ import {
   templateRoutes,
 } from './modules/templates/template.routes.js';
 
+import {
+  calendarIntegrationRoutes,
+} from './modules/calendar-integration/calendar-integration.routes.js';
+
 // ======================================================
 // APP
 // ======================================================
 
-const app = express();
+const app =
+  express();
 
 const isProduction =
-  config.NODE_ENV === 'production';
+  config.NODE_ENV ===
+  'production';
 
-app.disable('x-powered-by');
+app.disable(
+  'x-powered-by'
+);
 
 /*
  * Render, Nginx veya benzeri reverse proxy arkasında
@@ -111,7 +126,10 @@ app.disable('x-powered-by');
  * Bu ayar express-rate-limit ve güvenlik logları
  * açısından önemlidir.
  */
-app.set('trust proxy', 1);
+app.set(
+  'trust proxy',
+  1
+);
 
 /*
  * Güvenlik başlıkları.
@@ -123,7 +141,8 @@ app.set('trust proxy', 1);
 app.use(
   helmet({
     crossOriginResourcePolicy: {
-      policy: 'cross-origin',
+      policy:
+        'cross-origin',
     },
   })
 );
@@ -257,16 +276,24 @@ app.use(
  */
 app.use(
   express.json({
-    limit: '1mb',
-    strict: true,
+    limit:
+      '1mb',
+
+    strict:
+      true,
   })
 );
 
 app.use(
   express.urlencoded({
-    extended: true,
-    limit: '1mb',
-    parameterLimit: 1000,
+    extended:
+      true,
+
+    limit:
+      '1mb',
+
+    parameterLimit:
+      1000,
   })
 );
 
@@ -279,7 +306,9 @@ if (
   'development'
 ) {
   app.use(
-    morgan('dev')
+    morgan(
+      'dev'
+    )
   );
 } else {
   app.use(
@@ -300,7 +329,9 @@ if (
          * Render gibi platformların sık çağırdığı
          * health endpointlerini production logundan çıkarır.
          */
-        skip(req) {
+        skip(
+          req
+        ) {
           return (
             req.path ===
               '/health' ||
@@ -339,7 +370,9 @@ const apiRateLimiter =
     legacyHeaders:
       false,
 
-    skip(req) {
+    skip(
+      req
+    ) {
       return (
         req.path ===
           '/health' ||
@@ -349,7 +382,8 @@ const apiRateLimiter =
     },
 
     message: {
-      success: false,
+      success:
+        false,
 
       message:
         'Çok fazla istek gönderildi. Lütfen daha sonra tekrar deneyin.',
@@ -381,7 +415,9 @@ app.get(
     res
   ) => {
     return res
-      .status(200)
+      .status(
+        200
+      )
       .json({
         status:
           'ok',
@@ -530,13 +566,31 @@ app.use(
   '/api/dashboard',
   dashboardRoutes
 );
+
 app.use(
   '/api/performance',
   performanceRoutes
 );
+
 app.use(
   '/api/meetings',
   meetingRoutes
+);
+
+// ======================================================
+// CALENDAR INTEGRATIONS
+// ======================================================
+
+/*
+ * Google Calendar / ileride Microsoft Calendar
+ * bağlantıları.
+ *
+ * Google OAuth callback route'u bu router içerisinde
+ * authenticate middleware'inden önce tanımlıdır.
+ */
+app.use(
+  '/api/calendar-integrations',
+  calendarIntegrationRoutes
 );
 
 app.use(
@@ -569,7 +623,9 @@ app.use(
     res
   ) => {
     return res
-      .status(404)
+      .status(
+        404
+      )
       .json({
         success:
           false,
