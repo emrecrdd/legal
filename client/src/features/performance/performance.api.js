@@ -5,9 +5,14 @@ const performanceApi = {
   // MY PERFORMANCE
   // ======================================================
 
-  getMyPerformance: () => {
+  getMyPerformance: (
+    params = {}
+  ) => {
     return axios.get(
-      '/performance/me'
+      '/performance/me',
+      {
+        params,
+      }
     );
   },
 
@@ -17,9 +22,14 @@ const performanceApi = {
   // view_team_performance
   // ======================================================
 
-  getTeamOverview: () => {
+  getTeamOverview: (
+    params = {}
+  ) => {
     return axios.get(
-      '/performance/overview'
+      '/performance/overview',
+      {
+        params,
+      }
     );
   },
 
@@ -29,9 +39,14 @@ const performanceApi = {
   // view_team_performance
   // ======================================================
 
-  getUsersPerformance: () => {
+  getUsersPerformance: (
+    params = {}
+  ) => {
     return axios.get(
-      '/performance/users'
+      '/performance/users',
+      {
+        params,
+      }
     );
   },
 
@@ -42,10 +57,14 @@ const performanceApi = {
   // ======================================================
 
   getUserPerformance: (
-    userId
+    userId,
+    params = {}
   ) => {
     return axios.get(
-      `/performance/users/${userId}`
+      `/performance/users/${userId}`,
+      {
+        params,
+      }
     );
   },
 };

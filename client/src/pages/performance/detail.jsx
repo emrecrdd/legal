@@ -5,21 +5,11 @@ import {
 
 import {
   Link,
+  useParams,
 } from 'react-router-dom';
 
 import {
-  useAuth,
-} from '../../app/providers/auth.provider.jsx';
-
-import {
-  hasPermission,
-  PERMISSION_KEYS,
-} from '../../constants/roles.js';
-
-import {
-  useMyPerformance,
-  useTeamPerformanceOverview,
-  useUsersPerformance,
+  useUserPerformance,
 } from '../../features/performance/performance.query.js';
 
 import Card from '../../components/ui/Card.jsx';
@@ -33,6 +23,7 @@ import Error from '../../components/shared/Error.jsx';
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   CalendarDays,
   CheckCircle2,
   Clock3,
@@ -43,7 +34,6 @@ import {
   Timer,
   TrendingUp,
   UserRound,
-  Users,
   X,
 } from 'lucide-react';
 
@@ -130,6 +120,41 @@ const formatDate = (
   );
 };
 
+const formatDateTime = (
+  value
+) => {
+  if (!value) {
+    return '-';
+  }
+
+  const date =
+    new Date(
+      value
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return '-';
+  }
+
+  return new Intl.DateTimeFormat(
+    'tr-TR',
+    {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }
+  ).format(
+    date
+  );
+};
+
 const getFullName = (
   user
 ) => {
@@ -198,6 +223,32 @@ const getStatusVariant = (
   );
 };
 
+const getRoleLabel = (
+  role
+) => {
+  const labels = {
+    admin:
+      'Yönetici',
+
+    lawyer:
+      'Avukat',
+
+    intern:
+      'Stajyer',
+
+    secretary:
+      'Sekreter',
+  };
+
+  return (
+    labels[
+      role
+    ] ||
+    role ||
+    '-'
+  );
+};
+
 // ======================================================
 // METRIC CARD
 // ======================================================
@@ -261,152 +312,14 @@ const MetricCard = ({
 };
 
 // ======================================================
-// METRICS GRID
-// ======================================================
-
-const MetricsGrid = ({
-  metrics,
-}) => {
-  const data =
-    metrics || {};
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-
-      <MetricCard
-        title="Toplam Görev"
-        value={
-          formatNumber(
-            data.total_assignments
-          )
-        }
-        description="Filtreye uyan toplam görev"
-        icon={
-          ListTodo
-        }
-      />
-
-      <MetricCard
-        title="Tamamlanan"
-        value={
-          formatNumber(
-            data.completed
-          )
-        }
-        description={`Tamamlama oranı ${formatPercent(
-          data.completion_rate
-        )}`}
-        icon={
-          CheckCircle2
-        }
-      />
-
-      <MetricCard
-        title="Devam Eden"
-        value={
-          formatNumber(
-            data.in_progress
-          )
-        }
-        description={`${formatNumber(
-          data.pending
-        )} görev bekliyor`}
-        icon={
-          Activity
-        }
-      />
-
-      <MetricCard
-        title="Geciken"
-        value={
-          formatNumber(
-            data.overdue
-          )
-        }
-        description={`Gecikme oranı ${formatPercent(
-          data.overdue_rate
-        )}`}
-        icon={
-          AlertTriangle
-        }
-      />
-
-      <MetricCard
-        title="Zamanında Tamamlama"
-        value={
-          formatPercent(
-            data.on_time_completion_rate
-          )
-        }
-        description={`${formatNumber(
-          data.completed_on_time
-        )} zamanında · ${formatNumber(
-          data.completed_late
-        )} geç`}
-        icon={
-          Percent
-        }
-      />
-
-      <MetricCard
-        title="Toplam Çalışma"
-        value={
-          formatHours(
-            data.total_actual_hours
-          )
-        }
-        description={`Görev başına ortalama ${formatHours(
-          data.average_actual_hours
-        )}`}
-        icon={
-          Timer
-        }
-      />
-
-      <MetricCard
-        title="Ortalama İlerleme"
-        value={
-          formatPercent(
-            data.average_progress
-          )
-        }
-        description="Kişisel görev ilerleme ortalaması"
-        icon={
-          Gauge
-        }
-      />
-
-      <MetricCard
-        title="Aktif İş Yükü"
-        value={
-          formatNumber(
-            data.active
-          )
-        }
-        description="Bekleyen ve devam eden görevler"
-        icon={
-          TrendingUp
-        }
-      />
-
-    </div>
-  );
-};
-
-// ======================================================
 // PAGE
 // ======================================================
 
-const Performance = () => {
+const PerformanceDetail = () => {
   const {
-    user,
-  } = useAuth();
-
-  const canViewTeam =
-    hasPermission(
-      user,
-      PERMISSION_KEYS.VIEW_TEAM_PERFORMANCE
-    );
+    userId,
+  } =
+    useParams();
 
   // ====================================================
   // FILTER STATE
@@ -523,157 +436,112 @@ const Performance = () => {
   };
 
   // ====================================================
-  // MY PERFORMANCE
+  // PERFORMANCE QUERY
   // ====================================================
 
   const {
     data:
-      myResponse,
+      response,
 
-    isLoading:
-      isMyLoading,
+    isLoading,
 
-    isFetching:
-      isMyFetching,
+    isFetching,
 
-    error:
-      myError,
+    error,
 
-    refetch:
-      refetchMy,
+    refetch,
   } =
-    useMyPerformance(
+    useUserPerformance(
+      userId,
       appliedFilters
     );
 
-  // ====================================================
-  // TEAM OVERVIEW
-  // ====================================================
-
-  const {
-    data:
-      overviewResponse,
-
-    isLoading:
-      isOverviewLoading,
-
-    isFetching:
-      isOverviewFetching,
-
-    error:
-      overviewError,
-
-    refetch:
-      refetchOverview,
-  } =
-    useTeamPerformanceOverview(
-      appliedFilters,
-      {
-        enabled:
-          canViewTeam,
-      }
-    );
-
-  // ====================================================
-  // USERS PERFORMANCE
-  // ====================================================
-
-  const {
-    data:
-      usersResponse,
-
-    isLoading:
-      isUsersLoading,
-
-    isFetching:
-      isUsersFetching,
-
-    error:
-      usersError,
-
-    refetch:
-      refetchUsers,
-  } =
-    useUsersPerformance(
-      appliedFilters,
-      {
-        enabled:
-          canViewTeam,
-      }
-    );
-
-  // ====================================================
-  // RESPONSE DATA
-  // ====================================================
-
-  const myPerformance =
-    myResponse
+  const performance =
+    response
       ?.data
       ?.data ||
     null;
 
-  const overview =
-    overviewResponse
-      ?.data
-      ?.data ||
+  const user =
+    performance
+      ?.user ||
     null;
 
-  const usersPerformance =
-    Array.isArray(
-      usersResponse
-        ?.data
-        ?.data
-    )
-      ? usersResponse
-          .data
-          .data
-      : [];
+  const metrics =
+    performance
+      ?.metrics ||
+    {};
 
   const assignments =
     Array.isArray(
-      myPerformance
+      performance
         ?.assignments
     )
-      ? myPerformance
+      ? performance
           .assignments
       : [];
 
   // ====================================================
-  // ASSIGNMENTS
+  // DERIVED
   // ====================================================
 
-  const recentAssignments =
+  const completedAssignments =
     useMemo(
       () =>
-        assignments.slice(
-          0,
-          10
+        assignments.filter(
+          (
+            assignment
+          ) =>
+            assignment.status ===
+            'completed'
         ),
       [
         assignments,
       ]
     );
 
-  const isUpdating =
-    isMyFetching ||
-    (
-      canViewTeam &&
-      (
-        isOverviewFetching ||
-        isUsersFetching
-      )
+  const activeAssignments =
+    useMemo(
+      () =>
+        assignments.filter(
+          (
+            assignment
+          ) =>
+            assignment.status ===
+              'pending' ||
+            assignment.status ===
+              'in_progress'
+        ),
+      [
+        assignments,
+      ]
+    );
+
+  const overdueAssignments =
+    useMemo(
+      () =>
+        assignments.filter(
+          (
+            assignment
+          ) =>
+            assignment.overdue ===
+            true
+        ),
+      [
+        assignments,
+      ]
     );
 
   // ====================================================
-  // INITIAL LOADING
+  // LOADING
   // ====================================================
 
   if (
-    isMyLoading
+    isLoading
   ) {
     return (
       <div className="flex min-h-[420px] items-center justify-center">
-        <Loader text="Performans bilgileri yükleniyor..." />
+        <Loader text="Personel performansı yükleniyor..." />
       </div>
     );
   }
@@ -683,21 +551,25 @@ const Performance = () => {
   // ====================================================
 
   if (
-    myError
+    error
   ) {
     return (
       <Error
-        title="Performans bilgileri alınamadı"
-        message="Kendi performans verileriniz yüklenirken bir hata oluştu."
+        title="Personel performansı alınamadı"
+        message="Kullanıcının performans bilgileri yüklenirken bir hata oluştu."
         error={
-          myError
+          error
         }
         onRetry={() =>
-          refetchMy?.()
+          refetch?.()
         }
       />
     );
   }
+
+  // ====================================================
+  // RENDER
+  // ====================================================
 
   return (
     <div className="space-y-7">
@@ -706,70 +578,99 @@ const Performance = () => {
           HEADER
       ================================================== */}
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div>
 
-        <div className="flex items-start gap-3">
+        <Link
+          to="/performance"
+          className="
+            inline-flex
+            items-center
+            gap-1.5
+            text-xs
+            font-semibold
+            text-gray-500
+            transition
+            hover:text-blue-600
+            dark:text-slate-400
+            dark:hover:text-blue-400
+          "
+        >
+          <ArrowLeft
+            size={15}
+          />
 
-          <div
-            className="
-              flex
-              h-11
-              w-11
-              shrink-0
-              items-center
-              justify-center
-              rounded-xl
-              bg-blue-50
-              text-blue-600
-              dark:bg-blue-500/[0.08]
-              dark:text-blue-400
-            "
-          >
-            <TrendingUp
-              size={21}
-            />
+          Performansa Dön
+        </Link>
+
+        <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+
+          <div className="flex items-start gap-3">
+
+            <div
+              className="
+                flex
+                h-12
+                w-12
+                shrink-0
+                items-center
+                justify-center
+                rounded-xl
+                bg-violet-50
+                text-violet-600
+                dark:bg-violet-500/[0.08]
+                dark:text-violet-400
+              "
+            >
+              <UserRound
+                size={22}
+              />
+            </div>
+
+            <div>
+
+              <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
+                {getFullName(
+                  user
+                )}
+              </h1>
+
+              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                Personel Performans Detayı
+              </p>
+
+              {user
+                ?.email && (
+                <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                  {user.email}
+                </p>
+              )}
+
+            </div>
+
           </div>
 
-          <div>
+          <div className="flex flex-wrap items-center gap-2">
 
-            <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
-              Performans
-            </h1>
+            {isFetching && (
+              <Badge
+                variant="info"
+              >
+                Güncelleniyor
+              </Badge>
+            )}
 
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-slate-400">
-              Görev tamamlama, ilerleme, çalışma süresi ve zamanında teslim performansını takip edin.
-            </p>
-
-            {myPerformance
-              ?.user && (
-              <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
-                {getFullName(
-                  myPerformance.user
+            {user
+              ?.role && (
+              <Badge
+                variant="info"
+              >
+                {getRoleLabel(
+                  user.role
                 )}
-              </p>
+              </Badge>
             )}
 
           </div>
-
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-
-          {isUpdating && (
-            <Badge
-              variant="info"
-            >
-              Güncelleniyor
-            </Badge>
-          )}
-
-          {canViewTeam && (
-            <Badge
-              variant="success"
-            >
-              Ekip performansı erişimi
-            </Badge>
-          )}
 
         </div>
 
@@ -810,11 +711,11 @@ const Performance = () => {
               <div>
 
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Performans Filtreleri
+                  Personel Performans Filtreleri
                 </p>
 
                 <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">
-                  Tarih filtresi görevin son tarihine göre uygulanır.
+                  Tarih aralığı görevin son tarihine göre uygulanır.
                 </p>
 
               </div>
@@ -1085,16 +986,16 @@ const Performance = () => {
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 dark:border-white/[0.06]">
 
-              <div className="text-xs text-gray-400 dark:text-slate-500">
+              <p className="text-xs text-gray-400 dark:text-slate-500">
 
                 {Object.keys(
                   appliedFilters
                 ).length >
                 0
-                  ? 'Aktif filtreler performans verilerine uygulanıyor.'
-                  : 'Şu anda tüm performans kayıtları gösteriliyor.'}
+                  ? 'Aktif filtreler personelin metriklerine ve görev geçmişine uygulanıyor.'
+                  : 'Şu anda kullanıcının tüm performans kayıtları gösteriliyor.'}
 
-              </div>
+              </p>
 
               <div className="flex items-center gap-2">
 
@@ -1106,10 +1007,11 @@ const Performance = () => {
                       resetFilters
                     }
                     disabled={
-                      isUpdating
+                      isFetching
                     }
                   >
                     <X className="h-4 w-4" />
+
                     Temizle
                   </Button>
                 )}
@@ -1121,10 +1023,11 @@ const Performance = () => {
                   }
                   disabled={
                     dateRangeInvalid ||
-                    isUpdating
+                    isFetching
                   }
                 >
                   <SlidersHorizontal className="h-4 w-4" />
+
                   Filtreleri Uygula
                 </Button>
 
@@ -1139,7 +1042,7 @@ const Performance = () => {
       </Card>
 
       {/* ==================================================
-          MY PERFORMANCE
+          METRICS
       ================================================== */}
 
       <section className="space-y-4">
@@ -1147,69 +1050,269 @@ const Performance = () => {
         <div>
 
           <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-            Benim Performansım
+            Performans Özeti
           </h2>
 
           <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-            Buradaki değerler yalnızca size ait görev atamalarından hesaplanır.
+            Değerler kullanıcının filtreye uyan kişisel görev atamalarından hesaplanır.
           </p>
 
         </div>
 
-        <MetricsGrid
-          metrics={
-            myPerformance
-              ?.metrics
-          }
-        />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+          <MetricCard
+            title="Toplam Görev"
+            value={
+              formatNumber(
+                metrics.total_assignments
+              )
+            }
+            description="Filtreye uyan toplam görev"
+            icon={
+              ListTodo
+            }
+          />
+
+          <MetricCard
+            title="Tamamlanan"
+            value={
+              formatNumber(
+                metrics.completed
+              )
+            }
+            description={`Tamamlama oranı ${formatPercent(
+              metrics.completion_rate
+            )}`}
+            icon={
+              CheckCircle2
+            }
+          />
+
+          <MetricCard
+            title="Aktif İş Yükü"
+            value={
+              formatNumber(
+                metrics.active
+              )
+            }
+            description={`${formatNumber(
+              metrics.pending
+            )} bekleyen · ${formatNumber(
+              metrics.in_progress
+            )} devam eden`}
+            icon={
+              Activity
+            }
+          />
+
+          <MetricCard
+            title="Geciken"
+            value={
+              formatNumber(
+                metrics.overdue
+              )
+            }
+            description={`Gecikme oranı ${formatPercent(
+              metrics.overdue_rate
+            )}`}
+            icon={
+              AlertTriangle
+            }
+          />
+
+          <MetricCard
+            title="Zamanında Tamamlama"
+            value={
+              formatPercent(
+                metrics.on_time_completion_rate
+              )
+            }
+            description={`${formatNumber(
+              metrics.completed_on_time
+            )} zamanında · ${formatNumber(
+              metrics.completed_late
+            )} geç`}
+            icon={
+              Percent
+            }
+          />
+
+          <MetricCard
+            title="Toplam Çalışma"
+            value={
+              formatHours(
+                metrics.total_actual_hours
+              )
+            }
+            description={`Görev başına ortalama ${formatHours(
+              metrics.average_actual_hours
+            )}`}
+            icon={
+              Timer
+            }
+          />
+
+          <MetricCard
+            title="Ortalama İlerleme"
+            value={
+              formatPercent(
+                metrics.average_progress
+              )
+            }
+            description="Filtredeki kişisel görevlerin ilerleme ortalaması"
+            icon={
+              Gauge
+            }
+          />
+
+          <MetricCard
+            title="Tamamlama Oranı"
+            value={
+              formatPercent(
+                metrics.completion_rate
+              )
+            }
+            description={`${formatNumber(
+              metrics.completed
+            )} / ${formatNumber(
+              metrics.total_assignments
+            )} görev tamamlandı`}
+            icon={
+              TrendingUp
+            }
+          />
+
+        </div>
 
       </section>
 
       {/* ==================================================
-          MY RECENT TASKS
+          QUICK COUNTS
+      ================================================== */}
+
+      <div className="grid gap-4 md:grid-cols-3">
+
+        <Card>
+          <Card.Body>
+
+            <div className="flex items-center gap-3">
+
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
+                <Activity
+                  size={18}
+                />
+              </div>
+
+              <div>
+
+                <p className="text-xs text-gray-500 dark:text-slate-400">
+                  Aktif Görevler
+                </p>
+
+                <p className="mt-0.5 text-xl font-semibold text-gray-900 dark:text-white">
+                  {activeAssignments.length}
+                </p>
+
+              </div>
+
+            </div>
+
+          </Card.Body>
+        </Card>
+
+        <Card>
+          <Card.Body>
+
+            <div className="flex items-center gap-3">
+
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400">
+                <CheckCircle2
+                  size={18}
+                />
+              </div>
+
+              <div>
+
+                <p className="text-xs text-gray-500 dark:text-slate-400">
+                  Tamamlanan Görevler
+                </p>
+
+                <p className="mt-0.5 text-xl font-semibold text-gray-900 dark:text-white">
+                  {completedAssignments.length}
+                </p>
+
+              </div>
+
+            </div>
+
+          </Card.Body>
+        </Card>
+
+        <Card>
+          <Card.Body>
+
+            <div className="flex items-center gap-3">
+
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-500/[0.08] dark:text-red-400">
+                <AlertTriangle
+                  size={18}
+                />
+              </div>
+
+              <div>
+
+                <p className="text-xs text-gray-500 dark:text-slate-400">
+                  Geciken Görevler
+                </p>
+
+                <p className="mt-0.5 text-xl font-semibold text-gray-900 dark:text-white">
+                  {overdueAssignments.length}
+                </p>
+
+              </div>
+
+            </div>
+
+          </Card.Body>
+        </Card>
+
+      </div>
+
+      {/* ==================================================
+          TASK HISTORY
       ================================================== */}
 
       <section className="space-y-4">
 
-        <div className="flex items-end justify-between gap-4">
+        <div>
 
-          <div>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+            Görev Geçmişi
+          </h2>
 
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-              Son Görevlerim
-            </h2>
-
-            <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-              Uygulanan filtrelere göre kişisel görev durumunuz ve ilerlemeniz.
-            </p>
-
-          </div>
-
-          <Link
-            to="/tasks"
-            className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
-          >
-            Tüm görevler
-          </Link>
+          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+            Seçilen filtrelere göre kullanıcının görev bazlı kişisel durum, ilerleme ve çalışma süresi kayıtları.
+          </p>
 
         </div>
 
         <Card>
 
-          {recentAssignments.length ===
+          {assignments.length ===
           0 ? (
             <Card.Body>
 
-              <div className="py-8 text-center">
+              <div className="py-10 text-center">
 
                 <ListTodo className="mx-auto h-8 w-8 text-gray-300 dark:text-slate-600" />
 
                 <p className="mt-3 text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Görev bulunamadı
+                  Görev kaydı bulunamadı
                 </p>
 
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
-                  Seçili filtrelere uyan kişisel görev kaydı bulunmuyor.
+                  Seçili filtrelere uyan görev bulunmuyor.
                 </p>
 
               </div>
@@ -1243,6 +1346,14 @@ const Performance = () => {
                   </Table.HeadCell>
 
                   <Table.HeadCell>
+                    Başlama
+                  </Table.HeadCell>
+
+                  <Table.HeadCell>
+                    Tamamlama
+                  </Table.HeadCell>
+
+                  <Table.HeadCell>
                     Süre
                   </Table.HeadCell>
 
@@ -1252,7 +1363,7 @@ const Performance = () => {
 
               <Table.Body>
 
-                {recentAssignments.map(
+                {assignments.map(
                   (
                     assignment
                   ) => (
@@ -1264,11 +1375,11 @@ const Performance = () => {
 
                       <Table.Cell>
 
-                        <div className="min-w-[190px]">
+                        <div className="min-w-[210px]">
 
                           <Link
                             to={`/tasks/${assignment.task_id}`}
-                            className="font-semibold text-gray-900 hover:text-blue-600 dark:text-white dark:hover:text-blue-400"
+                            className="font-semibold text-gray-900 transition hover:text-blue-600 dark:text-white dark:hover:text-blue-400"
                           >
                             {assignment
                               .task
@@ -1302,7 +1413,7 @@ const Performance = () => {
 
                       <Table.Cell>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
 
                           <Badge
                             variant={
@@ -1322,6 +1433,22 @@ const Performance = () => {
                               variant="danger"
                             >
                               Gecikti
+                            </Badge>
+                          )}
+
+                          {assignment.completed_on_time && (
+                            <Badge
+                              variant="success"
+                            >
+                              Zamanında
+                            </Badge>
+                          )}
+
+                          {assignment.completed_late && (
+                            <Badge
+                              variant="danger"
+                            >
+                              Geç Tamamlandı
                             </Badge>
                           )}
 
@@ -1350,7 +1477,7 @@ const Performance = () => {
                           <div className="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-white/[0.06]">
 
                             <div
-                              className="h-full rounded-full bg-blue-500 transition-all"
+                              className="h-full rounded-full bg-blue-500"
                               style={{
                                 width: `${Math.min(
                                   100,
@@ -1384,17 +1511,46 @@ const Performance = () => {
 
                       <Table.Cell>
 
-                        <span className="whitespace-nowrap text-xs font-medium text-gray-600 dark:text-slate-300">
-
-                          {assignment
-                            .actual_hours !=
-                          null
-                            ? formatHours(
-                                assignment.actual_hours
-                              )
-                            : '-'}
-
+                        <span className="whitespace-nowrap text-xs text-gray-500 dark:text-slate-400">
+                          {formatDateTime(
+                            assignment.started_at
+                          )}
                         </span>
+
+                      </Table.Cell>
+
+                      <Table.Cell>
+
+                        <span className="whitespace-nowrap text-xs text-gray-500 dark:text-slate-400">
+                          {formatDateTime(
+                            assignment.completed_at
+                          )}
+                        </span>
+
+                      </Table.Cell>
+
+                      <Table.Cell>
+
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+
+                          <Clock3
+                            size={14}
+                            className="text-gray-400"
+                          />
+
+                          <span className="text-xs font-medium text-gray-600 dark:text-slate-300">
+
+                            {assignment
+                              .actual_hours !=
+                            null
+                              ? formatHours(
+                                  assignment.actual_hours
+                                )
+                              : '-'}
+
+                          </span>
+
+                        </div>
 
                       </Table.Cell>
 
@@ -1411,403 +1567,8 @@ const Performance = () => {
 
       </section>
 
-      {/* ==================================================
-          TEAM AREA
-      ================================================== */}
-
-      {canViewTeam && (
-        <>
-
-          <section className="space-y-4">
-
-            <div className="flex items-start gap-3">
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400">
-
-                <Users
-                  size={18}
-                />
-
-              </div>
-
-              <div>
-
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-                  Ekip Performansı
-                </h2>
-
-                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  Aynı filtreler tüm ekip performans hesaplamalarına uygulanır.
-                </p>
-
-              </div>
-
-            </div>
-
-            {overviewError ? (
-              <Error
-                title="Ekip özeti alınamadı"
-                message="Ekip performans özeti yüklenemedi."
-                error={
-                  overviewError
-                }
-                onRetry={() =>
-                  refetchOverview?.()
-                }
-              />
-            ) : isOverviewLoading ? (
-              <div className="flex min-h-[180px] items-center justify-center">
-                <Loader text="Ekip özeti yükleniyor..." />
-              </div>
-            ) : (
-              <>
-
-                <MetricsGrid
-                  metrics={
-                    overview
-                  }
-                />
-
-                <Card>
-
-                  <Card.Body>
-
-                    <div className="flex items-center gap-3">
-
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-50 text-gray-500 dark:bg-white/[0.04] dark:text-slate-400">
-
-                        <UserRound
-                          size={19}
-                        />
-
-                      </div>
-
-                      <div>
-
-                        <p className="text-xs text-gray-500 dark:text-slate-400">
-                          Görev kaydı bulunan personel
-                        </p>
-
-                        <p className="mt-0.5 text-xl font-semibold text-gray-900 dark:text-white">
-
-                          {formatNumber(
-                            overview
-                              ?.users_with_assignments
-                          )}
-
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                  </Card.Body>
-
-                </Card>
-
-              </>
-            )}
-
-          </section>
-
-          {/* ==================================================
-              TEAM USERS TABLE
-          ================================================== */}
-
-          <section className="space-y-4">
-
-            <div>
-
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-                Personel Karşılaştırması
-              </h2>
-
-              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                Seçilen filtrelere göre kullanıcı bazlı görev performansı.
-              </p>
-
-            </div>
-
-            {usersError ? (
-              <Error
-                title="Personel performansı alınamadı"
-                message="Kullanıcı performans listesi yüklenemedi."
-                error={
-                  usersError
-                }
-                onRetry={() =>
-                  refetchUsers?.()
-                }
-              />
-            ) : isUsersLoading ? (
-              <div className="flex min-h-[220px] items-center justify-center">
-                <Loader text="Personel performansları yükleniyor..." />
-              </div>
-            ) : (
-              <Card>
-
-                {usersPerformance.length ===
-                0 ? (
-                  <Card.Body>
-
-                    <div className="py-8 text-center">
-
-                      <Users className="mx-auto h-8 w-8 text-gray-300 dark:text-slate-600" />
-
-                      <p className="mt-3 text-sm text-gray-500 dark:text-slate-400">
-                        Gösterilecek kullanıcı performansı bulunamadı.
-                      </p>
-
-                    </div>
-
-                  </Card.Body>
-                ) : (
-                  <Table>
-
-                    <Table.Head>
-
-                      <Table.Row
-                        hover={
-                          false
-                        }
-                      >
-
-                        <Table.HeadCell>
-                          Personel
-                        </Table.HeadCell>
-
-                        <Table.HeadCell>
-                          Görev
-                        </Table.HeadCell>
-
-                        <Table.HeadCell>
-                          Tamamlanan
-                        </Table.HeadCell>
-
-                        <Table.HeadCell>
-                          Aktif
-                        </Table.HeadCell>
-
-                        <Table.HeadCell>
-                          Geciken
-                        </Table.HeadCell>
-
-                        <Table.HeadCell>
-                          Zamanında
-                        </Table.HeadCell>
-
-                        <Table.HeadCell>
-                          Çalışma
-                        </Table.HeadCell>
-
-                        <Table.HeadCell>
-                          Ort. İlerleme
-                        </Table.HeadCell>
-
-                      </Table.Row>
-
-                    </Table.Head>
-
-                    <Table.Body>
-
-                      {usersPerformance.map(
-                        (
-                          item
-                        ) => {
-                          const metrics =
-                            item.metrics ||
-                            {};
-
-                          return (
-                            <Table.Row
-                              key={
-                                item
-                                  .user
-                                  ?.id
-                              }
-                            >
-
-                              <Table.Cell>
-
-                                <div className="flex min-w-[180px] items-center gap-3">
-
-                                  <div
-                                    className="
-                                      flex
-                                      h-9
-                                      w-9
-                                      shrink-0
-                                      items-center
-                                      justify-center
-                                      rounded-full
-                                      bg-violet-50
-                                      text-xs
-                                      font-semibold
-                                      text-violet-600
-                                      dark:bg-violet-500/[0.08]
-                                      dark:text-violet-400
-                                    "
-                                  >
-
-                                    {item.user
-                                      ?.first_name
-                                      ?.[0] ||
-                                      ''}
-
-                                    {item.user
-                                      ?.last_name
-                                      ?.[0] ||
-                                      ''}
-
-                                  </div>
-
-                                  <div>
-
-                                    <Link
-                                      to={`/performance/users/${item.user?.id}`}
-                                      className="
-                                        font-semibold
-                                        text-gray-900
-                                        transition
-                                        hover:text-blue-600
-                                        dark:text-white
-                                        dark:hover:text-blue-400
-                                      "
-                                    >
-                                      {getFullName(
-                                        item.user
-                                      )}
-                                    </Link>
-
-                                    <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-
-                                      {item
-                                        .user
-                                        ?.email ||
-                                        '-'}
-
-                                    </p>
-
-                                  </div>
-
-                                </div>
-
-                              </Table.Cell>
-
-                              <Table.Cell>
-
-                                {formatNumber(
-                                  metrics.total_assignments
-                                )}
-
-                              </Table.Cell>
-
-                              <Table.Cell>
-
-                                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-
-                                  {formatNumber(
-                                    metrics.completed
-                                  )}
-
-                                </span>
-
-                              </Table.Cell>
-
-                              <Table.Cell>
-
-                                {formatNumber(
-                                  metrics.active
-                                )}
-
-                              </Table.Cell>
-
-                              <Table.Cell>
-
-                                <span
-                                  className={
-                                    safeNumber(
-                                      metrics.overdue
-                                    ) >
-                                    0
-                                      ? 'font-semibold text-red-600 dark:text-red-400'
-                                      : 'text-gray-500 dark:text-slate-400'
-                                  }
-                                >
-
-                                  {formatNumber(
-                                    metrics.overdue
-                                  )}
-
-                                </span>
-
-                              </Table.Cell>
-
-                              <Table.Cell>
-
-                                <span className="whitespace-nowrap text-sm font-semibold text-gray-700 dark:text-slate-300">
-
-                                  {formatPercent(
-                                    metrics.on_time_completion_rate
-                                  )}
-
-                                </span>
-
-                              </Table.Cell>
-
-                              <Table.Cell>
-
-                                <div className="flex items-center gap-1.5 whitespace-nowrap">
-
-                                  <Clock3
-                                    size={14}
-                                    className="text-gray-400"
-                                  />
-
-                                  <span className="text-sm text-gray-600 dark:text-slate-300">
-
-                                    {formatHours(
-                                      metrics.total_actual_hours
-                                    )}
-
-                                  </span>
-
-                                </div>
-
-                              </Table.Cell>
-
-                              <Table.Cell>
-
-                                <span className="font-semibold text-blue-600 dark:text-blue-400">
-
-                                  {formatPercent(
-                                    metrics.average_progress
-                                  )}
-
-                                </span>
-
-                              </Table.Cell>
-
-                            </Table.Row>
-                          );
-                        }
-                      )}
-
-                    </Table.Body>
-
-                  </Table>
-                )}
-
-              </Card>
-            )}
-
-          </section>
-
-        </>
-      )}
-
     </div>
   );
 };
 
-export default Performance;
+export default PerformanceDetail;

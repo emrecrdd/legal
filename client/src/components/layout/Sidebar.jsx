@@ -25,6 +25,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  TrendingUp,
   Users,
   WalletCards,
   X,
@@ -139,6 +140,19 @@ const navigationGroups = [
         permission:
           PERMISSION_KEYS.VIEW_TASKS,
       },
+{
+      path:
+        '/performance',
+
+      label:
+        'Performans',
+
+      icon:
+        TrendingUp,
+
+      permission:
+        PERMISSION_KEYS.VIEW_OWN_PERFORMANCE,
+    },
 
       {
         path:

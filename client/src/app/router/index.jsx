@@ -92,6 +92,7 @@ import TaskEdit from '../../pages/tasks/edit.jsx';
 // ======================================================
 
 import Performance from '../../pages/performance/index.jsx';
+import PerformanceDetail from '../../pages/performance/detail.jsx';
 // ======================================================
 // MEETINGS
 // ======================================================
@@ -605,6 +606,22 @@ const AppRouter = () => {
     path="/performance"
     element={
       <Performance />
+    }
+  />
+</Route>
+<Route
+  element={
+    <PrivateRoute
+      requiredPermission={
+        PERMISSION_KEYS.VIEW_TEAM_PERFORMANCE
+      }
+    />
+  }
+>
+  <Route
+    path="/performance/users/:userId"
+    element={
+      <PerformanceDetail />
     }
   />
 </Route>

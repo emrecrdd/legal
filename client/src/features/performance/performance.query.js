@@ -5,6 +5,169 @@ import {
 import performanceApi from './performance.api.js';
 
 // ======================================================
+// FILTER HELPERS
+// ======================================================
+
+const normalizeFilters = (
+  filters = {}
+) => {
+  if (
+    !filters ||
+    typeof filters !==
+      'object' ||
+    Array.isArray(
+      filters
+    )
+  ) {
+    return {};
+  }
+
+  const normalized = {};
+
+  if (
+    filters.status
+  ) {
+    normalized.status =
+      filters.status;
+  }
+
+  if (
+    filters.date_from
+  ) {
+    normalized.date_from =
+      filters.date_from;
+  }
+
+  if (
+    filters.date_to
+  ) {
+    normalized.date_to =
+      filters.date_to;
+  }
+
+  if (
+    filters.overdue !==
+      undefined &&
+    filters.overdue !==
+      null &&
+    filters.overdue !==
+      ''
+  ) {
+    normalized.overdue =
+      filters.overdue;
+  }
+
+  return normalized;
+};
+
+/*
+ * Önceki kullanımımız:
+ *
+ * useTeamPerformanceOverview({
+ *   enabled: canViewTeam,
+ * })
+ *
+ * idi.
+ *
+ * Şimdi filtre desteği geldiği için ideal kullanım:
+ *
+ * useTeamPerformanceOverview(
+ *   filters,
+ *   {
+ *     enabled: canViewTeam,
+ *   }
+ * )
+ *
+ * Ama mevcut sayfayı hemen kırmamak için
+ * eski kullanımı da destekliyoruz.
+ */
+const resolveHookArguments = (
+  filters = {},
+  options = {}
+) => {
+  const possibleOptions =
+    filters &&
+    typeof filters ===
+      'object' &&
+    !Array.isArray(
+      filters
+    )
+      ? filters
+      : {};
+
+  const hasFilterField =
+    Object.prototype.hasOwnProperty.call(
+      possibleOptions,
+      'status'
+    ) ||
+    Object.prototype.hasOwnProperty.call(
+      possibleOptions,
+      'date_from'
+    ) ||
+    Object.prototype.hasOwnProperty.call(
+      possibleOptions,
+      'date_to'
+    ) ||
+    Object.prototype.hasOwnProperty.call(
+      possibleOptions,
+      'overdue'
+    );
+
+  const hasQueryOption =
+    Object.prototype.hasOwnProperty.call(
+      possibleOptions,
+      'enabled'
+    ) ||
+    Object.prototype.hasOwnProperty.call(
+      possibleOptions,
+      'staleTime'
+    ) ||
+    Object.prototype.hasOwnProperty.call(
+      possibleOptions,
+      'gcTime'
+    ) ||
+    Object.prototype.hasOwnProperty.call(
+      possibleOptions,
+      'refetchOnWindowFocus'
+    ) ||
+    Object.prototype.hasOwnProperty.call(
+      possibleOptions,
+      'retry'
+    );
+
+  /*
+   * İlk parametre filtre değil ama query option ise,
+   * eski kullanım kabul edilir.
+   */
+  if (
+    !hasFilterField &&
+    hasQueryOption &&
+    (
+      !options ||
+      Object.keys(
+        options
+      ).length === 0
+    )
+  ) {
+    return {
+      filters: {},
+      options:
+        possibleOptions,
+    };
+  }
+
+  return {
+    filters:
+      normalizeFilters(
+        filters
+      ),
+
+    options:
+      options || {},
+  };
+};
+
+// ======================================================
 // QUERY KEYS
 // ======================================================
 
@@ -13,27 +176,46 @@ export const performanceQueryKeys = {
     'performance',
   ],
 
-  my: () => [
+  my: (
+    filters = {}
+  ) => [
     ...performanceQueryKeys.all,
     'me',
+    normalizeFilters(
+      filters
+    ),
   ],
 
-  overview: () => [
+  overview: (
+    filters = {}
+  ) => [
     ...performanceQueryKeys.all,
     'overview',
+    normalizeFilters(
+      filters
+    ),
   ],
 
-  users: () => [
+  users: (
+    filters = {}
+  ) => [
     ...performanceQueryKeys.all,
     'users',
+    normalizeFilters(
+      filters
+    ),
   ],
 
   user: (
-    userId
+    userId,
+    filters = {}
   ) => [
     ...performanceQueryKeys.all,
     'user',
     userId,
+    normalizeFilters(
+      filters
+    ),
   ],
 };
 
@@ -42,16 +224,27 @@ export const performanceQueryKeys = {
 // ======================================================
 
 export const useMyPerformance = (
+  filters = {},
   options = {}
 ) => {
+  const resolved =
+    resolveHookArguments(
+      filters,
+      options
+    );
+
   return useQuery({
+    ...resolved.options,
+
     queryKey:
-      performanceQueryKeys.my(),
+      performanceQueryKeys.my(
+        resolved.filters
+      ),
 
-    queryFn:
-      performanceApi.getMyPerformance,
-
-    ...options,
+    queryFn: () =>
+      performanceApi.getMyPerformance(
+        resolved.filters
+      ),
   });
 };
 
@@ -60,16 +253,27 @@ export const useMyPerformance = (
 // ======================================================
 
 export const useTeamPerformanceOverview = (
+  filters = {},
   options = {}
 ) => {
+  const resolved =
+    resolveHookArguments(
+      filters,
+      options
+    );
+
   return useQuery({
+    ...resolved.options,
+
     queryKey:
-      performanceQueryKeys.overview(),
+      performanceQueryKeys.overview(
+        resolved.filters
+      ),
 
-    queryFn:
-      performanceApi.getTeamOverview,
-
-    ...options,
+    queryFn: () =>
+      performanceApi.getTeamOverview(
+        resolved.filters
+      ),
   });
 };
 
@@ -78,16 +282,27 @@ export const useTeamPerformanceOverview = (
 // ======================================================
 
 export const useUsersPerformance = (
+  filters = {},
   options = {}
 ) => {
+  const resolved =
+    resolveHookArguments(
+      filters,
+      options
+    );
+
   return useQuery({
+    ...resolved.options,
+
     queryKey:
-      performanceQueryKeys.users(),
+      performanceQueryKeys.users(
+        resolved.filters
+      ),
 
-    queryFn:
-      performanceApi.getUsersPerformance,
-
-    ...options,
+    queryFn: () =>
+      performanceApi.getUsersPerformance(
+        resolved.filters
+      ),
   });
 };
 
@@ -97,28 +312,43 @@ export const useUsersPerformance = (
 
 export const useUserPerformance = (
   userId,
+  filters = {},
   options = {}
 ) => {
+  const resolved =
+    resolveHookArguments(
+      filters,
+      options
+    );
+
+  const optionEnabled =
+    resolved.options
+      ?.enabled;
+
+  const enabled =
+    Boolean(
+      userId
+    ) &&
+    (
+      optionEnabled ??
+      true
+    );
+
   return useQuery({
+    ...resolved.options,
+
     queryKey:
       performanceQueryKeys.user(
-        userId
+        userId,
+        resolved.filters
       ),
 
     queryFn: () =>
       performanceApi.getUserPerformance(
-        userId
+        userId,
+        resolved.filters
       ),
 
-    enabled:
-      Boolean(
-        userId
-      ) &&
-      (
-        options.enabled ??
-        true
-      ),
-
-    ...options,
+    enabled,
   });
 };

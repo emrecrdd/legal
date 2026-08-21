@@ -13,7 +13,9 @@ export const getTeamOverview =
   ) => {
     try {
       const data =
-        await performanceService.getTeamOverview();
+        await performanceService.getTeamOverview(
+          req.query
+        );
 
       return res.status(200).json({
         success:
@@ -49,7 +51,9 @@ export const getUsersPerformance =
   ) => {
     try {
       const data =
-        await performanceService.getUsersPerformance();
+        await performanceService.getUsersPerformance(
+          req.query
+        );
 
       return res.status(200).json({
         success:
@@ -100,7 +104,8 @@ export const getUserPerformance =
 
       const data =
         await performanceService.getUserPerformance(
-          userId
+          userId,
+          req.query
         );
 
       return res.status(200).json({
@@ -159,7 +164,8 @@ export const getMyPerformance =
 
       const data =
         await performanceService.getUserPerformance(
-          userId
+          userId,
+          req.query
         );
 
       return res.status(200).json({

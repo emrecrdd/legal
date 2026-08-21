@@ -142,6 +142,182 @@ const toDate = (
   return date;
 };
 
+const normalizeDateBoundary = (
+  value,
+  endOfDay = false
+) => {
+  if (!value) {
+    return null;
+  }
+
+  const raw =
+    String(
+      value
+    ).trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  /*
+   * Frontend <input type="date"> üzerinden
+   * YYYY-MM-DD gönderecek.
+   */
+  if (
+    /^\d{4}-\d{2}-\d{2}$/.test(
+      raw
+    )
+  ) {
+    const date =
+      new Date(
+        endOfDay
+          ? `${raw}T23:59:59.999Z`
+          : `${raw}T00:00:00.000Z`
+      );
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return null;
+    }
+
+    return date;
+  }
+
+  const parsed =
+    new Date(
+      raw
+    );
+
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
+    return null;
+  }
+
+  if (endOfDay) {
+    parsed.setUTCHours(
+      23,
+      59,
+      59,
+      999
+    );
+  } else {
+    parsed.setUTCHours(
+      0,
+      0,
+      0,
+      0
+    );
+  }
+
+  return parsed;
+};
+
+// ======================================================
+// FILTER HELPERS
+// ======================================================
+
+const normalizeBooleanFilter = (
+  value
+) => {
+  if (
+    value === true ||
+    value === 'true' ||
+    value === '1' ||
+    value === 1
+  ) {
+    return true;
+  }
+
+  if (
+    value === false ||
+    value === 'false' ||
+    value === '0' ||
+    value === 0
+  ) {
+    return false;
+  }
+
+  return null;
+};
+
+const normalizePerformanceFilters = (
+  filters = {}
+) => {
+  const rawStatus =
+    String(
+      filters.status ||
+        ''
+    )
+      .trim()
+      .toLowerCase();
+
+  const status =
+    VALID_ASSIGNMENT_STATUSES.has(
+      rawStatus
+    )
+      ? rawStatus
+      : null;
+
+  const dateFrom =
+    normalizeDateBoundary(
+      filters.date_from ??
+        filters.dateFrom,
+      false
+    );
+
+  const dateTo =
+    normalizeDateBoundary(
+      filters.date_to ??
+        filters.dateTo,
+      true
+    );
+
+  const overdue =
+    normalizeBooleanFilter(
+      filters.overdue
+    );
+
+  return {
+    status,
+    date_from:
+      dateFrom,
+    date_to:
+      dateTo,
+    overdue,
+  };
+};
+
+const buildAssignmentWhere = ({
+  filters,
+  userId = null,
+}) => {
+  const where = {};
+
+  if (userId) {
+    where.user_id =
+      userId;
+  }
+
+  if (
+    filters.status
+  ) {
+    where.status =
+      filters.status;
+  }
+
+  return where;
+};
+
+// ======================================================
+// ASSIGNMENT STATUS HELPERS
+// ======================================================
+
 const isAssignmentOverdue = (
   assignment,
   now = new Date()
@@ -238,6 +414,53 @@ const isCompletedLate = (
     completedAt.getTime() >
     dueDate.getTime()
   );
+};
+
+// ======================================================
+// POST FILTERS
+//
+// "overdue" hesaplanmış bir durum olduğu için
+// TaskAssignee WHERE içine doğrudan koymuyoruz.
+// ======================================================
+
+const applyPostFilters = (
+  assignments = [],
+  filters
+) => {
+  let result =
+    assignments;
+
+  if (
+    filters.overdue ===
+    true
+  ) {
+    result =
+      result.filter(
+        (
+          assignment
+        ) =>
+          isAssignmentOverdue(
+            assignment
+          )
+      );
+  }
+
+  if (
+    filters.overdue ===
+    false
+  ) {
+    result =
+      result.filter(
+        (
+          assignment
+        ) =>
+          !isAssignmentOverdue(
+            assignment
+          )
+      );
+  }
+
+  return result;
 };
 
 // ======================================================
@@ -463,44 +686,83 @@ const USER_INCLUDE = {
     true,
 };
 
-const TASK_INCLUDE = {
-  model:
-    Task,
-
-  as:
-    'task',
-
-  attributes:
-    PERFORMANCE_TASK_ATTRIBUTES,
-
-  required:
-    true,
-
-  where: {
+const buildTaskInclude = (
+  filters
+) => {
+  const taskWhere = {
     status: {
       [Op.ne]:
         'cancelled',
     },
-  },
+  };
 
-  include: [
-    {
-      model:
-        Case,
+  /*
+   * Tarih aralığı görev son tarihine göre uygulanır.
+   *
+   * Bunun sebebi task_assignees tablosunda şu anda
+   * assigned_at alanının bulunmamasıdır.
+   */
+  if (
+    filters.date_from ||
+    filters.date_to
+  ) {
+    taskWhere.due_date =
+      {};
 
-      as:
-        'case',
+    if (
+      filters.date_from
+    ) {
+      taskWhere.due_date[
+        Op.gte
+      ] =
+        filters.date_from;
+    }
 
-      attributes: [
-        'id',
-        'title',
-        'case_number',
-      ],
+    if (
+      filters.date_to
+    ) {
+      taskWhere.due_date[
+        Op.lte
+      ] =
+        filters.date_to;
+    }
+  }
 
-      required:
-        false,
-    },
-  ],
+  return {
+    model:
+      Task,
+
+    as:
+      'task',
+
+    attributes:
+      PERFORMANCE_TASK_ATTRIBUTES,
+
+    required:
+      true,
+
+    where:
+      taskWhere,
+
+    include: [
+      {
+        model:
+          Case,
+
+        as:
+          'case',
+
+        attributes: [
+          'id',
+          'title',
+          'case_number',
+        ],
+
+        required:
+          false,
+      },
+    ],
+  };
 };
 
 // ======================================================
@@ -647,6 +909,32 @@ const serializeAssignment = (
 };
 
 // ======================================================
+// FILTER RESPONSE
+// ======================================================
+
+const serializeFilters = (
+  filters
+) => {
+  return {
+    status:
+      filters.status,
+
+    date_from:
+      filters.date_from
+        ? filters.date_from.toISOString()
+        : null,
+
+    date_to:
+      filters.date_to
+        ? filters.date_to.toISOString()
+        : null,
+
+    overdue:
+      filters.overdue,
+  };
+};
+
+// ======================================================
 // SERVICE
 // ======================================================
 
@@ -655,18 +943,38 @@ export const performanceService = {
   // TEAM OVERVIEW
   // ====================================================
 
-  async getTeamOverview() {
+  async getTeamOverview(
+    rawFilters = {}
+  ) {
+    const filters =
+      normalizePerformanceFilters(
+        rawFilters
+      );
+
     const assignments =
       await TaskAssignee.findAll({
+        where:
+          buildAssignmentWhere({
+            filters,
+          }),
+
         include: [
           USER_INCLUDE,
-          TASK_INCLUDE,
+          buildTaskInclude(
+            filters
+          ),
         ],
       });
 
+    const filteredAssignments =
+      applyPostFilters(
+        assignments,
+        filters
+      );
+
     const userIds =
       new Set(
-        assignments.map(
+        filteredAssignments.map(
           (assignment) =>
             assignment.user_id
         )
@@ -676,8 +984,13 @@ export const performanceService = {
       users_with_assignments:
         userIds.size,
 
+      filters:
+        serializeFilters(
+          filters
+        ),
+
       ...calculateMetrics(
-        assignments
+        filteredAssignments
       ),
     };
   },
@@ -686,14 +999,20 @@ export const performanceService = {
   // ALL USER PERFORMANCE
   // ====================================================
 
-  async getUsersPerformance() {
+  async getUsersPerformance(
+    rawFilters = {}
+  ) {
+    const filters =
+      normalizePerformanceFilters(
+        rawFilters
+      );
+
     /*
      * Aktif kullanıcıları ayrıca çekiyoruz.
      *
-     * Böylece henüz hiç görev atanmamış kullanıcı da
-     * performans ekranında 0 değerlerle görünebilir.
+     * Böylece filtre sonucunda görevi olmayan kullanıcı
+     * dahi 0 değerlerle listede kalabilir.
      */
-
     const [
       users,
       assignments,
@@ -722,18 +1041,31 @@ export const performanceService = {
         }),
 
         TaskAssignee.findAll({
+          where:
+            buildAssignmentWhere({
+              filters,
+            }),
+
           include: [
-            TASK_INCLUDE,
+            buildTaskInclude(
+              filters
+            ),
           ],
         }),
       ]);
+
+    const filteredAssignments =
+      applyPostFilters(
+        assignments,
+        filters
+      );
 
     const assignmentsByUser =
       new Map();
 
     for (
       const assignment of
-      assignments
+      filteredAssignments
     ) {
       const userId =
         assignment.user_id;
@@ -781,16 +1113,14 @@ export const performanceService = {
       );
 
     /*
-     * İlk sıralama:
+     * Sıralama:
      *
-     * 1. Tamamlanan görev sayısı yüksek olan
-     * 2. Zamanında tamamlama oranı yüksek olan
-     * 3. Toplam atama sayısı yüksek olan
+     * 1. Tamamlanan görev sayısı
+     * 2. Zamanında tamamlama oranı
+     * 3. Toplam görev sayısı
      *
-     * Bu henüz "puanlama" değildir.
-     * Sadece tabloyu anlamlı sıralar.
+     * Bu performans puanı değildir.
      */
-
     data.sort(
       (
         first,
@@ -839,13 +1169,19 @@ export const performanceService = {
   // ====================================================
 
   async getUserPerformance(
-    userId
+    userId,
+    rawFilters = {}
   ) {
     if (!userId) {
       throw new Error(
         'Kullanıcı ID gereklidir'
       );
     }
+
+    const filters =
+      normalizePerformanceFilters(
+        rawFilters
+      );
 
     const user =
       await User.findByPk(
@@ -864,18 +1200,29 @@ export const performanceService = {
 
     const assignments =
       await TaskAssignee.findAll({
-        where: {
-          user_id:
+        where:
+          buildAssignmentWhere({
+            filters,
             userId,
-        },
+          }),
 
         include: [
-          TASK_INCLUDE,
+          buildTaskInclude(
+            filters
+          ),
         ],
       });
 
+    const filteredAssignments =
+      applyPostFilters(
+        assignments,
+        filters
+      );
+
     const sortedAssignments =
-      [...assignments].sort(
+      [
+        ...filteredAssignments,
+      ].sort(
         (
           first,
           second
@@ -927,9 +1274,14 @@ export const performanceService = {
           user
         ),
 
+      filters:
+        serializeFilters(
+          filters
+        ),
+
       metrics:
         calculateMetrics(
-          assignments
+          filteredAssignments
         ),
 
       assignments:
