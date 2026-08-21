@@ -793,6 +793,10 @@ const notifySafely =
 // GOOGLE CALENDAR HELPERS
 // ======================================================
 
+// ======================================================
+// GOOGLE CALENDAR HELPERS
+// ======================================================
+
 const isDateOnlyValue = (
   value
 ) => {
@@ -804,6 +808,245 @@ const isDateOnlyValue = (
     )
   );
 };
+
+const getTaskCalendarUserIds = (
+  task,
+  assigneesOrIds = []
+) => {
+  const assigneeIds =
+    assigneesOrIds
+      .map(
+        (
+          value
+        ) =>
+          typeof value ===
+            'string'
+            ? value
+            : value?.id
+      )
+      .filter(
+        Boolean
+      );
+
+  return [
+    ...new Set(
+      [
+        task?.created_by,
+        ...assigneeIds,
+      ].filter(
+        Boolean
+      )
+    ),
+  ];
+};
+
+const buildTaskGoogleDescription = (
+  task
+) => {
+  return [
+    'Derkenar görevi',
+
+    task?.description ||
+      null,
+
+    task?.priority
+      ? `Öncelik: ${task.priority}`
+      : null,
+  ]
+    .filter(
+      Boolean
+    )
+    .join(
+      '\n\n'
+    );
+};
+
+const upsertTaskToGoogleForUserSafely =
+  async (
+    task,
+    userId
+  ) => {
+    if (
+      !task?.id ||
+      !task?.due_date ||
+      !userId
+    ) {
+      return;
+    }
+
+    await googleCalendarSyncService
+      .upsertEventSafely({
+        userId,
+
+        entityType:
+          'task',
+
+        entityId:
+          task.id,
+
+        title:
+          `Görev: ${task.title}`,
+
+        description:
+          buildTaskGoogleDescription(
+            task
+          ),
+
+        start:
+          task.due_date,
+
+        end:
+          null,
+
+        allDay:
+          isDateOnlyValue(
+            task.due_date
+          ),
+      });
+  };
+
+const deleteTaskFromGoogleForUserSafely =
+  async (
+    taskId,
+    userId
+  ) => {
+    if (
+      !taskId ||
+      !userId
+    ) {
+      return;
+    }
+
+    await googleCalendarSyncService
+      .deleteEventSafely({
+        userId,
+
+        entityType:
+          'task',
+
+        entityId:
+          taskId,
+      });
+  };
+
+const deleteTaskFromGoogleForUsersSafely =
+  async (
+    taskId,
+    userIds = []
+  ) => {
+    const uniqueUserIds = [
+      ...new Set(
+        userIds.filter(
+          Boolean
+        )
+      ),
+    ];
+
+    if (
+      !taskId ||
+      uniqueUserIds.length ===
+        0
+    ) {
+      return;
+    }
+
+    await Promise.all(
+      uniqueUserIds.map(
+        (
+          userId
+        ) =>
+          deleteTaskFromGoogleForUserSafely(
+            taskId,
+            userId
+          )
+      )
+    );
+  };
+
+const syncTaskToGoogleForUsersSafely =
+  async (
+    task,
+    userIds = []
+  ) => {
+    if (!task?.id) {
+      return;
+    }
+
+    const uniqueUserIds = [
+      ...new Set(
+        userIds.filter(
+          Boolean
+        )
+      ),
+    ];
+
+    if (
+      uniqueUserIds.length ===
+      0
+    ) {
+      return;
+    }
+
+    /*
+     * İptal edilen veya tarihi kaldırılan görev
+     * kullanıcı takviminden kaldırılır.
+     *
+     * completed görevler geçmiş kayıt olarak
+     * Google Takvim'de kalır.
+     */
+    if (
+      task.status ===
+        'cancelled' ||
+      !task.due_date
+    ) {
+      await deleteTaskFromGoogleForUsersSafely(
+        task.id,
+        uniqueUserIds
+      );
+
+      return;
+    }
+
+    await Promise.all(
+      uniqueUserIds.map(
+        (
+          userId
+        ) =>
+          upsertTaskToGoogleForUserSafely(
+            task,
+            userId
+          )
+      )
+    );
+  };
+
+const syncCreatedTaskToGoogleSafely =
+  async (
+    task,
+    assignees = []
+  ) => {
+    /*
+     * Yeni görevde tarih yoksa Google tarafında
+     * oluşturulacak bir event bulunmaz.
+     */
+    if (
+      !task?.id ||
+      !task?.due_date
+    ) {
+      return;
+    }
+
+    const userIds =
+      getTaskCalendarUserIds(
+        task,
+        assignees
+      );
+
+    await syncTaskToGoogleForUsersSafely(
+      task,
+      userIds
+    );
+  };
 
 const syncCreatedTaskToGoogleSafely =
   async (
@@ -1724,7 +1967,7 @@ await syncCreatedTaskToGoogleSafely(
   // UPDATE
   // ====================================================
 
-  async update(
+    async update(
     id,
     data,
     access = {}
@@ -1733,6 +1976,7 @@ await syncCreatedTaskToGoogleSafely(
       await sequelize.transaction();
 
     let task;
+    let calendarUserIds = [];
 
     try {
       task =
@@ -1865,35 +2109,61 @@ await syncCreatedTaskToGoogleSafely(
         });
       }
 
-      await transaction.commit();
+      const assigneeIds =
+        await getTaskAssigneeIds(
+          task,
+          {
+            transaction,
+          }
+        );
 
-      return this.findOne(
-        id,
-        {
-          canViewAllTasks:
-            true,
-        }
-      );
+      calendarUserIds =
+        getTaskCalendarUserIds(
+          task,
+          assigneeIds
+        );
+
+      await transaction.commit();
     } catch (error) {
       await transaction.rollback();
 
       throw error;
     }
+
+    // ==================================================
+    // GOOGLE CALENDAR AUTO SYNC
+    // ==================================================
+
+    await syncTaskToGoogleForUsersSafely(
+      task,
+      calendarUserIds
+    );
+
+    return this.findOne(
+      id,
+      {
+        canViewAllTasks:
+          true,
+      }
+    );
   },
 
   // ====================================================
   // DELETE
   // ====================================================
 
-  async remove(
+    async remove(
     id,
     access = {}
   ) {
     const transaction =
       await sequelize.transaction();
 
+    let task;
+    let calendarUserIds = [];
+
     try {
-      const task =
+      task =
         await Task.findByPk(
           id,
           {
@@ -1918,6 +2188,20 @@ await syncCreatedTaskToGoogleSafely(
         }
       );
 
+      const assigneeIds =
+        await getTaskAssigneeIds(
+          task,
+          {
+            transaction,
+          }
+        );
+
+      calendarUserIds =
+        getTaskCalendarUserIds(
+          task,
+          assigneeIds
+        );
+
       await reminderService.cancelForSource({
         sourceType:
           'task',
@@ -1933,20 +2217,29 @@ await syncCreatedTaskToGoogleSafely(
       });
 
       await transaction.commit();
-
-      return task;
     } catch (error) {
       await transaction.rollback();
 
       throw error;
     }
+
+    // ==================================================
+    // GOOGLE CALENDAR DELETE
+    // ==================================================
+
+    await deleteTaskFromGoogleForUsersSafely(
+      task.id,
+      calendarUserIds
+    );
+
+    return task;
   },
 
   // ====================================================
   // UPDATE STATUS
   // ====================================================
 
-  async updateStatus(
+    async updateStatus(
     id,
     status,
     access = {}
@@ -1954,8 +2247,11 @@ await syncCreatedTaskToGoogleSafely(
     const transaction =
       await sequelize.transaction();
 
+    let task;
+    let calendarUserIds = [];
+
     try {
-      const task =
+      task =
         await Task.findByPk(
           id,
           {
@@ -2094,27 +2390,50 @@ await syncCreatedTaskToGoogleSafely(
         );
       }
 
-      await transaction.commit();
+      const assigneeIds =
+        await getTaskAssigneeIds(
+          task,
+          {
+            transaction,
+          }
+        );
 
-      return this.findOne(
-        id,
-        {
-          canViewAllTasks:
-            true,
-        }
-      );
+      calendarUserIds =
+        getTaskCalendarUserIds(
+          task,
+          assigneeIds
+        );
+
+      await transaction.commit();
     } catch (error) {
       await transaction.rollback();
 
       throw error;
     }
+
+    // ==================================================
+    // GOOGLE CALENDAR STATUS SYNC
+    // ==================================================
+
+    await syncTaskToGoogleForUsersSafely(
+      task,
+      calendarUserIds
+    );
+
+    return this.findOne(
+      id,
+      {
+        canViewAllTasks:
+          true,
+      }
+    );
   },
 
   // ====================================================
   // ASSIGN MULTIPLE USERS
   // ====================================================
 
-  async assignTask(
+    async assignTask(
     id,
     assigneeIds,
     assignedBy = null
@@ -2201,6 +2520,7 @@ await syncCreatedTaskToGoogleSafely(
         task,
         {
           transaction,
+
           lock:
             transaction.LOCK.UPDATE,
         }
@@ -2307,6 +2627,53 @@ await syncCreatedTaskToGoogleSafely(
         }
       );
     }
+
+    // ==================================================
+    // GOOGLE CALENDAR ASSIGNMENT SYNC
+    // ==================================================
+
+    const previousCalendarUserIds =
+      getTaskCalendarUserIds(
+        task,
+        previousAssigneeIds
+      );
+
+    const currentCalendarUserIds =
+      getTaskCalendarUserIds(
+        task,
+        newAssignees
+      );
+
+    /*
+     * Creator her durumda kendi takviminde kalır.
+     *
+     * Bu yüzden eski ve yeni listeleri creator dahil
+     * karşılaştırıyoruz.
+     */
+    const removedCalendarUserIds =
+      previousCalendarUserIds.filter(
+        (
+          userId
+        ) =>
+          !currentCalendarUserIds.includes(
+            userId
+          )
+      );
+
+    await deleteTaskFromGoogleForUsersSafely(
+      task.id,
+      removedCalendarUserIds
+    );
+
+    /*
+     * Mevcut kullanıcıları tekrar upsert etmek güvenlidir.
+     * Deterministic Google event id kullandığımız için
+     * duplicate oluşturmaz.
+     */
+    await syncTaskToGoogleForUsersSafely(
+      task,
+      currentCalendarUserIds
+    );
 
     return this.findOne(
       id,

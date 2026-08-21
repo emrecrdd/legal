@@ -691,6 +691,268 @@ export const googleCalendarSyncService = {
   },
 
   // ====================================================
+  // DELETE EVENT
+  // ====================================================
+
+  async deleteEvent({
+    userId,
+    entityType,
+    entityId,
+  }) {
+    if (!userId) {
+      throw new Error(
+        'Google Calendar silme işlemi için kullanıcı gereklidir'
+      );
+    }
+
+    if (
+      !entityType ||
+      !entityId
+    ) {
+      throw new Error(
+        'Google Calendar silme işlemi için entity bilgileri gereklidir'
+      );
+    }
+
+    // ==================================================
+    // CONNECTION CHECK
+    // ==================================================
+
+    const status =
+      await calendarIntegrationService
+        .getGoogleIntegration(
+          userId
+        );
+
+    if (
+      !status?.connected
+    ) {
+      return {
+        deleted:
+          false,
+
+        skipped:
+          true,
+
+        reason:
+          'google_not_connected',
+      };
+    }
+
+    // ==================================================
+    // AUTH CLIENT
+    // ==================================================
+
+    const {
+      oauthClient,
+      integration,
+    } =
+      await calendarIntegrationService
+        .getAuthorizedGoogleClient(
+          userId
+        );
+
+    const calendar =
+      google.calendar({
+        version:
+          'v3',
+
+        auth:
+          oauthClient,
+      });
+
+    const calendarId =
+      integration
+        ?.calendar_id ||
+      'primary';
+
+    // ==================================================
+    // SAME DETERMINISTIC EVENT ID
+    // ==================================================
+
+    const googleEventId =
+      createGoogleEventId({
+        userId,
+        entityType,
+        entityId,
+      });
+
+    try {
+      await calendar
+        .events
+        .delete({
+          calendarId,
+
+          eventId:
+            googleEventId,
+
+          sendUpdates:
+            'none',
+        });
+
+      await calendarIntegrationService
+        .markGoogleSyncSuccess(
+          integration
+        );
+
+      return {
+        deleted:
+          true,
+
+        skipped:
+          false,
+
+        google_event_id:
+          googleEventId,
+      };
+    } catch (
+      error
+    ) {
+      const statusCode =
+        Number(
+          error
+            ?.response
+            ?.status ||
+          error
+            ?.code
+        );
+
+      /*
+       * Google tarafında etkinlik zaten yoksa
+       * silme işlemini başarılı kabul ediyoruz.
+       */
+      if (
+        statusCode ===
+          404 ||
+        statusCode ===
+          410
+      ) {
+        await calendarIntegrationService
+          .markGoogleSyncSuccess(
+            integration
+          );
+
+        return {
+          deleted:
+            true,
+
+          skipped:
+            false,
+
+          already_missing:
+            true,
+
+          google_event_id:
+            googleEventId,
+        };
+      }
+
+      await calendarIntegrationService
+        .markGoogleSyncError(
+          integration,
+          error
+        );
+
+      throw error;
+    }
+  },
+
+  // ====================================================
+  // SAFE DELETE EVENT
+  // ====================================================
+
+  async deleteEventSafely(
+    payload
+  ) {
+    try {
+      logger.info(
+        'Google Calendar auto delete START',
+        {
+          userId:
+            payload
+              ?.userId,
+
+          entityType:
+            payload
+              ?.entityType,
+
+          entityId:
+            payload
+              ?.entityId,
+        }
+      );
+
+      const result =
+        await this
+          .deleteEvent(
+            payload
+          );
+
+      logger.info(
+        'Google Calendar auto delete RESULT',
+        {
+          userId:
+            payload
+              ?.userId,
+
+          entityType:
+            payload
+              ?.entityType,
+
+          entityId:
+            payload
+              ?.entityId,
+
+          result,
+        }
+      );
+
+      return result;
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Google Calendar auto delete ERROR',
+        {
+          userId:
+            payload
+              ?.userId,
+
+          entityType:
+            payload
+              ?.entityType,
+
+          entityId:
+            payload
+              ?.entityId,
+
+          message:
+            error
+              ?.message,
+
+          status:
+            error
+              ?.response
+              ?.status,
+        }
+      );
+
+      return {
+        deleted:
+          false,
+
+        skipped:
+          false,
+
+        error:
+          error
+            ?.message ||
+          'Google Calendar etkinliği silinemedi',
+      };
+    }
+  },
+
+  // ====================================================
   // SAFE UPSERT
   // ====================================================
 
