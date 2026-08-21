@@ -115,6 +115,7 @@ class CalendarIntegration extends Sequelize.Model {
          * Düz access_token / refresh_token hiçbir zaman
          * modele kaydedilmemeli.
          */
+
         access_token_encrypted: {
           type:
             DataTypes.TEXT,
@@ -205,6 +206,16 @@ class CalendarIntegration extends Sequelize.Model {
 
         updatedAt:
           'updated_at',
+
+        /*
+         * Projedeki global Sequelize ayarlarında
+         * paranoid=true olsa bile bu modelde
+         * deleted_at kolonu bulunmuyor.
+         *
+         * Bu nedenle soft delete kapatılıyor.
+         */
+        paranoid:
+          false,
 
         indexes: [
           {
