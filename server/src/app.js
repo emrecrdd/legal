@@ -71,7 +71,8 @@ import {
 import {
   dashboardRoutes,
 } from './modules/dashboard/dashboard.routes.js';
-
+import performanceRoutes
+  from './modules/performance/performance.routes.js';
 import {
   meetingRoutes,
 } from './modules/meetings/meeting.routes.js';
@@ -529,7 +530,10 @@ app.use(
   '/api/dashboard',
   dashboardRoutes
 );
-
+app.use(
+  '/api/performance',
+  performanceRoutes
+);
 app.use(
   '/api/meetings',
   meetingRoutes
