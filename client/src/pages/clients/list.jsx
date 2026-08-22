@@ -16,6 +16,11 @@ import {
 } from '../../app/providers/auth.provider.jsx';
 
 import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
+import {
   useDebounce,
 } from '../../hooks/useDebounce.js';
 
@@ -197,13 +202,11 @@ const ClientsList = () => {
   // PERMISSIONS
   // ======================================================
 
-  const canCreate = [
-    'admin',
-    'lawyer',
-    'secretary',
-  ].includes(
-    user?.role
-  );
+  const canCreate =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.CREATE_CLIENTS
+    );
 
   // ======================================================
   // QUERY
@@ -700,7 +703,9 @@ const ClientsList = () => {
           description={
             hasFilters
               ? 'Arama veya filtre kriterlerini değiştirerek tekrar deneyin.'
-              : 'İlk müvekkil kaydınızı oluşturarak çalışmaya başlayabilirsiniz.'
+              : canCreate
+                ? 'İlk müvekkil kaydınızı oluşturarak çalışmaya başlayabilirsiniz.'
+                : 'Henüz görüntüleyebileceğiniz bir müvekkil kaydı bulunmuyor.'
           }
           action={
             hasFilters ? (
