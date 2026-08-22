@@ -20,6 +20,11 @@ import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
 
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -293,17 +298,17 @@ const ClientEdit = () => {
   // PERMISSIONS
   // ======================================================
 
-  const canEdit = [
-    'admin',
-    'lawyer',
-    'secretary',
-  ].includes(
-    user?.role
-  );
+  const canEdit =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_CLIENTS
+    );
 
   const canDelete =
-    user?.role ===
-    'admin';
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DELETE_CLIENTS
+    );
 
   const isPending =
     updateMutation.isPending ||
