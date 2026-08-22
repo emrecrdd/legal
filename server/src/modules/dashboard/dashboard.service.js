@@ -1,3 +1,8 @@
+import {
+  Op,
+  Sequelize,
+} from 'sequelize';
+
 import { Client } from '../../models/Client.js';
 import { Case } from '../../models/Case.js';
 import { Document } from '../../models/Document.js';
@@ -6,91 +11,636 @@ import { Event } from '../../models/Event.js';
 import { Payment } from '../../models/Payment.js';
 import { User } from '../../models/User.js';
 
+import { sequelize } from '../../config/database.js';
+
 import {
-  Op,
-} from 'sequelize';
+  ROLES,
+  PERMISSION_KEYS,
+  getEffectivePermissions,
+} from '../../constants/roles.js';
 
-export const dashboardService = {
-  // ======================================================
-  // DASHBOARD STATS
-  // ======================================================
+// ======================================================
+// AUTHORIZATION HELPERS
+// ======================================================
 
-  async getStats() {
-    const totalClients =
-      await Client.count();
+const getActorId = (actor) =>
+  actor?.id || null;
 
-    const activeCases =
-      await Case.count({
-        where: {
-          status: {
-            [Op.notIn]: [
-              'concluded',
-              'archived',
-            ],
+const requireActor = (actor) => {
+  const actorId = getActorId(actor);
+
+  if (!actorId) {
+    throw new Error(
+      'Dashboard user not found'
+    );
+  }
+
+  return actorId;
+};
+
+const getActorPermissions = (actor) => {
+  if (!actor) {
+    return [];
+  }
+
+  return getEffectivePermissions(
+    actor.role,
+    actor.permissions || {}
+  );
+};
+
+const isAdmin = (actor) =>
+  actor?.role === ROLES.ADMIN;
+
+const hasActorPermission = (
+  actor,
+  permission
+) =>
+  isAdmin(actor) ||
+  getActorPermissions(actor).includes(
+    permission
+  );
+
+const canViewAllCases = (actor) =>
+  hasActorPermission(
+    actor,
+    PERMISSION_KEYS.VIEW_ALL_CASES
+  );
+
+const canViewAllTasks = (actor) =>
+  hasActorPermission(
+    actor,
+    PERMISSION_KEYS.VIEW_ALL_TASKS
+  );
+
+// ======================================================
+// WHERE HELPERS
+// ======================================================
+
+const hasWhereContent = (value) =>
+  Boolean(
+    value &&
+      typeof value === 'object' &&
+      Reflect.ownKeys(value).length > 0
+  );
+
+const combineWhere = (
+  ...conditions
+) => {
+  const validConditions =
+    conditions.filter(
+      hasWhereContent
+    );
+
+  if (validConditions.length === 0) {
+    return {};
+  }
+
+  if (validConditions.length === 1) {
+    return validConditions[0];
+  }
+
+  return {
+    [Op.and]: validConditions,
+  };
+};
+
+// ======================================================
+// CASE ACCESS
+// ======================================================
+
+const buildCaseAccessWhere = (
+  actor
+) => {
+  const actorId =
+    requireActor(actor);
+
+  if (canViewAllCases(actor)) {
+    return {};
+  }
+
+  return {
+    [Op.or]: [
+      {
+        created_by: actorId,
+      },
+      {
+        assigned_to: actorId,
+      },
+    ],
+  };
+};
+
+// ======================================================
+// CLIENT ACCESS
+// ======================================================
+
+const buildClientAccessWhere = (
+  actor
+) => {
+  const actorId =
+    requireActor(actor);
+
+  if (isAdmin(actor)) {
+    return {};
+  }
+
+  const escapedActorId =
+    sequelize.escape(actorId);
+
+  const relatedCasePredicate =
+    canViewAllCases(actor)
+      ? `
+        EXISTS (
+          SELECT 1
+          FROM case_clients cc
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+          WHERE cc.client_id = "Client"."id"
+        )
+      `
+      : `
+        EXISTS (
+          SELECT 1
+          FROM case_clients cc
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+          WHERE cc.client_id = "Client"."id"
+            AND (
+              c.created_by = ${escapedActorId}
+              OR c.assigned_to = ${escapedActorId}
+            )
+        )
+      `;
+
+  return {
+    [Op.or]: [
+      {
+        created_by: actorId,
+      },
+      Sequelize.where(
+        Sequelize.literal(
+          relatedCasePredicate
+        ),
+        true
+      ),
+    ],
+  };
+};
+
+// ======================================================
+// DOCUMENT READ ACCESS
+//
+// is_public = büro içi genel OKUMA erişimi.
+// Yazma yetkisi değildir.
+// ======================================================
+
+const buildDocumentReadAccessWhere = (
+  actor
+) => {
+  const actorId =
+    requireActor(actor);
+
+  if (isAdmin(actor)) {
+    return {};
+  }
+
+  const caseLinkedScope =
+    canViewAllCases(actor)
+      ? {
+          case_id: {
+            [Op.ne]: null,
           },
+        }
+      : {
+          [Op.and]: [
+            {
+              case_id: {
+                [Op.ne]: null,
+              },
+            },
+            {
+              [Op.or]: [
+                {
+                  '$case.created_by$':
+                    actorId,
+                },
+                {
+                  '$case.assigned_to$':
+                    actorId,
+                },
+              ],
+            },
+          ],
+        };
+
+  const clientCasePredicate =
+    canViewAllCases(actor)
+      ? `
+        EXISTS (
+          SELECT 1
+          FROM case_clients cc
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+          WHERE cc.client_id = "Document"."client_id"
+        )
+      `
+      : `
+        EXISTS (
+          SELECT 1
+          FROM case_clients cc
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+          WHERE cc.client_id = "Document"."client_id"
+            AND (
+              c.created_by = ${sequelize.escape(
+                actorId
+              )}
+              OR c.assigned_to = ${sequelize.escape(
+                actorId
+              )}
+            )
+        )
+      `;
+
+  const clientLinkedScope = {
+    [Op.and]: [
+      {
+        case_id: null,
+      },
+      {
+        client_id: {
+          [Op.ne]: null,
+        },
+      },
+      {
+        [Op.or]: [
+          {
+            '$client.created_by$':
+              actorId,
+          },
+          Sequelize.where(
+            Sequelize.literal(
+              clientCasePredicate
+            ),
+            true
+          ),
+        ],
+      },
+    ],
+  };
+
+  const standaloneScope = {
+    [Op.and]: [
+      {
+        case_id: null,
+      },
+      {
+        client_id: null,
+      },
+      {
+        uploaded_by: actorId,
+      },
+    ],
+  };
+
+  return {
+    [Op.or]: [
+      {
+        is_public: true,
+      },
+      caseLinkedScope,
+      clientLinkedScope,
+      standaloneScope,
+    ],
+  };
+};
+
+const documentAccessIncludes = [
+  {
+    model: Case,
+    as: 'case',
+    attributes: [],
+    required: false,
+  },
+  {
+    model: Client,
+    as: 'client',
+    attributes: [],
+    required: false,
+  },
+];
+
+// ======================================================
+// PAYMENT ACCESS
+//
+// Payment service ile aynı temel BOLA:
+// - admin -> tümü
+// - VIEW_ALL_CASES -> tüm case-linked + erişilebilir
+//   client'lardaki case'siz finans
+// - normal kullanıcı -> kendi/atandığı case finansı +
+//   kendi oluşturduğu client'ın case'siz finansı
+// ======================================================
+
+const buildPaymentAccessWhere =
+  async (actor) => {
+    const actorId =
+      requireActor(actor);
+
+    if (isAdmin(actor)) {
+      return {};
+    }
+
+    const allCases =
+      canViewAllCases(actor);
+
+    let caseIds = [];
+
+    if (!allCases) {
+      const caseRows =
+        await Case.findAll({
+          where:
+            buildCaseAccessWhere(actor),
+          attributes: ['id'],
+          raw: true,
+        });
+
+      caseIds = caseRows.map(
+        (item) => item.id
+      );
+    }
+
+    let standaloneClientIds = [];
+
+    if (allCases) {
+      const clientRows =
+        await Client.findAll({
+          where:
+            buildClientAccessWhere(actor),
+          attributes: ['id'],
+          raw: true,
+        });
+
+      standaloneClientIds =
+        clientRows.map(
+          (item) => item.id
+        );
+    } else {
+      const ownClientRows =
+        await Client.findAll({
+          where: {
+            created_by: actorId,
+          },
+          attributes: ['id'],
+          raw: true,
+        });
+
+      standaloneClientIds =
+        ownClientRows.map(
+          (item) => item.id
+        );
+    }
+
+    const allowedScopes = [];
+
+    if (allCases) {
+      allowedScopes.push({
+        case_id: {
+          [Op.ne]: null,
         },
       });
-
-    const totalDocuments =
-      await Document.count();
-
-    const pendingTasks =
-      await Task.count({
-        where: {
-          status:
-            'pending',
+    } else if (caseIds.length > 0) {
+      allowedScopes.push({
+        case_id: {
+          [Op.in]: caseIds,
         },
       });
+    }
 
-    const totalReceived =
-      (
-        await Payment.sum(
-          'amount',
+    if (
+      standaloneClientIds.length > 0
+    ) {
+      allowedScopes.push({
+        [Op.and]: [
           {
-            where: {
-              status:
-                'completed',
-
-              payment_type:
-                'received',
-            },
-          }
-        )
-      ) || 0;
-
-    const totalPendingPayments =
-      (
-        await Payment.sum(
-          'amount',
+            case_id: null,
+          },
           {
-            where: {
-              status:
-                'pending',
-
-              payment_type:
-                'received',
+            client_id: {
+              [Op.in]:
+                standaloneClientIds,
             },
-          }
-        )
-      ) || 0;
+          },
+        ],
+      });
+    }
+
+    if (allowedScopes.length === 0) {
+      return {
+        id: null,
+      };
+    }
 
     return {
+      [Op.or]: allowedScopes,
+    };
+  };
+
+// ======================================================
+// EVENT ACCESS
+// ======================================================
+
+const buildEventAccessWhere = (
+  actor
+) => {
+  const actorId =
+    requireActor(actor);
+
+  if (isAdmin(actor)) {
+    return {};
+  }
+
+  return {
+    [Op.or]: [
+      {
+        created_by: actorId,
+      },
+      {
+        assigned_to: actorId,
+      },
+    ],
+  };
+};
+
+const buildEventCaseInclude = (
+  actor
+) => {
+  const include = {
+    model: Case,
+    as: 'case',
+    required: false,
+    include: [
+      {
+        model: Client,
+        as: 'clients',
+        attributes: [
+          'id',
+          'name',
+        ],
+        through: {
+          attributes: [],
+        },
+      },
+    ],
+  };
+
+  if (!canViewAllCases(actor)) {
+    include.where =
+      buildCaseAccessWhere(actor);
+  }
+
+  return include;
+};
+
+// ======================================================
+// TASK ACCESS
+// ======================================================
+
+const countPendingTasks =
+  async (actor) => {
+    const actorId =
+      requireActor(actor);
+
+    const where = {
+      status: 'pending',
+    };
+
+    if (canViewAllTasks(actor)) {
+      return Task.count({ where });
+    }
+
+    return Task.count({
+      where,
+      include: [
+        {
+          association: 'assignees',
+          where: {
+            id: actorId,
+          },
+          attributes: [],
+          through: {
+            attributes: [],
+          },
+          required: true,
+        },
+      ],
+      distinct: true,
+      col: 'id',
+    });
+  };
+
+// ======================================================
+// SERVICE
+// ======================================================
+
+export const dashboardService = {
+  // ====================================================
+  // DASHBOARD STATS
+  // ====================================================
+
+  async getStats(actor) {
+    requireActor(actor);
+
+    const paymentAccessWhere =
+      await buildPaymentAccessWhere(
+        actor
+      );
+
+    const [
       totalClients,
       activeCases,
       totalDocuments,
       pendingTasks,
       totalReceived,
       totalPendingPayments,
+    ] = await Promise.all([
+      Client.count({
+        where:
+          buildClientAccessWhere(actor),
+      }),
+
+      Case.count({
+        where: combineWhere(
+          buildCaseAccessWhere(actor),
+          {
+            status: {
+              [Op.notIn]: [
+                'concluded',
+                'archived',
+              ],
+            },
+          }
+        ),
+      }),
+
+      Document.count({
+        where:
+          buildDocumentReadAccessWhere(
+            actor
+          ),
+        include:
+          documentAccessIncludes,
+        distinct: true,
+        col: 'id',
+      }),
+
+      countPendingTasks(actor),
+
+      Payment.sum('amount', {
+        where: combineWhere(
+          paymentAccessWhere,
+          {
+            status: 'completed',
+            payment_type: 'received',
+          }
+        ),
+      }),
+
+      Payment.sum('amount', {
+        where: combineWhere(
+          paymentAccessWhere,
+          {
+            status: 'pending',
+            payment_type: 'received',
+          }
+        ),
+      }),
+    ]);
+
+    return {
+      totalClients,
+      activeCases,
+      totalDocuments,
+      pendingTasks,
+      totalReceived:
+        totalReceived || 0,
+      totalPendingPayments:
+        totalPendingPayments || 0,
     };
   },
 
-  // ======================================================
+  // ====================================================
   // TODAY HEARINGS
-  // ======================================================
+  // ====================================================
 
-  async getTodayHearings() {
-    const today =
-      new Date();
+  async getTodayHearings(actor) {
+    requireActor(actor);
+
+    const today = new Date();
 
     today.setHours(
       0,
@@ -100,57 +650,29 @@ export const dashboardService = {
     );
 
     const tomorrow =
-      new Date(
-        today
-      );
+      new Date(today);
 
     tomorrow.setDate(
-      tomorrow.getDate() +
-        1
+      tomorrow.getDate() + 1
     );
 
     const events =
       await Event.findAll({
-        where: {
-          start_date: {
-            [Op.between]: [
-              today,
-              tomorrow,
-            ],
+        where: combineWhere(
+          {
+            start_date: {
+              [Op.between]: [
+                today,
+                tomorrow,
+              ],
+            },
+            event_type: 'hearing',
           },
-
-          event_type:
-            'hearing',
-        },
+          buildEventAccessWhere(actor)
+        ),
 
         include: [
-          {
-            model:
-              Case,
-
-            as:
-              'case',
-
-            include: [
-              {
-                model:
-                  Client,
-
-                as:
-                  'clients',
-
-                attributes: [
-                  'id',
-                  'name',
-                ],
-
-                through: {
-                  attributes:
-                    [],
-                },
-              },
-            ],
-          },
+          buildEventCaseInclude(actor),
         ],
 
         order: [
@@ -161,46 +683,44 @@ export const dashboardService = {
         ],
       });
 
-    return events;
+    /*
+     * Case bağlı eventte include null geldiyse kullanıcı
+     * o case'e erişemiyordur (veya case kaldırılmıştır).
+     * Kayıt varlığı sızdırılmaz.
+     */
+    return events.filter(
+      (event) =>
+        !event.case_id ||
+        Boolean(event.case)
+    );
   },
 
-  // ======================================================
+  // ====================================================
   // UPCOMING TASKS
-  // ======================================================
+  // ====================================================
 
   async getUpcomingTasks(
     userId,
     limit = 5
   ) {
-    const now =
-      new Date();
-
-    const safeLimit =
-      Math.min(
-        Math.max(
-          Number.parseInt(
-            limit,
-            10
-          ) || 5,
-          1
-        ),
-        50
+    if (!userId) {
+      throw new Error(
+        'Dashboard user not found'
       );
+    }
 
-    /*
-     * assigned_to artık tasks tablosunda yok.
-     *
-     * Yeni yapı:
-     *
-     * tasks
-     *   ↓
-     * task_assignees
-     *   ↓
-     * users
-     *
-     * Dashboard yalnız giriş yapan kullanıcıya
-     * atanmış görevleri getirir.
-     */
+    const now = new Date();
+
+    const safeLimit = Math.min(
+      Math.max(
+        Number.parseInt(
+          limit,
+          10
+        ) || 5,
+        1
+      ),
+      50
+    );
 
     const tasks =
       await Task.findAll({
@@ -211,49 +731,31 @@ export const dashboardService = {
               'cancelled',
             ],
           },
-
           due_date: {
-            [Op.gte]:
-              now,
+            [Op.gte]: now,
           },
         },
 
         include: [
           {
-            association:
-              'assignees',
-
+            association: 'assignees',
             where: {
-              id:
-                userId,
+              id: userId,
             },
-
-            attributes:
-              [],
-
+            attributes: [],
             through: {
-              attributes:
-                [],
+              attributes: [],
             },
-
-            required:
-              true,
+            required: true,
           },
-
           {
-            model:
-              Case,
-
-            as:
-              'case',
-
+            model: Case,
+            as: 'case',
             attributes: [
               'id',
               'title',
             ],
-
-            required:
-              false,
+            required: false,
           },
         ],
 
@@ -264,45 +766,49 @@ export const dashboardService = {
           ],
         ],
 
-        limit:
-          safeLimit,
-
-        subQuery:
-          false,
+        limit: safeLimit,
+        subQuery: false,
       });
 
     return tasks;
   },
 
-  // ======================================================
+  // ====================================================
   // RECENT ACTIVITIES
-  // ======================================================
+  // ====================================================
 
   async getRecentActivities(
-    limit = 5
+    limit = 5,
+    actor
   ) {
-    const safeLimit =
-      Math.min(
-        Math.max(
-          Number.parseInt(
-            limit,
-            10
-          ) || 5,
-          1
-        ),
-        50
-      );
+    requireActor(actor);
 
-    const recentDocuments =
-      await Document.findAll({
+    const safeLimit = Math.min(
+      Math.max(
+        Number.parseInt(
+          limit,
+          10
+        ) || 5,
+        1
+      ),
+      50
+    );
+
+    const [
+      recentDocuments,
+      recentCases,
+    ] = await Promise.all([
+      Document.findAll({
+        where:
+          buildDocumentReadAccessWhere(
+            actor
+          ),
+
         include: [
+          ...documentAccessIncludes,
           {
-            model:
-              User,
-
-            as:
-              'uploader',
-
+            model: User,
+            as: 'uploader',
             attributes: [
               'id',
               'first_name',
@@ -318,28 +824,24 @@ export const dashboardService = {
           ],
         ],
 
-        limit:
-          safeLimit,
-      });
+        limit: safeLimit,
+        subQuery: false,
+      }),
 
-    const recentCases =
-      await Case.findAll({
+      Case.findAll({
+        where:
+          buildCaseAccessWhere(actor),
+
         include: [
           {
-            model:
-              Client,
-
-            as:
-              'clients',
-
+            model: Client,
+            as: 'clients',
             attributes: [
               'id',
               'name',
             ],
-
             through: {
-              attributes:
-                [],
+              attributes: [],
             },
           },
         ],
@@ -351,9 +853,10 @@ export const dashboardService = {
           ],
         ],
 
-        limit:
-          safeLimit,
-      });
+        limit: safeLimit,
+        subQuery: false,
+      }),
+    ]);
 
     return {
       recentDocuments,
