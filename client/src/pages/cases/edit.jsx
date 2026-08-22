@@ -19,6 +19,15 @@ import caseApi from '../../features/cases/case.api.js';
 import clientApi from '../../features/clients/client.api.js';
 import userApi from '../../features/users/user.api.js';
 
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -150,6 +159,16 @@ const getPriorityLabel = (priority) => {
 const CaseEdit = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+
+  const {
+    user,
+  } = useAuth();
+
+  const canDelete =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DELETE_CASES
+    );
 
   const [
     formData,
@@ -576,6 +595,14 @@ const CaseEdit = () => {
   // ======================================================
 
   const handleDelete = () => {
+    if (!canDelete) {
+      toast.error(
+        'Bu davayı silme yetkiniz bulunmuyor.'
+      );
+
+      return;
+    }
+
     const confirmed =
       window.confirm(
         'Bu davayı silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.'
@@ -1576,9 +1603,10 @@ const CaseEdit = () => {
           DANGER ZONE
       ================================================== */}
 
-      <Card className="border border-red-200 shadow-none dark:border-red-500/20">
+      {canDelete && (
+        <Card className="border border-red-200 shadow-none dark:border-red-500/20">
 
-        <Card.Body>
+          <Card.Body>
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
@@ -1620,9 +1648,10 @@ const CaseEdit = () => {
 
           </div>
 
-        </Card.Body>
+          </Card.Body>
 
-      </Card>
+        </Card>
+      )}
 
     </div>
   );
