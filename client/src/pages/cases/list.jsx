@@ -21,6 +21,15 @@ import {
 
 import caseApi from '../../features/cases/case.api.js';
 
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Table from '../../components/ui/Table.jsx';
@@ -126,6 +135,16 @@ const getStatusVariant = (
 // ======================================================
 
 const CasesList = () => {
+  const {
+    user,
+  } = useAuth();
+
+  const canCreate =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.CREATE_CASES
+    );
+
   const [
     search,
     setSearch,
@@ -354,12 +373,14 @@ const CasesList = () => {
 
         </div>
 
-        <Link to="/cases/create">
-          <Button>
-            <Plus className="h-4 w-4" />
-            Yeni Dava
-          </Button>
-        </Link>
+        {canCreate && (
+          <Link to="/cases/create">
+            <Button>
+              <Plus className="h-4 w-4" />
+              Yeni Dava
+            </Button>
+          </Link>
+        )}
 
       </div>
 
@@ -503,7 +524,9 @@ const CasesList = () => {
           description={
             hasFilters
               ? 'Arama veya filtre kriterlerinizi değiştirerek tekrar deneyin.'
-              : 'İlk dava kaydınızı oluşturarak dosya yönetimine başlayabilirsiniz.'
+              : canCreate
+                ? 'İlk dava kaydınızı oluşturarak dosya yönetimine başlayabilirsiniz.'
+                : 'Henüz görüntüleyebileceğiniz bir dava kaydı bulunmuyor.'
           }
           action={
             hasFilters ? (
@@ -515,14 +538,14 @@ const CasesList = () => {
               >
                 Filtreleri Temizle
               </Button>
-            ) : (
+            ) : canCreate ? (
               <Link to="/cases/create">
                 <Button>
                   <Plus className="h-4 w-4" />
                   İlk Davayı Oluştur
                 </Button>
               </Link>
-            )
+            ) : null
           }
         />
       ) : (
