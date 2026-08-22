@@ -158,8 +158,9 @@ export const API_ROUTES = {
     ASSIGN:
       (id) =>
         `/tasks/${id}/assign`,
+
     ASSIGNABLE_USERS:
-        '/tasks/assignable-users',
+      '/tasks/assignable-users',
 
     START:
       (id) =>
@@ -192,13 +193,18 @@ export const API_ROUTES = {
 
     STATISTICS:
       '/tasks/statistics',
-      CLIENT_TASKS:
-  (clientId) =>
-    `/tasks/client/${clientId}`,
 
-CLIENT_OVERVIEW:
-  (clientId) =>
-    `/tasks/client/${clientId}/overview`,
+    // ==================================================
+    // CLIENT TASKS
+    // ==================================================
+
+    CLIENT_TASKS:
+      (clientId) =>
+        `/tasks/client/${clientId}`,
+
+    CLIENT_OVERVIEW:
+      (clientId) =>
+        `/tasks/client/${clientId}/overview`,
   },
 
   // ====================================================
@@ -211,6 +217,32 @@ CLIENT_OVERVIEW:
     UPDATE_STATUS:
       (id) =>
         `/meetings/${id}/status`,
+
+    // ==================================================
+    // SPECIAL ROUTES
+    // ==================================================
+
+    MY_MEETINGS:
+      '/meetings/my',
+
+    UPCOMING:
+      '/meetings/upcoming',
+
+    CASE_MEETINGS:
+      (caseId) =>
+        `/meetings/case/${caseId}`,
+
+    // ==================================================
+    // CLIENT MEETINGS
+    // ==================================================
+
+    CLIENT_MEETINGS:
+      (clientId) =>
+        `/meetings/client/${clientId}`,
+
+    CLIENT_TIMELINE:
+      (clientId) =>
+        `/meetings/client/${clientId}/timeline`,
   },
 
   // ====================================================
