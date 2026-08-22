@@ -15,6 +15,7 @@ import {
 import {
   reminderService,
 } from '../reminders/reminder.service.js';
+
 import { Op } from 'sequelize';
 
 import {
@@ -264,25 +265,38 @@ export const caseService = {
             ],
           },
 
+          // ==================================================
+          // TASKS
+          //
+          // Task -> User artık birden fazla association'a sahip:
+          // - creator
+          // - assignees
+          //
+          // Bu nedenle association isimlerini açıkça kullanıyoruz.
+          // ==================================================
           {
             model: Task,
             as: 'tasks',
 
             include: [
               {
-                model: User,
-                as: 'assignee',
+                association:
+                  'assignees',
 
                 attributes: [
                   'id',
                   'first_name',
                   'last_name',
                 ],
+
+                through: {
+                  attributes: [],
+                },
               },
 
               {
-                model: User,
-                as: 'creator',
+                association:
+                  'creator',
 
                 attributes: [
                   'id',
@@ -464,199 +478,200 @@ export const caseService = {
   },
 
   async remove(id) {
-  const transaction =
-    await sequelize.transaction();
+    const transaction =
+      await sequelize.transaction();
 
-  try {
-    const caseItem =
-      await Case.findByPk(
-        id,
-        {
+    try {
+      const caseItem =
+        await Case.findByPk(
+          id,
+          {
+            transaction,
+
+            lock:
+              transaction.LOCK.UPDATE,
+          }
+        );
+
+      if (!caseItem) {
+        throw new Error(
+          'Dava bulunamadı'
+        );
+      }
+
+      // ==================================================
+      // EVENT / HEARING REMINDERS
+      // ==================================================
+
+      const events =
+        await Event.findAll({
+          where: {
+            case_id: id,
+          },
+
+          attributes: [
+            'id',
+          ],
+
           transaction,
+        });
 
-          lock:
-            transaction.LOCK.UPDATE,
-        }
-      );
+      for (
+        const event
+        of events
+      ) {
+        await reminderService.cancelForSource({
+          sourceType:
+            'event',
 
-    if (!caseItem) {
-      throw new Error(
-        'Dava bulunamadı'
-      );
-    }
+          sourceId:
+            event.id,
 
-    // ==================================================
-    // EVENT / HEARING REMINDERS
-    // ==================================================
+          transaction,
+        });
+      }
 
-    const events =
-      await Event.findAll({
+      // ==================================================
+      // TASK REMINDERS
+      // ==================================================
+
+      const tasks =
+        await Task.findAll({
+          where: {
+            case_id: id,
+          },
+
+          attributes: [
+            'id',
+          ],
+
+          transaction,
+        });
+
+      for (
+        const task
+        of tasks
+      ) {
+        await reminderService.cancelForSource({
+          sourceType:
+            'task',
+
+          sourceId:
+            task.id,
+
+          transaction,
+        });
+      }
+
+      // ==================================================
+      // MEETING REMINDERS
+      // ==================================================
+
+      const meetings =
+        await Meeting.findAll({
+          where: {
+            case_id: id,
+          },
+
+          attributes: [
+            'id',
+          ],
+
+          transaction,
+        });
+
+      for (
+        const meeting
+        of meetings
+      ) {
+        await reminderService.cancelForSource({
+          sourceType:
+            'meeting',
+
+          sourceId:
+            meeting.id,
+
+          transaction,
+        });
+      }
+
+      // ==================================================
+      // OPERATIONAL CHILD RECORDS
+      //
+      // Bunlar paranoid modellerse soft-delete olur.
+      // Böylece takvim/görev/toplantı ekranında
+      // hayalet kayıt bırakmayız.
+      // ==================================================
+
+      await Event.destroy({
         where: {
           case_id: id,
         },
 
-        attributes: [
-          'id',
-        ],
-
         transaction,
       });
 
-    for (
-      const event
-      of events
-    ) {
-      await reminderService.cancelForSource({
-        sourceType:
-          'event',
-
-        sourceId:
-          event.id,
-
-        transaction,
-      });
-    }
-
-    // ==================================================
-    // TASK REMINDERS
-    // ==================================================
-
-    const tasks =
-      await Task.findAll({
+      await Task.destroy({
         where: {
           case_id: id,
         },
 
-        attributes: [
-          'id',
-        ],
-
         transaction,
       });
 
-    for (
-      const task
-      of tasks
-    ) {
-      await reminderService.cancelForSource({
-        sourceType:
-          'task',
-
-        sourceId:
-          task.id,
-
-        transaction,
-      });
-    }
-
-    // ==================================================
-    // MEETING REMINDERS
-    // ==================================================
-
-    const meetings =
-      await Meeting.findAll({
+      await Meeting.destroy({
         where: {
           case_id: id,
         },
 
-        attributes: [
-          'id',
-        ],
+        transaction,
+      });
+
+      /*
+       * Taraflar ve notlar da dava çalışma alanına
+       * ait operasyonel kayıtlardır.
+       */
+      await CaseParty.destroy({
+        where: {
+          case_id: id,
+        },
 
         transaction,
       });
 
-    for (
-      const meeting
-      of meetings
-    ) {
-      await reminderService.cancelForSource({
-        sourceType:
-          'meeting',
-
-        sourceId:
-          meeting.id,
+      await Note.destroy({
+        where: {
+          case_id: id,
+        },
 
         transaction,
       });
+
+      await caseItem.destroy({
+        transaction,
+      });
+
+      // ==================================================
+      // IMPORTANT
+      //
+      // Document ve Payment kayıtlarına dokunmuyoruz.
+      // Hukuki belge ve finans kayıtlarının dava silinmesi
+      // nedeniyle kaybolmasını istemiyoruz.
+      // ==================================================
+
+      await caseItem.destroy({
+        transaction,
+      });
+
+      await transaction.commit();
+
+      return caseItem;
+    } catch (error) {
+      await transaction.rollback();
+
+      throw error;
     }
-
-    // ==================================================
-    // OPERATIONAL CHILD RECORDS
-    //
-    // Bunlar paranoid modellerse soft-delete olur.
-    // Böylece takvim/görev/toplantı ekranında
-    // hayalet kayıt bırakmayız.
-    // ==================================================
-
-    await Event.destroy({
-      where: {
-        case_id: id,
-      },
-
-      transaction,
-    });
-
-    await Task.destroy({
-      where: {
-        case_id: id,
-      },
-
-      transaction,
-    });
-
-    await Meeting.destroy({
-      where: {
-        case_id: id,
-      },
-
-      transaction,
-    });
-
-    /*
-     * Taraflar ve notlar da dava çalışma alanına
-     * ait operasyonel kayıtlardır.
-     */
-    await CaseParty.destroy({
-      where: {
-        case_id: id,
-      },
-
-      transaction,
-    });
-
-    await Note.destroy({
-      where: {
-        case_id: id,
-      },
-
-      transaction,
-    });
-    await caseItem.destroy({
-  transaction,
-});
-
-    // ==================================================
-    // IMPORTANT
-    //
-    // Document ve Payment kayıtlarına dokunmuyoruz.
-    // Hukuki belge ve finans kayıtlarının dava silinmesi
-    // nedeniyle kaybolmasını istemiyoruz.
-    // ==================================================
-
-    await caseItem.destroy({
-      transaction,
-    });
-
-    await transaction.commit();
-
-    return caseItem;
-  } catch (error) {
-    await transaction.rollback();
-
-    throw error;
-  }
-},
+  },
 
   async addParty(
     caseId,
