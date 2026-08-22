@@ -1739,7 +1739,7 @@ export const documentService = {
     const where =
       combineWhere(
         filters,
-        buildDocumentAccessWhere(
+        buildDocumentReadAccessWhere(
           actor
         )
       );
