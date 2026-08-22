@@ -13,6 +13,14 @@ import {
 } from '../../config/logger.js';
 
 import {
+  hasPermission,
+} from '../../middlewares/auth.middleware.js';
+
+import {
+  PERMISSION_KEYS,
+} from '../../constants/roles.js';
+
+import {
   AuditLog,
 } from '../../models/AuditLog.js';
 
@@ -24,6 +32,80 @@ import {
 // ======================================================
 // HELPERS
 // ======================================================
+
+const getHttpStatusFromError = (
+  error,
+  fallback = 400
+) => {
+  const message =
+    String(
+      error?.message || ''
+    ).toLowerCase();
+
+  if (
+    message.includes('bulunamadı') ||
+    message.includes('not found')
+  ) {
+    return 404;
+  }
+
+  if (
+    message.includes('yetki') ||
+    message.includes('forbidden')
+  ) {
+    return 403;
+  }
+
+  if (
+    message.includes('unauthorized')
+  ) {
+    return 401;
+  }
+
+  return fallback;
+};
+
+const hasOptionalPermission = (
+  user,
+  permissionKey
+) => {
+  if (!permissionKey) {
+    return false;
+  }
+
+  return hasPermission(
+    user,
+    permissionKey
+  );
+};
+
+const getMeetingAccessContext = (
+  user
+) => {
+  return {
+    userId:
+      user.id,
+
+    /*
+     * VIEW_ALL_MEETINGS permission setinde yoksa
+     * fail-closed davranır.
+     *
+     * Admin tam erişimli kalır.
+     */
+    canViewAllMeetings:
+      user?.role === 'admin' ||
+      hasOptionalPermission(
+        user,
+        PERMISSION_KEYS.VIEW_ALL_MEETINGS
+      ),
+
+    canViewAllCases:
+      hasOptionalPermission(
+        user,
+        PERMISSION_KEYS.VIEW_ALL_CASES
+      ),
+  };
+};
 
 const createAuditLog = async ({
   req,
@@ -47,6 +129,7 @@ const createAuditLog = async ({
       description,
 
       ip_address:
+        req.realClientIp ||
         req.ip,
 
       user_agent:
@@ -140,16 +223,19 @@ export const meetingController = {
     res
   ) {
     try {
-      const meetingData = {
-        ...req.body,
+      const access =
+        getMeetingAccessContext(
+          req.user
+        );
 
-        created_by:
-          req.user.id,
-      };
-
+      /*
+       * created_by service tarafından actor'dan
+       * zorlanır.
+       */
       const meeting =
         await meetingService.create(
-          meetingData
+          req.body,
+          access
         );
 
       await createAuditLog({
@@ -180,7 +266,9 @@ export const meetingController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getHttpStatusFromError(
+          error
+        )
       );
     }
   },
@@ -194,6 +282,11 @@ export const meetingController = {
     res
   ) {
     try {
+      const access =
+        getMeetingAccessContext(
+          req.user
+        );
+
       const {
         page = 1,
         limit = 10,
@@ -219,6 +312,15 @@ export const meetingController = {
           assigned_to,
           start_date,
           end_date,
+
+          userId:
+            access.userId,
+
+          canViewAllMeetings:
+            access.canViewAllMeetings,
+
+          canViewAllCases:
+            access.canViewAllCases,
         });
 
       return paginatedResponse(
@@ -236,7 +338,9 @@ export const meetingController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getHttpStatusFromError(
+          error
+        )
       );
     }
   },
@@ -250,9 +354,15 @@ export const meetingController = {
     res
   ) {
     try {
+      const access =
+        getMeetingAccessContext(
+          req.user
+        );
+
       const meeting =
         await meetingService.findOne(
-          req.params.id
+          req.params.id,
+          access
         );
 
       return successResponse(
@@ -269,7 +379,10 @@ export const meetingController = {
       return errorResponse(
         res,
         error.message,
-        404
+        getHttpStatusFromError(
+          error,
+          404
+        )
       );
     }
   },
@@ -283,16 +396,22 @@ export const meetingController = {
     res
   ) {
     try {
+      const access =
+        getMeetingAccessContext(
+          req.user
+        );
+
       /*
        * Normal toplantı detayında kullanılan service
        * metodunu kullanıyoruz.
        *
-       * Route tarafındaki VIEW_MEETINGS yetkisi de
-       * ayrıca korunacak.
+       * Böylece ICS indirme de record-level BOLA
+       * kontrolünden geçer.
        */
       const meeting =
         await meetingService.findOne(
-          req.params.id
+          req.params.id,
+          access
         );
 
       const start =
@@ -484,6 +603,10 @@ export const meetingController = {
         `attachment; filename="${fileName}"`
       );
 
+      /*
+       * Dava / müvekkil bilgileri içerebileceği için
+       * cache'e alınmasını istemiyoruz.
+       */
       res.setHeader(
         'Cache-Control',
         'private, no-store'
@@ -504,7 +627,9 @@ export const meetingController = {
         res,
         error.message ||
           'Toplantı takvim dosyası oluşturulamadı',
-        400
+        getHttpStatusFromError(
+          error
+        )
       );
     }
   },
@@ -518,10 +643,16 @@ export const meetingController = {
     res
   ) {
     try {
+      const access =
+        getMeetingAccessContext(
+          req.user
+        );
+
       const meeting =
         await meetingService.update(
           req.params.id,
-          req.body
+          req.body,
+          access
         );
 
       await createAuditLog({
@@ -551,7 +682,9 @@ export const meetingController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getHttpStatusFromError(
+          error
+        )
       );
     }
   },
@@ -565,18 +698,22 @@ export const meetingController = {
     res
   ) {
     try {
-      /*
-       * Audit açıklamasında title gerektiği için
-       * önce kaydı okuyoruz.
-       */
-      const meeting =
-        await meetingService.findOne(
-          req.params.id
+      const access =
+        getMeetingAccessContext(
+          req.user
         );
 
-      await meetingService.remove(
-        req.params.id
-      );
+      /*
+       * Service record-level erişimi kontrol eder ve
+       * silinen meeting'i geri döndürür.
+       *
+       * Önceden ayrı findOne çağrısına gerek yok.
+       */
+      const meeting =
+        await meetingService.remove(
+          req.params.id,
+          access
+        );
 
       await createAuditLog({
         req,
@@ -585,7 +722,7 @@ export const meetingController = {
           'delete',
 
         entityId:
-          req.params.id,
+          meeting.id,
 
         description:
           `"${meeting.title}" toplantısı silindi`,
@@ -605,7 +742,9 @@ export const meetingController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getHttpStatusFromError(
+          error
+        )
       );
     }
   },
@@ -619,6 +758,11 @@ export const meetingController = {
     res
   ) {
     try {
+      const access =
+        getMeetingAccessContext(
+          req.user
+        );
+
       const {
         page = 1,
         limit = 25,
@@ -635,7 +779,8 @@ export const meetingController = {
             includeCompleted:
               include_completed ===
               'true',
-          }
+          },
+          access
         );
 
       return paginatedResponse(
@@ -653,7 +798,9 @@ export const meetingController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getHttpStatusFromError(
+          error
+        )
       );
     }
   },
@@ -667,6 +814,11 @@ export const meetingController = {
     res
   ) {
     try {
+      const access =
+        getMeetingAccessContext(
+          req.user
+        );
+
       const {
         page = 1,
         limit = 25,
@@ -678,7 +830,8 @@ export const meetingController = {
           {
             page,
             limit,
-          }
+          },
+          access
         );
 
       return paginatedResponse(
@@ -696,7 +849,9 @@ export const meetingController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getHttpStatusFromError(
+          error
+        )
       );
     }
   },
@@ -710,6 +865,11 @@ export const meetingController = {
     res
   ) {
     try {
+      const access =
+        getMeetingAccessContext(
+          req.user
+        );
+
       const {
         page = 1,
         limit = 25,
@@ -721,7 +881,8 @@ export const meetingController = {
           {
             page,
             limit,
-          }
+          },
+          access
         );
 
       return paginatedResponse(
@@ -739,7 +900,9 @@ export const meetingController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getHttpStatusFromError(
+          error
+        )
       );
     }
   },
@@ -753,6 +916,11 @@ export const meetingController = {
     res
   ) {
     try {
+      const access =
+        getMeetingAccessContext(
+          req.user
+        );
+
       const {
         upcoming_limit = 5,
         recent_limit = 5,
@@ -767,7 +935,8 @@ export const meetingController = {
 
             recentLimit:
               recent_limit,
-          }
+          },
+          access
         );
 
       return successResponse(
@@ -784,7 +953,9 @@ export const meetingController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getHttpStatusFromError(
+          error
+        )
       );
     }
   },
@@ -798,6 +969,11 @@ export const meetingController = {
     res
   ) {
     try {
+      const access =
+        getMeetingAccessContext(
+          req.user
+        );
+
       const {
         limit = 5,
       } = req.query;
@@ -805,7 +981,8 @@ export const meetingController = {
       const meetings =
         await meetingService.getUpcoming(
           req.user.id,
-          limit
+          limit,
+          access
         );
 
       return successResponse(
@@ -822,7 +999,9 @@ export const meetingController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getHttpStatusFromError(
+          error
+        )
       );
     }
   },
@@ -848,10 +1027,16 @@ export const meetingController = {
         );
       }
 
+      const access =
+        getMeetingAccessContext(
+          req.user
+        );
+
       const meeting =
         await meetingService.updateStatus(
           req.params.id,
-          status
+          status,
+          access
         );
 
       await createAuditLog({
@@ -881,7 +1066,9 @@ export const meetingController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getHttpStatusFromError(
+          error
+        )
       );
     }
   },

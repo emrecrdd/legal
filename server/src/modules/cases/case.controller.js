@@ -1,71 +1,242 @@
-import { caseService } from './case.service.js';
+import {
+  caseService,
+} from './case.service.js';
+
 import {
   successResponse,
   errorResponse,
   paginatedResponse,
 } from '../../utils/response.js';
-import { logger } from '../../config/logger.js';
-import { AuditLog } from '../../models/AuditLog.js';
+
+import {
+  logger,
+} from '../../config/logger.js';
+
+import {
+  AuditLog,
+} from '../../models/AuditLog.js';
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const getAuditIp = (
+  req
+) => {
+  return (
+    req.realClientIp ||
+    req.ip ||
+    null
+  );
+};
+
+const buildCaseCreateData = (
+  req
+) => {
+  const title =
+    req.body.title ||
+    `${req.body.judiciary_type || 'Dava'} - ${
+      req.body.judiciary_unit || 'Birim'
+    }`;
+
+  /*
+   * Mass-assignment engeli.
+   *
+   * req.body doğrudan modele yayılmıyor.
+   * Yalnız izin verilen alanlar alınır.
+   */
+  return {
+    title,
+
+    judiciary_type:
+      req.body.judiciary_type ||
+      null,
+
+    judiciary_unit:
+      req.body.judiciary_unit ||
+      null,
+
+    opening_date:
+      req.body.opening_date ||
+      null,
+
+    court_name:
+      req.body.court_name ||
+      null,
+
+    case_number:
+      req.body.case_number ||
+      null,
+
+    subject:
+      req.body.subject ||
+      null,
+
+    description:
+      req.body.description ||
+      null,
+
+    status:
+      req.body.status ||
+      'preparation',
+
+    priority:
+      req.body.priority ||
+      'normal',
+
+    /*
+     * created_by request body'den alınmaz.
+     * Her zaman authenticated kullanıcıdır.
+     */
+    created_by:
+      req.user.id,
+
+    assigned_to:
+      req.body.assigned_to ||
+      null,
+
+    client_ids:
+      Array.isArray(
+        req.body.client_ids
+      )
+        ? req.body.client_ids
+        : [],
+  };
+};
+
+const buildCaseUpdateData = (
+  req
+) => {
+  const title =
+    req.body.title ||
+    `${req.body.judiciary_type || 'Dava'} - ${
+      req.body.judiciary_unit || 'Birim'
+    }`;
+
+  /*
+   * KRİTİK:
+   *
+   * Önceki kodda:
+   *
+   * {
+   *   ...req.body
+   * }
+   *
+   * vardı.
+   *
+   * Böylece created_by gibi internal alanlar
+   * istemci tarafından değiştirilmeye çalışılabilirdi.
+   *
+   * Artık yalnız açıkça izin verilen alanlar var.
+   */
+  return {
+    title,
+
+    judiciary_type:
+      req.body.judiciary_type ||
+      null,
+
+    judiciary_unit:
+      req.body.judiciary_unit ||
+      null,
+
+    opening_date:
+      req.body.opening_date ||
+      null,
+
+    court_name:
+      req.body.court_name ||
+      null,
+
+    case_number:
+      req.body.case_number ||
+      null,
+
+    subject:
+      req.body.subject ||
+      null,
+
+    description:
+      req.body.description ||
+      null,
+
+    status:
+      req.body.status ||
+      'preparation',
+
+    priority:
+      req.body.priority ||
+      'normal',
+
+    assigned_to:
+      req.body.assigned_to ||
+      null,
+
+    client_ids:
+      Array.isArray(
+        req.body.client_ids
+      )
+        ? req.body.client_ids
+        : [],
+  };
+};
+
+// ======================================================
+// CONTROLLER
+// ======================================================
 
 export const caseController = {
-  async create(req, res) {
+  // ====================================================
+  // CREATE
+  // ====================================================
+
+  async create(
+    req,
+    res
+  ) {
     try {
-      const title =
-        req.body.title ||
-        `${req.body.judiciary_type || 'Dava'} - ${
-          req.body.judiciary_unit || 'Birim'
-        }`;
+      const caseData =
+        buildCaseCreateData(
+          req
+        );
 
-      const caseData = {
-        ...req.body,
-        created_by: req.user.id,
-        assigned_to: req.body.assigned_to || null,
-
-        title,
-
-        judiciary_type:
-          req.body.judiciary_type || null,
-
-        judiciary_unit:
-          req.body.judiciary_unit || null,
-
-        opening_date:
-          req.body.opening_date || null,
-
-        court_name:
-          req.body.court_name || null,
-
-        case_number:
-          req.body.case_number || null,
-
-        subject:
-          req.body.subject || null,
-
-        description:
-          req.body.description || null,
-
-        status:
-          req.body.status || 'preparation',
-
-        priority:
-          req.body.priority || 'normal',
-
-        client_ids:
-          req.body.client_ids || [],
-      };
-
+      /*
+       * req.user ayrıca service'e aktarılıyor.
+       *
+       * Service BOLA enforcement eklendiğinde
+       * actor üzerinden yetkilendirme yapacak.
+       */
       const caseItem =
-        await caseService.create(caseData);
+        await caseService.create(
+          caseData,
+          req.user
+        );
 
       await AuditLog.create({
-        action: 'create',
-        entity_type: 'case',
-        entity_id: caseItem.id,
-        user_id: req.user.id,
-        description: `"${caseItem.title}" davası oluşturuldu`,
-        ip_address: req.ip,
+        action:
+          'create',
+
+        entity_type:
+          'case',
+
+        entity_id:
+          caseItem.id,
+
+        user_id:
+          req.user.id,
+
+        description:
+          `"${caseItem.title}" davası oluşturuldu`,
+
+        ip_address:
+          getAuditIp(
+            req
+          ),
+
         user_agent:
-          req.headers['user-agent'],
+          req.headers[
+            'user-agent'
+          ],
       });
 
       return successResponse(
@@ -74,7 +245,9 @@ export const caseController = {
         'Case created successfully',
         201
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Create case error:',
         error
@@ -88,7 +261,14 @@ export const caseController = {
     }
   },
 
-  async findAll(req, res) {
+  // ====================================================
+  // FIND ALL
+  // ====================================================
+
+  async findAll(
+    req,
+    res
+  ) {
     try {
       const {
         page = 1,
@@ -103,6 +283,12 @@ export const caseController = {
           limit,
           search,
           status,
+
+          /*
+           * BOLA scope için actor service'e taşınıyor.
+           */
+          actor:
+            req.user,
         });
 
       return paginatedResponse(
@@ -111,7 +297,9 @@ export const caseController = {
         result.pagination,
         'Cases fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get cases error:',
         error
@@ -125,11 +313,19 @@ export const caseController = {
     }
   },
 
-  async findOne(req, res) {
+  // ====================================================
+  // FIND ONE
+  // ====================================================
+
+  async findOne(
+    req,
+    res
+  ) {
     try {
       const caseItem =
         await caseService.findOne(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       return successResponse(
@@ -137,7 +333,9 @@ export const caseController = {
         caseItem,
         'Case fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get case error:',
         error
@@ -151,71 +349,52 @@ export const caseController = {
     }
   },
 
-  // ======================================================
+  // ====================================================
   // TAM GÜNCELLEME
-  // ======================================================
-  async update(req, res) {
+  // ====================================================
+
+  async update(
+    req,
+    res
+  ) {
     try {
-      const title =
-        req.body.title ||
-        `${req.body.judiciary_type || 'Dava'} - ${
-          req.body.judiciary_unit || 'Birim'
-        }`;
-
-      const updateData = {
-        ...req.body,
-
-        title,
-
-        judiciary_type:
-          req.body.judiciary_type || null,
-
-        judiciary_unit:
-          req.body.judiciary_unit || null,
-
-        opening_date:
-          req.body.opening_date || null,
-
-        court_name:
-          req.body.court_name || null,
-
-        case_number:
-          req.body.case_number || null,
-
-        subject:
-          req.body.subject || null,
-
-        description:
-          req.body.description || null,
-
-        status:
-          req.body.status || 'preparation',
-
-        priority:
-          req.body.priority || 'normal',
-
-        assigned_to:
-          req.body.assigned_to || null,
-
-        client_ids:
-          req.body.client_ids || [],
-      };
+      const updateData =
+        buildCaseUpdateData(
+          req
+        );
 
       const caseItem =
         await caseService.update(
           req.params.id,
-          updateData
+          updateData,
+          req.user
         );
 
       await AuditLog.create({
-        action: 'update',
-        entity_type: 'case',
-        entity_id: caseItem.id,
-        user_id: req.user.id,
-        description: `"${caseItem.title}" davası güncellendi`,
-        ip_address: req.ip,
+        action:
+          'update',
+
+        entity_type:
+          'case',
+
+        entity_id:
+          caseItem.id,
+
+        user_id:
+          req.user.id,
+
+        description:
+          `"${caseItem.title}" davası güncellendi`,
+
+        ip_address:
+          getAuditIp(
+            req
+          ),
+
         user_agent:
-          req.headers['user-agent'],
+          req.headers[
+            'user-agent'
+          ],
       });
 
       return successResponse(
@@ -223,7 +402,9 @@ export const caseController = {
         caseItem,
         'Case updated successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Update case error:',
         error
@@ -237,11 +418,14 @@ export const caseController = {
     }
   },
 
-  // ======================================================
+  // ====================================================
   // KISMİ / AI GÜNCELLEMESİ
-  // Sadece gönderilen alanları değiştirir.
-  // ======================================================
-  async patch(req, res) {
+  // ====================================================
+
+  async patch(
+    req,
+    res
+  ) {
     try {
       const allowedFields = [
         'title',
@@ -257,9 +441,13 @@ export const caseController = {
         'assigned_to',
       ];
 
-      const updateData = {};
+      const updateData =
+        {};
 
-      for (const field of allowedFields) {
+      for (
+        const field of
+        allowedFields
+      ) {
         if (
           Object.prototype.hasOwnProperty.call(
             req.body,
@@ -272,7 +460,10 @@ export const caseController = {
       }
 
       if (
-        Object.keys(updateData).length === 0
+        Object.keys(
+          updateData
+        ).length ===
+        0
       ) {
         return errorResponse(
           res,
@@ -284,18 +475,35 @@ export const caseController = {
       const caseItem =
         await caseService.update(
           req.params.id,
-          updateData
+          updateData,
+          req.user
         );
 
       await AuditLog.create({
-        action: 'update',
-        entity_type: 'case',
-        entity_id: caseItem.id,
-        user_id: req.user.id,
-        description: `"${caseItem.title}" davasında kısmi güncelleme yapıldı`,
-        ip_address: req.ip,
+        action:
+          'update',
+
+        entity_type:
+          'case',
+
+        entity_id:
+          caseItem.id,
+
+        user_id:
+          req.user.id,
+
+        description:
+          `"${caseItem.title}" davasında kısmi güncelleme yapıldı`,
+
+        ip_address:
+          getAuditIp(
+            req
+          ),
+
         user_agent:
-          req.headers['user-agent'],
+          req.headers[
+            'user-agent'
+          ],
       });
 
       return successResponse(
@@ -303,7 +511,9 @@ export const caseController = {
         caseItem,
         'Case partially updated successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Patch case error:',
         error
@@ -317,26 +527,54 @@ export const caseController = {
     }
   },
 
-  async remove(req, res) {
+  // ====================================================
+  // REMOVE
+  // ====================================================
+
+  async remove(
+    req,
+    res
+  ) {
     try {
+      /*
+       * Service findOne BOLA kontrolünü yapacak.
+       */
       const caseItem =
         await caseService.findOne(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       await caseService.remove(
-        req.params.id
+        req.params.id,
+        req.user
       );
 
       await AuditLog.create({
-        action: 'delete',
-        entity_type: 'case',
-        entity_id: req.params.id,
-        user_id: req.user.id,
-        description: `"${caseItem.title}" davası silindi`,
-        ip_address: req.ip,
+        action:
+          'delete',
+
+        entity_type:
+          'case',
+
+        entity_id:
+          req.params.id,
+
+        user_id:
+          req.user.id,
+
+        description:
+          `"${caseItem.title}" davası silindi`,
+
+        ip_address:
+          getAuditIp(
+            req
+          ),
+
         user_agent:
-          req.headers['user-agent'],
+          req.headers[
+            'user-agent'
+          ],
       });
 
       return successResponse(
@@ -344,7 +582,9 @@ export const caseController = {
         null,
         'Case deleted successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Delete case error:',
         error
@@ -358,12 +598,20 @@ export const caseController = {
     }
   },
 
-  async addParty(req, res) {
+  // ====================================================
+  // ADD PARTY
+  // ====================================================
+
+  async addParty(
+    req,
+    res
+  ) {
     try {
       const party =
         await caseService.addParty(
           req.params.id,
-          req.body
+          req.body,
+          req.user
         );
 
       return successResponse(
@@ -372,7 +620,9 @@ export const caseController = {
         'Party added successfully',
         201
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Add party error:',
         error
@@ -386,11 +636,19 @@ export const caseController = {
     }
   },
 
-  async removeParty(req, res) {
+  // ====================================================
+  // REMOVE PARTY
+  // ====================================================
+
+  async removeParty(
+    req,
+    res
+  ) {
     try {
       await caseService.removeParty(
         req.params.id,
-        req.params.partyId
+        req.params.partyId,
+        req.user
       );
 
       return successResponse(
@@ -398,7 +656,9 @@ export const caseController = {
         null,
         'Party removed successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Remove party error:',
         error
@@ -412,11 +672,19 @@ export const caseController = {
     }
   },
 
-  async getParties(req, res) {
+  // ====================================================
+  // GET PARTIES
+  // ====================================================
+
+  async getParties(
+    req,
+    res
+  ) {
     try {
       const parties =
         await caseService.getParties(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       return successResponse(
@@ -424,7 +692,9 @@ export const caseController = {
         parties,
         'Parties fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get parties error:',
         error
@@ -438,11 +708,19 @@ export const caseController = {
     }
   },
 
-  async getDocuments(req, res) {
+  // ====================================================
+  // GET DOCUMENTS
+  // ====================================================
+
+  async getDocuments(
+    req,
+    res
+  ) {
     try {
       const documents =
         await caseService.getDocuments(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       return successResponse(
@@ -450,7 +728,9 @@ export const caseController = {
         documents,
         'Documents fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get documents error:',
         error
@@ -464,11 +744,19 @@ export const caseController = {
     }
   },
 
-  async getTasks(req, res) {
+  // ====================================================
+  // GET TASKS
+  // ====================================================
+
+  async getTasks(
+    req,
+    res
+  ) {
     try {
       const tasks =
         await caseService.getTasks(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       return successResponse(
@@ -476,7 +764,9 @@ export const caseController = {
         tasks,
         'Tasks fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get tasks error:',
         error
@@ -490,11 +780,19 @@ export const caseController = {
     }
   },
 
-  async getEvents(req, res) {
+  // ====================================================
+  // GET EVENTS
+  // ====================================================
+
+  async getEvents(
+    req,
+    res
+  ) {
     try {
       const events =
         await caseService.getEvents(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       return successResponse(
@@ -502,7 +800,9 @@ export const caseController = {
         events,
         'Events fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get events error:',
         error
@@ -516,11 +816,19 @@ export const caseController = {
     }
   },
 
-  async getPayments(req, res) {
+  // ====================================================
+  // GET PAYMENTS
+  // ====================================================
+
+  async getPayments(
+    req,
+    res
+  ) {
     try {
       const payments =
         await caseService.getPayments(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       return successResponse(
@@ -528,7 +836,9 @@ export const caseController = {
         payments,
         'Payments fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get payments error:',
         error
@@ -542,11 +852,19 @@ export const caseController = {
     }
   },
 
-  async getNotes(req, res) {
+  // ====================================================
+  // GET NOTES
+  // ====================================================
+
+  async getNotes(
+    req,
+    res
+  ) {
     try {
       const notes =
         await caseService.getNotes(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       return successResponse(
@@ -554,7 +872,9 @@ export const caseController = {
         notes,
         'Notes fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get notes error:',
         error
@@ -568,11 +888,25 @@ export const caseController = {
     }
   },
 
-  async getStatistics(req, res) {
+  // ====================================================
+  // STATISTICS
+  // ====================================================
+
+  async getStatistics(
+    req,
+    res
+  ) {
     try {
+      /*
+       * Artık yalnız userId değil bütün actor
+       * gönderiliyor.
+       *
+       * Service rol + ownership bazlı doğru
+       * istatistik scope'u uygulayabilecek.
+       */
       const stats =
         await caseService.getStatistics(
-          req.user.id
+          req.user
         );
 
       return successResponse(
@@ -580,7 +914,9 @@ export const caseController = {
         stats,
         'Case statistics fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get case statistics error:',
         error
@@ -594,26 +930,51 @@ export const caseController = {
     }
   },
 
-  async updateStatus(req, res) {
+  // ====================================================
+  // UPDATE STATUS
+  // ====================================================
+
+  async updateStatus(
+    req,
+    res
+  ) {
     try {
-      const { status } = req.body;
+      const {
+        status,
+      } = req.body;
 
       const caseItem =
         await caseService.updateStatus(
           req.params.id,
-          status
+          status,
+          req.user
         );
 
       await AuditLog.create({
-        action: 'update',
-        entity_type: 'case',
-        entity_id: caseItem.id,
-        user_id: req.user.id,
+        action:
+          'update',
+
+        entity_type:
+          'case',
+
+        entity_id:
+          caseItem.id,
+
+        user_id:
+          req.user.id,
+
         description:
           `Case ${caseItem.title} status updated to ${status}`,
-        ip_address: req.ip,
+
+        ip_address:
+          getAuditIp(
+            req
+          ),
+
         user_agent:
-          req.headers['user-agent'],
+          req.headers[
+            'user-agent'
+          ],
       });
 
       return successResponse(
@@ -621,7 +982,9 @@ export const caseController = {
         caseItem,
         'Case status updated successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Update case status error:',
         error

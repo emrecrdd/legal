@@ -39,8 +39,53 @@ const getRefreshCookieOptions = () => ({
     60 *
     1000,
 
-  path: '/',
+  /*
+   * Refresh cookie yalnızca auth endpointlerine
+   * gönderilsin.
+   */
+  path:
+    '/api/auth',
 });
+
+// ======================================================
+// USER SANITIZER
+// ======================================================
+
+const sanitizeUser = (
+  user
+) => {
+  if (!user) {
+    return user;
+  }
+
+  const plainUser =
+    typeof user.get ===
+    'function'
+      ? user.get({
+          plain: true,
+        })
+      : {
+          ...user,
+        };
+
+  /*
+   * Hassas / internal alanlar hiçbir koşulda
+   * API response'una gönderilmez.
+   */
+  delete plainUser.password;
+
+  delete plainUser.refresh_token;
+
+  delete plainUser.email_verification_token;
+
+  delete plainUser.password_reset_token;
+
+  delete plainUser.password_reset_expires;
+
+  delete plainUser.token_version;
+
+  return plainUser;
+};
 
 // ======================================================
 // CONTROLLER
@@ -51,7 +96,10 @@ export const authController = {
   // LOGIN
   // ====================================================
 
-  async login(req, res) {
+  async login(
+    req,
+    res
+  ) {
     try {
       const {
         email,
@@ -75,6 +123,10 @@ export const authController = {
           password
         );
 
+      // ==================================================
+      // REFRESH TOKEN COOKIE
+      // ==================================================
+
       res.cookie(
         'refreshToken',
         result.refreshToken,
@@ -82,15 +134,33 @@ export const authController = {
       );
 
       /*
-       * İleride refresh tokenı tamamen HttpOnly cookie'ye
-       * taşıdığımızda response body'den kaldırabiliriz.
+       * KRİTİK:
+       *
+       * refreshToken response body'ye DÖNMÜYOR.
+       *
+       * Browser bunu yalnızca HttpOnly cookie
+       * olarak tutacak.
+       *
+       * JavaScript yalnız accessToken alır.
        */
+      const safeResult = {
+        user:
+          sanitizeUser(
+            result.user
+          ),
+
+        accessToken:
+          result.accessToken,
+      };
+
       return successResponse(
         res,
-        result,
+        safeResult,
         'Giriş başarılı'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Login error:',
         error
@@ -109,15 +179,24 @@ export const authController = {
   // LOGOUT
   // ====================================================
 
-  async logout(req, res) {
+  async logout(
+    req,
+    res
+  ) {
     try {
+      /*
+       * Refresh token artık yalnızca HttpOnly
+       * cookie'den alınır.
+       *
+       * Request body'den token kabul etmiyoruz.
+       */
       const refreshToken =
         req.cookies
-          ?.refreshToken ||
-        req.body
           ?.refreshToken;
 
-      if (refreshToken) {
+      if (
+        refreshToken
+      ) {
         await authService.logout(
           refreshToken
         );
@@ -127,7 +206,9 @@ export const authController = {
         'refreshToken',
         {
           ...getRefreshCookieOptions(),
-          maxAge: undefined,
+
+          maxAge:
+            undefined,
         }
       );
 
@@ -136,21 +217,25 @@ export const authController = {
         null,
         'Çıkış başarılı'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Logout error:',
         error
       );
 
       /*
-       * Backend token temizliği başarısız olsa bile
+       * Backend tarafındaki işlem hata verse bile
        * browser cookie'sini temizlemeye çalış.
        */
       res.clearCookie(
         'refreshToken',
         {
           ...getRefreshCookieOptions(),
-          maxAge: undefined,
+
+          maxAge:
+            undefined,
         }
       );
 
@@ -171,13 +256,19 @@ export const authController = {
     res
   ) {
     try {
+      /*
+       * Refresh token JavaScript tarafından
+       * gönderilmez.
+       *
+       * Browser HttpOnly cookie'yi otomatik gönderir.
+       */
       const refreshToken =
         req.cookies
-          ?.refreshToken ||
-        req.body
           ?.refreshToken;
 
-      if (!refreshToken) {
+      if (
+        !refreshToken
+      ) {
         return errorResponse(
           res,
           'Refresh token bulunamadı',
@@ -190,28 +281,49 @@ export const authController = {
           refreshToken
         );
 
+      /*
+       * Rotation sonrası yeni refresh token
+       * yalnızca cookie'ye yazılır.
+       */
       res.cookie(
         'refreshToken',
         result.refreshToken,
         getRefreshCookieOptions()
       );
 
+      /*
+       * KRİTİK:
+       *
+       * Yeni refresh token response body'ye
+       * kesinlikle gönderilmez.
+       */
       return successResponse(
         res,
-        result,
+        {
+          accessToken:
+            result.accessToken,
+        },
         'Oturum yenilendi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Refresh token error:',
         error
       );
 
+      /*
+       * Refresh başarısızsa artık kullanılamayan
+       * cookie'yi browser'dan da temizle.
+       */
       res.clearCookie(
         'refreshToken',
         {
           ...getRefreshCookieOptions(),
-          maxAge: undefined,
+
+          maxAge:
+            undefined,
         }
       );
 
@@ -240,10 +352,14 @@ export const authController = {
 
       return successResponse(
         res,
-        user,
+        sanitizeUser(
+          user
+        ),
         'Profil getirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get profile error:',
         error
@@ -283,7 +399,9 @@ export const authController = {
           userId
         );
 
-      if (!user) {
+      if (
+        !user
+      ) {
         return errorResponse(
           res,
           'Kullanıcı bulunamadı',
@@ -291,7 +409,8 @@ export const authController = {
         );
       }
 
-      const updateData = {};
+      const updateData =
+        {};
 
       if (
         first_name !==
@@ -302,7 +421,9 @@ export const authController = {
             first_name
           ).trim();
 
-        if (!value) {
+        if (
+          !value
+        ) {
           return errorResponse(
             res,
             'Ad boş olamaz',
@@ -323,7 +444,9 @@ export const authController = {
             last_name
           ).trim();
 
-        if (!value) {
+        if (
+          !value
+        ) {
           return errorResponse(
             res,
             'Soyad boş olamaz',
@@ -340,8 +463,12 @@ export const authController = {
         undefined
       ) {
         updateData.phone =
-          phone?.trim() ||
-          null;
+          phone === null
+            ? null
+            : String(
+                phone
+              ).trim() ||
+              null;
       }
 
       if (
@@ -349,8 +476,12 @@ export const authController = {
         undefined
       ) {
         updateData.title =
-          title?.trim() ||
-          null;
+          title === null
+            ? null
+            : String(
+                title
+              ).trim() ||
+              null;
       }
 
       if (
@@ -358,8 +489,12 @@ export const authController = {
         undefined
       ) {
         updateData.bio =
-          bio?.trim() ||
-          null;
+          bio === null
+            ? null
+            : String(
+                bio
+              ).trim() ||
+              null;
       }
 
       await user.update(
@@ -373,10 +508,14 @@ export const authController = {
 
       return successResponse(
         res,
-        updatedUser,
+        sanitizeUser(
+          updatedUser
+        ),
         'Profil başarıyla güncellendi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Update profile error:',
         error
@@ -416,16 +555,7 @@ export const authController = {
         );
       }
 
-      if (
-        newPassword.length <
-        8
-      ) {
-        return errorResponse(
-          res,
-          'Yeni şifre en az 8 karakter olmalıdır',
-          400
-        );
-      }
+      
 
       await authService.changePassword(
         req.user.id,
@@ -433,12 +563,33 @@ export const authController = {
         newPassword
       );
 
+      /*
+       * Şifre değişince:
+       *
+       * - token_version arttı
+       * - refresh token DB'den silindi
+       * - eski access tokenlar öldü
+       *
+       * Cookie'yi de browser'dan temizliyoruz.
+       */
+      res.clearCookie(
+        'refreshToken',
+        {
+          ...getRefreshCookieOptions(),
+
+          maxAge:
+            undefined,
+        }
+      );
+
       return successResponse(
         res,
         null,
         'Şifre başarıyla değiştirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Change password error:',
         error
@@ -466,7 +617,9 @@ export const authController = {
         email,
       } = req.body;
 
-      if (!email) {
+      if (
+        !email
+      ) {
         return errorResponse(
           res,
           'E-posta adresi gereklidir',
@@ -479,22 +632,23 @@ export const authController = {
       );
 
       /*
-       * Hesap enumeration önlemek için
-       * kullanıcı var/yok bilgisini dışarı vermiyoruz.
+       * Account enumeration engeli.
        */
       return successResponse(
         res,
         null,
         'Eğer bu e-posta adresine bağlı bir hesap varsa şifre sıfırlama talimatları gönderilecektir.'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Forgot password error:',
         error
       );
 
       /*
-       * Güvenlik açısından yine genel mesaj.
+       * Dışarı her durumda aynı cevap.
        */
       return successResponse(
         res,
@@ -529,16 +683,7 @@ export const authController = {
         );
       }
 
-      if (
-        password.length <
-        8
-      ) {
-        return errorResponse(
-          res,
-          'Şifre en az 8 karakter olmalıdır',
-          400
-        );
-      }
+      
 
       await authService.resetPassword(
         token,
@@ -550,7 +695,9 @@ export const authController = {
         null,
         'Şifre başarıyla sıfırlandı'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Reset password error:',
         error

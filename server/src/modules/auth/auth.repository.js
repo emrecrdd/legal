@@ -1,3 +1,9 @@
+import crypto from 'crypto';
+
+import {
+  Op,
+} from 'sequelize';
+
 import {
   User,
 } from '../../models/User.js';
@@ -26,6 +32,78 @@ const normalizeEmail = (
   )
     .trim()
     .toLowerCase();
+};
+
+// ======================================================
+// TOKEN HASH
+// ======================================================
+
+const hashToken = (
+  token
+) => {
+  if (
+    !token
+  ) {
+    return null;
+  }
+
+  return crypto
+    .createHash(
+      'sha256'
+    )
+    .update(
+      String(
+        token
+      ),
+      'utf8'
+    )
+    .digest(
+      'hex'
+    );
+};
+
+/*
+ * GEÇİŞ UYUMLULUĞU
+ *
+ * Eski sistem tokenları DB'ye plaintext olarak
+ * yazıyordu.
+ *
+ * Yeni sistem yalnızca SHA-256 hash saklıyor.
+ *
+ * Kullanıcıları topluca logout etmemek için
+ * lookup sırasında hem:
+ *
+ * - eski plaintext değer
+ * - yeni hashed değer
+ *
+ * aranır.
+ *
+ * Eski tokenların ömrü dolduktan sonra
+ * plaintext fallback kaldırılabilir.
+ */
+const getTokenCandidates = (
+  token
+) => {
+  if (
+    !token
+  ) {
+    return [];
+  }
+
+  const rawToken =
+    String(
+      token
+    );
+
+  const hashedToken =
+    hashToken(
+      rawToken
+    );
+
+  return [
+    rawToken,
+    hashedToken,
+  ];
 };
 
 // ======================================================
@@ -106,14 +184,27 @@ export const authRepository = {
   // REFRESH TOKEN
   // ====================================================
 
+  /*
+   * KRİTİK:
+   *
+   * Raw refresh token artık DB'ye yazılmaz.
+   * Yalnızca SHA-256 hash saklanır.
+   */
   updateRefreshToken: (
     userId,
     refreshToken
   ) => {
+    const refreshTokenHash =
+      refreshToken
+        ? hashToken(
+            refreshToken
+          )
+        : null;
+
     return User.update(
       {
         refresh_token:
-          refreshToken,
+          refreshTokenHash,
       },
       {
         where: {
@@ -124,6 +215,10 @@ export const authRepository = {
     );
   },
 
+  // ====================================================
+  // FIND BY REFRESH TOKEN
+  // ====================================================
+
   findByRefreshToken: (
     refreshToken
   ) => {
@@ -133,13 +228,24 @@ export const authRepository = {
       return null;
     }
 
+    const candidates =
+      getTokenCandidates(
+        refreshToken
+      );
+
     return User.findOne({
       where: {
-        refresh_token:
-          refreshToken,
+        refresh_token: {
+          [Op.in]:
+            candidates,
+        },
       },
     });
   },
+
+  // ====================================================
+  // INVALIDATE REFRESH TOKEN
+  // ====================================================
 
   invalidateRefreshToken: (
     refreshToken
@@ -150,6 +256,11 @@ export const authRepository = {
       return null;
     }
 
+    const candidates =
+      getTokenCandidates(
+        refreshToken
+      );
+
     return User.update(
       {
         refresh_token:
@@ -157,12 +268,18 @@ export const authRepository = {
       },
       {
         where: {
-          refresh_token:
-            refreshToken,
+          refresh_token: {
+            [Op.in]:
+              candidates,
+          },
         },
       }
     );
   },
+
+  // ====================================================
+  // INVALIDATE ALL REFRESH TOKENS
+  // ====================================================
 
   invalidateAllRefreshTokens: (
     userId
@@ -182,18 +299,103 @@ export const authRepository = {
   },
 
   // ====================================================
+  // ATOMIC REFRESH TOKEN ROTATION
+  // ====================================================
+
+  /*
+   * Refresh işlemi sırasında:
+   *
+   * eski token hâlâ DB'deyse
+   *      ↓
+   * yeni token hashini yaz
+   *
+   * eski token artık yoksa
+   *      ↓
+   * hiçbir satırı değiştirme
+   *
+   * Böylece aynı refresh token ile eşzamanlı
+   * iki isteğin ikisinin de başarılı olması
+   * engellenebilir.
+   *
+   * Bir sonraki auth.service.js güncellemesinde
+   * bu fonksiyonu kullanacağız.
+   */
+  rotateRefreshToken: async (
+    userId,
+    currentRefreshToken,
+    newRefreshToken
+  ) => {
+    if (
+      !userId ||
+      !currentRefreshToken ||
+      !newRefreshToken
+    ) {
+      return false;
+    }
+
+    const currentCandidates =
+      getTokenCandidates(
+        currentRefreshToken
+      );
+
+    const newRefreshTokenHash =
+      hashToken(
+        newRefreshToken
+      );
+
+    const [
+      affectedRows,
+    ] =
+      await User.update(
+        {
+          refresh_token:
+            newRefreshTokenHash,
+        },
+        {
+          where: {
+            id:
+              userId,
+
+            refresh_token: {
+              [Op.in]:
+                currentCandidates,
+            },
+          },
+        }
+      );
+
+    return (
+      affectedRows ===
+      1
+    );
+  },
+
+  // ====================================================
   // PASSWORD RESET
   // ====================================================
 
+  /*
+   * KRİTİK:
+   *
+   * E-postaya raw reset token gider.
+   * DB'de yalnız SHA-256 hash saklanır.
+   */
   savePasswordResetToken: (
     userId,
     token,
     expires
   ) => {
+    const tokenHash =
+      token
+        ? hashToken(
+            token
+          )
+        : null;
+
     return User.update(
       {
         password_reset_token:
-          token,
+          tokenHash,
 
         password_reset_expires:
           expires,
@@ -207,26 +409,41 @@ export const authRepository = {
     );
   },
 
+  // ====================================================
+  // FIND BY PASSWORD RESET TOKEN
+  // ====================================================
+
   findByPasswordResetToken: (
     token
   ) => {
-    if (!token) {
+    if (
+      !token
+    ) {
       return null;
     }
 
+    const candidates =
+      getTokenCandidates(
+        token
+      );
+
+    /*
+     * Hem eski plaintext reset tokenlar
+     * hem yeni hashed tokenlar geçiş
+     * döneminde desteklenir.
+     */
     return User.findOne({
       where: {
-        password_reset_token:
-          token,
+        password_reset_token: {
+          [Op.in]:
+            candidates,
+        },
       },
     });
   },
 
   // ====================================================
   // CLEAR PASSWORD RESET TOKEN
-  //
-  // Reset başarısızlığı veya güvenlik işlemlerinde
-  // ayrıca kullanılabilir.
   // ====================================================
 
   clearPasswordResetToken: (

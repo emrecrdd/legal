@@ -23,10 +23,12 @@ import {
 import {
   AuditLog,
 } from '../../models/AuditLog.js';
+
 import {
   createIcsEvent,
   createIcsFileName,
 } from '../../utils/ics.util.js';
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -54,6 +56,7 @@ const createAuditLog = async ({
       description,
 
       ip_address:
+        req.realClientIp ||
         req.ip,
 
       user_agent:
@@ -178,6 +181,12 @@ const getTaskAccessContext = (
       hasPermission(
         user,
         PERMISSION_KEYS.VIEW_ALL_TASKS
+      ),
+
+    canViewAllCases:
+      hasPermission(
+        user,
+        PERMISSION_KEYS.VIEW_ALL_CASES
       ),
   };
 };
@@ -304,9 +313,15 @@ export const taskController = {
           0,
       };
 
+      const access =
+        getTaskAccessContext(
+          req.user
+        );
+
       const task =
         await taskService.create(
-          taskData
+          taskData,
+          access
         );
 
       const assigneeCount =
@@ -463,6 +478,9 @@ export const taskController = {
 
             canViewAllTasks:
               access.canViewAllTasks,
+
+            canViewAllCases:
+              access.canViewAllCases,
           }
         );
 
@@ -523,6 +541,9 @@ export const taskController = {
 
             canViewAllTasks:
               access.canViewAllTasks,
+
+            canViewAllCases:
+              access.canViewAllCases,
           }
         );
 
@@ -596,7 +617,8 @@ export const taskController = {
       );
     }
   },
-    // ====================================================
+
+  // ====================================================
   // DOWNLOAD CALENDAR / ICS
   // ====================================================
 
@@ -849,6 +871,9 @@ export const taskController = {
 
             canViewAllTasks:
               access.canViewAllTasks,
+
+            canViewAllCases:
+              access.canViewAllCases,
           }
         );
 
@@ -984,11 +1009,13 @@ export const taskController = {
         );
       }
 
-      const canManageAllTasks =
-        hasPermission(
-          req.user,
-          PERMISSION_KEYS.VIEW_ALL_TASKS
+      const access =
+        getTaskAccessContext(
+          req.user
         );
+
+      const canManageAllTasks =
+        access.canViewAllTasks;
 
       if (!canManageAllTasks) {
         return errorResponse(
@@ -1019,13 +1046,7 @@ export const taskController = {
         await taskService.updateStatus(
           req.params.id,
           status,
-          {
-            userId:
-              req.user.id,
-
-            canViewAllTasks:
-              true,
-          }
+          access
         );
 
       await createAuditLog({
@@ -1122,11 +1143,17 @@ export const taskController = {
           req.user
         );
 
+      const access =
+        getTaskAccessContext(
+          req.user
+        );
+
       const task =
         await taskService.assignTask(
           req.params.id,
           assigneeIds,
-          assignedBy
+          assignedBy,
+          access
         );
 
       const assigneeCount =
@@ -1492,10 +1519,16 @@ export const taskController = {
        * Route zaten APPROVE_TASKS permission'ı ile
        * korunuyor.
        */
+      const access =
+        getTaskAccessContext(
+          req.user
+        );
+
       const task =
         await taskService.approveTask(
           req.params.id,
-          req.user.id
+          req.user.id,
+          access
         );
 
       await createAuditLog({

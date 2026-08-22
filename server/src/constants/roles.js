@@ -3,24 +3,40 @@
 // ======================================================
 
 export const ROLES = {
-  ADMIN: 'admin',
-  LAWYER: 'lawyer',
-  INTERN: 'intern',
-  SECRETARY: 'secretary',
+  ADMIN:
+    'admin',
+
+  LAWYER:
+    'lawyer',
+
+  INTERN:
+    'intern',
+
+  SECRETARY:
+    'secretary',
 };
 
 export const ROLES_LIST =
-  Object.values(ROLES);
+  Object.values(
+    ROLES
+  );
 
 // ======================================================
 // ROLE LABELS
 // ======================================================
 
 export const ROLE_LABELS = {
-  [ROLES.ADMIN]: 'Yönetici',
-  [ROLES.LAWYER]: 'Avukat',
-  [ROLES.INTERN]: 'Stajyer',
-  [ROLES.SECRETARY]: 'Sekreter',
+  [ROLES.ADMIN]:
+    'Yönetici',
+
+  [ROLES.LAWYER]:
+    'Avukat',
+
+  [ROLES.INTERN]:
+    'Stajyer',
+
+  [ROLES.SECRETARY]:
+    'Sekreter',
 };
 
 // ======================================================
@@ -54,6 +70,19 @@ export const PERMISSION_KEYS = {
 
   VIEW_CASES:
     'view_cases',
+
+  /*
+   * Record-level erişim.
+   *
+   * Bu izin yoksa kullanıcı yalnızca:
+   *
+   * - created_by = kendi ID'si
+   * - assigned_to = kendi ID'si
+   *
+   * olan davalara erişebilir.
+   */
+  VIEW_ALL_CASES:
+    'view_all_cases',
 
   CREATE_CASES:
     'create_cases',
@@ -529,6 +558,13 @@ export const PERMISSION_GROUPS = {
 
     permissions: [
       PERMISSION_KEYS.VIEW_CASES,
+
+      /*
+       * Admin yetki ekranında artık ayrı seçenek olarak
+       * görünebilir.
+       */
+      PERMISSION_KEYS.VIEW_ALL_CASES,
+
       PERMISSION_KEYS.CREATE_CASES,
       PERMISSION_KEYS.EDIT_CASES,
       PERMISSION_KEYS.DELETE_CASES,
@@ -566,10 +602,6 @@ export const PERMISSION_GROUPS = {
       PERMISSION_KEYS.VIEW_ALL_TASKS,
     ],
   },
-
-  // ====================================================
-  // PERFORMANCE
-  // ====================================================
 
   performance: {
     label:
@@ -738,6 +770,13 @@ export const PERMISSION_PRESETS = {
       ROLES.LAWYER,
 
     overrides: {
+      /*
+       * Yönetici avukat bütün dava kayıtlarını
+       * görebilir.
+       */
+      [PERMISSION_KEYS.VIEW_ALL_CASES]:
+        true,
+
       [PERMISSION_KEYS.DELETE_CLIENTS]:
         true,
 
@@ -759,7 +798,6 @@ export const PERMISSION_PRESETS = {
       [PERMISSION_KEYS.VIEW_ALL_TASKS]:
         true,
 
-      // Performance
       [PERMISSION_KEYS.VIEW_TEAM_PERFORMANCE]:
         true,
 
@@ -801,9 +839,11 @@ export const isValidPermission = (
 export const getRolePermissions = (
   role
 ) => {
-  return PERMISSIONS[
-    role
-  ] || [];
+  return (
+    PERMISSIONS[
+      role
+    ] || []
+  );
 };
 
 export const getEffectivePermissions = (
@@ -841,7 +881,8 @@ export const getEffectivePermissions = (
     }
 
     if (
-      enabled === true
+      enabled ===
+      true
     ) {
       defaults.add(
         permission
@@ -849,7 +890,8 @@ export const getEffectivePermissions = (
     }
 
     if (
-      enabled === false
+      enabled ===
+      false
     ) {
       defaults.delete(
         permission

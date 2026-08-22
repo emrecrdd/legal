@@ -2,8 +2,23 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
+
+import {
+  rateLimit,
+  ipKeyGenerator,
+} from 'express-rate-limit';
+
+import {
+  RedisStore,
+} from 'rate-limit-redis';
+
+import Redis from 'ioredis';
+
 import cookieParser from 'cookie-parser';
+
+import {
+  isIP,
+} from 'node:net';
 
 import {
   config,
@@ -20,6 +35,10 @@ import {
 import {
   errorHandler,
 } from './middlewares/error.middleware.js';
+
+import {
+  requireTrustedOrigin,
+} from './middlewares/origin.middleware.js';
 
 // ======================================================
 // ROUTES
@@ -119,25 +138,152 @@ app.disable(
   'x-powered-by'
 );
 
-/*
- * Render, Nginx veya benzeri reverse proxy arkasında
- * gerçek istemci IP adresinin doğru alınmasını sağlar.
- *
- * Bu ayar express-rate-limit ve güvenlik logları
- * açısından önemlidir.
- */
+// ======================================================
+// TRUST PROXY
+// ======================================================
+
 app.set(
   'trust proxy',
   1
 );
 
-/*
- * Güvenlik başlıkları.
- *
- * API sunucusunda crossOriginResourcePolicy bazı
- * dosya önizleme senaryolarında sorun çıkarabileceği
- * için cross-origin olarak ayarlanmıştır.
- */
+// ======================================================
+// REAL CLIENT IP
+// ======================================================
+
+const normalizeIp = (
+  value
+) => {
+  if (
+    !value ||
+    typeof value !==
+      'string'
+  ) {
+    return null;
+  }
+
+  const candidate =
+    value.trim();
+
+  if (
+    !candidate ||
+    !isIP(
+      candidate
+    )
+  ) {
+    return null;
+  }
+
+  return candidate;
+};
+
+const getForwardedClientIp = (
+  req
+) => {
+  const forwardedFor =
+    req.headers[
+      'x-forwarded-for'
+    ];
+
+  if (
+    typeof forwardedFor ===
+    'string'
+  ) {
+    const firstIp =
+      forwardedFor
+        .split(',')[0]
+        ?.trim();
+
+    return normalizeIp(
+      firstIp
+    );
+  }
+
+  if (
+    Array.isArray(
+      forwardedFor
+    ) &&
+    forwardedFor.length >
+      0
+  ) {
+    const firstIp =
+      String(
+        forwardedFor[0]
+      )
+        .split(',')[0]
+        ?.trim();
+
+    return normalizeIp(
+      firstIp
+    );
+  }
+
+  return null;
+};
+
+const getRealClientIp = (
+  req
+) => {
+  if (
+    isProduction
+  ) {
+    const forwardedIp =
+      getForwardedClientIp(
+        req
+      );
+
+    if (
+      forwardedIp
+    ) {
+      return forwardedIp;
+    }
+  }
+
+  const expressIp =
+    normalizeIp(
+      req.ip
+    );
+
+  if (
+    expressIp
+  ) {
+    return expressIp;
+  }
+
+  const socketIp =
+    normalizeIp(
+      req.socket
+        ?.remoteAddress
+    );
+
+  if (
+    socketIp
+  ) {
+    return socketIp;
+  }
+
+  return null;
+};
+
+app.use(
+  (
+    req,
+    res,
+    next
+  ) => {
+    req.realClientIp =
+      getRealClientIp(
+        req
+      );
+
+    return next();
+  }
+);
+
+// ======================================================
+// SECURITY HEADERS
+// ======================================================
+
 app.use(
   helmet({
     crossOriginResourcePolicy: {
@@ -178,13 +324,6 @@ const corsOptions = {
     origin,
     callback
   ) {
-    /*
-     * Origin olmayan istekler:
-     * - curl
-     * - Postman
-     * - mobil uygulamalar
-     * - sunucudan sunucuya istekler
-     */
     if (!origin) {
       return callback(
         null,
@@ -265,15 +404,47 @@ app.use(
 );
 
 // ======================================================
-// REQUEST BODY
+// CSRF / TRUSTED ORIGIN PROTECTION
 // ======================================================
 
 /*
- * Request body limitleri.
+ * Refresh token production'da:
  *
- * Dosyalar JSON body ile değil,
- * multer/form-data üzerinden taşınmalıdır.
+ * SameSite=None
+ * Secure
+ * HttpOnly
+ *
+ * olarak tutulduğu için browser cross-site
+ * cookie gönderebilir.
+ *
+ * Bu nedenle kritik auth endpointlerinde ayrıca
+ * exact Origin allowlist kontrolü yapıyoruz.
+ *
+ * CORS bunun yerine geçmez; ikisi birlikte çalışır.
  */
+
+// Login-CSRF koruması
+app.use(
+  '/api/auth/login',
+  requireTrustedOrigin
+);
+
+// HttpOnly refresh cookie kullanan endpoint
+app.use(
+  '/api/auth/refresh-token',
+  requireTrustedOrigin
+);
+
+// HttpOnly refresh cookie kullanan endpoint
+app.use(
+  '/api/auth/logout',
+  requireTrustedOrigin
+);
+
+// ======================================================
+// REQUEST BODY
+// ======================================================
+
 app.use(
   express.json({
     limit:
@@ -298,6 +469,92 @@ app.use(
 );
 
 // ======================================================
+// SAFE HTTP LOGGING HELPERS
+// ======================================================
+
+const stripQueryString = (
+  value
+) => {
+  if (
+    !value ||
+    typeof value !==
+      'string'
+  ) {
+    return '-';
+  }
+
+  return (
+    value.split('?')[0] ||
+    '/'
+  );
+};
+
+const sanitizeReferrer = (
+  value
+) => {
+  if (
+    !value ||
+    typeof value !==
+      'string'
+  ) {
+    return '-';
+  }
+
+  try {
+    const url =
+      new URL(
+        value
+      );
+
+    return (
+      `${url.origin}${url.pathname}`
+    );
+  } catch {
+    return '-';
+  }
+};
+
+// ======================================================
+// MORGAN SAFE TOKENS
+// ======================================================
+
+morgan.token(
+  'safe-url',
+  (
+    req
+  ) =>
+    stripQueryString(
+      req.originalUrl ||
+      req.url
+    )
+);
+
+morgan.token(
+  'safe-referrer',
+  (
+    req
+  ) =>
+    sanitizeReferrer(
+      req.headers
+        ?.referer ||
+      req.headers
+        ?.referrer
+    )
+);
+
+morgan.token(
+  'safe-remote-addr',
+  (
+    req
+  ) => {
+    return (
+      req.realClientIp ||
+      '-'
+    );
+  }
+);
+
+// ======================================================
 // HTTP LOGGING
 // ======================================================
 
@@ -307,13 +564,13 @@ if (
 ) {
   app.use(
     morgan(
-      'dev'
+      ':method :safe-url :status :response-time ms - :res[content-length]'
     )
   );
 } else {
   app.use(
     morgan(
-      'combined',
+      ':safe-remote-addr - :remote-user [:date[clf]] ":method :safe-url HTTP/:http-version" :status :res[content-length] ":safe-referrer" ":user-agent"',
       {
         stream: {
           write(
@@ -325,10 +582,6 @@ if (
           },
         },
 
-        /*
-         * Render gibi platformların sık çağırdığı
-         * health endpointlerini production logundan çıkarır.
-         */
         skip(
           req
         ) {
@@ -345,41 +598,186 @@ if (
 }
 
 // ======================================================
-// RATE LIMIT
+// RATE LIMIT REDIS
 // ======================================================
 
-/*
- * Genel API rate limit.
- *
- * AI route'larında ayrıca daha sıkı
- * endpoint bazlı limit bulunabilir.
- */
+let rateLimitRedisClient =
+  null;
+
+let lastRedisErrorLogAt =
+  0;
+
+const REDIS_ERROR_LOG_INTERVAL_MS =
+  30_000;
+
+if (
+  config.REDIS_ENABLED &&
+  config.REDIS_URL
+) {
+  rateLimitRedisClient =
+    new Redis(
+      config.REDIS_URL,
+      {
+        enableOfflineQueue:
+          false,
+
+        maxRetriesPerRequest:
+          1,
+
+        connectTimeout:
+          5000,
+
+        retryStrategy(
+          times
+        ) {
+          return Math.min(
+            times * 500,
+            5000
+          );
+        },
+      }
+    );
+
+  rateLimitRedisClient.on(
+    'error',
+    (
+      error
+    ) => {
+      const now =
+        Date.now();
+
+      if (
+        now -
+          lastRedisErrorLogAt <
+        REDIS_ERROR_LOG_INTERVAL_MS
+      ) {
+        return;
+      }
+
+      lastRedisErrorLogAt =
+        now;
+
+      logger.warn(
+        'Rate-limit Redis bağlantı hatası',
+        {
+          message:
+            error?.message ||
+            'Redis connection error',
+        }
+      );
+    }
+  );
+}
+
+// ======================================================
+// RATE LIMIT STORE FACTORY
+// ======================================================
+
+const createRateLimitStore = (
+  prefix
+) => {
+  if (
+    !rateLimitRedisClient
+  ) {
+    return null;
+  }
+
+  return new RedisStore({
+    prefix,
+
+    sendCommand:
+      async (
+        command,
+        ...args
+      ) => {
+        return rateLimitRedisClient.call(
+          command,
+          ...args
+        );
+      },
+  });
+};
+
+// ======================================================
+// RATE LIMIT KEY
+// ======================================================
+
+const getRateLimitKey = (
+  req
+) => {
+  const clientIp =
+    req.realClientIp;
+
+  if (
+    !clientIp ||
+    !isIP(
+      clientIp
+    )
+  ) {
+    return 'unknown-client';
+  }
+
+  return ipKeyGenerator(
+    clientIp,
+    56
+  );
+};
+
+// ======================================================
+// RATE LIMIT FACTORY
+// ======================================================
+
+const createLimiter = ({
+  prefix,
+  ...options
+}) => {
+  const store =
+    createRateLimitStore(
+      prefix
+    );
+
+  return rateLimit({
+    ...options,
+
+    keyGenerator:
+      getRateLimitKey,
+
+    passOnStoreError:
+      true,
+
+    ...(store
+      ? {
+          store,
+        }
+      : {}),
+  });
+};
+
+// ======================================================
+// GLOBAL API RATE LIMIT
+// ======================================================
+
 const apiRateLimiter =
-  rateLimit({
+  createLimiter({
+    prefix:
+      'rl:api:',
+
+    identifier:
+      'api-general',
+
     windowMs:
       15 *
       60 *
       1000,
 
     limit:
-      300,
+      5000,
 
     standardHeaders:
       'draft-8',
 
     legacyHeaders:
       false,
-
-    skip(
-      req
-    ) {
-      return (
-        req.path ===
-          '/health' ||
-        req.path ===
-          '/health/ready'
-      );
-    },
 
     message: {
       success:
@@ -393,6 +791,108 @@ const apiRateLimiter =
     },
   });
 
+// ======================================================
+// LOGIN RATE LIMIT
+// ======================================================
+
+const loginRateLimiter =
+  createLimiter({
+    prefix:
+      'rl:auth:login:',
+
+    identifier:
+      'auth-login',
+
+    windowMs:
+      15 *
+      60 *
+      1000,
+
+    limit:
+      20,
+
+    standardHeaders:
+      'draft-8',
+
+    legacyHeaders:
+      false,
+
+    skipSuccessfulRequests:
+      true,
+
+    message: {
+      success:
+        false,
+
+      message:
+        'Çok fazla başarısız giriş denemesi yapıldı. Lütfen bir süre sonra tekrar deneyin.',
+
+      code:
+        'LOGIN_RATE_LIMIT_EXCEEDED',
+    },
+  });
+
+// ======================================================
+// PASSWORD RECOVERY RATE LIMIT
+// ======================================================
+
+const passwordRecoveryRateLimiter =
+  createLimiter({
+    prefix:
+      'rl:auth:recovery:',
+
+    identifier:
+      'auth-recovery',
+
+    windowMs:
+      15 *
+      60 *
+      1000,
+
+    limit:
+      10,
+
+    standardHeaders:
+      'draft-8',
+
+    legacyHeaders:
+      false,
+
+    message: {
+      success:
+        false,
+
+      message:
+        'Çok fazla şifre sıfırlama isteği gönderildi. Lütfen bir süre sonra tekrar deneyin.',
+
+      code:
+        'PASSWORD_RECOVERY_RATE_LIMIT_EXCEEDED',
+    },
+  });
+
+// ======================================================
+// APPLY SPECIFIC RATE LIMITS
+// ======================================================
+
+app.use(
+  '/api/auth/login',
+  loginRateLimiter
+);
+
+app.use(
+  '/api/auth/forgot-password',
+  passwordRecoveryRateLimiter
+);
+
+app.use(
+  '/api/auth/reset-password',
+  passwordRecoveryRateLimiter
+);
+
+// ======================================================
+// APPLY GLOBAL API RATE LIMIT
+// ======================================================
+
 app.use(
   '/api',
   apiRateLimiter
@@ -402,18 +902,17 @@ app.use(
 // HEALTH
 // ======================================================
 
-/*
- * Liveness kontrolü.
- *
- * Yalnızca Node uygulamasının ayakta olup
- * olmadığını gösterir.
- */
 app.get(
   '/health',
   (
     req,
     res
   ) => {
+    res.set(
+      'Cache-Control',
+      'no-store'
+    );
+
     return res
       .status(
         200
@@ -435,12 +934,6 @@ app.get(
   }
 );
 
-/*
- * Readiness kontrolü.
- *
- * Veritabanı bağlantısının sağlıklı olup
- * olmadığını da doğrular.
- */
 app.get(
   '/health/ready',
   async (
@@ -449,12 +942,34 @@ app.get(
     next
   ) => {
     try {
+      res.set(
+        'Cache-Control',
+        'no-store'
+      );
+
       const database =
         await checkDatabaseHealth();
 
       const healthy =
         database.healthy ===
         true;
+
+      if (
+        isProduction
+      ) {
+        return res
+          .status(
+            healthy
+              ? 200
+              : 503
+          )
+          .json({
+            status:
+              healthy
+                ? 'ready'
+                : 'not_ready',
+          });
+      }
 
       return res
         .status(
@@ -581,13 +1096,6 @@ app.use(
 // CALENDAR INTEGRATIONS
 // ======================================================
 
-/*
- * Google Calendar / ileride Microsoft Calendar
- * bağlantıları.
- *
- * Google OAuth callback route'u bu router içerisinde
- * authenticate middleware'inden önce tanımlıdır.
- */
 app.use(
   '/api/calendar-integrations',
   calendarIntegrationRoutes
@@ -622,6 +1130,12 @@ app.use(
     req,
     res
   ) => {
+    const safePath =
+      stripQueryString(
+        req.originalUrl ||
+        req.url
+      );
+
     return res
       .status(
         404
@@ -637,7 +1151,7 @@ app.use(
           'ROUTE_NOT_FOUND',
 
         path:
-          req.originalUrl,
+          safePath,
       });
   }
 );
@@ -646,10 +1160,6 @@ app.use(
 // GLOBAL ERROR HANDLER
 // ======================================================
 
-/*
- * Global error handler her zaman
- * middleware zincirinin sonunda olmalıdır.
- */
 app.use(
   errorHandler
 );

@@ -1,70 +1,150 @@
-import { Op, Sequelize } from 'sequelize';
+import {
+  Op,
+  Sequelize,
+} from 'sequelize';
 
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import { fileURLToPath } from 'url';
 
-import { Document } from '../../models/Document.js';
-import { User } from '../../models/User.js';
-import { Case } from '../../models/Case.js';
-import { Client } from '../../models/Client.js';
-import { PowerOfAttorney } from '../../models/PowerOfAttorney.js';
+import {
+  fileURLToPath,
+} from 'url';
 
-import { sequelize } from '../../config/database.js';
+import {
+  Document,
+} from '../../models/Document.js';
+
+import {
+  User,
+} from '../../models/User.js';
+
+import {
+  Case,
+} from '../../models/Case.js';
+
+import {
+  Client,
+} from '../../models/Client.js';
+
+import {
+  PowerOfAttorney,
+} from '../../models/PowerOfAttorney.js';
+
+import {
+  sequelize,
+} from '../../config/database.js';
 
 import {
   paginate,
   getPaginationData,
 } from '../../utils/paginate.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import {
+  ROLES,
+  PERMISSION_KEYS,
+  getEffectivePermissions,
+} from '../../constants/roles.js';
 
-const UPLOAD_DIR = path.resolve(
-  __dirname,
-  '../../../uploads'
+// ======================================================
+// PATHS
+// ======================================================
+
+const __filename =
+  fileURLToPath(
+    import.meta.url
+  );
+
+const __dirname =
+  path.dirname(
+    __filename
+  );
+
+const UPLOAD_DIR =
+  path.resolve(
+    __dirname,
+    '../../../uploads'
+  );
+
+await fsPromises.mkdir(
+  UPLOAD_DIR,
+  {
+    recursive:
+      true,
+  }
 );
 
-await fsPromises.mkdir(UPLOAD_DIR, {
-  recursive: true,
-});
-
 // ======================================================
-// HELPERS
+// NORMALIZATION HELPERS
 // ======================================================
 
-const normalizeOriginalName = (originalName = '') => {
+const normalizeOriginalName = (
+  originalName = ''
+) => {
   try {
-    const decoded = Buffer
-      .from(originalName, 'latin1')
-      .toString('utf8');
+    const decoded =
+      Buffer
+        .from(
+          originalName,
+          'latin1'
+        )
+        .toString(
+          'utf8'
+        );
 
-    return decoded || originalName;
+    return (
+      decoded ||
+      originalName
+    );
   } catch {
     return originalName;
   }
 };
 
-const normalizeTags = (tags) => {
-  if (Array.isArray(tags)) {
+const normalizeTags = (
+  tags
+) => {
+  if (
+    Array.isArray(
+      tags
+    )
+  ) {
     return [
       ...new Set(
         tags
-          .map((tag) => String(tag).trim())
-          .filter(Boolean)
+          .map(
+            (
+              tag
+            ) =>
+              String(
+                tag
+              ).trim()
+          )
+          .filter(
+            Boolean
+          )
       ),
     ];
   }
 
-  if (typeof tags === 'string') {
+  if (
+    typeof tags ===
+    'string'
+  ) {
     return [
       ...new Set(
         tags
           .split(',')
-          .map((tag) => tag.trim())
-          .filter(Boolean)
+          .map(
+            (
+              tag
+            ) =>
+              tag.trim()
+          )
+          .filter(
+            Boolean
+          )
       ),
     ];
   }
@@ -72,52 +152,92 @@ const normalizeTags = (tags) => {
   return [];
 };
 
-const normalizeBoolean = (value, fallback = false) => {
-  if (typeof value === 'boolean') {
+const normalizeBoolean = (
+  value,
+  fallback = false
+) => {
+  if (
+    typeof value ===
+    'boolean'
+  ) {
     return value;
   }
 
-  if (typeof value === 'string') {
-    if (value.toLowerCase() === 'true') {
+  if (
+    typeof value ===
+    'string'
+  ) {
+    const normalized =
+      value.toLowerCase();
+
+    if (
+      normalized ===
+      'true'
+    ) {
       return true;
     }
 
-    if (value.toLowerCase() === 'false') {
+    if (
+      normalized ===
+      'false'
+    ) {
       return false;
     }
   }
 
-  if (value === 1 || value === '1') {
+  if (
+    value === 1 ||
+    value === '1'
+  ) {
     return true;
   }
 
-  if (value === 0 || value === '0') {
+  if (
+    value === 0 ||
+    value === '0'
+  ) {
     return false;
   }
 
   return fallback;
 };
 
-const normalizeMetadata = (metadata) => {
-  if (!metadata) {
+const normalizeMetadata = (
+  metadata
+) => {
+  if (
+    !metadata
+  ) {
     return {};
   }
 
   if (
-    typeof metadata === 'object' &&
-    !Array.isArray(metadata)
+    typeof metadata ===
+      'object' &&
+    !Array.isArray(
+      metadata
+    )
   ) {
     return metadata;
   }
 
-  if (typeof metadata === 'string') {
+  if (
+    typeof metadata ===
+    'string'
+  ) {
     try {
-      const parsed = JSON.parse(metadata);
+      const parsed =
+        JSON.parse(
+          metadata
+        );
 
       if (
         parsed &&
-        typeof parsed === 'object' &&
-        !Array.isArray(parsed)
+        typeof parsed ===
+          'object' &&
+        !Array.isArray(
+          parsed
+        )
       ) {
         return parsed;
       }
@@ -129,26 +249,28 @@ const normalizeMetadata = (metadata) => {
   return {};
 };
 
-/*
- * UDF dosyaları XML tabanlı içerik taşıyabilse de
- * tarayıcı / işletim sistemi tarafından text/xml,
- * application/xml veya application/octet-stream
- * şeklinde bildirilebilir.
- *
- * Sistemimizde UDF'nin XML olarak yorumlanmasını
- * istemediğimiz için uzantı .udf ise MIME türünü
- * application/octet-stream olarak normalize ediyoruz.
- */
+// ======================================================
+// FILE TYPES
+// ======================================================
+
 const normalizeMimeType = (
   originalName = '',
   mimeType = ''
 ) => {
-  const extension = path
-    .extname(originalName)
-    .toLowerCase();
+  const extension =
+    path
+      .extname(
+        originalName
+      )
+      .toLowerCase();
 
-  if (extension === '.udf') {
-    return 'application/octet-stream';
+  if (
+    extension ===
+    '.udf'
+  ) {
+    return (
+      'application/octet-stream'
+    );
   }
 
   return (
@@ -161,118 +283,806 @@ const detectFileType = (
   mimeType = '',
   originalName = ''
 ) => {
-  const extension = path
-    .extname(originalName)
-    .toLowerCase();
+  const extension =
+    path
+      .extname(
+        originalName
+      )
+      .toLowerCase();
 
-  /*
-   * Document modelinde henüz "udf" ENUM değeri yok.
-   * Bu nedenle UDF şimdilik "other" olarak tutuluyor.
-   */
-  if (extension === '.udf') {
+  if (
+    extension ===
+    '.udf'
+  ) {
     return 'udf';
   }
 
-  if (mimeType === 'application/pdf') {
+  if (
+    mimeType ===
+    'application/pdf'
+  ) {
     return 'pdf';
   }
 
   if (
-    mimeType.includes('word') ||
-    mimeType.includes('document')
+    mimeType.includes(
+      'word'
+    ) ||
+    mimeType.includes(
+      'document'
+    )
   ) {
     return 'word';
   }
 
   if (
-    mimeType.includes('excel') ||
-    mimeType.includes('sheet')
+    mimeType.includes(
+      'excel'
+    ) ||
+    mimeType.includes(
+      'sheet'
+    )
   ) {
     return 'excel';
   }
 
-  if (mimeType.startsWith('image/')) {
+  if (
+    mimeType.startsWith(
+      'image/'
+    )
+  ) {
     return 'image';
   }
 
-  // Document modelinde henüz video ENUM'u yok.
-  if (mimeType.startsWith('video/')) {
+  if (
+    mimeType.startsWith(
+      'video/'
+    )
+  ) {
     return 'other';
   }
 
   return 'other';
 };
 
-const createStoredFilename = (originalName) => {
-  const extension = path
-    .extname(originalName || '')
-    .toLowerCase();
+// ======================================================
+// FILE PATH SECURITY
+// ======================================================
 
-  return `${crypto.randomUUID()}${extension}`;
+const createStoredFilename = (
+  originalName
+) => {
+  const extension =
+    path
+      .extname(
+        originalName ||
+        ''
+      )
+      .toLowerCase();
+
+  return (
+    `${crypto.randomUUID()}${extension}`
+  );
 };
 
-const resolveStoredFilePath = (storedFilename) => {
-  if (!storedFilename) {
-    throw new Error('Document file path is missing');
+const resolveStoredFilePath = (
+  storedFilename
+) => {
+  if (
+    !storedFilename
+  ) {
+    throw new Error(
+      'Document file path is missing'
+    );
   }
-
-  /*
-   * DB tarafında yalnız dosya adı tutulmalı.
-   * "../" gibi path traversal değerlerini reddediyoruz.
-   */
-  if (path.basename(storedFilename) !== storedFilename) {
-    throw new Error('Invalid document file path');
-  }
-
-  const resolved = path.resolve(
-    UPLOAD_DIR,
-    storedFilename
-  );
-
-  const relative = path.relative(
-    UPLOAD_DIR,
-    resolved
-  );
 
   if (
-    relative.startsWith('..') ||
-    path.isAbsolute(relative)
+    path.basename(
+      storedFilename
+    ) !==
+    storedFilename
   ) {
-    throw new Error('Invalid document file path');
+    throw new Error(
+      'Invalid document file path'
+    );
+  }
+
+  const resolved =
+    path.resolve(
+      UPLOAD_DIR,
+      storedFilename
+    );
+
+  const relative =
+    path.relative(
+      UPLOAD_DIR,
+      resolved
+    );
+
+  if (
+    relative.startsWith(
+      '..'
+    ) ||
+    path.isAbsolute(
+      relative
+    )
+  ) {
+    throw new Error(
+      'Invalid document file path'
+    );
   }
 
   return resolved;
 };
 
+// ======================================================
+// AUTHORIZATION
+// ======================================================
+
+const getActorId = (
+  actor
+) => {
+  return (
+    actor?.id ||
+    null
+  );
+};
+
+const requireActor = (
+  actor
+) => {
+  const actorId =
+    getActorId(
+      actor
+    );
+
+  if (
+    !actorId
+  ) {
+    throw new Error(
+      'Document not found'
+    );
+  }
+
+  return actorId;
+};
+
+const getActorPermissions = (
+  actor
+) => {
+  if (
+    !actor
+  ) {
+    return [];
+  }
+
+  return getEffectivePermissions(
+    actor.role,
+    actor.permissions ||
+      {}
+  );
+};
+
+const isAdmin = (
+  actor
+) => {
+  return (
+    actor?.role ===
+    ROLES.ADMIN
+  );
+};
+
+const canViewAllCases = (
+  actor
+) => {
+  return (
+    isAdmin(
+      actor
+    ) ||
+    getActorPermissions(
+      actor
+    ).includes(
+      PERMISSION_KEYS.VIEW_ALL_CASES
+    )
+  );
+};
+
+// ======================================================
+// WHERE HELPERS
+// ======================================================
+
+const hasWhereContent = (
+  value
+) => {
+  return Boolean(
+    value &&
+    typeof value ===
+      'object' &&
+    Reflect.ownKeys(
+      value
+    ).length >
+      0
+  );
+};
+
+const combineWhere = (
+  ...conditions
+) => {
+  const validConditions =
+    conditions.filter(
+      hasWhereContent
+    );
+
+  if (
+    validConditions.length ===
+    0
+  ) {
+    return {};
+  }
+
+  if (
+    validConditions.length ===
+    1
+  ) {
+    return validConditions[0];
+  }
+
+  return {
+    [Op.and]:
+      validConditions,
+  };
+};
+
+// ======================================================
+// CASE ACCESS
+// ======================================================
+
+const assertCaseAccess =
+  async (
+    caseId,
+    actor,
+    options = {}
+  ) => {
+    if (
+      !caseId
+    ) {
+      return null;
+    }
+
+    const actorId =
+      requireActor(
+        actor
+      );
+
+    const where = {
+      id:
+        caseId,
+    };
+
+    if (
+      !canViewAllCases(
+        actor
+      )
+    ) {
+      where[Op.or] = [
+        {
+          created_by:
+            actorId,
+        },
+
+        {
+          assigned_to:
+            actorId,
+        },
+      ];
+    }
+
+    const caseItem =
+      await Case.findOne({
+        where,
+
+        attributes: [
+          'id',
+        ],
+
+        transaction:
+          options.transaction,
+      });
+
+    if (
+      !caseItem
+    ) {
+      throw new Error(
+        'Case not found'
+      );
+    }
+
+    return caseItem;
+  };
+
+// ======================================================
+// CLIENT ACCESS
+// ======================================================
+
+const buildClientAccessWhere = (
+  actor
+) => {
+  const actorId =
+    requireActor(
+      actor
+    );
+
+  if (
+    isAdmin(
+      actor
+    )
+  ) {
+    return {};
+  }
+
+  const escapedActorId =
+    sequelize.escape(
+      actorId
+    );
+
+  const relatedCasePredicate =
+    canViewAllCases(
+      actor
+    )
+      ? `
+        EXISTS (
+          SELECT 1
+          FROM case_clients cc
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+          WHERE cc.client_id = "Client"."id"
+        )
+      `
+      : `
+        EXISTS (
+          SELECT 1
+          FROM case_clients cc
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+          WHERE cc.client_id = "Client"."id"
+            AND (
+              c.created_by = ${escapedActorId}
+              OR c.assigned_to = ${escapedActorId}
+            )
+        )
+      `;
+
+  return {
+    [Op.or]: [
+      {
+        created_by:
+          actorId,
+      },
+
+      Sequelize.where(
+        Sequelize.literal(
+          relatedCasePredicate
+        ),
+        true
+      ),
+    ],
+  };
+};
+
+const assertClientAccess =
+  async (
+    clientId,
+    actor,
+    options = {}
+  ) => {
+    if (
+      !clientId
+    ) {
+      return null;
+    }
+
+    const client =
+      await Client.findOne({
+        where:
+          combineWhere(
+            {
+              id:
+                clientId,
+            },
+
+            buildClientAccessWhere(
+              actor
+            )
+          ),
+
+        attributes: [
+          'id',
+          'created_by',
+        ],
+
+        transaction:
+          options.transaction,
+      });
+
+    if (
+      !client
+    ) {
+      throw new Error(
+        'Client not found'
+      );
+    }
+
+    return client;
+  };
+
+// ======================================================
+// DOCUMENT QUERY ACCESS
+// ======================================================
+
+const buildDocumentAccessWhere = (
+  actor
+) => {
+  const actorId =
+    requireActor(
+      actor
+    );
+
+  if (
+    isAdmin(
+      actor
+    )
+  ) {
+    return {};
+  }
+
+  // ====================================================
+  // CASE-LINKED DOCUMENTS
+  // ====================================================
+
+  const caseLinkedScope =
+    canViewAllCases(
+      actor
+    )
+      ? {
+          case_id: {
+            [Op.ne]:
+              null,
+          },
+        }
+      : {
+          [Op.and]: [
+            {
+              case_id: {
+                [Op.ne]:
+                  null,
+              },
+            },
+
+            {
+              [Op.or]: [
+                {
+                  '$case.created_by$':
+                    actorId,
+                },
+
+                {
+                  '$case.assigned_to$':
+                    actorId,
+                },
+              ],
+            },
+          ],
+        };
+
+  // ====================================================
+  // CLIENT-LINKED, NO CASE
+  // ====================================================
+
+  const clientCasePredicate =
+    canViewAllCases(
+      actor
+    )
+      ? `
+        EXISTS (
+          SELECT 1
+          FROM case_clients cc
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+          WHERE cc.client_id = "Document"."client_id"
+        )
+      `
+      : `
+        EXISTS (
+          SELECT 1
+          FROM case_clients cc
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+          WHERE cc.client_id = "Document"."client_id"
+            AND (
+              c.created_by = ${sequelize.escape(
+                actorId
+              )}
+              OR c.assigned_to = ${sequelize.escape(
+                actorId
+              )}
+            )
+        )
+      `;
+
+  const clientLinkedScope = {
+    [Op.and]: [
+      /*
+       * Case bağlıysa her zaman CASE scope üstün.
+       */
+      {
+        case_id:
+          null,
+      },
+
+      {
+        client_id: {
+          [Op.ne]:
+            null,
+        },
+      },
+
+      {
+        [Op.or]: [
+          /*
+           * Kullanıcının kendi oluşturduğu müvekkil.
+           */
+          {
+            '$client.created_by$':
+              actorId,
+          },
+
+          /*
+           * Veya erişebildiği bir davaya bağlı müvekkil.
+           */
+          Sequelize.where(
+            Sequelize.literal(
+              clientCasePredicate
+            ),
+            true
+          ),
+        ],
+      },
+    ],
+  };
+
+  // ====================================================
+  // PURE STANDALONE / POA-ONLY
+  // ====================================================
+
+  const standaloneScope = {
+    [Op.and]: [
+      {
+        case_id:
+          null,
+      },
+
+      {
+        client_id:
+          null,
+      },
+
+      /*
+       * POA-only veya tamamen bağımsız belgelerde
+       * PowerOfAttorney BOLA kurulana kadar uploader
+       * ownership korunur.
+       */
+      {
+        uploaded_by:
+          actorId,
+      },
+    ],
+  };
+
+  return {
+    [Op.or]: [
+      caseLinkedScope,
+      clientLinkedScope,
+      standaloneScope,
+    ],
+  };
+};
+
+// ======================================================
+// DOCUMENT ACCESS INCLUDES
+// ======================================================
+
+const documentAccessIncludes = [
+  {
+    model:
+      Case,
+
+    as:
+      'case',
+
+    attributes:
+      [],
+
+    required:
+      false,
+  },
+
+  {
+    model:
+      Client,
+
+    as:
+      'client',
+
+    attributes:
+      [],
+
+    required:
+      false,
+  },
+];
+
+// ======================================================
+// ASSERT DOCUMENT ACCESS
+// ======================================================
+
+const assertDocumentAccess =
+  async (
+    documentId,
+    actor,
+    options = {}
+  ) => {
+    const actorId =
+      requireActor(
+        actor
+      );
+
+    const document =
+      await Document.findByPk(
+        documentId,
+        {
+          transaction:
+            options.transaction,
+        }
+      );
+
+    if (
+      !document
+    ) {
+      throw new Error(
+        'Document not found'
+      );
+    }
+
+    if (
+      isAdmin(
+        actor
+      )
+    ) {
+      return document;
+    }
+
+    // ==================================================
+    // CASE HAS PRIORITY
+    // ==================================================
+
+    if (
+      document.case_id
+    ) {
+      try {
+        await assertCaseAccess(
+          document.case_id,
+          actor,
+          options
+        );
+
+        return document;
+      } catch {
+        throw new Error(
+          'Document not found'
+        );
+      }
+    }
+
+    // ==================================================
+    // CLIENT-LINKED DOCUMENT
+    // ==================================================
+
+    if (
+      document.client_id
+    ) {
+      try {
+        await assertClientAccess(
+          document.client_id,
+          actor,
+          options
+        );
+
+        return document;
+      } catch {
+        throw new Error(
+          'Document not found'
+        );
+      }
+    }
+
+    // ==================================================
+    // STANDALONE / POA-ONLY
+    // ==================================================
+
+    if (
+      document.uploaded_by ===
+      actorId
+    ) {
+      return document;
+    }
+
+    throw new Error(
+      'Document not found'
+    );
+  };
+
+// ======================================================
+// NORMAL INCLUDES
+// ======================================================
+
 const documentIncludes = [
   {
-    model: User,
-    as: 'uploader',
+    model:
+      User,
+
+    as:
+      'uploader',
+
     attributes: [
       'id',
       'first_name',
       'last_name',
     ],
   },
+
   {
-    model: Case,
-    as: 'case',
+    model:
+      Case,
+
+    as:
+      'case',
+
     attributes: [
       'id',
       'title',
     ],
+
+    required:
+      false,
   },
+
   {
-    model: Client,
-    as: 'client',
+    model:
+      Client,
+
+    as:
+      'client',
+
     attributes: [
       'id',
       'name',
     ],
+
+    required:
+      false,
   },
+
   {
-    model: PowerOfAttorney,
-    as: 'powerOfAttorney',
+    model:
+      PowerOfAttorney,
+
+    as:
+      'powerOfAttorney',
+
     attributes: [
       'id',
       'title',
@@ -285,19 +1095,54 @@ const documentIncludes = [
 // ======================================================
 
 export const documentService = {
-
   // ====================================================
   // UPLOAD
   // ====================================================
 
-  async upload(data) {
+  async upload(
+    data,
+    actor
+  ) {
+    const actorId =
+      requireActor(
+        actor
+      );
+
     const {
       file,
       ...documentData
     } = data;
 
-    if (!file?.buffer) {
-      throw new Error('File is required');
+    if (
+      !file?.buffer
+    ) {
+      throw new Error(
+        'File is required'
+      );
+    }
+
+    /*
+     * İlişki alanları ayrıca authorize edilir.
+     *
+     * Böylece kullanıcı erişemediği case/client ID'sini
+     * body'ye yazarak belge bağlayamaz.
+     */
+    if (
+      documentData.case_id
+    ) {
+      await assertCaseAccess(
+        documentData.case_id,
+        actor
+      );
+    }
+
+    if (
+      documentData.client_id
+    ) {
+      await assertClientAccess(
+        documentData.client_id,
+        actor
+      );
     }
 
     const originalName =
@@ -324,24 +1169,21 @@ export const documentService = {
     const transaction =
       await sequelize.transaction();
 
-    let fileWritten = false;
+    let fileWritten =
+      false;
 
     try {
-      /*
-       * Dosya içeriğine kesinlikle dokunmuyoruz.
-       *
-       * Özellikle UDF belgeleri olduğu gibi
-       * byte-for-byte saklanıyor.
-       */
       await fsPromises.writeFile(
         storedPath,
         file.buffer,
         {
-          flag: 'wx',
+          flag:
+            'wx',
         }
       );
 
-      fileWritten = true;
+      fileWritten =
+        true;
 
       const document =
         await Document.create(
@@ -394,7 +1236,7 @@ export const documentService = {
               null,
 
             uploaded_by:
-              documentData.uploaded_by,
+              actorId,
 
             is_public:
               normalizeBoolean(
@@ -402,16 +1244,19 @@ export const documentService = {
                 false
               ),
 
-            is_archived: false,
+            is_archived:
+              false,
 
             metadata:
               normalizeMetadata(
                 documentData.metadata
               ),
 
-            version: 1,
+            version:
+              1,
 
-            parent_id: null,
+            parent_id:
+              null,
           },
           {
             transaction,
@@ -421,13 +1266,21 @@ export const documentService = {
       await transaction.commit();
 
       return document;
-    } catch (error) {
+    } catch (
+      error
+    ) {
       await transaction.rollback();
 
-      if (fileWritten) {
+      if (
+        fileWritten
+      ) {
         await fsPromises
-          .unlink(storedPath)
-          .catch(() => {});
+          .unlink(
+            storedPath
+          )
+          .catch(
+            () => {}
+          );
       }
 
       throw error;
@@ -438,46 +1291,84 @@ export const documentService = {
   // VERSION UPLOAD
   // ====================================================
 
-  async uploadVersion(documentId, data) {
+  async uploadVersion(
+    documentId,
+    data,
+    actor
+  ) {
+    const actorId =
+      requireActor(
+        actor
+      );
+
     const {
       file,
       ...versionData
     } = data;
 
-    if (!file?.buffer) {
+    if (
+      !file?.buffer
+    ) {
       throw new Error(
         'New version file is required'
       );
     }
 
     const existing =
-      await Document.findByPk(
-        documentId
+      await assertDocumentAccess(
+        documentId,
+        actor
       );
 
-    if (!existing) {
-      throw new Error(
-        'Document not found'
-      );
-    }
-
-    /*
-     * Her versiyon doğrudan ana/root belgeye bağlanır.
-     */
     const rootId =
       existing.parent_id ||
       existing.id;
 
     const rootDocument =
       existing.parent_id
-        ? await Document.findByPk(
-            rootId
+        ? await assertDocumentAccess(
+            rootId,
+            actor
           )
         : existing;
 
-    if (!rootDocument) {
+    if (
+      !rootDocument
+    ) {
       throw new Error(
-        'Root document not found'
+        'Document not found'
+      );
+    }
+
+    const targetCaseId =
+      versionData.case_id !==
+      undefined
+        ? versionData.case_id ||
+          null
+        : rootDocument.case_id;
+
+    const targetClientId =
+      versionData.client_id !==
+      undefined
+        ? versionData.client_id ||
+          null
+        : rootDocument.client_id;
+
+    if (
+      targetCaseId
+    ) {
+      await assertCaseAccess(
+        targetCaseId,
+        actor
+      );
+    }
+
+    if (
+      targetClientId
+    ) {
+      await assertClientAccess(
+        targetClientId,
+        actor
       );
     }
 
@@ -488,8 +1379,10 @@ export const documentService = {
           where: {
             [Op.or]: [
               {
-                id: rootId,
+                id:
+                  rootId,
               },
+
               {
                 parent_id:
                   rootId,
@@ -501,8 +1394,9 @@ export const documentService = {
 
     const nextVersion =
       Math.max(
-        Number(maxChildVersion) ||
-          1,
+        Number(
+          maxChildVersion
+        ) || 1,
         1
       ) + 1;
 
@@ -530,22 +1424,21 @@ export const documentService = {
     const transaction =
       await sequelize.transaction();
 
-    let fileWritten = false;
+    let fileWritten =
+      false;
 
     try {
-      /*
-       * Yeni versiyon da hiçbir içerik dönüşümü
-       * yapılmadan olduğu gibi saklanır.
-       */
       await fsPromises.writeFile(
         storedPath,
         file.buffer,
         {
-          flag: 'wx',
+          flag:
+            'wx',
         }
       );
 
-      fileWritten = true;
+      fileWritten =
+        true;
 
       const document =
         await Document.create(
@@ -594,18 +1487,10 @@ export const documentService = {
                 : rootDocument.description,
 
             case_id:
-              versionData.case_id !==
-              undefined
-                ? versionData.case_id ||
-                  null
-                : rootDocument.case_id,
+              targetCaseId,
 
             client_id:
-              versionData.client_id !==
-              undefined
-                ? versionData.client_id ||
-                  null
-                : rootDocument.client_id,
+              targetClientId,
 
             power_of_attorney_id:
               versionData.power_of_attorney_id !==
@@ -615,7 +1500,7 @@ export const documentService = {
                 : rootDocument.power_of_attorney_id,
 
             uploaded_by:
-              versionData.uploaded_by,
+              actorId,
 
             is_public:
               versionData.is_public !==
@@ -651,13 +1536,21 @@ export const documentService = {
       await transaction.commit();
 
       return document;
-    } catch (error) {
+    } catch (
+      error
+    ) {
       await transaction.rollback();
 
-      if (fileWritten) {
+      if (
+        fileWritten
+      ) {
         await fsPromises
-          .unlink(storedPath)
-          .catch(() => {});
+          .unlink(
+            storedPath
+          )
+          .catch(
+            () => {}
+          );
       }
 
       throw error;
@@ -677,8 +1570,9 @@ export const documentService = {
     client_id,
     power_of_attorney_id,
     include_archived = false,
+    actor,
   }) {
-    const where = {};
+    const filters = {};
 
     if (
       !normalizeBoolean(
@@ -686,27 +1580,31 @@ export const documentService = {
         false
       )
     ) {
-      where.is_archived =
+      filters.is_archived =
         false;
     }
 
-    if (search?.trim()) {
+    if (
+      search?.trim()
+    ) {
       const normalizedSearch =
         search.trim();
 
-      where[Op.or] = [
+      filters[Op.or] = [
         {
           name: {
             [Op.iLike]:
               `%${normalizedSearch}%`,
           },
         },
+
         {
           original_name: {
             [Op.iLike]:
               `%${normalizedSearch}%`,
           },
         },
+
         {
           description: {
             [Op.iLike]:
@@ -716,27 +1614,41 @@ export const documentService = {
       ];
     }
 
-    if (category) {
-      where.category =
+    if (
+      category
+    ) {
+      filters.category =
         category;
     }
 
-    if (case_id) {
-      where.case_id =
+    if (
+      case_id
+    ) {
+      filters.case_id =
         case_id;
     }
 
-    if (client_id) {
-      where.client_id =
+    if (
+      client_id
+    ) {
+      filters.client_id =
         client_id;
     }
 
     if (
       power_of_attorney_id
     ) {
-      where.power_of_attorney_id =
+      filters.power_of_attorney_id =
         power_of_attorney_id;
     }
+
+    const where =
+      combineWhere(
+        filters,
+        buildDocumentAccessWhere(
+          actor
+        )
+      );
 
     const pageNum =
       Math.max(
@@ -763,6 +1675,7 @@ export const documentService = {
       paginate(
         {
           where,
+
           order: [
             [
               'created_at',
@@ -778,19 +1691,19 @@ export const documentService = {
       count,
       rows,
     } =
-      await Document.findAndCountAll(
-        {
-          ...query,
+      await Document.findAndCountAll({
+        ...query,
 
-          include:
-            documentIncludes,
+        include:
+          documentIncludes,
 
-          distinct: true,
-        }
-      );
+        distinct:
+          true,
+      });
 
     return {
-      data: rows,
+      data:
+        rows,
 
       pagination:
         getPaginationData(
@@ -805,7 +1718,15 @@ export const documentService = {
   // FIND ONE
   // ====================================================
 
-  async findOne(id) {
+  async findOne(
+    id,
+    actor
+  ) {
+    await assertDocumentAccess(
+      id,
+      actor
+    );
+
     const document =
       await Document.findByPk(
         id,
@@ -815,7 +1736,9 @@ export const documentService = {
         }
       );
 
-    if (!document) {
+    if (
+      !document
+    ) {
       throw new Error(
         'Document not found'
       );
@@ -825,26 +1748,20 @@ export const documentService = {
   },
 
   // ====================================================
-  // UPDATE METADATA ONLY
+  // UPDATE
   // ====================================================
 
-  async update(id, data) {
+  async update(
+    id,
+    data,
+    actor
+  ) {
     const document =
-      await Document.findByPk(
-        id
+      await assertDocumentAccess(
+        id,
+        actor
       );
 
-    if (!document) {
-      throw new Error(
-        'Document not found'
-      );
-    }
-
-    /*
-     * file_path, uploaded_by, version, parent_id,
-     * mime_type vb. metadata update endpoint'inden
-     * değiştirilemez.
-     */
     const allowedFields = [
       'name',
       'description',
@@ -858,7 +1775,8 @@ export const documentService = {
       'metadata',
     ];
 
-    const updateData = {};
+    const updateData =
+      {};
 
     for (
       const field of
@@ -876,6 +1794,28 @@ export const documentService = {
     }
 
     if (
+      updateData.case_id !==
+        undefined &&
+      updateData.case_id
+    ) {
+      await assertCaseAccess(
+        updateData.case_id,
+        actor
+      );
+    }
+
+    if (
+      updateData.client_id !==
+        undefined &&
+      updateData.client_id
+    ) {
+      await assertClientAccess(
+        updateData.client_id,
+        actor
+      );
+    }
+
+    if (
       updateData.name !==
       undefined
     ) {
@@ -884,7 +1824,9 @@ export const documentService = {
           updateData.name
         ).trim();
 
-      if (!name) {
+      if (
+        !name
+      ) {
         throw new Error(
           'Document name cannot be empty'
         );
@@ -916,6 +1858,33 @@ export const documentService = {
               updateData.category
             ).trim()
           : 'general';
+    }
+
+    if (
+      updateData.case_id !==
+      undefined
+    ) {
+      updateData.case_id =
+        updateData.case_id ||
+        null;
+    }
+
+    if (
+      updateData.client_id !==
+      undefined
+    ) {
+      updateData.client_id =
+        updateData.client_id ||
+        null;
+    }
+
+    if (
+      updateData.power_of_attorney_id !==
+      undefined
+    ) {
+      updateData.power_of_attorney_id =
+        updateData.power_of_attorney_id ||
+        null;
     }
 
     if (
@@ -964,32 +1933,26 @@ export const documentService = {
       updateData
     );
 
-    return this.findOne(id);
+    return this.findOne(
+      id,
+      actor
+    );
   },
 
   // ====================================================
   // SOFT DELETE
   // ====================================================
 
-  async remove(id) {
+  async remove(
+    id,
+    actor
+  ) {
     const document =
-      await Document.findByPk(
-        id
+      await assertDocumentAccess(
+        id,
+        actor
       );
 
-    if (!document) {
-      throw new Error(
-        'Document not found'
-      );
-    }
-
-    /*
-     * Fiziksel dosya burada SİLİNMİYOR.
-     *
-     * Model paranoid olduğu için yalnız deleted_at yazılır.
-     * Hukuk bürosu sisteminde yanlışlıkla silinen belge
-     * fiziksel olarak geri alınabilir durumda kalır.
-     */
     await document.destroy();
 
     return document;
@@ -999,7 +1962,30 @@ export const documentService = {
   // DOWNLOAD / PREVIEW
   // ====================================================
 
-  async getFilePath(document) {
+  async getFilePath(
+    documentOrId,
+    actor
+  ) {
+    const documentId =
+      typeof documentOrId ===
+      'object'
+        ? documentOrId?.id
+        : documentOrId;
+
+    if (
+      !documentId
+    ) {
+      throw new Error(
+        'Document not found'
+      );
+    }
+
+    const document =
+      await assertDocumentAccess(
+        documentId,
+        actor
+      );
+
     const filePath =
       resolveStoredFilePath(
         document.file_path
@@ -1018,10 +2004,14 @@ export const documentService = {
     return filePath;
   },
 
-  async download(document) {
+  async download(
+    documentOrId,
+    actor
+  ) {
     const filePath =
       await this.getFilePath(
-        document
+        documentOrId,
+        actor
       );
 
     return fs.createReadStream(
@@ -1033,39 +2023,59 @@ export const documentService = {
   // VERSIONS
   // ====================================================
 
-  async getVersions(documentId) {
+  async getVersions(
+    documentId,
+    actor
+  ) {
     const document =
-      await Document.findByPk(
-        documentId
+      await assertDocumentAccess(
+        documentId,
+        actor
       );
-
-    if (!document) {
-      throw new Error(
-        'Document not found'
-      );
-    }
 
     const rootId =
       document.parent_id ||
       document.id;
 
+    await assertDocumentAccess(
+      rootId,
+      actor
+    );
+
+    const where =
+      combineWhere(
+        {
+          [Op.or]: [
+            {
+              id:
+                rootId,
+            },
+
+            {
+              parent_id:
+                rootId,
+            },
+          ],
+        },
+
+        buildDocumentAccessWhere(
+          actor
+        )
+      );
+
     return Document.findAll({
-      where: {
-        [Op.or]: [
-          {
-            id: rootId,
-          },
-          {
-            parent_id:
-              rootId,
-          },
-        ],
-      },
+      where,
 
       include: [
+        ...documentAccessIncludes,
+
         {
-          model: User,
-          as: 'uploader',
+          model:
+            User,
+
+          as:
+            'uploader',
+
           attributes: [
             'id',
             'first_name',
@@ -1087,13 +2097,27 @@ export const documentService = {
   // CATEGORIES
   // ====================================================
 
-  async getCategories() {
-    const documents =
-      await Document.findAll({
-        where: {
+  async getCategories(
+    actor
+  ) {
+    const where =
+      combineWhere(
+        {
           is_archived:
             false,
         },
+
+        buildDocumentAccessWhere(
+          actor
+        )
+      );
+
+    const documents =
+      await Document.findAll({
+        where,
+
+        include:
+          documentAccessIncludes,
 
         attributes: [
           'category',
@@ -1109,24 +2133,52 @@ export const documentService = {
             'ASC',
           ],
         ],
+
+        raw:
+          true,
       });
 
     return documents
       .map(
-        (document) =>
+        (
+          document
+        ) =>
           document.category
       )
-      .filter(Boolean);
+      .filter(
+        Boolean
+      );
   },
 
   // ====================================================
   // STATISTICS
   // ====================================================
 
-  async getStatistics() {
-    const baseWhere = {
-      is_archived: false,
-    };
+  async getStatistics(
+    actor
+  ) {
+    const accessWhere =
+      buildDocumentAccessWhere(
+        actor
+      );
+
+    const activeWhere =
+      combineWhere(
+        accessWhere,
+        {
+          is_archived:
+            false,
+        }
+      );
+
+    const archivedWhere =
+      combineWhere(
+        accessWhere,
+        {
+          is_archived:
+            true,
+        }
+      );
 
     const [
       totalDocuments,
@@ -1137,35 +2189,58 @@ export const documentService = {
       await Promise.all([
         Document.count({
           where:
-            baseWhere,
+            activeWhere,
+
+          include:
+            documentAccessIncludes,
+
+          distinct:
+            true,
+
+          col:
+            'id',
         }),
 
         Document.sum(
           'file_size',
           {
             where:
-              baseWhere,
+              activeWhere,
+
+            include:
+              documentAccessIncludes,
           }
         ),
 
         Document.count({
-          where: {
-            is_archived:
-              true,
-          },
+          where:
+            archivedWhere,
+
+          include:
+            documentAccessIncludes,
+
+          distinct:
+            true,
+
+          col:
+            'id',
         }),
 
         Document.findAll({
           where:
-            baseWhere,
+            activeWhere,
+
+          include:
+            documentAccessIncludes,
 
           attributes: [
             'category',
+
             [
               Sequelize.fn(
                 'COUNT',
                 Sequelize.col(
-                  'category'
+                  'Document.id'
                 )
               ),
               'count',
@@ -1176,7 +2251,8 @@ export const documentService = {
             'category',
           ],
 
-          raw: true,
+          raw:
+            true,
         }),
       ]);
 
@@ -1187,13 +2263,18 @@ export const documentService = {
             totalSize
           ) /
           (1024 * 1024)
-        ).toFixed(2)
+        ).toFixed(
+          2
+        )
       ) || 0;
 
     return {
       totalDocuments,
+
       archivedDocuments,
+
       totalSizeMB,
+
       categories,
     };
   },

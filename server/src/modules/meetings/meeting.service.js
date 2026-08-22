@@ -1,5 +1,6 @@
 import {
   Op,
+  QueryTypes,
 } from 'sequelize';
 
 import {
@@ -74,19 +75,30 @@ const ASSIGNEE_ATTRIBUTES = [
   'email',
 ];
 
+/*
+ * created_by / assigned_to yalnız response sanitization
+ * sırasında record-level Case erişimini anlamak için
+ * yüklenir. Response'tan sonra kaldırılır.
+ */
 const CASE_SUMMARY_ATTRIBUTES = [
   'id',
   'title',
   'case_number',
+  'created_by',
+  'assigned_to',
 ];
 
+/*
+ * created_by yalnız response sanitization için kullanılır.
+ */
 const CLIENT_SUMMARY_ATTRIBUTES = [
   'id',
   'name',
+  'created_by',
 ];
 
 // ======================================================
-// HELPERS
+// BASIC HELPERS
 // ======================================================
 
 const normalizePagination = (
@@ -244,6 +256,10 @@ const shouldHaveReminders = (
   );
 };
 
+// ======================================================
+// INPUT NORMALIZATION
+// ======================================================
+
 const prepareMeetingData = (
   data
 ) => {
@@ -252,8 +268,8 @@ const prepareMeetingData = (
   };
 
   /*
-   * Server controlled alanları
-   * body üzerinden değiştirmiyoruz.
+   * DB/system alanları request body üzerinden
+   * değiştirilemez.
    */
   delete prepared.id;
   delete prepared.created_at;
@@ -347,6 +363,413 @@ const prepareMeetingData = (
   return prepared;
 };
 
+// ======================================================
+// RECORD-LEVEL ACCESS
+// ======================================================
+
+const requireMeetingUserId = (
+  access = {}
+) => {
+  const userId =
+    access?.userId ||
+    null;
+
+  if (!userId) {
+    throw new Error(
+      'Meeting not found'
+    );
+  }
+
+  return userId;
+};
+
+const buildMeetingAccessWhere = ({
+  userId,
+  canViewAllMeetings = false,
+} = {}) => {
+  if (
+    canViewAllMeetings
+  ) {
+    return null;
+  }
+
+  if (!userId) {
+    return {
+      id: null,
+    };
+  }
+
+  return {
+    [Op.or]: [
+      {
+        created_by:
+          userId,
+      },
+
+      {
+        assigned_to:
+          userId,
+      },
+    ],
+  };
+};
+
+const applyMeetingAccessScope = (
+  where = {},
+  access = {}
+) => {
+  const accessWhere =
+    buildMeetingAccessWhere(
+      access
+    );
+
+  if (!accessWhere) {
+    return where;
+  }
+
+  if (
+    Object.keys(
+      where
+    ).length === 0 &&
+    Object.getOwnPropertySymbols(
+      where
+    ).length === 0
+  ) {
+    return accessWhere;
+  }
+
+  return {
+    [Op.and]: [
+      where,
+      accessWhere,
+    ],
+  };
+};
+
+const canAccessCaseInstance = (
+  caseItem,
+  access = {}
+) => {
+  if (!caseItem) {
+    return false;
+  }
+
+  if (
+    access?.canViewAllCases
+  ) {
+    return true;
+  }
+
+  const userId =
+    access?.userId;
+
+  if (!userId) {
+    return false;
+  }
+
+  return (
+    caseItem.created_by ===
+      userId ||
+    caseItem.assigned_to ===
+      userId
+  );
+};
+
+const assertCaseAccessForMeeting =
+  async (
+    caseId,
+    access = {},
+    {
+      transaction = null,
+    } = {}
+  ) => {
+    if (!caseId) {
+      return null;
+    }
+
+    const userId =
+      requireMeetingUserId(
+        access
+      );
+
+    const where = {
+      id:
+        caseId,
+    };
+
+    if (
+      !access?.canViewAllCases
+    ) {
+      where[Op.or] = [
+        {
+          created_by:
+            userId,
+        },
+
+        {
+          assigned_to:
+            userId,
+        },
+      ];
+    }
+
+    const caseItem =
+      await Case.findOne({
+        where,
+
+        attributes: [
+          'id',
+          'title',
+          'case_number',
+          'created_by',
+          'assigned_to',
+        ],
+
+        transaction,
+      });
+
+    if (!caseItem) {
+      throw new Error(
+        'Meeting not found'
+      );
+    }
+
+    return caseItem;
+  };
+
+const assertClientAccessForMeeting =
+  async (
+    clientId,
+    access = {},
+    {
+      transaction = null,
+    } = {}
+  ) => {
+    if (!clientId) {
+      return null;
+    }
+
+    const userId =
+      requireMeetingUserId(
+        access
+      );
+
+    const client =
+      await Client.findByPk(
+        clientId,
+        {
+          attributes: [
+            'id',
+            'name',
+            'created_by',
+          ],
+
+          transaction,
+        }
+      );
+
+    if (!client) {
+      throw new Error(
+        'Meeting not found'
+      );
+    }
+
+    if (
+      client.created_by ===
+      userId
+    ) {
+      return client;
+    }
+
+    const caseCondition =
+      access?.canViewAllCases
+        ? ''
+        : `
+          AND (
+            c.created_by = :userId
+            OR c.assigned_to = :userId
+          )
+        `;
+
+    const rows =
+      await sequelize.query(
+        `
+          SELECT 1
+
+          FROM case_clients cc
+
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+
+          WHERE cc.client_id = :clientId
+
+          ${caseCondition}
+
+          LIMIT 1
+        `,
+        {
+          replacements: {
+            clientId,
+            userId,
+          },
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction,
+        }
+      );
+
+    if (
+      rows.length ===
+      0
+    ) {
+      throw new Error(
+        'Meeting not found'
+      );
+    }
+
+    return client;
+  };
+
+const assertCaseClientRelation =
+  async (
+    caseId,
+    clientId,
+    transaction = null
+  ) => {
+    if (
+      !caseId ||
+      !clientId
+    ) {
+      return;
+    }
+
+    const rows =
+      await sequelize.query(
+        `
+          SELECT 1
+
+          FROM case_clients
+
+          WHERE case_id = :caseId
+            AND client_id = :clientId
+
+          LIMIT 1
+        `,
+        {
+          replacements: {
+            caseId,
+            clientId,
+          },
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction,
+        }
+      );
+
+    if (
+      rows.length ===
+      0
+    ) {
+      throw new Error(
+        'Seçilen dava bu müvekkille ilişkili değil'
+      );
+    }
+  };
+
+const validateAssignedUser =
+  async (
+    userId,
+    transaction = null
+  ) => {
+    if (!userId) {
+      return null;
+    }
+
+    const user =
+      await User.findOne({
+        where: {
+          id:
+            userId,
+
+          is_active:
+            true,
+        },
+
+        attributes:
+          ASSIGNEE_ATTRIBUTES,
+
+        transaction,
+      });
+
+    if (!user) {
+      throw new Error(
+        'Atanan kullanıcı bulunamadı'
+      );
+    }
+
+    return user;
+  };
+
+const validateMeetingRelations =
+  async (
+    {
+      caseId,
+      clientId,
+      assignedTo,
+    },
+    access = {},
+    {
+      transaction = null,
+    } = {}
+  ) => {
+    if (caseId) {
+      await assertCaseAccessForMeeting(
+        caseId,
+        access,
+        {
+          transaction,
+        }
+      );
+    }
+
+    if (clientId) {
+      await assertClientAccessForMeeting(
+        clientId,
+        access,
+        {
+          transaction,
+        }
+      );
+    }
+
+    if (
+      caseId &&
+      clientId
+    ) {
+      await assertCaseClientRelation(
+        caseId,
+        clientId,
+        transaction
+      );
+    }
+
+    if (assignedTo) {
+      await validateAssignedUser(
+        assignedTo,
+        transaction
+      );
+    }
+  };
+
+// ======================================================
+// INCLUDES / RESPONSE SANITIZATION
+// ======================================================
+
 const buildIncludes = ({
   includeClient = true,
   includeCase = true,
@@ -420,6 +843,132 @@ const buildIncludes = ({
   }
 
   return includes;
+};
+
+const assertRelationsStillAvailable = (
+  meeting
+) => {
+  if (
+    meeting?.case_id &&
+    !meeting?.case
+  ) {
+    throw new Error(
+      'Meeting not found'
+    );
+  }
+
+  if (
+    meeting?.client_id &&
+    !meeting?.client
+  ) {
+    throw new Error(
+      'Meeting not found'
+    );
+  }
+};
+
+const sanitizeMeetingForAccess = (
+  meeting,
+  access = {}
+) => {
+  if (!meeting) {
+    return meeting;
+  }
+
+  const caseItem =
+    meeting.case ||
+    null;
+
+  const client =
+    meeting.client ||
+    null;
+
+  const canSeeCase =
+    caseItem
+      ? canAccessCaseInstance(
+          caseItem,
+          access
+        )
+      : false;
+
+  if (
+    caseItem &&
+    !canSeeCase
+  ) {
+    meeting.setDataValue?.(
+      'case',
+      null
+    );
+
+    if (
+      meeting.dataValues
+    ) {
+      meeting.dataValues.case =
+        null;
+    }
+  }
+
+  if (client) {
+    const canSeeClient =
+      Boolean(
+        access?.canViewAllCases &&
+        access?.canViewAllMeetings
+      ) ||
+      client.created_by ===
+        access?.userId ||
+      canSeeCase;
+
+    if (!canSeeClient) {
+      meeting.setDataValue?.(
+        'client',
+        null
+      );
+
+      if (
+        meeting.dataValues
+      ) {
+        meeting.dataValues.client =
+          null;
+      }
+    }
+  }
+
+  if (
+    caseItem?.dataValues
+  ) {
+    delete caseItem
+      .dataValues
+      .created_by;
+
+    delete caseItem
+      .dataValues
+      .assigned_to;
+  }
+
+  if (
+    client?.dataValues
+  ) {
+    delete client
+      .dataValues
+      .created_by;
+  }
+
+  return meeting;
+};
+
+const sanitizeMeetingsForAccess = (
+  meetings,
+  access = {}
+) => {
+  return meetings.map(
+    (
+      meeting
+    ) =>
+      sanitizeMeetingForAccess(
+        meeting,
+        access
+      )
+  );
 };
 
 // ======================================================
@@ -593,16 +1142,14 @@ const syncMeetingToGoogleForUsersSafely =
 
     if (
       uniqueUserIds.length ===
-      0
+        0
     ) {
       return;
     }
 
     /*
      * cancelled toplantılar Google'dan kaldırılır.
-     *
-     * completed toplantılar geçmiş kayıt olarak
-     * Google Takvim'de kalır.
+     * completed toplantılar geçmiş kayıt olarak kalır.
      */
     if (
       meeting.status ===
@@ -635,17 +1182,40 @@ const syncMeetingToGoogleForUsersSafely =
 // ======================================================
 
 export const meetingService = {
+
   // ====================================================
   // CREATE
   // ====================================================
 
   async create(
-    data
+    data,
+    access = {}
   ) {
+    const userId =
+      requireMeetingUserId(
+        access
+      );
+
+    const {
+      id,
+      created_by,
+      created_at,
+      updated_at,
+      deleted_at,
+      status,
+      ...inputData
+    } = data || {};
+
     const preparedData =
       prepareMeetingData(
-        data
+        inputData
       );
+
+    preparedData.created_by =
+      userId;
+
+    preparedData.status =
+      'scheduled';
 
     validateMeetingDates({
       startDate:
@@ -661,6 +1231,26 @@ export const meetingService = {
     let meeting;
 
     try {
+      await validateMeetingRelations(
+        {
+          caseId:
+            preparedData.case_id ||
+            null,
+
+          clientId:
+            preparedData.client_id ||
+            null,
+
+          assignedTo:
+            preparedData.assigned_to ||
+            null,
+        },
+        access,
+        {
+          transaction,
+        }
+      );
+
       meeting =
         await Meeting.create(
           preparedData,
@@ -690,10 +1280,6 @@ export const meetingService = {
       throw error;
     }
 
-    // ==================================================
-    // GOOGLE CALENDAR AUTO SYNC
-    // ==================================================
-
     await syncMeetingToGoogleForUsersSafely(
       meeting,
       getMeetingCalendarUserIds(
@@ -701,7 +1287,10 @@ export const meetingService = {
       )
     );
 
-    return meeting;
+    return this.findOne(
+      meeting.id,
+      access
+    );
   },
 
   // ====================================================
@@ -719,8 +1308,21 @@ export const meetingService = {
     assigned_to,
     start_date,
     end_date,
+    userId,
+    canViewAllMeetings = false,
+    canViewAllCases = false,
   }) {
-    const where = {};
+    const access = {
+      userId,
+      canViewAllMeetings,
+      canViewAllCases,
+    };
+
+    requireMeetingUserId(
+      access
+    );
+
+    const filters = {};
 
     const normalizedSearch =
       normalizeSearch(
@@ -730,7 +1332,7 @@ export const meetingService = {
     if (
       normalizedSearch
     ) {
-      where[Op.or] = [
+      filters[Op.or] = [
         {
           title: {
             [Op.iLike]:
@@ -759,7 +1361,7 @@ export const meetingService = {
         status
       );
 
-      where.status =
+      filters.status =
         status;
     }
 
@@ -770,22 +1372,32 @@ export const meetingService = {
         meeting_type
       );
 
-      where.meeting_type =
+      filters.meeting_type =
         meeting_type;
     }
 
     if (case_id) {
-      where.case_id =
+      filters.case_id =
         case_id;
     }
 
     if (client_id) {
-      where.client_id =
+      filters.client_id =
         client_id;
     }
 
     if (assigned_to) {
-      where.assigned_to =
+      if (
+        !canViewAllMeetings &&
+        assigned_to !==
+          userId
+      ) {
+        throw new Error(
+          'Meeting not found'
+        );
+      }
+
+      filters.assigned_to =
         assigned_to;
     }
 
@@ -793,10 +1405,10 @@ export const meetingService = {
       start_date ||
       end_date
     ) {
-      where.start_date = {};
+      filters.start_date = {};
 
       if (start_date) {
-        where.start_date[
+        filters.start_date[
           Op.gte
         ] =
           parseDate(
@@ -806,7 +1418,7 @@ export const meetingService = {
       }
 
       if (end_date) {
-        where.start_date[
+        filters.start_date[
           Op.lte
         ] =
           parseDate(
@@ -815,6 +1427,12 @@ export const meetingService = {
           );
       }
     }
+
+    const where =
+      applyMeetingAccessScope(
+        filters,
+        access
+      );
 
     const {
       pageNumber,
@@ -860,9 +1478,27 @@ export const meetingService = {
         ],
       });
 
+    const visibleRows =
+      rows.filter(
+        (
+          meeting
+        ) =>
+          (!meeting.case_id ||
+            Boolean(
+              meeting.case
+            )) &&
+          (!meeting.client_id ||
+            Boolean(
+              meeting.client
+            ))
+      );
+
     return {
       data:
-        rows,
+        sanitizeMeetingsForAccess(
+          visibleRows,
+          access
+        ),
 
       pagination:
         getPaginationData(
@@ -878,16 +1514,26 @@ export const meetingService = {
   // ====================================================
 
   async findOne(
-    id
+    id,
+    access = {}
   ) {
+    requireMeetingUserId(
+      access
+    );
+
     const meeting =
-      await Meeting.findByPk(
-        id,
-        {
-          include:
-            buildIncludes(),
-        }
-      );
+      await Meeting.findOne({
+        where:
+          applyMeetingAccessScope(
+            {
+              id,
+            },
+            access
+          ),
+
+        include:
+          buildIncludes(),
+      });
 
     if (!meeting) {
       throw new Error(
@@ -895,7 +1541,14 @@ export const meetingService = {
       );
     }
 
-    return meeting;
+    assertRelationsStillAvailable(
+      meeting
+    );
+
+    return sanitizeMeetingForAccess(
+      meeting,
+      access
+    );
   },
 
   // ====================================================
@@ -904,8 +1557,13 @@ export const meetingService = {
 
   async update(
     id,
-    data
+    data,
+    access = {}
   ) {
+    requireMeetingUserId(
+      access
+    );
+
     const transaction =
       await sequelize.transaction();
 
@@ -915,16 +1573,21 @@ export const meetingService = {
 
     try {
       meeting =
-        await Meeting.findByPk(
-          id,
-          {
-            transaction,
+        await Meeting.findOne({
+          where:
+            applyMeetingAccessScope(
+              {
+                id,
+              },
+              access
+            ),
 
-            lock:
-              transaction
-                .LOCK.UPDATE,
-          }
-        );
+          transaction,
+
+          lock:
+            transaction
+              .LOCK.UPDATE,
+        });
 
       if (!meeting) {
         throw new Error(
@@ -932,13 +1595,6 @@ export const meetingService = {
         );
       }
 
-      /*
-       * Update öncesindeki creator + assignee
-       * listesini saklıyoruz.
-       *
-       * assigned_to değişirse eski kullanıcının
-       * Google event'ini silmek için gerekecek.
-       */
       previousCalendarUserIds =
         getMeetingCalendarUserIds(
           meeting
@@ -949,11 +1605,13 @@ export const meetingService = {
           data
         );
 
-      /*
-       * created_by update endpoint üzerinden
-       * değiştirilemez.
-       */
       delete preparedData.created_by;
+
+      /*
+       * Global status yalnız updateStatus endpoint'i
+       * üzerinden değiştirilir.
+       */
+      delete preparedData.status;
 
       validateMeetingDates({
         startDate:
@@ -966,6 +1624,47 @@ export const meetingService = {
             ? preparedData.end_date
             : meeting.end_date,
       });
+
+      const effectiveCaseId =
+        preparedData.case_id !==
+        undefined
+          ? preparedData.case_id ||
+            null
+          : meeting.case_id ||
+            null;
+
+      const effectiveClientId =
+        preparedData.client_id !==
+        undefined
+          ? preparedData.client_id ||
+            null
+          : meeting.client_id ||
+            null;
+
+      const effectiveAssignedTo =
+        preparedData.assigned_to !==
+        undefined
+          ? preparedData.assigned_to ||
+            null
+          : meeting.assigned_to ||
+            null;
+
+      await validateMeetingRelations(
+        {
+          caseId:
+            effectiveCaseId,
+
+          clientId:
+            effectiveClientId,
+
+          assignedTo:
+            effectiveAssignedTo,
+        },
+        access,
+        {
+          transaction,
+        }
+      );
 
       const previousValues = {
         startDate:
@@ -1091,10 +1790,6 @@ export const meetingService = {
       throw error;
     }
 
-    // ==================================================
-    // GOOGLE CALENDAR ASSIGNMENT CLEANUP
-    // ==================================================
-
     const removedCalendarUserIds =
       previousCalendarUserIds.filter(
         (
@@ -1110,16 +1805,15 @@ export const meetingService = {
       removedCalendarUserIds
     );
 
-    // ==================================================
-    // GOOGLE CALENDAR AUTO UPDATE
-    // ==================================================
-
     await syncMeetingToGoogleForUsersSafely(
       meeting,
       currentCalendarUserIds
     );
 
-    return meeting;
+    return this.findOne(
+      id,
+      access
+    );
   },
 
   // ====================================================
@@ -1127,8 +1821,13 @@ export const meetingService = {
   // ====================================================
 
   async remove(
-    id
+    id,
+    access = {}
   ) {
+    requireMeetingUserId(
+      access
+    );
+
     const transaction =
       await sequelize.transaction();
 
@@ -1137,16 +1836,21 @@ export const meetingService = {
 
     try {
       meeting =
-        await Meeting.findByPk(
-          id,
-          {
-            transaction,
+        await Meeting.findOne({
+          where:
+            applyMeetingAccessScope(
+              {
+                id,
+              },
+              access
+            ),
 
-            lock:
-              transaction
-                .LOCK.UPDATE,
-          }
-        );
+          transaction,
+
+          lock:
+            transaction
+              .LOCK.UPDATE,
+        });
 
       if (!meeting) {
         throw new Error(
@@ -1154,10 +1858,6 @@ export const meetingService = {
         );
       }
 
-      /*
-       * Destroy'dan önce kimlerin Google
-       * takviminden silineceğini sakla.
-       */
       calendarUserIds =
         getMeetingCalendarUserIds(
           meeting
@@ -1185,10 +1885,6 @@ export const meetingService = {
       throw error;
     }
 
-    // ==================================================
-    // GOOGLE CALENDAR DELETE
-    // ==================================================
-
     await deleteMeetingFromGoogleForUsersSafely(
       meeting.id,
       calendarUserIds
@@ -1207,8 +1903,23 @@ export const meetingService = {
       page = 1,
       limit = 25,
       includeCompleted = false,
-    } = {}
+    } = {},
+    access = {}
   ) {
+    const actorId =
+      requireMeetingUserId(
+        access
+      );
+
+    if (
+      actorId !==
+      userId
+    ) {
+      throw new Error(
+        'Meeting not found'
+      );
+    }
+
     const {
       pageNumber,
       limitNumber,
@@ -1277,9 +1988,27 @@ export const meetingService = {
           limitNumber,
       });
 
+    const visibleRows =
+      rows.filter(
+        (
+          meeting
+        ) =>
+          (!meeting.case_id ||
+            Boolean(
+              meeting.case
+            )) &&
+          (!meeting.client_id ||
+            Boolean(
+              meeting.client
+            ))
+      );
+
     return {
       data:
-        rows,
+        sanitizeMeetingsForAccess(
+          visibleRows,
+          access
+        ),
 
       pagination:
         getPaginationData(
@@ -1299,15 +2028,71 @@ export const meetingService = {
     {
       page = 1,
       limit = 25,
-    } = {}
+    } = {},
+    access = {}
   ) {
-    return this.findAll({
-      page,
-      limit,
+    await assertCaseAccessForMeeting(
+      caseId,
+      access
+    );
 
-      case_id:
-        caseId,
-    });
+    const {
+      pageNumber,
+      limitNumber,
+    } =
+      normalizePagination(
+        page,
+        limit
+      );
+
+    const {
+      count,
+      rows,
+    } =
+      await Meeting.findAndCountAll({
+        where: {
+          case_id:
+            caseId,
+        },
+
+        include:
+          buildIncludes(),
+
+        distinct:
+          true,
+
+        order: [
+          [
+            'start_date',
+            'ASC',
+          ],
+        ],
+
+        limit:
+          limitNumber,
+
+        offset:
+          (
+            pageNumber -
+            1
+          ) *
+          limitNumber,
+      });
+
+    return {
+      data:
+        sanitizeMeetingsForAccess(
+          rows,
+          access
+        ),
+
+      pagination:
+        getPaginationData(
+          count,
+          pageNumber,
+          limitNumber
+        ),
+    };
   },
 
   // ====================================================
@@ -1319,15 +2104,71 @@ export const meetingService = {
     {
       page = 1,
       limit = 25,
-    } = {}
+    } = {},
+    access = {}
   ) {
-    return this.findAll({
-      page,
-      limit,
+    await assertClientAccessForMeeting(
+      clientId,
+      access
+    );
 
-      client_id:
-        clientId,
-    });
+    const {
+      pageNumber,
+      limitNumber,
+    } =
+      normalizePagination(
+        page,
+        limit
+      );
+
+    const {
+      count,
+      rows,
+    } =
+      await Meeting.findAndCountAll({
+        where: {
+          client_id:
+            clientId,
+        },
+
+        include:
+          buildIncludes(),
+
+        distinct:
+          true,
+
+        order: [
+          [
+            'start_date',
+            'ASC',
+          ],
+        ],
+
+        limit:
+          limitNumber,
+
+        offset:
+          (
+            pageNumber -
+            1
+          ) *
+          limitNumber,
+      });
+
+    return {
+      data:
+        sanitizeMeetingsForAccess(
+          rows,
+          access
+        ),
+
+      pagination:
+        getPaginationData(
+          count,
+          pageNumber,
+          limitNumber
+        ),
+    };
   },
 
   // ====================================================
@@ -1339,8 +2180,14 @@ export const meetingService = {
     {
       upcomingLimit = 5,
       recentLimit = 5,
-    } = {}
+    } = {},
+    access = {}
   ) {
+    await assertClientAccessForMeeting(
+      clientId,
+      access
+    );
+
     const safeUpcomingLimit =
       Math.min(
         Math.max(
@@ -1455,8 +2302,17 @@ export const meetingService = {
       ]);
 
     return {
-      upcoming,
-      recent,
+      upcoming:
+        sanitizeMeetingsForAccess(
+          upcoming,
+          access
+        ),
+
+      recent:
+        sanitizeMeetingsForAccess(
+          recent,
+          access
+        ),
 
       counts: {
         upcoming:
@@ -1474,8 +2330,23 @@ export const meetingService = {
 
   async getUpcoming(
     userId,
-    limit = 5
+    limit = 5,
+    access = {}
   ) {
+    const actorId =
+      requireMeetingUserId(
+        access
+      );
+
+    if (
+      actorId !==
+      userId
+    ) {
+      throw new Error(
+        'Meeting not found'
+      );
+    }
+
     const safeLimit =
       Math.min(
         Math.max(
@@ -1488,49 +2359,70 @@ export const meetingService = {
         50
       );
 
-    return Meeting.findAll({
-      where: {
-        [Op.or]: [
-          {
-            created_by:
-              userId,
-          },
+    const meetings =
+      await Meeting.findAll({
+        where: {
+          [Op.or]: [
+            {
+              created_by:
+                userId,
+            },
 
-          {
-            assigned_to:
-              userId,
-          },
-        ],
-
-        start_date: {
-          [Op.gte]:
-            new Date(),
-        },
-
-        status: {
-          [Op.notIn]: [
-            'completed',
-            'cancelled',
+            {
+              assigned_to:
+                userId,
+            },
           ],
+
+          start_date: {
+            [Op.gte]:
+              new Date(),
+          },
+
+          status: {
+            [Op.notIn]: [
+              'completed',
+              'cancelled',
+            ],
+          },
         },
-      },
 
-      include:
-        buildIncludes({
-          includeCreator:
-            false,
-        }),
+        include:
+          buildIncludes({
+            includeCreator:
+              false,
+          }),
 
-      order: [
-        [
-          'start_date',
-          'ASC',
+        order: [
+          [
+            'start_date',
+            'ASC',
+          ],
         ],
-      ],
 
-      limit:
-        safeLimit,
-    });
+        limit:
+          safeLimit,
+      });
+
+    const visibleMeetings =
+      meetings.filter(
+        (
+          meeting
+        ) =>
+          (!meeting.case_id ||
+            Boolean(
+              meeting.case
+            )) &&
+          (!meeting.client_id ||
+            Boolean(
+              meeting.client
+            ))
+      );
+
+    return sanitizeMeetingsForAccess(
+      visibleMeetings,
+      access
+    );
   },
 
   // ====================================================
@@ -1539,8 +2431,13 @@ export const meetingService = {
 
   async updateStatus(
     id,
-    status
+    status,
+    access = {}
   ) {
+    requireMeetingUserId(
+      access
+    );
+
     validateStatus(
       status
     );
@@ -1553,16 +2450,21 @@ export const meetingService = {
 
     try {
       meeting =
-        await Meeting.findByPk(
-          id,
-          {
-            transaction,
+        await Meeting.findOne({
+          where:
+            applyMeetingAccessScope(
+              {
+                id,
+              },
+              access
+            ),
 
-            lock:
-              transaction
-                .LOCK.UPDATE,
-          }
-        );
+          transaction,
+
+          lock:
+            transaction
+              .LOCK.UPDATE,
+        });
 
       if (!meeting) {
         throw new Error(
@@ -1570,16 +2472,26 @@ export const meetingService = {
         );
       }
 
-      /*
-       * Gereksiz UPDATE + reminder işlemini önle.
-       */
       if (
         meeting.status ===
         status
       ) {
+        calendarUserIds =
+          getMeetingCalendarUserIds(
+            meeting
+          );
+
         await transaction.commit();
 
-        return meeting;
+        await syncMeetingToGoogleForUsersSafely(
+          meeting,
+          calendarUserIds
+        );
+
+        return this.findOne(
+          id,
+          access
+        );
       }
 
       await meeting.update(
@@ -1618,6 +2530,17 @@ export const meetingService = {
               transaction,
             }
           );
+      } else {
+        await reminderService
+          .cancelForSource({
+            sourceType:
+              'meeting',
+
+            sourceId:
+              meeting.id,
+
+            transaction,
+          });
       }
 
       calendarUserIds =
@@ -1632,16 +2555,15 @@ export const meetingService = {
       throw error;
     }
 
-    // ==================================================
-    // GOOGLE CALENDAR STATUS SYNC
-    // ==================================================
-
     await syncMeetingToGoogleForUsersSafely(
       meeting,
       calendarUserIds
     );
 
-    return meeting;
+    return this.findOne(
+      id,
+      access
+    );
   },
 };
 

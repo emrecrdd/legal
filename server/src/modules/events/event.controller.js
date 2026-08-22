@@ -13,6 +13,14 @@ import {
 } from '../../config/logger.js';
 
 import {
+  hasPermission,
+} from '../../middlewares/auth.middleware.js';
+
+import {
+  PERMISSION_KEYS,
+} from '../../constants/roles.js';
+
+import {
   AuditLog,
 } from '../../models/AuditLog.js';
 
@@ -57,6 +65,46 @@ const getHttpStatusFromError = (
   return fallback;
 };
 
+const hasOptionalPermission = (
+  user,
+  permissionKey
+) => {
+  if (!permissionKey) {
+    return false;
+  }
+
+  return hasPermission(
+    user,
+    permissionKey
+  );
+};
+
+const getEventAccessContext = (
+  user
+) => {
+  return {
+    userId:
+      user.id,
+
+    /*
+     * VIEW_ALL_EVENTS henüz permission setinde yoksa
+     * fail-closed davranır. Admin zaten tam erişimlidir.
+     */
+    canViewAllEvents:
+      user?.role === 'admin' ||
+      hasOptionalPermission(
+        user,
+        PERMISSION_KEYS.VIEW_ALL_EVENTS
+      ),
+
+    canViewAllCases:
+      hasOptionalPermission(
+        user,
+        PERMISSION_KEYS.VIEW_ALL_CASES
+      ),
+  };
+};
+
 const createAuditLog = async ({
   req,
   action,
@@ -79,6 +127,7 @@ const createAuditLog = async ({
       description,
 
       ip_address:
+        req.realClientIp ||
         req.ip,
 
       user_agent:
@@ -195,16 +244,15 @@ export const eventController = {
     res
   ) {
     try {
-      const eventData = {
-        ...req.body,
-
-        created_by:
-          req.user.id,
-      };
+      const access =
+        getEventAccessContext(
+          req.user
+        );
 
       const event =
         await eventService.create(
-          eventData
+          req.body,
+          access
         );
 
       await createAuditLog({
@@ -266,6 +314,11 @@ export const eventController = {
         end_date,
       } = req.query;
 
+      const access =
+        getEventAccessContext(
+          req.user
+        );
+
       const result =
         await eventService.findAll({
           page,
@@ -276,6 +329,15 @@ export const eventController = {
           assigned_to,
           start_date,
           end_date,
+
+          userId:
+            access.userId,
+
+          canViewAllEvents:
+            access.canViewAllEvents,
+
+          canViewAllCases:
+            access.canViewAllCases,
         });
 
       return paginatedResponse(
@@ -325,6 +387,11 @@ export const eventController = {
           .getMonth() +
           1;
 
+      const access =
+        getEventAccessContext(
+          req.user
+        );
+
       const events =
         await eventService
           .getCalendarEvents(
@@ -341,7 +408,8 @@ export const eventController = {
                   currentMonth,
                   10
                 ),
-            }
+            },
+            access
           );
 
       return successResponse(
@@ -374,10 +442,16 @@ export const eventController = {
     res
   ) {
     try {
+      const access =
+        getEventAccessContext(
+          req.user
+        );
+
       const events =
         await eventService
           .getMyEvents(
-            req.user.id
+            req.user.id,
+            access
           );
 
       return successResponse(
@@ -410,9 +484,15 @@ export const eventController = {
     res
   ) {
     try {
+      const access =
+        getEventAccessContext(
+          req.user
+        );
+
       const events =
         await eventService.getByCase(
-          req.params.caseId
+          req.params.caseId,
+          access
         );
 
       return successResponse(
@@ -445,9 +525,15 @@ export const eventController = {
     res
   ) {
     try {
+      const access =
+        getEventAccessContext(
+          req.user
+        );
+
       const event =
         await eventService.findOne(
-          req.params.id
+          req.params.id,
+          access
         );
 
       return successResponse(
@@ -481,13 +567,19 @@ export const eventController = {
     res
   ) {
     try {
+      const access =
+        getEventAccessContext(
+          req.user
+        );
+
       /*
-       * Mevcut detay service metodunu kullanıyoruz.
-       * Route tarafında VIEW_EVENTS izniyle korunacak.
+       * Normal event detayındaki record-level erişim
+       * kontrolünü aynen kullanıyoruz.
        */
       const event =
         await eventService.findOne(
-          req.params.id
+          req.params.id,
+          access
         );
 
       const start =
@@ -698,11 +790,6 @@ export const eventController = {
         `attachment; filename="${fileName}"`
       );
 
-      /*
-       * Dava / müvekkil bilgileri içerebileceği için
-       * dosyanın proxy veya browser cache'inde
-       * tutulmasını istemiyoruz.
-       */
       res.setHeader(
         'Cache-Control',
         'private, no-store'
@@ -739,10 +826,16 @@ export const eventController = {
     res
   ) {
     try {
+      const access =
+        getEventAccessContext(
+          req.user
+        );
+
       const event =
         await eventService.update(
           req.params.id,
-          req.body
+          req.body,
+          access
         );
 
       await createAuditLog({
@@ -795,13 +888,27 @@ export const eventController = {
       const {
         status,
       } =
-        req.body;
+        req.body || {};
+
+      if (!status) {
+        return errorResponse(
+          res,
+          'Etkinlik durumu gereklidir',
+          400
+        );
+      }
+
+      const access =
+        getEventAccessContext(
+          req.user
+        );
 
       const event =
         await eventService
           .updateStatus(
             req.params.id,
-            status
+            status,
+            access
           );
 
       await createAuditLog({
@@ -847,14 +954,15 @@ export const eventController = {
     res
   ) {
     try {
-      /*
-       * Service zaten kaydı bulup döndürüyor.
-       * Önceden ayrı findOne çağırıp iki sorgu atmaya
-       * gerek yok.
-       */
+      const access =
+        getEventAccessContext(
+          req.user
+        );
+
       const event =
         await eventService.remove(
-          req.params.id
+          req.params.id,
+          access
         );
 
       await createAuditLog({

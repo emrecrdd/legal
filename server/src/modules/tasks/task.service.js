@@ -1,5 +1,6 @@
 import {
   Op,
+  QueryTypes,
   Sequelize,
 } from 'sequelize';
 
@@ -688,83 +689,6 @@ const shouldHaveReminders = (
   );
 };
 
-/*
- * reminder.service şu anda büyük ihtimalle assigned_to
- * bekliyor.
- *
- * Task modelinden assigned_to kaldırıldığı için reminder
- * servisini güncelleyene kadar ilk assignee'yi geçici
- * olarak instance üzerinde assigned_to şeklinde sunuyoruz.
- *
- * Bu kalıcı çözüm değil.
- * Sonraki adım reminder.service.js olacak.
- */
-const runWithReminderCompatibility =
-  async (
-    task,
-    callback,
-    {
-      transaction,
-    } = {}
-  ) => {
-    if (!task) {
-      return callback(
-        task
-      );
-    }
-
-    const assigneeIds =
-      await getTaskAssigneeIds(
-        task,
-        {
-          transaction,
-        }
-      );
-
-    const hadAssignedTo =
-      Object.prototype.hasOwnProperty.call(
-        task.dataValues ||
-          {},
-        'assigned_to'
-      );
-
-    const previousAssignedTo =
-      task.dataValues
-        ?.assigned_to;
-
-    if (
-      typeof task.setDataValue ===
-      'function'
-    ) {
-      task.setDataValue(
-        'assigned_to',
-        assigneeIds[0] ||
-          null
-      );
-    }
-
-    try {
-      return await callback(
-        task
-      );
-    } finally {
-      if (
-        task.dataValues
-      ) {
-        if (
-          hadAssignedTo
-        ) {
-          task.dataValues.assigned_to =
-            previousAssignedTo;
-        } else {
-          delete task
-            .dataValues
-            .assigned_to;
-        }
-      }
-    }
-  };
-
 // ======================================================
 // NOTIFICATION HELPER
 // ======================================================
@@ -1047,7 +971,273 @@ const syncCreatedTaskToGoogleSafely =
       userIds
     );
   };
+// ======================================================
+// RECORD-LEVEL RELATION ACCESS HELPERS
+// ======================================================
 
+const requireTaskUserId = (
+  access = {}
+) => {
+  const userId =
+    access?.userId ||
+    null;
+
+  if (!userId) {
+    throw new Error(
+      'Task not found'
+    );
+  }
+
+  return userId;
+};
+
+const assertCaseAccessForTask =
+  async (
+    caseId,
+    access = {},
+    {
+      transaction,
+    } = {}
+  ) => {
+    if (!caseId) {
+      return null;
+    }
+
+    const userId =
+      requireTaskUserId(
+        access
+      );
+
+    const where = {
+      id:
+        caseId,
+    };
+
+    if (
+      !access?.canViewAllCases
+    ) {
+      where[Op.or] = [
+        {
+          created_by:
+            userId,
+        },
+
+        {
+          assigned_to:
+            userId,
+        },
+      ];
+    }
+
+    const caseItem =
+      await Case.findOne({
+        where,
+
+        attributes: [
+          'id',
+          'title',
+          'created_by',
+          'assigned_to',
+        ],
+
+        transaction,
+      });
+
+    if (!caseItem) {
+      throw new Error(
+        'Task not found'
+      );
+    }
+
+    return caseItem;
+  };
+
+const assertClientAccessForTask =
+  async (
+    clientId,
+    access = {},
+    {
+      transaction,
+    } = {}
+  ) => {
+    if (!clientId) {
+      return null;
+    }
+
+    const userId =
+      requireTaskUserId(
+        access
+      );
+
+    const client =
+      await Client.findByPk(
+        clientId,
+        {
+          attributes: [
+            'id',
+            'name',
+            'created_by',
+          ],
+
+          transaction,
+        }
+      );
+
+    if (!client) {
+      throw new Error(
+        'Task not found'
+      );
+    }
+
+    if (
+      client.created_by ===
+      userId
+    ) {
+      return client;
+    }
+
+    const caseCondition =
+      access?.canViewAllCases
+        ? ''
+        : `
+          AND (
+            c.created_by = :userId
+            OR c.assigned_to = :userId
+          )
+        `;
+
+    const rows =
+      await sequelize.query(
+        `
+          SELECT 1
+
+          FROM case_clients cc
+
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+
+          WHERE cc.client_id = :clientId
+
+          ${caseCondition}
+
+          LIMIT 1
+        `,
+        {
+          replacements: {
+            clientId,
+            userId,
+          },
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction,
+        }
+      );
+
+    if (
+      rows.length ===
+      0
+    ) {
+      throw new Error(
+        'Task not found'
+      );
+    }
+
+    return client;
+  };
+
+const assertCaseClientRelation =
+  async (
+    caseId,
+    clientId,
+    transaction
+  ) => {
+    if (
+      !caseId ||
+      !clientId
+    ) {
+      return;
+    }
+
+    const rows =
+      await sequelize.query(
+        `
+          SELECT 1
+
+          FROM case_clients
+
+          WHERE case_id = :caseId
+            AND client_id = :clientId
+
+          LIMIT 1
+        `,
+        {
+          replacements: {
+            caseId,
+            clientId,
+          },
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction,
+        }
+      );
+
+    if (
+      rows.length ===
+      0
+    ) {
+      throw new Error(
+        'Seçilen dava bu müvekkille ilişkili değil'
+      );
+    }
+  };
+
+const validateTaskRelations =
+  async (
+    {
+      caseId,
+      clientId,
+    },
+    access = {},
+    {
+      transaction,
+    } = {}
+  ) => {
+    if (caseId) {
+      await assertCaseAccessForTask(
+        caseId,
+        access,
+        {
+          transaction,
+        }
+      );
+    }
+
+    if (clientId) {
+      await assertClientAccessForTask(
+        clientId,
+        access,
+        {
+          transaction,
+        }
+      );
+    }
+
+    if (
+      caseId &&
+      clientId
+    ) {
+      await assertCaseClientRelation(
+        caseId,
+        clientId,
+        transaction
+      );
+    }
+  };
 // ======================================================
 // ACCESS HELPERS
 // ======================================================
@@ -1170,7 +1360,7 @@ const assertTaskAccess =
 
     if (!allowed) {
       throw new Error(
-        'Bu göreve erişim yetkiniz bulunmuyor'
+        'Task not found'
       );
     }
   };
@@ -1258,178 +1448,215 @@ export const taskService = {
   // ====================================================
 
   async create(
-    data
-  ) {
-    const transaction =
-      await sequelize.transaction();
+  data,
+  access = {}
+) {
+  const userId =
+    requireTaskUserId(
+      access
+    );
 
-    let task;
-    let assignees = [];
+  const transaction =
+    await sequelize.transaction();
 
-    try {
-      const assigneeIds =
-        getRequestedAssigneeIds(
-          data
-        );
+  let task;
+  let assignees = [];
 
-      assignees =
-        await validateAssignees(
-          assigneeIds,
-          {
-            transaction,
-          }
-        );
-
-      /*
-       * assigned_to artık Task modelinde yok.
-       *
-       * assignee_ids de DB kolonu olmadığı için
-       * Task.create içerisine göndermiyoruz.
-       */
-      const {
-        assigned_to,
-        assignee_ids,
-        ...taskData
-      } = data || {};
-
-      task =
-        await Task.create(
-          taskData,
-          {
-            transaction,
-          }
-        );
-
-      if (
-        assignees.length >
-        0
-      ) {
-        await task.setAssignees(
-          assignees,
-          {
-            transaction,
-          }
-        );
-      }
-
-      task.setDataValue(
-        'assignees',
-        assignees
+  try {
+    const assigneeIds =
+      getRequestedAssigneeIds(
+        data
       );
 
-      if (
-        shouldHaveReminders(
-          task
-        )
-      ) {
-        await runWithReminderCompatibility(
-          task,
+    assignees =
+      await validateAssignees(
+        assigneeIds,
+        {
+          transaction,
+        }
+      );
 
-          (
-            reminderTask
-          ) =>
-            reminderService.createTaskReminders(
-              reminderTask,
-              {
-                transaction,
-              }
-            ),
+    /*
+     * Client'ın değiştirmesine izin vermediğimiz
+     * workflow/system alanları.
+     */
+    const {
+      assigned_to,
+      assignee_ids,
 
-          {
-            transaction,
-          }
-        );
+      id,
+      created_by,
+      created_at,
+      updated_at,
+      deleted_at,
+
+      status,
+      progress,
+
+      approved_by,
+      approved_at,
+
+      started_at,
+      completed_at,
+      actual_hours,
+
+      ...taskData
+    } = data || {};
+
+    await validateTaskRelations(
+      {
+        caseId:
+          taskData.case_id ||
+          null,
+
+        clientId:
+          taskData.client_id ||
+          null,
+      },
+      access,
+      {
+        transaction,
       }
+    );
 
-      await transaction.commit();
-    } catch (error) {
-      await transaction.rollback();
+    /*
+     * Server controlled.
+     */
+    taskData.created_by =
+      userId;
 
-      throw error;
-    }
+    taskData.status =
+      'pending';
 
-    // ==================================================
-    // NOTIFICATIONS
-    // ==================================================
+    taskData.progress =
+      0;
+
+    task =
+      await Task.create(
+        taskData,
+        {
+          transaction,
+        }
+      );
 
     if (
       assignees.length >
       0
     ) {
-      await notifySafely(
-        'task-assigned-on-create',
-
-        async () => {
-          const creator =
-            await User.findByPk(
-              task.created_by,
-              {
-                attributes: [
-                  'id',
-                  'first_name',
-                  'last_name',
-                ],
-              }
-            );
-
-          const creatorName =
-            creator
-              ? [
-                  creator.first_name,
-                  creator.last_name,
-                ]
-                  .filter(
-                    Boolean
-                  )
-                  .join(' ')
-                  .trim()
-              : 'Sistem';
-
-          for (
-            const assignee of
-            assignees
-          ) {
-            await notificationService.notifyTaskAssigned(
-              assignee.id,
-              task.id,
-              task.title,
-              creatorName ||
-                'Sistem'
-            );
-          }
-        },
-
+      await task.setAssignees(
+        assignees,
         {
-          taskId:
-            task.id,
-
-          assigneeIds:
-            assignees.map(
-              (user) =>
-                user.id
-            ),
-
-          createdBy:
-            task.created_by,
+          transaction,
         }
       );
     }
-// ==================================================
-// GOOGLE CALENDAR AUTO SYNC
-// ==================================================
 
-await syncCreatedTaskToGoogleSafely(
+    task.setDataValue(
+      'assignees',
+      assignees
+    );
+
+    if (
+      shouldHaveReminders(
+        task
+      )
+    ) {
+      await reminderService.createTaskReminders(
   task,
-  assignees
+  {
+    transaction,
+  }
 );
-    return this.findOne(
-      task.id,
+    }
+
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+
+    throw error;
+  }
+
+  if (
+    assignees.length >
+    0
+  ) {
+    await notifySafely(
+      'task-assigned-on-create',
+
+      async () => {
+        const creator =
+          await User.findByPk(
+            task.created_by,
+            {
+              attributes: [
+                'id',
+                'first_name',
+                'last_name',
+              ],
+            }
+          );
+
+        const creatorName =
+          creator
+            ? [
+                creator.first_name,
+                creator.last_name,
+              ]
+                .filter(
+                  Boolean
+                )
+                .join(' ')
+                .trim()
+            : 'Sistem';
+
+        for (
+          const assignee of
+          assignees
+        ) {
+          await notificationService.notifyTaskAssigned(
+            assignee.id,
+            task.id,
+            task.title,
+            creatorName ||
+              'Sistem'
+          );
+        }
+      },
+
       {
-        canViewAllTasks:
-          true,
+        taskId:
+          task.id,
+
+        assigneeIds:
+          assignees.map(
+            (user) =>
+              user.id
+          ),
+
+        createdBy:
+          task.created_by,
       }
     );
-  },
+  }
+
+  // ==================================================
+  // GOOGLE CALENDAR AUTO SYNC
+  // ==================================================
+
+  await syncCreatedTaskToGoogleSafely(
+    task,
+    assignees
+  );
+
+  /*
+   * Eskiden burada canViewAllTasks:true vardı.
+   * Artık gerçek kullanıcının scope'u korunuyor.
+   */
+  return this.findOne(
+    task.id,
+    access
+  );
+},
 
   // ====================================================
   // LIST
@@ -1821,6 +2048,60 @@ await syncCreatedTaskToGoogleSafely(
       task,
       access
     );
+    /*
+ * Parent ve subtask da ayrı birer Task kaydıdır.
+ * Ana task'a erişim, otomatik olarak diğer task'lara
+ * erişim vermemelidir.
+ */
+
+if (
+  task.parentTask
+) {
+  const canSeeParent =
+    await canAccessTask(
+      task.parentTask,
+      access
+    );
+
+  if (
+    !canSeeParent
+  ) {
+    task.setDataValue(
+      'parentTask',
+      null
+    );
+  }
+}
+
+if (
+  Array.isArray(
+    task.subtasks
+  )
+) {
+  const visibleSubtasks =
+    [];
+
+  for (
+    const subtask of
+    task.subtasks
+  ) {
+    if (
+      await canAccessTask(
+        subtask,
+        access
+      )
+    ) {
+      visibleSubtasks.push(
+        subtask
+      );
+    }
+  }
+
+  task.setDataValue(
+    'subtasks',
+    visibleSubtasks
+  );
+}
 
     /*
      * Çoklu görev atamasında frontend'in ortak task.status
@@ -1899,18 +2180,72 @@ await syncCreatedTaskToGoogleSafely(
        * Atama ayrı endpoint üzerinden yönetiliyor.
        */
       const {
-        assigned_to,
-        assignee_ids,
-        created_by,
-        status,
-        progress,
-        approved_by,
-        approved_at,
-        started_at,
-        completed_at,
-        actual_hours,
-        ...safeData
-      } = data || {};
+  id: ignoredId,
+
+  assigned_to,
+  assignee_ids,
+
+  created_by,
+  created_at,
+  updated_at,
+  deleted_at,
+
+  status,
+  progress,
+
+  approved_by,
+  approved_at,
+
+  started_at,
+  completed_at,
+  actual_hours,
+
+  ...safeData
+} = data || {};
+if (
+  Object.prototype.hasOwnProperty.call(
+    safeData,
+    'case_id'
+  ) ||
+  Object.prototype.hasOwnProperty.call(
+    safeData,
+    'client_id'
+  )
+) {
+  const effectiveCaseId =
+    Object.prototype.hasOwnProperty.call(
+      safeData,
+      'case_id'
+    )
+      ? safeData.case_id ||
+        null
+      : task.case_id ||
+        null;
+
+  const effectiveClientId =
+    Object.prototype.hasOwnProperty.call(
+      safeData,
+      'client_id'
+    )
+      ? safeData.client_id ||
+        null
+      : task.client_id ||
+        null;
+
+  await validateTaskRelations(
+    {
+      caseId:
+        effectiveCaseId,
+
+      clientId:
+        effectiveClientId,
+    },
+    access,
+    {
+      transaction,
+    }
+  );
+}
 
       const previousValues = {
         dueDate:
@@ -1969,19 +2304,8 @@ await syncCreatedTaskToGoogleSafely(
           task
         )
       ) {
-        await runWithReminderCompatibility(
+        await reminderService.rescheduleTask(
           task,
-
-          (
-            reminderTask
-          ) =>
-            reminderService.rescheduleTask(
-              reminderTask,
-              {
-                transaction,
-              }
-            ),
-
           {
             transaction,
           }
@@ -2030,13 +2354,10 @@ await syncCreatedTaskToGoogleSafely(
       calendarUserIds
     );
 
-    return this.findOne(
-      id,
-      {
-        canViewAllTasks:
-          true,
-      }
-    );
+   return this.findOne(
+  id,
+  access
+);
   },
 
   // ====================================================
@@ -2262,19 +2583,8 @@ await syncCreatedTaskToGoogleSafely(
           task
         )
       ) {
-        await runWithReminderCompatibility(
+        await reminderService.rescheduleTask(
           task,
-
-          (
-            reminderTask
-          ) =>
-            reminderService.rescheduleTask(
-              reminderTask,
-              {
-                transaction,
-              }
-            ),
-
           {
             transaction,
           }
@@ -2312,12 +2622,9 @@ await syncCreatedTaskToGoogleSafely(
     );
 
     return this.findOne(
-      id,
-      {
-        canViewAllTasks:
-          true,
-      }
-    );
+  id,
+  access
+);
   },
 
   // ====================================================
@@ -2325,10 +2632,11 @@ await syncCreatedTaskToGoogleSafely(
   // ====================================================
 
     async assignTask(
-    id,
-    assigneeIds,
-    assignedBy = null
-  ) {
+  id,
+  assigneeIds,
+  assignedBy = null,
+  access = {}
+) {
     const transaction =
       await sequelize.transaction();
 
@@ -2353,6 +2661,13 @@ await syncCreatedTaskToGoogleSafely(
           'Task not found'
         );
       }
+      await assertTaskAccess(
+  task,
+  {
+    ...access,
+    transaction,
+  }
+);
 
       if (
         TERMINAL_STATUSES.has(
@@ -2422,19 +2737,8 @@ await syncCreatedTaskToGoogleSafely(
           task
         )
       ) {
-        await runWithReminderCompatibility(
+        await reminderService.rescheduleTask(
           task,
-
-          (
-            reminderTask
-          ) =>
-            reminderService.rescheduleTask(
-              reminderTask,
-              {
-                transaction,
-              }
-            ),
-
           {
             transaction,
           }
@@ -2566,13 +2870,10 @@ await syncCreatedTaskToGoogleSafely(
       currentCalendarUserIds
     );
 
-    return this.findOne(
-      id,
-      {
-        canViewAllTasks:
-          true,
-      }
-    );
+   return this.findOne(
+  id,
+  access
+);
   },
 
   // ====================================================
@@ -2724,43 +3025,60 @@ await syncCreatedTaskToGoogleSafely(
   // ====================================================
 
   async getByClient(
+  clientId,
+  {
+    page = 1,
+    limit = 25,
+    status,
+
+    userId,
+    canViewAllTasks = false,
+    canViewAllCases = false,
+  } = {}
+) {
+  await assertClientAccessForTask(
     clientId,
     {
-      page = 1,
-      limit = 25,
-      status,
-
       userId,
-      canViewAllTasks = false,
-    } = {}
-  ) {
-    return this.findAll({
-      page,
-      limit,
-      status,
+      canViewAllCases,
+    }
+  );
 
-      client_id:
-        clientId,
+  return this.findAll({
+    page,
+    limit,
+    status,
 
-      userId,
-      canViewAllTasks,
-    });
-  },
+    client_id:
+      clientId,
+
+    userId,
+    canViewAllTasks,
+  });
+},
 
   // ====================================================
   // CLIENT OVERVIEW
   // ====================================================
 
   async getClientOverview(
-    clientId,
-    {
-      activeLimit = 5,
-      recentLimit = 5,
+  clientId,
+  {
+    activeLimit = 5,
+    recentLimit = 5,
 
-      userId,
-      canViewAllTasks = false,
-    } = {}
-  ) {
+    userId,
+    canViewAllTasks = false,
+    canViewAllCases = false,
+  } = {}
+) {
+  await assertClientAccessForTask(
+  clientId,
+  {
+    userId,
+    canViewAllCases,
+  }
+);
     const safeActiveLimit =
       Math.min(
         Math.max(
@@ -3394,15 +3712,6 @@ await syncCreatedTaskToGoogleSafely(
         );
       }
 
-      if (
-        task.status ===
-        'cancelled'
-      ) {
-        throw new Error(
-          'İptal edilmiş görev başlatılamaz'
-        );
-      }
-
       const assignment =
         await getTaskAssignment(
           id,
@@ -3417,7 +3726,16 @@ await syncCreatedTaskToGoogleSafely(
 
       if (!assignment) {
         throw new Error(
-          'Bu görev size atanmamış'
+          'Task not found'
+        );
+      }
+
+      if (
+        task.status ===
+        'cancelled'
+      ) {
+        throw new Error(
+          'İptal edilmiş görev başlatılamaz'
         );
       }
 
@@ -3501,19 +3819,8 @@ await syncCreatedTaskToGoogleSafely(
          * başlatabileceği için duplicate reminder üretmemek
          * adına tüm reminder'ları yeniden kuruyoruz.
          */
-        await runWithReminderCompatibility(
+        await reminderService.rescheduleTask(
           task,
-
-          (
-            reminderTask
-          ) =>
-            reminderService.rescheduleTask(
-              reminderTask,
-              {
-                transaction,
-              }
-            ),
-
           {
             transaction,
           }
@@ -3567,15 +3874,6 @@ await syncCreatedTaskToGoogleSafely(
         );
       }
 
-      if (
-        task.status ===
-        'cancelled'
-      ) {
-        throw new Error(
-          'İptal edilmiş görev tamamlanamaz'
-        );
-      }
-
       const assignment =
         await getTaskAssignment(
           id,
@@ -3590,10 +3888,18 @@ await syncCreatedTaskToGoogleSafely(
 
       if (!assignment) {
         throw new Error(
-          'Bu görev size atanmamış'
+          'Task not found'
         );
       }
 
+      if (
+        task.status ===
+        'cancelled'
+      ) {
+        throw new Error(
+          'İptal edilmiş görev tamamlanamaz'
+        );
+      }
       if (
         assignment.status ===
         'completed'
@@ -3781,9 +4087,10 @@ await syncCreatedTaskToGoogleSafely(
   // ====================================================
 
   async approveTask(
-    id,
-    userId
-  ) {
+  id,
+  userId,
+  access = {}
+) {
     const transaction =
       await sequelize.transaction();
 
@@ -3809,6 +4116,23 @@ await syncCreatedTaskToGoogleSafely(
         );
       }
 
+      if (
+        !access?.userId ||
+        access.userId !==
+          userId
+      ) {
+        throw new Error(
+          'Task not found'
+        );
+      }
+
+      await assertTaskAccess(
+        task,
+        {
+          ...access,
+          transaction,
+        }
+      );
       if (
         task.status !==
         'completed'
@@ -3971,7 +4295,7 @@ await syncCreatedTaskToGoogleSafely(
 
     if (!assigned) {
       throw new Error(
-        'Bu göreve not ekleme yetkiniz bulunmuyor'
+        'Task not found'
       );
     }
 
@@ -4050,7 +4374,7 @@ await syncCreatedTaskToGoogleSafely(
 
     if (!allowed) {
       throw new Error(
-        'Bu görevin notlarını görüntüleme yetkiniz bulunmuyor'
+        'Task not found'
       );
     }
 
@@ -4123,15 +4447,6 @@ await syncCreatedTaskToGoogleSafely(
         );
       }
 
-      if (
-        task.status ===
-        'cancelled'
-      ) {
-        throw new Error(
-          'İptal edilmiş görevin ilerlemesi güncellenemez'
-        );
-      }
-
       const assignment =
         await getTaskAssignment(
           id,
@@ -4146,7 +4461,16 @@ await syncCreatedTaskToGoogleSafely(
 
       if (!assignment) {
         throw new Error(
-          'Bu görev size atanmamış'
+          'Task not found'
+        );
+      }
+
+      if (
+        task.status ===
+        'cancelled'
+      ) {
+        throw new Error(
+          'İptal edilmiş görevin ilerlemesi güncellenemez'
         );
       }
 

@@ -177,6 +177,11 @@ class ReminderService {
 
   /**
    * Tek bir hatırlatma kaydı oluşturur.
+   *
+   * Aynı deduplication key ile daha önce source
+   * reschedule nedeniyle cancelled olmuş bir kayıt
+   * bulunursa yeni kayıt açmak yerine mevcut kayıt
+   * tekrar pending durumuna getirilir.
    */
   async create({
     userId,
@@ -223,6 +228,16 @@ class ReminderService {
         channel,
       });
 
+    const normalizedMetadata =
+      metadata &&
+      typeof metadata ===
+        'object' &&
+      !Array.isArray(
+        metadata
+      )
+        ? metadata
+        : {};
+
     const payload = {
       user_id:
         userId,
@@ -266,18 +281,17 @@ class ReminderService {
       next_attempt_at:
         normalizedRemindAt,
 
+      locked_at:
+        null,
+
+      locked_by:
+        null,
+
       deduplication_key:
         deduplicationKey,
 
       metadata:
-        metadata &&
-        typeof metadata ===
-          'object' &&
-        !Array.isArray(
-          metadata
-        )
-          ? metadata
-          : {},
+        normalizedMetadata,
     };
 
     payload[
@@ -301,9 +315,38 @@ class ReminderService {
           transaction,
         });
 
-      if (!created) {
+      if (created) {
+        return reminder;
+      }
+
+      /*
+       * ÖNEMLİ:
+       *
+       * rescheduleTask / rescheduleEvent /
+       * rescheduleMeeting önce eski reminder'ları
+       * cancelled yapar.
+       *
+       * Tarih değişmediyse deduplication key de
+       * değişmez. findOrCreate bu durumda eski
+       * cancelled kaydı bulur ve yeni kayıt açmaz.
+       *
+       * Bu yüzden cancelled kayıt aynı source için
+       * yeniden schedule ediliyorsa tekrar pending
+       * durumuna getiriyoruz.
+       */
+      if (
+        reminder.status ===
+        'cancelled'
+      ) {
+        await reminder.update(
+          payload,
+          {
+            transaction,
+          }
+        );
+
         logger.debug(
-          'Hatırlatma zaten mevcut',
+          'İptal edilmiş hatırlatma yeniden aktifleştirildi',
           {
             reminderId:
               reminder.id,
@@ -318,7 +361,34 @@ class ReminderService {
               normalizedRemindAt.toISOString(),
           }
         );
+
+        return reminder;
       }
+
+      /*
+       * Pending / processing / sent / failed durumda
+       * aynı deduplication key zaten varsa ikinci bir
+       * reminder oluşturulmaz.
+       */
+      logger.debug(
+        'Hatırlatma zaten mevcut',
+        {
+          reminderId:
+            reminder.id,
+
+          status:
+            reminder.status,
+
+          sourceType,
+
+          sourceId,
+
+          userId,
+
+          remindAt:
+            normalizedRemindAt.toISOString(),
+        }
+      );
 
       return reminder;
     } catch (error) {
@@ -489,8 +559,10 @@ class ReminderService {
    * Öncelik:
    *
    * 1. task.assignees yüklenmişse onu kullan.
+   *
    * 2. Yüklenmemişse belongsToMany getAssignees()
    *    üzerinden task_assignees tablosunu sorgula.
+   *
    * 3. Hiç sorumlu yoksa görevi oluşturan kullanıcıya
    *    reminder oluştur.
    *
@@ -571,22 +643,17 @@ class ReminderService {
      * Göreve kimse atanmamışsa oluşturan kullanıcı
      * kendi görevi için hatırlatma almaya devam eder.
      *
-     * Eski sistemdeki:
-     *
-     * assigned_to || created_by
-     *
-     * davranışının çoklu atama karşılığıdır.
+     * Bu, çoklu assignee sisteminde creator fallback
+     * davranışıdır.
      */
     if (
       assigneeIds.length ===
         0 &&
       task.created_by
     ) {
-      return [
-        String(
-          task.created_by
-        ),
-      ];
+      return normalizeUserIds([
+        task.created_by,
+      ]);
     }
 
     return assigneeIds;
@@ -906,10 +973,14 @@ class ReminderService {
   // ====================================================
 
   /**
-   * Kaynağın bekleyen hatırlatmalarını iptal eder.
+   * Kaynağın aktif / tekrar denenebilir
+   * hatırlatmalarını iptal eder.
    *
    * Task için birden fazla kullanıcıya oluşturulmuş
    * reminder varsa tamamını iptal eder.
+   *
+   * sent kayıtlar geçmiş/audit niteliği taşıdığı için
+   * değiştirilmez.
    */
   async cancelForSource({
     sourceType,
@@ -982,16 +1053,32 @@ class ReminderService {
   /**
    * Görev tarihi veya görev sorumluları değiştiğinde:
    *
-   * 1. Görevin mevcut tüm pending reminder kayıtlarını
+   * 1. Görevin mevcut aktif reminder kayıtlarını
    *    iptal eder.
    *
    * 2. task_assignees tablosundaki güncel kullanıcılar
-   *    için yeniden oluşturur.
+   *    için yeniden oluşturur / gerekiyorsa eski
+   *    cancelled kayıtları yeniden aktifleştirir.
    */
   async rescheduleTask(
     task,
     options = {}
   ) {
+    if (
+      !task?.id
+    ) {
+      throw new ReminderServiceError(
+        'Geçerli bir görev zorunludur.',
+        {
+          code:
+            'INVALID_TASK',
+
+          statusCode:
+            400,
+        }
+      );
+    }
+
     await this.cancelForSource({
       sourceType:
         'task',
@@ -1018,6 +1105,21 @@ class ReminderService {
     event,
     options = {}
   ) {
+    if (
+      !event?.id
+    ) {
+      throw new ReminderServiceError(
+        'Geçerli bir etkinlik zorunludur.',
+        {
+          code:
+            'INVALID_EVENT',
+
+          statusCode:
+            400,
+        }
+      );
+    }
+
     await this.cancelForSource({
       sourceType:
         'event',
@@ -1044,6 +1146,21 @@ class ReminderService {
     meeting,
     options = {}
   ) {
+    if (
+      !meeting?.id
+    ) {
+      throw new ReminderServiceError(
+        'Geçerli bir toplantı zorunludur.',
+        {
+          code:
+            'INVALID_MEETING',
+
+          statusCode:
+            400,
+        }
+      );
+    }
+
     await this.cancelForSource({
       sourceType:
         'meeting',
@@ -1068,11 +1185,31 @@ class ReminderService {
 
   /**
    * Bir hatırlatmayı kullanıcı tarafından iptal eder.
+   *
+   * user_id ile birlikte sorgulandığı için başka
+   * kullanıcının reminder kaydı UUID üzerinden
+   * iptal edilemez.
    */
   async cancelById(
     reminderId,
     userId
   ) {
+    if (
+      !reminderId ||
+      !userId
+    ) {
+      throw new ReminderServiceError(
+        'Hatırlatma bulunamadı.',
+        {
+          code:
+            'REMINDER_NOT_FOUND',
+
+          statusCode:
+            404,
+        }
+      );
+    }
+
     const reminder =
       await Reminder.findOne({
         where: {
@@ -1131,16 +1268,25 @@ class ReminderService {
 
   /**
    * Kullanıcının yaklaşan hatırlatmalarını listeler.
+   *
+   * user_id her zaman query içerisinde olduğu için
+   * kullanıcı yalnız kendi reminder kayıtlarını görür.
    */
   async listUpcoming({
     userId,
     limit = 50,
   }) {
+    if (!userId) {
+      return [];
+    }
+
     const safeLimit =
       Math.min(
         Math.max(
-          Number(limit) ||
-            50,
+          Number.parseInt(
+            limit,
+            10
+          ) || 50,
           1
         ),
         100

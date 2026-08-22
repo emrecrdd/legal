@@ -30,9 +30,16 @@ const getHttpStatusFromError = (
 ) => {
   const message =
     String(
-      error?.message || ''
+      error?.message ||
+      ''
     ).toLowerCase();
 
+  /*
+   * BOLA tarafında yetkisiz kayıt da
+   * "bulunamadı" / "not found" döner.
+   *
+   * Böylece kayıt varlığı sızdırılmaz.
+   */
   if (
     message.includes(
       'bulunamadı'
@@ -66,6 +73,16 @@ const getHttpStatusFromError = (
   return fallback;
 };
 
+const getAuditIp = (
+  req
+) => {
+  return (
+    req.realClientIp ||
+    req.ip ||
+    null
+  );
+};
+
 const createAuditLog = async ({
   req,
   action,
@@ -89,14 +106,18 @@ const createAuditLog = async ({
       description,
 
       ip_address:
-        req.ip,
+        getAuditIp(
+          req
+        ),
 
       user_agent:
         req.headers[
           'user-agent'
         ],
     });
-  } catch (auditError) {
+  } catch (
+    auditError
+  ) {
     /*
      * Audit hatası ana finans işlemini
      * başarısız göstermemelidir.
@@ -114,7 +135,7 @@ const createAuditLog = async ({
 
 export const paymentController = {
   // ====================================================
-  // GLOBAL SUMMARY
+  // GLOBAL / ACTOR-SCOPED SUMMARY
   // ====================================================
 
   async getSummary(
@@ -123,14 +144,18 @@ export const paymentController = {
   ) {
     try {
       const summary =
-        await paymentService.getSummary();
+        await paymentService.getSummary(
+          req.user
+        );
 
       return successResponse(
         res,
         summary,
         'Finans özeti başarıyla getirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get payment summary error:',
         error
@@ -158,7 +183,7 @@ export const paymentController = {
       const payment =
         await paymentService.create(
           req.body,
-          req.user.id
+          req.user
         );
 
       await createAuditLog({
@@ -183,7 +208,9 @@ export const paymentController = {
         'Finans hareketi başarıyla oluşturuldu',
         201
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Create payment error:',
         error
@@ -233,6 +260,9 @@ export const paymentController = {
           status,
           start_date,
           end_date,
+
+          actor:
+            req.user,
         });
 
       return paginatedResponse(
@@ -241,7 +271,9 @@ export const paymentController = {
         result.pagination,
         'Finans hareketleri başarıyla getirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get payments error:',
         error
@@ -264,7 +296,8 @@ export const paymentController = {
     try {
       const payment =
         await paymentService.findOne(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       return successResponse(
@@ -272,7 +305,9 @@ export const paymentController = {
         payment,
         'Finans hareketi başarıyla getirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get payment error:',
         error
@@ -297,7 +332,8 @@ export const paymentController = {
       const payment =
         await paymentService.update(
           req.params.id,
-          req.body
+          req.body,
+          req.user
         );
 
       await createAuditLog({
@@ -321,7 +357,9 @@ export const paymentController = {
         payment,
         'Finans hareketi başarıyla güncellendi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Update payment error:',
         error
@@ -354,12 +392,10 @@ export const paymentController = {
           {
             reason,
 
-            userId:
-              req.user.id,
-
             paymentDate:
               payment_date,
-          }
+          },
+          req.user
         );
 
       await createAuditLog({
@@ -384,7 +420,9 @@ export const paymentController = {
         'Finans hareketi ters kayda alındı',
         201
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Reverse payment error:',
         error
@@ -407,7 +445,8 @@ export const paymentController = {
     try {
       const payment =
         await paymentService.remove(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       await createAuditLog({
@@ -431,7 +470,9 @@ export const paymentController = {
         null,
         'Finans hareketi kaldırıldı'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Delete payment error:',
         error
@@ -455,7 +496,8 @@ export const paymentController = {
       const payments =
         await paymentService.getByClient(
           req.params.clientId,
-          req.query.limit
+          req.query.limit,
+          req.user
         );
 
       return successResponse(
@@ -463,7 +505,9 @@ export const paymentController = {
         payments,
         'Müvekkil finans hareketleri getirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get client payments error:',
         error
@@ -473,7 +517,8 @@ export const paymentController = {
         res,
         error.message,
         getHttpStatusFromError(
-          error
+          error,
+          404
         )
       );
     }
@@ -487,7 +532,8 @@ export const paymentController = {
       const payments =
         await paymentService.getByCase(
           req.params.caseId,
-          req.query.limit
+          req.query.limit,
+          req.user
         );
 
       return successResponse(
@@ -495,7 +541,9 @@ export const paymentController = {
         payments,
         'Dava finans hareketleri getirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get case payments error:',
         error
@@ -505,7 +553,8 @@ export const paymentController = {
         res,
         error.message,
         getHttpStatusFromError(
-          error
+          error,
+          404
         )
       );
     }
@@ -520,10 +569,14 @@ export const paymentController = {
     res
   ) {
     try {
+      /*
+       * Service artık yalnız userId değil
+       * authenticated actor alıyor.
+       */
       const plan =
         await paymentPlanService.create(
           req.body,
-          req.user.id
+          req.user
         );
 
       await createAuditLog({
@@ -548,7 +601,9 @@ export const paymentController = {
         'Ödeme planı başarıyla oluşturuldu',
         201
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Create payment plan error:',
         error
@@ -588,6 +643,12 @@ export const paymentController = {
           client_id,
           case_id,
           plan_type,
+
+          /*
+           * Query-level PaymentPlan BOLA.
+           */
+          actor:
+            req.user,
         });
 
       return paginatedResponse(
@@ -596,7 +657,9 @@ export const paymentController = {
         result.pagination,
         'Ödeme planları başarıyla getirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get payment plans error:',
         error
@@ -619,7 +682,8 @@ export const paymentController = {
     try {
       const plan =
         await paymentPlanService.findOne(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       return successResponse(
@@ -627,7 +691,9 @@ export const paymentController = {
         plan,
         'Ödeme planı başarıyla getirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get payment plan error:',
         error
@@ -652,7 +718,7 @@ export const paymentController = {
       const plan =
         await paymentPlanService.activate(
           req.params.id,
-          req.user.id
+          req.user
         );
 
       await createAuditLog({
@@ -676,7 +742,9 @@ export const paymentController = {
         plan,
         'Ödeme planı aktive edildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Activate payment plan error:',
         error
@@ -702,10 +770,15 @@ export const paymentController = {
       } =
         req.body;
 
+      /*
+       * Yeni imza:
+       *
+       * cancel(id, actor, reason)
+       */
       const plan =
         await paymentPlanService.cancel(
           req.params.id,
-          req.user.id,
+          req.user,
           reason
         );
 
@@ -732,7 +805,9 @@ export const paymentController = {
         plan,
         'Ödeme planı iptal edildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Cancel payment plan error:',
         error
@@ -755,7 +830,8 @@ export const paymentController = {
     try {
       const summary =
         await paymentPlanService.getClientSummary(
-          req.params.clientId
+          req.params.clientId,
+          req.user
         );
 
       return successResponse(
@@ -763,7 +839,9 @@ export const paymentController = {
         summary,
         'Müvekkil finans özeti getirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get client payment summary error:',
         error
@@ -773,7 +851,8 @@ export const paymentController = {
         res,
         error.message,
         getHttpStatusFromError(
-          error
+          error,
+          404
         )
       );
     }

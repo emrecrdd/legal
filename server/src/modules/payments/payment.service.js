@@ -1,5 +1,6 @@
 import {
   Op,
+  QueryTypes,
 } from 'sequelize';
 
 import {
@@ -35,18 +36,18 @@ import {
   getPaginationData,
 } from '../../utils/paginate.js';
 
+import {
+  ROLES,
+  PERMISSION_KEYS,
+  getEffectivePermissions,
+} from '../../constants/roles.js';
+
 // ======================================================
 // CONSTANTS
 // ======================================================
 
 const COMPLETED_STATUS =
   'completed';
-
-const TERMINAL_PLAN_STATUSES =
-  new Set([
-    'completed',
-    'cancelled',
-  ]);
 
 const SUPPORTED_PAYMENT_TYPES =
   new Set([
@@ -76,7 +77,9 @@ const toCents = (
   value
 ) => {
   const parsed =
-    Number(value);
+    Number(
+      value
+    );
 
   if (
     !Number.isFinite(
@@ -163,26 +166,30 @@ const normalizePagination = (
 };
 
 // ======================================================
-// HELPERS
+// GENERAL HELPERS
 // ======================================================
 
 const normalizeNullableString = (
   value
 ) => {
   if (
-    value === undefined
+    value ===
+    undefined
   ) {
     return undefined;
   }
 
   if (
-    value === null
+    value ===
+    null
   ) {
     return null;
   }
 
   const normalized =
-    String(value).trim();
+    String(
+      value
+    ).trim();
 
   return (
     normalized ||
@@ -218,131 +225,1135 @@ const validatePaymentMethod = (
   }
 };
 
+const hasOwn = (
+  object,
+  field
+) => {
+  return Object.prototype.hasOwnProperty.call(
+    object,
+    field
+  );
+};
+
+// ======================================================
+// AUTHORIZATION HELPERS
+// ======================================================
+
+const getActorId = (
+  actor
+) => {
+  return (
+    actor?.id ||
+    null
+  );
+};
+
+const requireActor = (
+  actor
+) => {
+  const actorId =
+    getActorId(
+      actor
+    );
+
+  /*
+   * FAIL CLOSED
+   */
+  if (
+    !actorId
+  ) {
+    throw new Error(
+      'Finans hareketi bulunamadı'
+    );
+  }
+
+  return actorId;
+};
+
+const getActorPermissions = (
+  actor
+) => {
+  if (
+    !actor
+  ) {
+    return [];
+  }
+
+  return getEffectivePermissions(
+    actor.role,
+    actor.permissions ||
+      {}
+  );
+};
+
+const isAdmin = (
+  actor
+) => {
+  return (
+    actor?.role ===
+    ROLES.ADMIN
+  );
+};
+
+const canViewAllCases = (
+  actor
+) => {
+  return (
+    isAdmin(
+      actor
+    ) ||
+    getActorPermissions(
+      actor
+    ).includes(
+      PERMISSION_KEYS.VIEW_ALL_CASES
+    )
+  );
+};
+
+// ======================================================
+// WHERE HELPERS
+// ======================================================
+
+const hasWhereContent = (
+  value
+) => {
+  return Boolean(
+    value &&
+    typeof value ===
+      'object' &&
+    Reflect.ownKeys(
+      value
+    ).length >
+      0
+  );
+};
+
+const combineWhere = (
+  ...conditions
+) => {
+  const validConditions =
+    conditions.filter(
+      hasWhereContent
+    );
+
+  if (
+    validConditions.length ===
+    0
+  ) {
+    return {};
+  }
+
+  if (
+    validConditions.length ===
+    1
+  ) {
+    return validConditions[0];
+  }
+
+  return {
+    [Op.and]:
+      validConditions,
+  };
+};
+
+// ======================================================
+// CASE ACCESS
+// ======================================================
+
+const assertCaseAccess =
+  async (
+    caseId,
+    actor,
+    options = {}
+  ) => {
+    if (
+      !caseId
+    ) {
+      return null;
+    }
+
+    const actorId =
+      requireActor(
+        actor
+      );
+
+    const where = {
+      id:
+        caseId,
+    };
+
+    if (
+      !canViewAllCases(
+        actor
+      )
+    ) {
+      where[Op.or] = [
+        {
+          created_by:
+            actorId,
+        },
+
+        {
+          assigned_to:
+            actorId,
+        },
+      ];
+    }
+
+    const caseItem =
+      await Case.findOne({
+        where,
+
+        attributes: [
+          'id',
+          'title',
+          'status',
+          'created_by',
+          'assigned_to',
+        ],
+
+        transaction:
+          options.transaction,
+
+        lock:
+          options.lock,
+      });
+
+    if (
+      !caseItem
+    ) {
+      throw new Error(
+        'Finans hareketi bulunamadı'
+      );
+    }
+
+    return caseItem;
+  };
+
+// ======================================================
+// CLIENT ACCESS
+// ======================================================
+
+const assertClientAccess =
+  async (
+    clientId,
+    actor,
+    options = {}
+  ) => {
+    const actorId =
+      requireActor(
+        actor
+      );
+
+    const client =
+      await Client.findByPk(
+        clientId,
+        {
+          attributes: [
+            'id',
+            'name',
+            'status',
+            'created_by',
+          ],
+
+          transaction:
+            options.transaction,
+
+          lock:
+            options.lock,
+        }
+      );
+
+    if (
+      !client
+    ) {
+      throw new Error(
+        'Finans hareketi bulunamadı'
+      );
+    }
+
+    if (
+      isAdmin(
+        actor
+      )
+    ) {
+      return client;
+    }
+
+    if (
+      client.created_by ===
+      actorId
+    ) {
+      return client;
+    }
+
+    /*
+     * Client'ı oluşturmasa bile erişebildiği bir dava
+     * üzerinden client'a erişebilir.
+     */
+    const replacements = {
+      clientId,
+      actorId,
+    };
+
+    const caseCondition =
+      canViewAllCases(
+        actor
+      )
+        ? ''
+        : `
+          AND (
+            c.created_by = :actorId
+            OR c.assigned_to = :actorId
+          )
+        `;
+
+    const rows =
+      await sequelize.query(
+        `
+          SELECT 1
+          FROM case_clients cc
+
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+
+          WHERE cc.client_id = :clientId
+
+          ${caseCondition}
+
+          LIMIT 1
+        `,
+        {
+          replacements,
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction:
+            options.transaction,
+        }
+      );
+
+    if (
+      rows.length ===
+      0
+    ) {
+      throw new Error(
+        'Finans hareketi bulunamadı'
+      );
+    }
+
+    return client;
+  };
+
+// ======================================================
+// STANDALONE CLIENT FINANCE ACCESS
+// ======================================================
+
+const assertStandaloneClientFinanceAccess = (
+  client,
+  actor
+) => {
+  const actorId =
+    requireActor(
+      actor
+    );
+
+  if (
+    isAdmin(
+      actor
+    ) ||
+    canViewAllCases(
+      actor
+    )
+  ) {
+    return;
+  }
+
+  /*
+   * Normal kullanıcı case'siz finans kaydını yalnızca
+   * kendi oluşturduğu client üzerinde yönetebilir.
+   *
+   * Client'a yalnız başka bir dava üzerinden erişiyor
+   * olmak bağımsız finans kaydına erişim vermez.
+   */
+  if (
+    client.created_by !==
+    actorId
+  ) {
+    throw new Error(
+      'Finans hareketi bulunamadı'
+    );
+  }
+};
+
+// ======================================================
+// CASE / CLIENT RELATION
+// ======================================================
+
+const assertCaseBelongsToClient =
+  async (
+    caseId,
+    clientId,
+    transaction
+  ) => {
+    const rows =
+      await sequelize.query(
+        `
+          SELECT 1
+          FROM case_clients
+          WHERE case_id = :caseId
+            AND client_id = :clientId
+          LIMIT 1
+        `,
+        {
+          replacements: {
+            caseId,
+            clientId,
+          },
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction,
+        }
+      );
+
+    if (
+      rows.length ===
+      0
+    ) {
+      throw new Error(
+        'Seçilen dava seçilen müvekkile ait değil'
+      );
+    }
+  };
+
+// ======================================================
+// FINANCIAL ACCESS SCOPE
+// ======================================================
+
+const getFinancialAccessScope =
+  async (
+    actor,
+    transaction
+  ) => {
+    const actorId =
+      requireActor(
+        actor
+      );
+
+    if (
+      isAdmin(
+        actor
+      )
+    ) {
+      return {
+        unrestricted:
+          true,
+
+        allCases:
+          true,
+
+        caseIds:
+          [],
+
+        accessibleClientIds:
+          [],
+
+        standaloneClientIds:
+          [],
+      };
+    }
+
+    const allCases =
+      canViewAllCases(
+        actor
+      );
+
+    const caseRows =
+      allCases
+        ? []
+        : await Case.findAll({
+            where: {
+              [Op.or]: [
+                {
+                  created_by:
+                    actorId,
+                },
+
+                {
+                  assigned_to:
+                    actorId,
+                },
+              ],
+            },
+
+            attributes: [
+              'id',
+            ],
+
+            raw:
+              true,
+
+            transaction,
+          });
+
+    const caseIds =
+      caseRows.map(
+        (
+          item
+        ) =>
+          item.id
+      );
+
+    const caseCondition =
+      allCases
+        ? ''
+        : `
+          AND (
+            c.created_by = :actorId
+            OR c.assigned_to = :actorId
+          )
+        `;
+
+    const accessibleClientRows =
+      await sequelize.query(
+        `
+          SELECT DISTINCT
+            cl.id
+
+          FROM clients cl
+
+          LEFT JOIN case_clients cc
+            ON cc.client_id = cl.id
+
+          LEFT JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+
+          WHERE cl.deleted_at IS NULL
+            AND (
+              cl.created_by = :actorId
+
+              OR (
+                c.id IS NOT NULL
+                ${caseCondition}
+              )
+            )
+        `,
+        {
+          replacements: {
+            actorId,
+          },
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction,
+        }
+      );
+
+    const ownClientRows =
+      await Client.findAll({
+        where: {
+          created_by:
+            actorId,
+        },
+
+        attributes: [
+          'id',
+        ],
+
+        raw:
+          true,
+
+        transaction,
+      });
+
+    const accessibleClientIds =
+      accessibleClientRows.map(
+        (
+          row
+        ) =>
+          row.id
+      );
+
+    /*
+     * VIEW_ALL_CASES sahibi kullanıcı erişebildiği
+     * client'ın case'siz finans kayıtlarını da görebilir.
+     *
+     * Normal kullanıcı için case'siz finans erişimi
+     * yalnız kendi oluşturduğu client'larla sınırlı.
+     */
+    const standaloneClientIds =
+      allCases
+        ? accessibleClientIds
+        : ownClientRows.map(
+            (
+              row
+            ) =>
+              row.id
+          );
+
+    return {
+      unrestricted:
+        false,
+
+      allCases,
+
+      caseIds,
+
+      accessibleClientIds,
+
+      standaloneClientIds,
+    };
+  };
+
+// ======================================================
+// PAYMENT ACCESS WHERE
+// ======================================================
+
+const buildPaymentAccessWhere = (
+  scope
+) => {
+  if (
+    scope.unrestricted
+  ) {
+    return {};
+  }
+
+  const allowedScopes =
+    [];
+
+  if (
+    scope.allCases
+  ) {
+    allowedScopes.push({
+      case_id: {
+        [Op.ne]:
+          null,
+      },
+    });
+  } else if (
+    scope.caseIds.length >
+    0
+  ) {
+    allowedScopes.push({
+      case_id: {
+        [Op.in]:
+          scope.caseIds,
+      },
+    });
+  }
+
+  if (
+    scope.standaloneClientIds.length >
+    0
+  ) {
+    allowedScopes.push({
+      [Op.and]: [
+        {
+          case_id:
+            null,
+        },
+
+        {
+          client_id: {
+            [Op.in]:
+              scope.standaloneClientIds,
+          },
+        },
+      ],
+    });
+  }
+
+  if (
+    allowedScopes.length ===
+    0
+  ) {
+    return {
+      id:
+        null,
+    };
+  }
+
+  return {
+    [Op.or]:
+      allowedScopes,
+  };
+};
+
+// ======================================================
+// PAYMENT PLAN ACCESS WHERE
+// ======================================================
+
+const buildPaymentPlanAccessWhere = (
+  scope
+) => {
+  if (
+    scope.unrestricted
+  ) {
+    return {};
+  }
+
+  const allowedScopes =
+    [];
+
+  if (
+    scope.allCases
+  ) {
+    allowedScopes.push({
+      case_id: {
+        [Op.ne]:
+          null,
+      },
+    });
+  } else if (
+    scope.caseIds.length >
+    0
+  ) {
+    allowedScopes.push({
+      case_id: {
+        [Op.in]:
+          scope.caseIds,
+      },
+    });
+  }
+
+  if (
+    scope.standaloneClientIds.length >
+    0
+  ) {
+    allowedScopes.push({
+      [Op.and]: [
+        {
+          case_id:
+            null,
+        },
+
+        {
+          client_id: {
+            [Op.in]:
+              scope.standaloneClientIds,
+          },
+        },
+      ],
+    });
+  }
+
+  if (
+    allowedScopes.length ===
+    0
+  ) {
+    return {
+      id:
+        null,
+    };
+  }
+
+  return {
+    [Op.or]:
+      allowedScopes,
+  };
+};
+
+// ======================================================
+// ASSERT PAYMENT ACCESS
+// ======================================================
+
+const assertPaymentAccess =
+  async (
+    id,
+    actor,
+    options = {}
+  ) => {
+    requireActor(
+      actor
+    );
+
+    const payment =
+      await Payment.findByPk(
+        id,
+        {
+          transaction:
+            options.transaction,
+
+          lock:
+            options.lock,
+        }
+      );
+
+    if (
+      !payment
+    ) {
+      throw new Error(
+        'Finans hareketi bulunamadı'
+      );
+    }
+
+    if (
+      isAdmin(
+        actor
+      )
+    ) {
+      return payment;
+    }
+
+    /*
+     * CASE-LINKED payment:
+     * case erişimi her şeyden üstündür.
+     */
+    if (
+      payment.case_id
+    ) {
+      try {
+        await assertCaseAccess(
+          payment.case_id,
+          actor,
+          options
+        );
+
+        return payment;
+      } catch {
+        throw new Error(
+          'Finans hareketi bulunamadı'
+        );
+      }
+    }
+
+    /*
+     * CASE'SİZ payment:
+     * client scope.
+     */
+    try {
+      const client =
+        await assertClientAccess(
+          payment.client_id,
+          actor,
+          options
+        );
+
+      assertStandaloneClientFinanceAccess(
+        client,
+        actor
+      );
+
+      return payment;
+    } catch {
+      throw new Error(
+        'Finans hareketi bulunamadı'
+      );
+    }
+  };
+
 // ======================================================
 // RELATION VALIDATION
 // ======================================================
 
-const validateRelations = async (
-  data,
-  transaction
-) => {
-  if (
-    !data.client_id
-  ) {
-    throw new Error(
-      'Müvekkil seçilmelidir'
-    );
-  }
+const validateRelations =
+  async (
+    data,
+    actor,
+    transaction
+  ) => {
+    if (
+      !data.client_id
+    ) {
+      throw new Error(
+        'Müvekkil seçilmelidir'
+      );
+    }
 
-  const client =
-    await Client.findByPk(
-      data.client_id,
-      {
-        attributes: [
-          'id',
-          'name',
-          'status',
-        ],
-
-        transaction,
-      }
-    );
-
-  if (!client) {
-    throw new Error(
-      'Müvekkil bulunamadı'
-    );
-  }
-
-  let caseItem =
-    null;
-
-  let paymentPlan =
-    null;
-
-  let installment =
-    null;
-
-  if (
-    data.case_id
-  ) {
-    caseItem =
-      await Case.findByPk(
-        data.case_id,
+    const client =
+      await assertClientAccess(
+        data.client_id,
+        actor,
         {
-          attributes: [
-            'id',
-            'title',
-            'status',
-          ],
-
           transaction,
         }
       );
 
-    if (!caseItem) {
-      throw new Error(
-        'Dava bulunamadı'
-      );
-    }
-  }
+    let caseItem =
+      null;
 
-  if (
-    data.payment_plan_id
-  ) {
-    paymentPlan =
-      await PaymentPlan.findByPk(
-        data.payment_plan_id,
-        {
-          transaction,
+    let paymentPlan =
+      null;
 
-          lock:
-            transaction.LOCK.UPDATE,
-        }
-      );
+    let installment =
+      null;
 
-    if (!paymentPlan) {
-      throw new Error(
-        'Ödeme planı bulunamadı'
-      );
-    }
+    // ==================================================
+    // EXPLICIT CASE
+    // ==================================================
 
     if (
-      paymentPlan.client_id !==
-      data.client_id
-    ) {
-      throw new Error(
-        'Ödeme planı seçilen müvekkile ait değil'
-      );
-    }
-
-    if (
-      paymentPlan.status ===
-      'cancelled'
-    ) {
-      throw new Error(
-        'İptal edilmiş ödeme planına finans hareketi eklenemez'
-      );
-    }
-
-    if (
-      data.case_id &&
-      paymentPlan.case_id &&
-      paymentPlan.case_id !==
       data.case_id
     ) {
-      throw new Error(
-        'Ödeme planı seçilen davaya ait değil'
+      caseItem =
+        await assertCaseAccess(
+          data.case_id,
+          actor,
+          {
+            transaction,
+          }
+        );
+
+      await assertCaseBelongsToClient(
+        caseItem.id,
+        client.id,
+        transaction
       );
     }
-  }
 
-  if (
-    data.installment_id
-  ) {
-    installment =
+    // ==================================================
+    // PAYMENT PLAN
+    // ==================================================
+
+    if (
+      data.payment_plan_id
+    ) {
+      paymentPlan =
+        await PaymentPlan.findByPk(
+          data.payment_plan_id,
+          {
+            transaction,
+
+            lock:
+              transaction.LOCK.UPDATE,
+          }
+        );
+
+      if (
+        !paymentPlan
+      ) {
+        throw new Error(
+          'Ödeme planı bulunamadı'
+        );
+      }
+
+      if (
+        paymentPlan.client_id !==
+        data.client_id
+      ) {
+        throw new Error(
+          'Ödeme planı seçilen müvekkile ait değil'
+        );
+      }
+
+      if (
+        paymentPlan.status ===
+        'cancelled'
+      ) {
+        throw new Error(
+          'İptal edilmiş ödeme planına finans hareketi eklenemez'
+        );
+      }
+
+      if (
+        paymentPlan.case_id
+      ) {
+        await assertCaseAccess(
+          paymentPlan.case_id,
+          actor,
+          {
+            transaction,
+          }
+        );
+
+        await assertCaseBelongsToClient(
+          paymentPlan.case_id,
+          client.id,
+          transaction
+        );
+      }
+
+      if (
+        data.case_id &&
+        paymentPlan.case_id &&
+        paymentPlan.case_id !==
+          data.case_id
+      ) {
+        throw new Error(
+          'Ödeme planı seçilen davaya ait değil'
+        );
+      }
+    }
+
+    // ==================================================
+    // INSTALLMENT
+    // ==================================================
+
+    if (
+      data.installment_id
+    ) {
+      installment =
+        await PaymentInstallment.findByPk(
+          data.installment_id,
+          {
+            transaction,
+
+            lock:
+              transaction.LOCK.UPDATE,
+          }
+        );
+
+      if (
+        !installment
+      ) {
+        throw new Error(
+          'Taksit bulunamadı'
+        );
+      }
+
+      if (
+        installment.status ===
+        'cancelled'
+      ) {
+        throw new Error(
+          'İptal edilmiş taksite ödeme bağlanamaz'
+        );
+      }
+
+      if (
+        !paymentPlan
+      ) {
+        paymentPlan =
+          await PaymentPlan.findByPk(
+            installment.payment_plan_id,
+            {
+              transaction,
+
+              lock:
+                transaction.LOCK.UPDATE,
+            }
+          );
+
+        if (
+          !paymentPlan
+        ) {
+          throw new Error(
+            'Taksitin ödeme planı bulunamadı'
+          );
+        }
+
+        if (
+          paymentPlan.client_id !==
+          data.client_id
+        ) {
+          throw new Error(
+            'Taksit seçilen müvekkile ait değil'
+          );
+        }
+
+        if (
+          paymentPlan.case_id
+        ) {
+          await assertCaseAccess(
+            paymentPlan.case_id,
+            actor,
+            {
+              transaction,
+            }
+          );
+
+          await assertCaseBelongsToClient(
+            paymentPlan.case_id,
+            client.id,
+            transaction
+          );
+        }
+      }
+
+      if (
+        installment.payment_plan_id !==
+        paymentPlan.id
+      ) {
+        throw new Error(
+          'Taksit seçilen ödeme planına ait değil'
+        );
+      }
+
+      if (
+        paymentPlan.client_id !==
+        data.client_id
+      ) {
+        throw new Error(
+          'Taksit seçilen müvekkile ait değil'
+        );
+      }
+    }
+
+    // ==================================================
+    // EFFECTIVE CASE
+    // ==================================================
+
+    const effectiveCaseId =
+      data.case_id ||
+      paymentPlan?.case_id ||
+      null;
+
+    if (
+      effectiveCaseId &&
+      !caseItem
+    ) {
+      caseItem =
+        await assertCaseAccess(
+          effectiveCaseId,
+          actor,
+          {
+            transaction,
+          }
+        );
+
+      await assertCaseBelongsToClient(
+        caseItem.id,
+        client.id,
+        transaction
+      );
+    }
+
+    /*
+     * Case yoksa standalone client finance scope
+     * uygulanır.
+     */
+    if (
+      !effectiveCaseId
+    ) {
+      assertStandaloneClientFinanceAccess(
+        client,
+        actor
+      );
+    }
+
+    return {
+      client,
+      caseItem,
+      paymentPlan,
+      installment,
+      effectiveCaseId,
+    };
+  };
+
+// ======================================================
+// INSTALLMENT SYNC
+// ======================================================
+
+const syncInstallment =
+  async (
+    installmentId,
+    transaction
+  ) => {
+    if (
+      !installmentId
+    ) {
+      return null;
+    }
+
+    const installment =
       await PaymentInstallment.findByPk(
-        data.installment_id,
+        installmentId,
         {
           transaction,
 
@@ -351,7 +1362,9 @@ const validateRelations = async (
         }
       );
 
-    if (!installment) {
+    if (
+      !installment
+    ) {
       throw new Error(
         'Taksit bulunamadı'
       );
@@ -361,357 +1374,266 @@ const validateRelations = async (
       installment.status ===
       'cancelled'
     ) {
-      throw new Error(
-        'İptal edilmiş taksite ödeme bağlanamaz'
-      );
+      return installment;
     }
 
-    /*
-     * installment gönderilip payment_plan_id gönderilmediyse
-     * planı taksitten çözüyoruz.
-     */
-    if (
-      !paymentPlan
-    ) {
-      paymentPlan =
-        await PaymentPlan.findByPk(
-          installment.payment_plan_id,
-          {
-            transaction,
+    const payments =
+      await Payment.findAll({
+        where: {
+          installment_id:
+            installmentId,
 
-            lock:
-              transaction.LOCK.UPDATE,
-          }
-        );
+          status:
+            COMPLETED_STATUS,
 
-      if (!paymentPlan) {
-        throw new Error(
-          'Taksitin ödeme planı bulunamadı'
-        );
+          payment_type: {
+            [Op.in]: [
+              'received',
+              'refund',
+              'adjustment',
+            ],
+          },
+        },
+
+        attributes: [
+          'amount',
+          'payment_type',
+        ],
+
+        transaction,
+      });
+
+    let paidCents =
+      0;
+
+    payments.forEach(
+      (
+        payment
+      ) => {
+        const amount =
+          toCents(
+            payment.amount
+          );
+
+        if (
+          payment.payment_type ===
+            'received' ||
+          payment.payment_type ===
+            'adjustment'
+        ) {
+          paidCents +=
+            amount;
+        }
+
+        if (
+          payment.payment_type ===
+          'refund'
+        ) {
+          paidCents -=
+            amount;
+        }
       }
-    }
+    );
+
+    paidCents =
+      Math.max(
+        paidCents,
+        0
+      );
+
+    const installmentCents =
+      toCents(
+        installment.amount
+      );
+
+    let status =
+      'pending';
+
+    let paidAt =
+      null;
 
     if (
-      installment.payment_plan_id !==
-      paymentPlan.id
+      paidCents >=
+      installmentCents
     ) {
-      throw new Error(
-        'Taksit seçilen ödeme planına ait değil'
-      );
+      status =
+        'paid';
+
+      paidAt =
+        installment.paid_at ||
+        new Date();
+    } else if (
+      paidCents >
+      0
+    ) {
+      status =
+        'partial';
+    } else {
+      const today =
+        new Date()
+          .toISOString()
+          .slice(
+            0,
+            10
+          );
+
+      status =
+        installment.due_date <
+        today
+          ? 'overdue'
+          : 'pending';
     }
 
-    if (
-      paymentPlan.client_id !==
-      data.client_id
-    ) {
-      throw new Error(
-        'Taksit seçilen müvekkile ait değil'
-      );
-    }
-  }
+    await installment.update(
+      {
+        paid_amount:
+          fromCents(
+            paidCents
+          ),
 
-  return {
-    client,
-    caseItem,
-    paymentPlan,
-    installment,
-  };
-};
+        status,
 
-// ======================================================
-// INSTALLMENT SYNC
-//
-// paid_amount her zaman Payment kayıtlarından yeniden
-// hesaplanır. Böylece drift oluşursa kendini düzeltebilir.
-// ======================================================
-
-const syncInstallment = async (
-  installmentId,
-  transaction
-) => {
-  if (
-    !installmentId
-  ) {
-    return null;
-  }
-
-  const installment =
-    await PaymentInstallment.findByPk(
-      installmentId,
+        paid_at:
+          paidAt,
+      },
       {
         transaction,
-
-        lock:
-          transaction.LOCK.UPDATE,
       }
     );
 
-  if (!installment) {
-    throw new Error(
-      'Taksit bulunamadı'
-    );
-  }
-
-  if (
-    installment.status ===
-    'cancelled'
-  ) {
     return installment;
-  }
-
-  const payments =
-    await Payment.findAll({
-      where: {
-        installment_id:
-          installmentId,
-
-        status:
-          COMPLETED_STATUS,
-
-        payment_type: {
-          [Op.in]: [
-            'received',
-            'refund',
-            'adjustment',
-          ],
-        },
-      },
-
-      attributes: [
-        'amount',
-        'payment_type',
-      ],
-
-      transaction,
-    });
-
-  let paidCents =
-    0;
-
-  payments.forEach(
-    (payment) => {
-      const amount =
-        toCents(
-          payment.amount
-        );
-
-      if (
-        payment.payment_type ===
-          'received' ||
-        payment.payment_type ===
-          'adjustment'
-      ) {
-        paidCents +=
-          amount;
-      }
-
-      if (
-        payment.payment_type ===
-        'refund'
-      ) {
-        paidCents -=
-          amount;
-      }
-    }
-  );
-
-  paidCents =
-    Math.max(
-      paidCents,
-      0
-    );
-
-  const installmentCents =
-    toCents(
-      installment.amount
-    );
-
-  let status =
-    'pending';
-
-  let paidAt =
-    null;
-
-  if (
-    paidCents >=
-    installmentCents
-  ) {
-    status =
-      'paid';
-
-    paidAt =
-      installment.paid_at ||
-      new Date();
-  } else if (
-    paidCents > 0
-  ) {
-    status =
-      'partial';
-  } else {
-    const today =
-      new Date()
-        .toISOString()
-        .slice(
-          0,
-          10
-        );
-
-    status =
-      installment.due_date <
-      today
-        ? 'overdue'
-        : 'pending';
-  }
-
-  await installment.update(
-    {
-      paid_amount:
-        fromCents(
-          paidCents
-        ),
-
-      status,
-
-      paid_at:
-        paidAt,
-    },
-    {
-      transaction,
-    }
-  );
-
-  return installment;
-};
+  };
 
 // ======================================================
 // PAYMENT PLAN SYNC
 // ======================================================
 
-const syncPaymentPlan = async (
-  paymentPlanId,
-  userId,
-  transaction
-) => {
-  if (
-    !paymentPlanId
-  ) {
-    return null;
-  }
+const syncPaymentPlan =
+  async (
+    paymentPlanId,
+    userId,
+    transaction
+  ) => {
+    if (
+      !paymentPlanId
+    ) {
+      return null;
+    }
 
-  const plan =
-    await PaymentPlan.findByPk(
-      paymentPlanId,
-      {
-        transaction,
+    const plan =
+      await PaymentPlan.findByPk(
+        paymentPlanId,
+        {
+          transaction,
 
-        lock:
-          transaction.LOCK.UPDATE,
-      }
-    );
+          lock:
+            transaction.LOCK.UPDATE,
+        }
+      );
 
-  if (!plan) {
-    throw new Error(
-      'Ödeme planı bulunamadı'
-    );
-  }
+    if (
+      !plan
+    ) {
+      throw new Error(
+        'Ödeme planı bulunamadı'
+      );
+    }
 
-  if (
-    plan.status ===
-    'cancelled'
-  ) {
-    return plan;
-  }
+    if (
+      plan.status ===
+      'cancelled'
+    ) {
+      return plan;
+    }
 
-  const installments =
-    await PaymentInstallment.findAll({
-      where: {
-        payment_plan_id:
-          paymentPlanId,
+    const installments =
+      await PaymentInstallment.findAll({
+        where: {
+          payment_plan_id:
+            paymentPlanId,
 
-        status: {
-          [Op.ne]:
-            'cancelled',
+          status: {
+            [Op.ne]:
+              'cancelled',
+          },
         },
-      },
 
-      attributes: [
-        'id',
-        'status',
-        'amount',
-        'paid_amount',
-      ],
+        attributes: [
+          'id',
+          'status',
+          'amount',
+          'paid_amount',
+        ],
 
-      transaction,
-    });
-
-  if (
-    installments.length ===
-    0
-  ) {
-    return plan;
-  }
-
-  const allPaid =
-    installments.every(
-      (installment) =>
-        installment.status ===
-        'paid'
-    );
-
-  if (
-    allPaid
-  ) {
-    await plan.update(
-      {
-        status:
-          'completed',
-
-        completed_at:
-          plan.completed_at ||
-          new Date(),
-
-        updated_by:
-          userId ||
-          plan.updated_by ||
-          plan.created_by,
-      },
-      {
         transaction,
-      }
-    );
+      });
+
+    if (
+      installments.length ===
+      0
+    ) {
+      return plan;
+    }
+
+    const allPaid =
+      installments.every(
+        (
+          installment
+        ) =>
+          installment.status ===
+          'paid'
+      );
+
+    if (
+      allPaid
+    ) {
+      await plan.update(
+        {
+          status:
+            'completed',
+
+          completed_at:
+            plan.completed_at ||
+            new Date(),
+
+          updated_by:
+            userId ||
+            plan.updated_by ||
+            plan.created_by,
+        },
+        {
+          transaction,
+        }
+      );
+
+      return plan;
+    }
+
+    if (
+      plan.status ===
+      'completed'
+    ) {
+      await plan.update(
+        {
+          status:
+            'active',
+
+          completed_at:
+            null,
+
+          updated_by:
+            userId ||
+            plan.updated_by ||
+            plan.created_by,
+        },
+        {
+          transaction,
+        }
+      );
+    }
 
     return plan;
-  }
-
-  /*
-   * Daha önce completed olmuş planın reversal/refund
-   * sonrası tekrar açık hale gelmesi gerekebilir.
-   */
-  if (
-    plan.status ===
-    'completed'
-  ) {
-    await plan.update(
-      {
-        status:
-          'active',
-
-        completed_at:
-          null,
-
-        updated_by:
-          userId ||
-          plan.updated_by ||
-          plan.created_by,
-      },
-      {
-        transaction,
-      }
-    );
-  }
-
-  return plan;
-};
+  };
 
 // ======================================================
 // COMMON INCLUDE
@@ -836,20 +1758,17 @@ export const paymentService = {
 
   async create(
     data,
-    userId
+    actor
   ) {
+    const actorId =
+      requireActor(
+        actor
+      );
+
     const transaction =
       await sequelize.transaction();
 
     try {
-      if (
-        !userId
-      ) {
-        throw new Error(
-          'Finans hareketini oluşturan kullanıcı bulunamadı'
-        );
-      }
-
       const paymentType =
         data.payment_type ||
         'received';
@@ -866,6 +1785,15 @@ export const paymentService = {
         paymentMethod
       );
 
+      if (
+        paymentType ===
+        'agreed'
+      ) {
+        throw new Error(
+          'Yeni finans mimarisinde anlaşma tutarı PaymentPlan üzerinden oluşturulmalıdır'
+        );
+      }
+
       const amount =
         normalizeAmount(
           data.amount
@@ -874,15 +1802,14 @@ export const paymentService = {
       const {
         paymentPlan,
         installment,
+        effectiveCaseId,
       } =
         await validateRelations(
           data,
+          actor,
           transaction
         );
 
-      /*
-       * Gider hareketini takside bağlamıyoruz.
-       */
       if (
         paymentType ===
           'expense' &&
@@ -890,19 +1817,6 @@ export const paymentService = {
       ) {
         throw new Error(
           'Gider hareketi taksite bağlanamaz'
-        );
-      }
-
-      /*
-       * Yeni agreed kayıtları artık oluşturulmamalı.
-       * Sadece legacy datayı okuyabilmek için enumda tutuyoruz.
-       */
-      if (
-        paymentType ===
-        'agreed'
-      ) {
-        throw new Error(
-          'Yeni finans mimarisinde anlaşma tutarı PaymentPlan üzerinden oluşturulmalıdır'
         );
       }
 
@@ -944,9 +1858,7 @@ export const paymentService = {
               data.client_id,
 
             case_id:
-              data.case_id ||
-              paymentPlan?.case_id ||
-              null,
+              effectiveCaseId,
 
             payment_plan_id:
               paymentPlan?.id ||
@@ -956,8 +1868,11 @@ export const paymentService = {
               installment?.id ||
               null,
 
+            /*
+             * created_by body'den alınmaz.
+             */
             created_by:
-              userId,
+              actorId,
 
             notes:
               normalizeNullableString(
@@ -983,7 +1898,7 @@ export const paymentService = {
       ) {
         await syncPaymentPlan(
           payment.payment_plan_id,
-          userId,
+          actorId,
           transaction
         );
       }
@@ -991,9 +1906,12 @@ export const paymentService = {
       await transaction.commit();
 
       return this.findOne(
-        payment.id
+        payment.id,
+        actor
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       await transaction.rollback();
 
       throw error;
@@ -1017,7 +1935,13 @@ export const paymentService = {
     status,
     start_date,
     end_date,
+    actor,
   }) {
+    const scope =
+      await getFinancialAccessScope(
+        actor
+      );
+
     const {
       page:
         safePage,
@@ -1030,54 +1954,54 @@ export const paymentService = {
         limit
       );
 
-    const where = {};
+    const filters = {};
 
     if (
       client_id
     ) {
-      where.client_id =
+      filters.client_id =
         client_id;
     }
 
     if (
       case_id
     ) {
-      where.case_id =
+      filters.case_id =
         case_id;
     }
 
     if (
       payment_plan_id
     ) {
-      where.payment_plan_id =
+      filters.payment_plan_id =
         payment_plan_id;
     }
 
     if (
       installment_id
     ) {
-      where.installment_id =
+      filters.installment_id =
         installment_id;
     }
 
     if (
       payment_type
     ) {
-      where.payment_type =
+      filters.payment_type =
         payment_type;
     }
 
     if (
       payment_method
     ) {
-      where.payment_method =
+      filters.payment_method =
         payment_method;
     }
 
     if (
       status
     ) {
-      where.status =
+      filters.status =
         status;
     }
 
@@ -1085,7 +2009,7 @@ export const paymentService = {
       start_date ||
       end_date
     ) {
-      where.payment_date =
+      filters.payment_date =
         {};
 
       if (
@@ -1106,7 +2030,7 @@ export const paymentService = {
           );
         }
 
-        where.payment_date[
+        filters.payment_date[
           Op.gte
         ] =
           startDate;
@@ -1130,7 +2054,7 @@ export const paymentService = {
           );
         }
 
-        where.payment_date[
+        filters.payment_date[
           Op.lte
         ] =
           endDate;
@@ -1139,7 +2063,8 @@ export const paymentService = {
 
     const normalizedSearch =
       String(
-        search || ''
+        search ||
+        ''
       )
         .trim()
         .slice(
@@ -1150,7 +2075,7 @@ export const paymentService = {
     if (
       normalizedSearch
     ) {
-      where[Op.or] = [
+      filters[Op.or] = [
         {
           description: {
             [Op.iLike]:
@@ -1195,6 +2120,14 @@ export const paymentService = {
         },
       ];
     }
+
+    const where =
+      combineWhere(
+        filters,
+        buildPaymentAccessWhere(
+          scope
+        )
+      );
 
     const query =
       paginate(
@@ -1248,14 +2181,48 @@ export const paymentService = {
   },
 
   // ====================================================
-  // GLOBAL FINANCIAL SUMMARY
-  //
-  // Bu method pagination'dan bağımsızdır.
-  // Dashboard kartlarının gerçek finans değerlerini
-  // doğrudan veritabanından hesaplar.
+  // ACTOR-SCOPED FINANCIAL SUMMARY
   // ====================================================
 
-  async getSummary() {
+  async getSummary(
+    actor
+  ) {
+    const scope =
+      await getFinancialAccessScope(
+        actor
+      );
+
+    const paymentWhere =
+      buildPaymentAccessWhere(
+        scope
+      );
+
+    const planWhere =
+      buildPaymentPlanAccessWhere(
+        scope
+      );
+
+    const accessiblePlans =
+      await PaymentPlan.findAll({
+        where:
+          planWhere,
+
+        attributes: [
+          'id',
+        ],
+
+        raw:
+          true,
+      });
+
+    const accessiblePlanIds =
+      accessiblePlans.map(
+        (
+          plan
+        ) =>
+          plan.id
+      );
+
     const today =
       new Date()
         .toISOString()
@@ -1266,217 +2233,202 @@ export const paymentService = {
 
     const [
       totalAgreedRaw,
-
       totalReceivedRaw,
-
       totalRefundedRaw,
-
       totalExpenseRaw,
-
       totalPendingRaw,
-
       receivedCount,
-
       totalPaymentCount,
-
       activePlanCount,
-
       draftPlanCount,
-
       completedPlanCount,
-
       overdueInstallments,
-
       completedAdjustments,
     ] =
       await Promise.all([
-        // ================================================
-        // ANLAŞILAN TOPLAM ÜCRET
-        //
-        // Cancelled planlar finansal beklentiye dahil
-        // edilmez.
-        // ================================================
-
         PaymentPlan.sum(
           'total_amount',
           {
-            where: {
-              status: {
-                [Op.ne]:
-                  'cancelled',
-              },
-            },
+            where:
+              combineWhere(
+                planWhere,
+                {
+                  status: {
+                    [Op.ne]:
+                      'cancelled',
+                  },
+                }
+              ),
           }
         ),
-
-        // ================================================
-        // TAMAMLANMIŞ TAHSİLAT
-        // ================================================
 
         Payment.sum(
           'amount',
           {
-            where: {
-              status:
-                COMPLETED_STATUS,
+            where:
+              combineWhere(
+                paymentWhere,
+                {
+                  status:
+                    COMPLETED_STATUS,
 
-              payment_type:
-                'received',
-            },
+                  payment_type:
+                    'received',
+                }
+              ),
           }
         ),
-
-        // ================================================
-        // TAMAMLANMIŞ İADE
-        // ================================================
 
         Payment.sum(
           'amount',
           {
-            where: {
-              status:
-                COMPLETED_STATUS,
+            where:
+              combineWhere(
+                paymentWhere,
+                {
+                  status:
+                    COMPLETED_STATUS,
 
-              payment_type:
-                'refund',
-            },
+                  payment_type:
+                    'refund',
+                }
+              ),
           }
         ),
-
-        // ================================================
-        // TAMAMLANMIŞ GİDER
-        // ================================================
 
         Payment.sum(
           'amount',
           {
-            where: {
-              status:
-                COMPLETED_STATUS,
+            where:
+              combineWhere(
+                paymentWhere,
+                {
+                  status:
+                    COMPLETED_STATUS,
 
-              payment_type:
-                'expense',
-            },
+                  payment_type:
+                    'expense',
+                }
+              ),
           }
         ),
-
-        // ================================================
-        // BEKLEYEN TAHSİLAT
-        // ================================================
 
         Payment.sum(
           'amount',
           {
-            where: {
-              status:
-                'pending',
+            where:
+              combineWhere(
+                paymentWhere,
+                {
+                  status:
+                    'pending',
 
-              payment_type:
-                'received',
-            },
+                  payment_type:
+                    'received',
+                }
+              ),
           }
         ),
-
-        // ================================================
-        // ORTALAMA TAHSİLAT İÇİN ADET
-        // ================================================
 
         Payment.count({
-          where: {
-            status:
-              COMPLETED_STATUS,
+          where:
+            combineWhere(
+              paymentWhere,
+              {
+                status:
+                  COMPLETED_STATUS,
 
-            payment_type:
-              'received',
-          },
+                payment_type:
+                  'received',
+              }
+            ),
         }),
 
-        // ================================================
-        // TOPLAM HAREKET
-        // ================================================
-
-        Payment.count(),
-
-        // ================================================
-        // PLAN COUNTS
-        // ================================================
-
-        PaymentPlan.count({
-          where: {
-            status:
-              'active',
-          },
+        Payment.count({
+          where:
+            paymentWhere,
         }),
 
         PaymentPlan.count({
-          where: {
-            status:
-              'draft',
-          },
+          where:
+            combineWhere(
+              planWhere,
+              {
+                status:
+                  'active',
+              }
+            ),
         }),
 
         PaymentPlan.count({
-          where: {
-            status:
-              'completed',
-          },
+          where:
+            combineWhere(
+              planWhere,
+              {
+                status:
+                  'draft',
+              }
+            ),
         }),
 
-        // ================================================
-        // GECİKMİŞ TAKSİTLER
-        //
-        // Status alanına tek başına güvenmiyoruz.
-        // Tarih geçmiş ve halen açık olan taksitleri
-        // doğrudan hesaba katıyoruz.
-        // ================================================
+        PaymentPlan.count({
+          where:
+            combineWhere(
+              planWhere,
+              {
+                status:
+                  'completed',
+              }
+            ),
+        }),
 
-        PaymentInstallment.findAll({
-          where: {
-            due_date: {
-              [Op.lt]:
-                today,
-            },
+        accessiblePlanIds.length >
+        0
+          ? PaymentInstallment.findAll({
+              where: {
+                payment_plan_id: {
+                  [Op.in]:
+                    accessiblePlanIds,
+                },
 
-            status: {
-              [Op.notIn]: [
-                'paid',
-                'cancelled',
+                due_date: {
+                  [Op.lt]:
+                    today,
+                },
+
+                status: {
+                  [Op.notIn]: [
+                    'paid',
+                    'cancelled',
+                  ],
+                },
+              },
+
+              attributes: [
+                'id',
+                'amount',
+                'paid_amount',
+                'status',
+                'due_date',
               ],
-            },
-          },
 
-          attributes: [
-            'id',
-            'amount',
-            'paid_amount',
-            'status',
-            'due_date',
-          ],
-
-          raw:
-            true,
-        }),
-
-        // ================================================
-        // ADJUSTMENTS
-        //
-        // adjustment tek başına yön ifade etmez.
-        //
-        // refund reversal -> tahsilata geri eklenir.
-        // expense reversal -> giderden düşülür.
-        //
-        // Bu nedenle reversedPayment tipini okuyup
-        // ayrı sınıflandırıyoruz.
-        // ================================================
+              raw:
+                true,
+            })
+          : [],
 
         Payment.findAll({
-          where: {
-            status:
-              COMPLETED_STATUS,
+          where:
+            combineWhere(
+              paymentWhere,
+              {
+                status:
+                  COMPLETED_STATUS,
 
-            payment_type:
-              'adjustment',
-          },
+                payment_type:
+                  'adjustment',
+              }
+            ),
 
           attributes: [
             'id',
@@ -1503,10 +2455,6 @@ export const paymentService = {
           ],
         }),
       ]);
-
-    // ==================================================
-    // BASE VALUES
-    // ==================================================
 
     const totalAgreed =
       fromCents(
@@ -1543,10 +2491,6 @@ export const paymentService = {
         )
       );
 
-    // ==================================================
-    // ADJUSTMENT CLASSIFICATION
-    // ==================================================
-
     let refundReversalCents =
       0;
 
@@ -1557,7 +2501,9 @@ export const paymentService = {
       0;
 
     completedAdjustments.forEach(
-      (adjustment) => {
+      (
+        adjustment
+      ) => {
         const amountCents =
           toCents(
             adjustment.amount
@@ -1588,11 +2534,6 @@ export const paymentService = {
           return;
         }
 
-        /*
-         * Manuel / farklı adjustment ileride eklenirse
-         * ayrı gösterilir. Sessizce tahsilata veya gidere
-         * yazılmaz.
-         */
         otherAdjustmentCents +=
           amountCents;
       }
@@ -1612,10 +2553,6 @@ export const paymentService = {
       fromCents(
         otherAdjustmentCents
       );
-
-    // ==================================================
-    // NET VALUES
-    // ==================================================
 
     const effectiveRefunded =
       Math.max(
@@ -1645,22 +2582,14 @@ export const paymentService = {
         0
       );
 
-    /*
-     * Net nakit performansı.
-     *
-     * Tahsilat
-     * - geçerli iadeler
-     * - geçerli giderler
-     *
-     * Manuel adjustment bilinçli şekilde dahil edilmez.
-     */
     const netRevenue =
       grossReceived -
       effectiveRefunded -
       effectiveExpense;
 
     const averagePayment =
-      receivedCount > 0
+      receivedCount >
+      0
         ? Number(
             (
               grossReceived /
@@ -1668,10 +2597,6 @@ export const paymentService = {
             ).toFixed(2)
           )
         : 0;
-
-    // ==================================================
-    // OVERDUE
-    // ==================================================
 
     let overdueAmountCents =
       0;
@@ -1704,34 +2629,18 @@ export const paymentService = {
         overdueAmountCents
       );
 
-    // ==================================================
-    // PLAN COUNTS
-    // ==================================================
-
     const totalPlanCount =
       activePlanCount +
       draftPlanCount +
       completedPlanCount;
 
-    // ==================================================
-    // RETURN
-    // ==================================================
-
     return {
       currency:
         'TRY',
 
-      // ----------------------------------------------
-      // CONTRACT / EXPECTATION
-      // ----------------------------------------------
-
       totalAgreed,
 
       outstandingBalance,
-
-      // ----------------------------------------------
-      // COLLECTION
-      // ----------------------------------------------
 
       grossReceived,
 
@@ -1747,10 +2656,6 @@ export const paymentService = {
 
       averagePayment,
 
-      // ----------------------------------------------
-      // EXPENSE
-      // ----------------------------------------------
-
       grossExpense,
 
       expenseReversals,
@@ -1759,24 +2664,12 @@ export const paymentService = {
 
       netRevenue,
 
-      // ----------------------------------------------
-      // ADJUSTMENTS
-      // ----------------------------------------------
-
       otherAdjustments,
-
-      // ----------------------------------------------
-      // OVERDUE
-      // ----------------------------------------------
 
       overdueAmount,
 
       overdueInstallmentCount:
         overdueInstallments.length,
-
-      // ----------------------------------------------
-      // PLAN STATISTICS
-      // ----------------------------------------------
 
       plans: {
         total:
@@ -1791,10 +2684,6 @@ export const paymentService = {
         completed:
           completedPlanCount,
       },
-
-      // ----------------------------------------------
-      // PAYMENT STATISTICS
-      // ----------------------------------------------
 
       payments: {
         total:
@@ -1811,8 +2700,14 @@ export const paymentService = {
   // ====================================================
 
   async findOne(
-    id
+    id,
+    actor
   ) {
+    await assertPaymentAccess(
+      id,
+      actor
+    );
+
     const payment =
       await Payment.findByPk(
         id,
@@ -1875,23 +2770,27 @@ export const paymentService = {
   },
 
   // ====================================================
-  // UPDATE METADATA
-  //
-  // Para miktarı ve temel muhasebe ilişkileri completed
-  // kayıtta değiştirilemez.
+  // UPDATE
   // ====================================================
 
   async update(
     id,
-    data
+    data,
+    actor
   ) {
+    const actorId =
+      requireActor(
+        actor
+      );
+
     const transaction =
       await sequelize.transaction();
 
     try {
       const payment =
-        await Payment.findByPk(
+        await assertPaymentAccess(
           id,
+          actor,
           {
             transaction,
 
@@ -1900,37 +2799,71 @@ export const paymentService = {
           }
         );
 
-      if (
-        !payment
+      /*
+       * Mass-assignment engeli.
+       */
+      const allowedFields = [
+        'amount',
+        'description',
+        'payment_type',
+        'payment_method',
+        'status',
+        'payment_date',
+        'transaction_id',
+        'receipt_number',
+        'client_id',
+        'case_id',
+        'payment_plan_id',
+        'installment_id',
+        'notes',
+      ];
+
+      const updateData =
+        {};
+
+      for (
+        const field of
+        allowedFields
       ) {
-        throw new Error(
-          'Finans hareketi bulunamadı'
-        );
+        if (
+          hasOwn(
+            data,
+            field
+          )
+        ) {
+          updateData[field] =
+            data[field];
+        }
       }
 
       /*
-       * req.body gibi dışarıdan gelen objeyi doğrudan
-       * mutate etmiyoruz.
+       * COMPLETED STATUS IMMUTABILITY
+       *
+       * Tamamlanmış bir finans hareketinin status'u normal
+       * update endpoint'i üzerinden geri alınamaz.
+       *
+       * Aksi halde saldırgan:
+       *   completed -> pending/cancelled
+       * yaptıktan sonra ikinci bir update ile amount / relation
+       * alanlarını değiştirebilirdi.
+       *
+       * Tamamlanmış kayıtların muhasebesel iptali/değişikliği
+       * yalnız reversal akışı üzerinden yapılmalıdır.
        */
-      const updateData = {
-        ...data,
-      };
-
-      const immutableFields = [
-        'id',
-        'created_by',
-        'reversed_payment_id',
-        'reversed_at',
-        'reversed_by',
-      ];
-
-      immutableFields.forEach(
-        (field) => {
-          delete updateData[
-            field
-          ];
-        }
-      );
+      if (
+        payment.status ===
+          COMPLETED_STATUS &&
+        hasOwn(
+          updateData,
+          'status'
+        ) &&
+        updateData.status !==
+          COMPLETED_STATUS
+      ) {
+        throw new Error(
+          'Tamamlanmış finans hareketinin durumu değiştirilemez. Ters kayıt kullanılmalıdır.'
+        );
+      }
 
       const financialFields = [
         'amount',
@@ -1943,13 +2876,15 @@ export const paymentService = {
 
       if (
         payment.status ===
-        'completed'
+        COMPLETED_STATUS
       ) {
         const financialChange =
           financialFields.some(
-            (field) => {
+            (
+              field
+            ) => {
               if (
-                !Object.prototype.hasOwnProperty.call(
+                !hasOwn(
                   updateData,
                   field
                 )
@@ -1982,7 +2917,50 @@ export const paymentService = {
       }
 
       if (
-        Object.prototype.hasOwnProperty.call(
+        hasOwn(
+          updateData,
+          'amount'
+        )
+      ) {
+        updateData.amount =
+          normalizeAmount(
+            updateData.amount
+          );
+      }
+
+      if (
+        hasOwn(
+          updateData,
+          'payment_type'
+        )
+      ) {
+        validatePaymentType(
+          updateData.payment_type
+        );
+
+        if (
+          updateData.payment_type ===
+          'agreed'
+        ) {
+          throw new Error(
+            'Yeni finans mimarisinde anlaşma tutarı PaymentPlan üzerinden oluşturulmalıdır'
+          );
+        }
+      }
+
+      if (
+        hasOwn(
+          updateData,
+          'payment_method'
+        )
+      ) {
+        validatePaymentMethod(
+          updateData.payment_method
+        );
+      }
+
+      if (
+        hasOwn(
           updateData,
           'description'
         )
@@ -1994,7 +2972,7 @@ export const paymentService = {
       }
 
       if (
-        Object.prototype.hasOwnProperty.call(
+        hasOwn(
           updateData,
           'transaction_id'
         )
@@ -2006,7 +2984,7 @@ export const paymentService = {
       }
 
       if (
-        Object.prototype.hasOwnProperty.call(
+        hasOwn(
           updateData,
           'receipt_number'
         )
@@ -2018,7 +2996,7 @@ export const paymentService = {
       }
 
       if (
-        Object.prototype.hasOwnProperty.call(
+        hasOwn(
           updateData,
           'notes'
         )
@@ -2029,6 +3007,93 @@ export const paymentService = {
           );
       }
 
+      const relationFields = [
+        'client_id',
+        'case_id',
+        'payment_plan_id',
+        'installment_id',
+      ];
+
+      const relationsChanged =
+        relationFields.some(
+          (
+            field
+          ) =>
+            hasOwn(
+              updateData,
+              field
+            )
+        );
+
+      const oldInstallmentId =
+        payment.installment_id;
+
+      const oldPaymentPlanId =
+        payment.payment_plan_id;
+
+      if (
+        relationsChanged
+      ) {
+        const relationData = {
+          client_id:
+            hasOwn(
+              updateData,
+              'client_id'
+            )
+              ? updateData.client_id
+              : payment.client_id,
+
+          case_id:
+            hasOwn(
+              updateData,
+              'case_id'
+            )
+              ? updateData.case_id
+              : payment.case_id,
+
+          payment_plan_id:
+            hasOwn(
+              updateData,
+              'payment_plan_id'
+            )
+              ? updateData.payment_plan_id
+              : payment.payment_plan_id,
+
+          installment_id:
+            hasOwn(
+              updateData,
+              'installment_id'
+            )
+              ? updateData.installment_id
+              : payment.installment_id,
+        };
+
+        const {
+          paymentPlan,
+          installment,
+          effectiveCaseId,
+        } =
+          await validateRelations(
+            relationData,
+            actor,
+            transaction
+          );
+
+        updateData.client_id =
+          relationData.client_id;
+
+        updateData.case_id =
+          effectiveCaseId;
+
+        updateData.payment_plan_id =
+          paymentPlan?.id ||
+          null;
+
+        updateData.installment_id =
+          installment?.id ||
+          null;
+      }
+
       await payment.update(
         updateData,
         {
@@ -2036,21 +3101,43 @@ export const paymentService = {
         }
       );
 
-      if (
-        payment.installment_id
+      const installmentIds =
+        new Set(
+          [
+            oldInstallmentId,
+            payment.installment_id,
+          ].filter(
+            Boolean
+          )
+        );
+
+      for (
+        const installmentId of
+        installmentIds
       ) {
         await syncInstallment(
-          payment.installment_id,
+          installmentId,
           transaction
         );
       }
 
-      if (
-        payment.payment_plan_id
+      const paymentPlanIds =
+        new Set(
+          [
+            oldPaymentPlanId,
+            payment.payment_plan_id,
+          ].filter(
+            Boolean
+          )
+        );
+
+      for (
+        const paymentPlanId of
+        paymentPlanIds
       ) {
         await syncPaymentPlan(
-          payment.payment_plan_id,
-          payment.created_by,
+          paymentPlanId,
+          actorId,
           transaction
         );
       }
@@ -2058,9 +3145,12 @@ export const paymentService = {
       await transaction.commit();
 
       return this.findOne(
-        id
+        id,
+        actor
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       await transaction.rollback();
 
       throw error;
@@ -2075,17 +3165,23 @@ export const paymentService = {
     id,
     {
       reason,
-      userId,
       paymentDate,
-    }
+    },
+    actor
   ) {
+    const actorId =
+      requireActor(
+        actor
+      );
+
     const transaction =
       await sequelize.transaction();
 
     try {
       const payment =
-        await Payment.findByPk(
+        await assertPaymentAccess(
           id,
+          actor,
           {
             transaction,
 
@@ -2095,16 +3191,8 @@ export const paymentService = {
         );
 
       if (
-        !payment
-      ) {
-        throw new Error(
-          'Finans hareketi bulunamadı'
-        );
-      }
-
-      if (
         payment.status !==
-        'completed'
+        COMPLETED_STATUS
       ) {
         throw new Error(
           'Sadece tamamlanmış finans hareketi ters kayda alınabilir'
@@ -2127,21 +3215,6 @@ export const paymentService = {
         );
       }
 
-      if (
-        !userId
-      ) {
-        throw new Error(
-          'Ters kaydı oluşturan kullanıcı bulunamadı'
-        );
-      }
-
-      /*
-       * received -> refund
-       * refund -> adjustment
-       * expense -> adjustment
-       *
-       * adjustment reversalını şimdilik engelliyoruz.
-       */
       let reversalType;
 
       switch (
@@ -2183,7 +3256,7 @@ export const paymentService = {
               payment.payment_method,
 
             status:
-              'completed',
+              COMPLETED_STATUS,
 
             payment_date:
               paymentDate ||
@@ -2201,8 +3274,11 @@ export const paymentService = {
             installment_id:
               payment.installment_id,
 
+            /*
+             * userId body'den alınmaz.
+             */
             created_by:
-              userId,
+              actorId,
 
             reversed_payment_id:
               payment.id,
@@ -2224,7 +3300,7 @@ export const paymentService = {
             new Date(),
 
           reversed_by:
-            userId,
+            actorId,
 
           reversal_reason:
             reason.trim(),
@@ -2248,7 +3324,7 @@ export const paymentService = {
       ) {
         await syncPaymentPlan(
           payment.payment_plan_id,
-          userId,
+          actorId,
           transaction
         );
       }
@@ -2256,9 +3332,12 @@ export const paymentService = {
       await transaction.commit();
 
       return this.findOne(
-        reversal.id
+        reversal.id,
+        actor
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       await transaction.rollback();
 
       throw error;
@@ -2267,21 +3346,25 @@ export const paymentService = {
 
   // ====================================================
   // DELETE
-  //
-  // Pending/cancelled kayıt soft-delete olabilir.
-  // Completed kayıt reversal ister.
   // ====================================================
 
   async remove(
-    id
+    id,
+    actor
   ) {
+    const actorId =
+      requireActor(
+        actor
+      );
+
     const transaction =
       await sequelize.transaction();
 
     try {
       const payment =
-        await Payment.findByPk(
+        await assertPaymentAccess(
           id,
+          actor,
           {
             transaction,
 
@@ -2291,16 +3374,8 @@ export const paymentService = {
         );
 
       if (
-        !payment
-      ) {
-        throw new Error(
-          'Finans hareketi bulunamadı'
-        );
-      }
-
-      if (
         payment.status ===
-        'completed'
+        COMPLETED_STATUS
       ) {
         throw new Error(
           'Tamamlanmış finans hareketi silinemez. Ters kayıt oluşturulmalıdır.'
@@ -2331,7 +3406,7 @@ export const paymentService = {
       ) {
         await syncPaymentPlan(
           paymentPlanId,
-          payment.created_by,
+          actorId,
           transaction
         );
       }
@@ -2339,7 +3414,9 @@ export const paymentService = {
       await transaction.commit();
 
       return payment;
-    } catch (error) {
+    } catch (
+      error
+    ) {
       await transaction.rollback();
 
       throw error;
@@ -2352,8 +3429,19 @@ export const paymentService = {
 
   async getByClient(
     clientId,
-    limit = 100
+    limit = 100,
+    actor
   ) {
+    await assertClientAccess(
+      clientId,
+      actor
+    );
+
+    const scope =
+      await getFinancialAccessScope(
+        actor
+      );
+
     const safeLimit =
       Math.min(
         Math.max(
@@ -2367,10 +3455,17 @@ export const paymentService = {
       );
 
     return Payment.findAll({
-      where: {
-        client_id:
-          clientId,
-      },
+      where:
+        combineWhere(
+          {
+            client_id:
+              clientId,
+          },
+
+          buildPaymentAccessWhere(
+            scope
+          )
+        ),
 
       include: [
         {
@@ -2444,8 +3539,14 @@ export const paymentService = {
 
   async getByCase(
     caseId,
-    limit = 100
+    limit = 100,
+    actor
   ) {
+    await assertCaseAccess(
+      caseId,
+      actor
+    );
+
     const safeLimit =
       Math.min(
         Math.max(

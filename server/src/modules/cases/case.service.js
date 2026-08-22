@@ -1,13 +1,47 @@
-import { Case } from '../../models/Case.js';
-import { CaseParty } from '../../models/CaseParty.js';
-import { Client } from '../../models/Client.js';
-import { User } from '../../models/User.js';
-import { Document } from '../../models/Document.js';
-import { Task } from '../../models/Task.js';
-import { Event } from '../../models/Event.js';
-import { Meeting } from '../../models/Meeting.js';
-import { Payment } from '../../models/Payment.js';
-import { Note } from '../../models/Note.js';
+import {
+  Op,
+} from 'sequelize';
+
+import {
+  Case,
+} from '../../models/Case.js';
+
+import {
+  CaseParty,
+} from '../../models/CaseParty.js';
+
+import {
+  Client,
+} from '../../models/Client.js';
+
+import {
+  User,
+} from '../../models/User.js';
+
+import {
+  Document,
+} from '../../models/Document.js';
+
+import {
+  Task,
+} from '../../models/Task.js';
+
+import {
+  Event,
+} from '../../models/Event.js';
+
+import {
+  Meeting,
+} from '../../models/Meeting.js';
+
+import {
+  Payment,
+} from '../../models/Payment.js';
+
+import {
+  Note,
+} from '../../models/Note.js';
+
 import {
   sequelize,
 } from '../../config/database.js';
@@ -16,26 +50,287 @@ import {
   reminderService,
 } from '../reminders/reminder.service.js';
 
-import { Op } from 'sequelize';
-
 import {
   paginate,
   getPaginationData,
 } from '../../utils/paginate.js';
 
+import {
+  PERMISSION_KEYS,
+  getEffectivePermissions,
+} from '../../constants/roles.js';
+
+// ======================================================
+// ACCESS CONTROL HELPERS
+// ======================================================
+
+const getActorId = (
+  actor
+) => {
+  return (
+    actor?.id ||
+    null
+  );
+};
+
+const getActorPermissions = (
+  actor
+) => {
+  if (
+    !actor
+  ) {
+    return [];
+  }
+
+  return getEffectivePermissions(
+    actor.role,
+    actor.permissions ||
+      {}
+  );
+};
+
+const canViewAllCases = (
+  actor
+) => {
+  return getActorPermissions(
+    actor
+  ).includes(
+    PERMISSION_KEYS.VIEW_ALL_CASES
+  );
+};
+
+// ======================================================
+// CASE ACCESS SCOPE
+// ======================================================
+
+const buildCaseAccessWhere = (
+  actor
+) => {
+  const actorId =
+    getActorId(
+      actor
+    );
+
+  /*
+   * FAIL CLOSED
+   *
+   * Service'e authenticated actor gelmediyse
+   * unrestricted query çalıştırmıyoruz.
+   */
+  if (
+    !actorId
+  ) {
+    throw new Error(
+      'Case not found'
+    );
+  }
+
+  /*
+   * Admin veya VIEW_ALL_CASES sahibi kullanıcı
+   * tüm dava kayıtlarını görebilir.
+   */
+  if (
+    canViewAllCases(
+      actor
+    )
+  ) {
+    return {};
+  }
+
+  /*
+   * Diğer kullanıcılar yalnızca:
+   *
+   * - kendisinin oluşturduğu
+   * - kendisine atanmış
+   *
+   * davalara erişebilir.
+   */
+  return {
+    [Op.or]: [
+      {
+        created_by:
+          actorId,
+      },
+
+      {
+        assigned_to:
+          actorId,
+      },
+    ],
+  };
+};
+
+// ======================================================
+// WHERE COMBINER
+// ======================================================
+
+const hasWhereContent = (
+  value
+) => {
+  return Boolean(
+    value &&
+    typeof value ===
+      'object' &&
+    Reflect.ownKeys(
+      value
+    ).length >
+      0
+  );
+};
+
+const combineWhere = (
+  ...conditions
+) => {
+  const validConditions =
+    conditions.filter(
+      hasWhereContent
+    );
+
+  if (
+    validConditions.length ===
+    0
+  ) {
+    return {};
+  }
+
+  if (
+    validConditions.length ===
+    1
+  ) {
+    return validConditions[0];
+  }
+
+  /*
+   * Search de Op.or kullanıyor,
+   * ownership scope da Op.or kullanıyor.
+   *
+   * Object spread ile birini diğerinin üzerine
+   * yazmak yerine Op.and ile güvenli şekilde
+   * birleştiriyoruz.
+   */
+  return {
+    [Op.and]:
+      validConditions,
+  };
+};
+
+// ======================================================
+// ASSERT CASE ACCESS
+// ======================================================
+
+const assertCaseAccess =
+  async (
+    caseId,
+    actor,
+    options = {}
+  ) => {
+    const accessWhere =
+      buildCaseAccessWhere(
+        actor
+      );
+
+    const caseItem =
+      await Case.findOne({
+        where:
+          combineWhere(
+            {
+              id:
+                caseId,
+            },
+
+            accessWhere
+          ),
+
+        attributes: [
+          'id',
+          'created_by',
+          'assigned_to',
+        ],
+
+        transaction:
+          options.transaction,
+
+        lock:
+          options.lock,
+      });
+
+    /*
+     * Burada özellikle:
+     *
+     * "Dava var ama yetkin yok"
+     *
+     * demiyoruz.
+     *
+     * Böylece başka UUID'lerin varlığı da
+     * dışarı sızmıyor.
+     */
+    if (
+      !caseItem
+    ) {
+      throw new Error(
+        'Case not found'
+      );
+    }
+
+    return caseItem;
+  };
+
+// ======================================================
+// SERVICE
+// ======================================================
+
 export const caseService = {
-  async create(data) {
+  // ====================================================
+  // CREATE
+  // ====================================================
+
+  async create(
+    data,
+    actor
+  ) {
     const {
       client_ids,
       ...caseData
     } = data;
 
-    const newCase =
-      await Case.create(caseData);
+    /*
+     * Controller created_by alanını actor'dan
+     * oluşturuyor.
+     *
+     * Defense-in-depth:
+     * service seviyesinde de authenticated actor
+     * olmadan case oluşturulmaz.
+     */
+    const actorId =
+      getActorId(
+        actor
+      );
 
     if (
-      Array.isArray(client_ids) &&
-      client_ids.length > 0
+      !actorId
+    ) {
+      throw new Error(
+        'Case not found'
+      );
+    }
+
+    const newCase =
+      await Case.create({
+        ...caseData,
+
+        /*
+         * created_by request içeriğine güvenmez.
+         */
+        created_by:
+          actorId,
+      });
+
+    if (
+      Array.isArray(
+        client_ids
+      ) &&
+      client_ids.length >
+        0
     ) {
       await newCase.setClients(
         client_ids
@@ -43,17 +338,47 @@ export const caseService = {
     }
 
     return this.findOne(
-      newCase.id
+      newCase.id,
+      actor
     );
   },
+
+  // ====================================================
+  // FIND ALL
+  // ====================================================
 
   async findAll({
     page,
     limit,
     search,
     status,
+    actor,
   }) {
-    const where = {};
+    const conditions =
+      [];
+
+    // ==================================================
+    // RECORD-LEVEL ACCESS
+    // ==================================================
+
+    const accessWhere =
+      buildCaseAccessWhere(
+        actor
+      );
+
+    if (
+      hasWhereContent(
+        accessWhere
+      )
+    ) {
+      conditions.push(
+        accessWhere
+      );
+    }
+
+    // ==================================================
+    // SEARCH
+    // ==================================================
 
     if (
       search &&
@@ -62,63 +387,92 @@ export const caseService = {
       const normalizedSearch =
         search.trim();
 
-      where[Op.or] = [
-        {
-          title: {
-            [Op.iLike]:
-              `%${normalizedSearch}%`,
+      conditions.push({
+        [Op.or]: [
+          {
+            title: {
+              [Op.iLike]:
+                `%${normalizedSearch}%`,
+            },
           },
-        },
-        {
-          case_number: {
-            [Op.iLike]:
-              `%${normalizedSearch}%`,
+
+          {
+            case_number: {
+              [Op.iLike]:
+                `%${normalizedSearch}%`,
+            },
           },
-        },
-        {
-          court_name: {
-            [Op.iLike]:
-              `%${normalizedSearch}%`,
+
+          {
+            court_name: {
+              [Op.iLike]:
+                `%${normalizedSearch}%`,
+            },
           },
-        },
-        {
-          subject: {
-            [Op.iLike]:
-              `%${normalizedSearch}%`,
+
+          {
+            subject: {
+              [Op.iLike]:
+                `%${normalizedSearch}%`,
+            },
           },
-        },
-        {
-          judiciary_type: {
-            [Op.iLike]:
-              `%${normalizedSearch}%`,
+
+          {
+            judiciary_type: {
+              [Op.iLike]:
+                `%${normalizedSearch}%`,
+            },
           },
-        },
-        {
-          judiciary_unit: {
-            [Op.iLike]:
-              `%${normalizedSearch}%`,
+
+          {
+            judiciary_unit: {
+              [Op.iLike]:
+                `%${normalizedSearch}%`,
+            },
           },
-        },
-      ];
+        ],
+      });
     }
 
-    if (status) {
-      where.status = status;
+    // ==================================================
+    // STATUS
+    // ==================================================
+
+    if (
+      status
+    ) {
+      conditions.push({
+        status,
+      });
     }
+
+    const where =
+      combineWhere(
+        ...conditions
+      );
 
     const pageNum =
-      Number.parseInt(page, 10) ||
+      Number.parseInt(
+        page,
+        10
+      ) ||
       1;
 
     const limitNum =
-      Number.parseInt(limit, 10) ||
+      Number.parseInt(
+        limit,
+        10
+      ) ||
       10;
 
-    const query = paginate(
-      { where },
-      pageNum,
-      limitNum
-    );
+    const query =
+      paginate(
+        {
+          where,
+        },
+        pageNum,
+        limitNum
+      );
 
     const {
       count,
@@ -129,8 +483,11 @@ export const caseService = {
 
         include: [
           {
-            model: Client,
-            as: 'clients',
+            model:
+              Client,
+
+            as:
+              'clients',
 
             attributes: [
               'id',
@@ -138,13 +495,17 @@ export const caseService = {
             ],
 
             through: {
-              attributes: [],
+              attributes:
+                [],
             },
           },
 
           {
-            model: User,
-            as: 'creator',
+            model:
+              User,
+
+            as:
+              'creator',
 
             attributes: [
               'id',
@@ -154,8 +515,11 @@ export const caseService = {
           },
 
           {
-            model: User,
-            as: 'assignee',
+            model:
+              User,
+
+            as:
+              'assignee',
 
             attributes: [
               'id',
@@ -165,8 +529,11 @@ export const caseService = {
           },
 
           {
-            model: CaseParty,
-            as: 'parties',
+            model:
+              CaseParty,
+
+            as:
+              'parties',
 
             attributes: [
               'id',
@@ -176,7 +543,8 @@ export const caseService = {
           },
         ],
 
-        distinct: true,
+        distinct:
+          true,
 
         order: [
           [
@@ -187,7 +555,8 @@ export const caseService = {
       });
 
     return {
-      data: rows,
+      data:
+        rows,
 
       pagination:
         getPaginationData(
@@ -198,13 +567,43 @@ export const caseService = {
     };
   },
 
-  async findOne(id) {
+  // ====================================================
+  // FIND ONE
+  // ====================================================
+
+  async findOne(
+    id,
+    actor
+  ) {
+    const accessWhere =
+      buildCaseAccessWhere(
+        actor
+      );
+
+    /*
+     * findByPk yerine findOne + ownership scope.
+     *
+     * Böylece başka UUID verilerek kayıt
+     * alınamaz.
+     */
     const caseItem =
-      await Case.findByPk(id, {
+      await Case.findOne({
+        where:
+          combineWhere(
+            {
+              id,
+            },
+
+            accessWhere
+          ),
+
         include: [
           {
-            model: Client,
-            as: 'clients',
+            model:
+              Client,
+
+            as:
+              'clients',
 
             attributes: [
               'id',
@@ -215,13 +614,17 @@ export const caseService = {
             ],
 
             through: {
-              attributes: [],
+              attributes:
+                [],
             },
           },
 
           {
-            model: User,
-            as: 'creator',
+            model:
+              User,
+
+            as:
+              'creator',
 
             attributes: [
               'id',
@@ -231,8 +634,11 @@ export const caseService = {
           },
 
           {
-            model: User,
-            as: 'assignee',
+            model:
+              User,
+
+            as:
+              'assignee',
 
             attributes: [
               'id',
@@ -243,18 +649,27 @@ export const caseService = {
           },
 
           {
-            model: CaseParty,
-            as: 'parties',
+            model:
+              CaseParty,
+
+            as:
+              'parties',
           },
 
           {
-            model: Document,
-            as: 'documents',
+            model:
+              Document,
+
+            as:
+              'documents',
 
             include: [
               {
-                model: User,
-                as: 'uploader',
+                model:
+                  User,
+
+                as:
+                  'uploader',
 
                 attributes: [
                   'id',
@@ -265,18 +680,16 @@ export const caseService = {
             ],
           },
 
-          // ==================================================
+          // ==============================================
           // TASKS
-          //
-          // Task -> User artık birden fazla association'a sahip:
-          // - creator
-          // - assignees
-          //
-          // Bu nedenle association isimlerini açıkça kullanıyoruz.
-          // ==================================================
+          // ==============================================
+
           {
-            model: Task,
-            as: 'tasks',
+            model:
+              Task,
+
+            as:
+              'tasks',
 
             include: [
               {
@@ -290,7 +703,8 @@ export const caseService = {
                 ],
 
                 through: {
-                  attributes: [],
+                  attributes:
+                    [],
                 },
               },
 
@@ -308,13 +722,19 @@ export const caseService = {
           },
 
           {
-            model: Event,
-            as: 'events',
+            model:
+              Event,
+
+            as:
+              'events',
 
             include: [
               {
-                model: User,
-                as: 'creator',
+                model:
+                  User,
+
+                as:
+                  'creator',
 
                 attributes: [
                   'id',
@@ -324,8 +744,11 @@ export const caseService = {
               },
 
               {
-                model: User,
-                as: 'assignedTo',
+                model:
+                  User,
+
+                as:
+                  'assignedTo',
 
                 attributes: [
                   'id',
@@ -337,13 +760,19 @@ export const caseService = {
           },
 
           {
-            model: Meeting,
-            as: 'meetings',
+            model:
+              Meeting,
+
+            as:
+              'meetings',
 
             include: [
               {
-                model: User,
-                as: 'creator',
+                model:
+                  User,
+
+                as:
+                  'creator',
 
                 attributes: [
                   'id',
@@ -353,8 +782,11 @@ export const caseService = {
               },
 
               {
-                model: User,
-                as: 'assignee',
+                model:
+                  User,
+
+                as:
+                  'assignee',
 
                 attributes: [
                   'id',
@@ -364,8 +796,11 @@ export const caseService = {
               },
 
               {
-                model: Client,
-                as: 'client',
+                model:
+                  Client,
+
+                as:
+                  'client',
 
                 attributes: [
                   'id',
@@ -376,18 +811,27 @@ export const caseService = {
           },
 
           {
-            model: Payment,
-            as: 'payments',
+            model:
+              Payment,
+
+            as:
+              'payments',
           },
 
           {
-            model: Note,
-            as: 'notes',
+            model:
+              Note,
+
+            as:
+              'notes',
 
             include: [
               {
-                model: User,
-                as: 'creator',
+                model:
+                  User,
+
+                as:
+                  'creator',
 
                 attributes: [
                   'id',
@@ -402,8 +846,11 @@ export const caseService = {
         order: [
           [
             {
-              model: Task,
-              as: 'tasks',
+              model:
+                Task,
+
+              as:
+                'tasks',
             },
             'created_at',
             'DESC',
@@ -411,8 +858,11 @@ export const caseService = {
 
           [
             {
-              model: Event,
-              as: 'events',
+              model:
+                Event,
+
+              as:
+                'events',
             },
             'start_date',
             'ASC',
@@ -420,8 +870,11 @@ export const caseService = {
 
           [
             {
-              model: Meeting,
-              as: 'meetings',
+              model:
+                Meeting,
+
+              as:
+                'meetings',
             },
             'start_date',
             'ASC',
@@ -429,8 +882,11 @@ export const caseService = {
 
           [
             {
-              model: Note,
-              as: 'notes',
+              model:
+                Note,
+
+              as:
+                'notes',
             },
             'created_at',
             'DESC',
@@ -438,7 +894,9 @@ export const caseService = {
         ],
       });
 
-    if (!caseItem) {
+    if (
+      !caseItem
+    ) {
       throw new Error(
         'Case not found'
       );
@@ -447,55 +905,119 @@ export const caseService = {
     return caseItem;
   },
 
-  async update(id, data) {
+  // ====================================================
+  // UPDATE
+  // ====================================================
+
+  async update(
+    id,
+    data,
+    actor
+  ) {
     const {
       client_ids,
       ...updateData
     } = data;
 
-    const caseItem =
-      await Case.findByPk(id);
+    const accessWhere =
+      buildCaseAccessWhere(
+        actor
+      );
 
-    if (!caseItem) {
+    const caseItem =
+      await Case.findOne({
+        where:
+          combineWhere(
+            {
+              id,
+            },
+
+            accessWhere
+          ),
+      });
+
+    if (
+      !caseItem
+    ) {
       throw new Error(
         'Case not found'
       );
     }
+
+    /*
+     * created_by hiçbir zaman service update
+     * üzerinden değiştirilemez.
+     *
+     * Controller zaten filtreliyor ama service
+     * katmanında da defense-in-depth uygulanıyor.
+     */
+    delete updateData.created_by;
+
+    delete updateData.id;
 
     await caseItem.update(
       updateData
     );
 
     if (
-      Array.isArray(client_ids)
+      Array.isArray(
+        client_ids
+      )
     ) {
       await caseItem.setClients(
         client_ids
       );
     }
 
-    return this.findOne(id);
+    return this.findOne(
+      id,
+      actor
+    );
   },
 
-  async remove(id) {
+  // ====================================================
+  // REMOVE
+  // ====================================================
+
+  async remove(
+    id,
+    actor
+  ) {
     const transaction =
       await sequelize.transaction();
 
     try {
-      const caseItem =
-        await Case.findByPk(
-          id,
-          {
-            transaction,
-
-            lock:
-              transaction.LOCK.UPDATE,
-          }
+      const accessWhere =
+        buildCaseAccessWhere(
+          actor
         );
 
-      if (!caseItem) {
+      /*
+       * Ownership kontrolü transaction ve row lock
+       * ile aynı sorguda uygulanır.
+       */
+      const caseItem =
+        await Case.findOne({
+          where:
+            combineWhere(
+              {
+                id,
+              },
+
+              accessWhere
+            ),
+
+          transaction,
+
+          lock:
+            transaction.LOCK.UPDATE,
+        });
+
+      if (
+        !caseItem
+      ) {
         throw new Error(
-          'Dava bulunamadı'
+          'Case not found'
         );
       }
 
@@ -506,7 +1028,8 @@ export const caseService = {
       const events =
         await Event.findAll({
           where: {
-            case_id: id,
+            case_id:
+              id,
           },
 
           attributes: [
@@ -517,8 +1040,8 @@ export const caseService = {
         });
 
       for (
-        const event
-        of events
+        const event of
+        events
       ) {
         await reminderService.cancelForSource({
           sourceType:
@@ -538,7 +1061,8 @@ export const caseService = {
       const tasks =
         await Task.findAll({
           where: {
-            case_id: id,
+            case_id:
+              id,
           },
 
           attributes: [
@@ -549,8 +1073,8 @@ export const caseService = {
         });
 
       for (
-        const task
-        of tasks
+        const task of
+        tasks
       ) {
         await reminderService.cancelForSource({
           sourceType:
@@ -570,7 +1094,8 @@ export const caseService = {
       const meetings =
         await Meeting.findAll({
           where: {
-            case_id: id,
+            case_id:
+              id,
           },
 
           attributes: [
@@ -581,8 +1106,8 @@ export const caseService = {
         });
 
       for (
-        const meeting
-        of meetings
+        const meeting of
+        meetings
       ) {
         await reminderService.cancelForSource({
           sourceType:
@@ -597,15 +1122,12 @@ export const caseService = {
 
       // ==================================================
       // OPERATIONAL CHILD RECORDS
-      //
-      // Bunlar paranoid modellerse soft-delete olur.
-      // Böylece takvim/görev/toplantı ekranında
-      // hayalet kayıt bırakmayız.
       // ==================================================
 
       await Event.destroy({
         where: {
-          case_id: id,
+          case_id:
+            id,
         },
 
         transaction,
@@ -613,7 +1135,8 @@ export const caseService = {
 
       await Task.destroy({
         where: {
-          case_id: id,
+          case_id:
+            id,
         },
 
         transaction,
@@ -621,19 +1144,17 @@ export const caseService = {
 
       await Meeting.destroy({
         where: {
-          case_id: id,
+          case_id:
+            id,
         },
 
         transaction,
       });
 
-      /*
-       * Taraflar ve notlar da dava çalışma alanına
-       * ait operasyonel kayıtlardır.
-       */
       await CaseParty.destroy({
         where: {
-          case_id: id,
+          case_id:
+            id,
         },
 
         transaction,
@@ -641,11 +1162,16 @@ export const caseService = {
 
       await Note.destroy({
         where: {
-          case_id: id,
+          case_id:
+            id,
         },
 
         transaction,
       });
+
+      // ==================================================
+      // CASE
+      // ==================================================
 
       await caseItem.destroy({
         transaction,
@@ -655,58 +1181,77 @@ export const caseService = {
       // IMPORTANT
       //
       // Document ve Payment kayıtlarına dokunmuyoruz.
-      // Hukuki belge ve finans kayıtlarının dava silinmesi
-      // nedeniyle kaybolmasını istemiyoruz.
       // ==================================================
-
-      await caseItem.destroy({
-        transaction,
-      });
 
       await transaction.commit();
 
       return caseItem;
-    } catch (error) {
+    } catch (
+      error
+    ) {
       await transaction.rollback();
 
       throw error;
     }
   },
 
+  // ====================================================
+  // ADD PARTY
+  // ====================================================
+
   async addParty(
     caseId,
-    partyData
+    partyData,
+    actor
   ) {
-    const caseItem =
-      await Case.findByPk(
-        caseId
-      );
-
-    if (!caseItem) {
-      throw new Error(
-        'Case not found'
-      );
-    }
+    /*
+     * Önce dava erişimi doğrulanır.
+     */
+    await assertCaseAccess(
+      caseId,
+      actor
+    );
 
     return CaseParty.create({
       ...partyData,
-      case_id: caseId,
+
+      /*
+       * Body'den gelen case_id varsa üzerine
+       * gerçek route caseId yazılır.
+       */
+      case_id:
+        caseId,
     });
   },
 
+  // ====================================================
+  // REMOVE PARTY
+  // ====================================================
+
   async removeParty(
     caseId,
-    partyId
+    partyId,
+    actor
   ) {
+    await assertCaseAccess(
+      caseId,
+      actor
+    );
+
     const party =
       await CaseParty.findOne({
         where: {
-          id: partyId,
-          case_id: caseId,
+          id:
+            partyId,
+
+          case_id:
+            caseId,
         },
       });
 
-    if (!party) {
+    if (
+      !party
+    ) {
       throw new Error(
         'Party not found'
       );
@@ -717,10 +1262,23 @@ export const caseService = {
     return true;
   },
 
-  async getParties(caseId) {
+  // ====================================================
+  // GET PARTIES
+  // ====================================================
+
+  async getParties(
+    caseId,
+    actor
+  ) {
+    await assertCaseAccess(
+      caseId,
+      actor
+    );
+
     return CaseParty.findAll({
       where: {
-        case_id: caseId,
+        case_id:
+          caseId,
       },
 
       order: [
@@ -732,10 +1290,23 @@ export const caseService = {
     });
   },
 
-  async getDocuments(caseId) {
+  // ====================================================
+  // GET DOCUMENTS
+  // ====================================================
+
+  async getDocuments(
+    caseId,
+    actor
+  ) {
+    await assertCaseAccess(
+      caseId,
+      actor
+    );
+
     return Document.findAll({
       where: {
-        case_id: caseId,
+        case_id:
+          caseId,
       },
 
       order: [
@@ -747,10 +1318,23 @@ export const caseService = {
     });
   },
 
-  async getTasks(caseId) {
+  // ====================================================
+  // GET TASKS
+  // ====================================================
+
+  async getTasks(
+    caseId,
+    actor
+  ) {
+    await assertCaseAccess(
+      caseId,
+      actor
+    );
+
     return Task.findAll({
       where: {
-        case_id: caseId,
+        case_id:
+          caseId,
       },
 
       order: [
@@ -762,10 +1346,23 @@ export const caseService = {
     });
   },
 
-  async getEvents(caseId) {
+  // ====================================================
+  // GET EVENTS
+  // ====================================================
+
+  async getEvents(
+    caseId,
+    actor
+  ) {
+    await assertCaseAccess(
+      caseId,
+      actor
+    );
+
     return Event.findAll({
       where: {
-        case_id: caseId,
+        case_id:
+          caseId,
       },
 
       order: [
@@ -777,10 +1374,23 @@ export const caseService = {
     });
   },
 
-  async getMeetings(caseId) {
+  // ====================================================
+  // GET MEETINGS
+  // ====================================================
+
+  async getMeetings(
+    caseId,
+    actor
+  ) {
+    await assertCaseAccess(
+      caseId,
+      actor
+    );
+
     return Meeting.findAll({
       where: {
-        case_id: caseId,
+        case_id:
+          caseId,
       },
 
       order: [
@@ -792,10 +1402,23 @@ export const caseService = {
     });
   },
 
-  async getPayments(caseId) {
+  // ====================================================
+  // GET PAYMENTS
+  // ====================================================
+
+  async getPayments(
+    caseId,
+    actor
+  ) {
+    await assertCaseAccess(
+      caseId,
+      actor
+    );
+
     return Payment.findAll({
       where: {
-        case_id: caseId,
+        case_id:
+          caseId,
       },
 
       order: [
@@ -807,10 +1430,23 @@ export const caseService = {
     });
   },
 
-  async getNotes(caseId) {
+  // ====================================================
+  // GET NOTES
+  // ====================================================
+
+  async getNotes(
+    caseId,
+    actor
+  ) {
+    await assertCaseAccess(
+      caseId,
+      actor
+    );
+
     return Note.findAll({
       where: {
-        case_id: caseId,
+        case_id:
+          caseId,
       },
 
       order: [
@@ -822,44 +1458,97 @@ export const caseService = {
     });
   },
 
-  async getStatistics(userId) {
+  // ====================================================
+  // STATISTICS
+  // ====================================================
+
+  async getStatistics(
+    actor
+  ) {
+    const actorId =
+      getActorId(
+        actor
+      );
+
+    if (
+      !actorId
+    ) {
+      throw new Error(
+        'Case not found'
+      );
+    }
+
+    const accessWhere =
+      buildCaseAccessWhere(
+        actor
+      );
+
+    /*
+     * Normal kullanıcı:
+     *
+     * istatistiklerde de yalnız erişebildiği davalar.
+     *
+     * VIEW_ALL_CASES:
+     *
+     * toplam sistem davaları.
+     */
     const [
       totalCases,
       preparationCases,
       activeCases,
       concludedCases,
       myCases,
-    ] = await Promise.all([
-      Case.count(),
+    ] =
+      await Promise.all([
+        Case.count({
+          where:
+            accessWhere,
+        }),
 
-      Case.count({
-        where: {
-          status:
-            'preparation',
-        },
-      }),
+        Case.count({
+          where:
+            combineWhere(
+              accessWhere,
+              {
+                status:
+                  'preparation',
+              }
+            ),
+        }),
 
-      Case.count({
-        where: {
-          status:
-            'active',
-        },
-      }),
+        Case.count({
+          where:
+            combineWhere(
+              accessWhere,
+              {
+                status:
+                  'active',
+              }
+            ),
+        }),
 
-      Case.count({
-        where: {
-          status:
-            'concluded',
-        },
-      }),
+        Case.count({
+          where:
+            combineWhere(
+              accessWhere,
+              {
+                status:
+                  'concluded',
+              }
+            ),
+        }),
 
-      Case.count({
-        where: {
-          assigned_to:
-            userId,
-        },
-      }),
-    ]);
+        Case.count({
+          where:
+            combineWhere(
+              accessWhere,
+              {
+                assigned_to:
+                  actorId,
+              }
+            ),
+        }),
+      ]);
 
     return {
       totalCases,
@@ -878,14 +1567,35 @@ export const caseService = {
     };
   },
 
+  // ====================================================
+  // UPDATE STATUS
+  // ====================================================
+
   async updateStatus(
     id,
-    status
+    status,
+    actor
   ) {
-    const caseItem =
-      await Case.findByPk(id);
+    const accessWhere =
+      buildCaseAccessWhere(
+        actor
+      );
 
-    if (!caseItem) {
+    const caseItem =
+      await Case.findOne({
+        where:
+          combineWhere(
+            {
+              id,
+            },
+
+            accessWhere
+          ),
+      });
+
+    if (
+      !caseItem
+    ) {
       throw new Error(
         'Case not found'
       );

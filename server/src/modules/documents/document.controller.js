@@ -1,4 +1,6 @@
-import { documentService } from './document.service.js';
+import {
+  documentService,
+} from './document.service.js';
 
 import {
   successResponse,
@@ -6,38 +8,48 @@ import {
   paginatedResponse,
 } from '../../utils/response.js';
 
-import { logger } from '../../config/logger.js';
-import { AuditLog } from '../../models/AuditLog.js';
+import {
+  logger,
+} from '../../config/logger.js';
+
+import {
+  AuditLog,
+} from '../../models/AuditLog.js';
 
 // ======================================================
 // HELPERS
 // ======================================================
 
-const createAuditLogSafely = async (data) => {
-  try {
-    await AuditLog.create(
-      data
-    );
-  } catch (error) {
-    /*
-     * Audit log hatası gerçekleşmiş ana işlemi
-     * kullanıcıya başarısız göstermemeli.
-     */
-    logger.error(
-      'Document audit log error:',
-      {
-        message:
-          error.message,
+const createAuditLogSafely =
+  async (
+    data
+  ) => {
+    try {
+      await AuditLog.create(
+        data
+      );
+    } catch (
+      error
+    ) {
+      /*
+       * Audit log hatası gerçekleşmiş ana işlemi
+       * kullanıcıya başarısız göstermemeli.
+       */
+      logger.error(
+        'Document audit log error:',
+        {
+          message:
+            error.message,
 
-        entityId:
-          data.entity_id,
+          entityId:
+            data.entity_id,
 
-        action:
-          data.action,
-      }
-    );
-  }
-};
+          action:
+            data.action,
+        }
+      );
+    }
+  };
 
 const auditMetadata = (
   req
@@ -45,8 +57,14 @@ const auditMetadata = (
   user_id:
     req.user.id,
 
+  /*
+   * Reverse proxy arkasında doğruladığımız
+   * gerçek client IP tercih edilir.
+   */
   ip_address:
-    req.ip,
+    req.realClientIp ||
+    req.ip ||
+    null,
 
   user_agent:
     req.headers[
@@ -58,11 +76,14 @@ const encodeFilename = (
   filename
 ) => {
   return encodeURIComponent(
-    filename || 'document'
+    filename ||
+    'document'
   )
     .replace(
       /['()]/g,
-      (character) =>
+      (
+        character
+      ) =>
         `%${character
           .charCodeAt(0)
           .toString(16)
@@ -99,7 +120,9 @@ const isUdfFilename = (
       'string' &&
     filename
       .toLowerCase()
-      .endsWith('.udf')
+      .endsWith(
+        '.udf'
+      )
   );
 };
 
@@ -108,14 +131,18 @@ const isUdfFilename = (
 // ======================================================
 
 export const documentController = {
-
   // ====================================================
   // UPLOAD SINGLE
   // ====================================================
 
-  async upload(req, res) {
+  async upload(
+    req,
+    res
+  ) {
     try {
-      if (!req.file) {
+      if (
+        !req.file
+      ) {
         return errorResponse(
           res,
           'No file uploaded',
@@ -123,17 +150,22 @@ export const documentController = {
         );
       }
 
+      /*
+       * uploaded_by artık body üzerinden gönderilmiyor.
+       *
+       * Service authenticated actor ID'sini doğrudan
+       * kullanıyor.
+       */
       const document =
         await documentService.upload(
           {
             ...req.body,
 
-            uploaded_by:
-              req.user.id,
-
             file:
               req.file,
-          }
+          },
+
+          req.user
         );
 
       await createAuditLogSafely({
@@ -160,7 +192,9 @@ export const documentController = {
         'Document uploaded successfully',
         201
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Upload document error:',
         error
@@ -200,7 +234,8 @@ export const documentController = {
       const documents =
         [];
 
-      const errors = [];
+      const errors =
+        [];
 
       for (
         const file of
@@ -212,14 +247,11 @@ export const documentController = {
               {
                 ...req.body,
 
-                uploaded_by:
-                  req.user.id,
-
                 file,
 
                 /*
-                 * Çoklu yüklemede bütün belgelere aynı özel
-                 * isim verilmesini engelle.
+                 * Çoklu yüklemede bütün belgelere aynı
+                 * özel isim verilmesini engelle.
                  */
                 name:
                   req.files.length >
@@ -227,33 +259,35 @@ export const documentController = {
                     ? undefined
                     : req.body
                         .name,
-              }
+              },
+
+              req.user
             );
 
           documents.push(
             document
           );
 
-          await createAuditLogSafely(
-            {
-              action:
-                'upload',
+          await createAuditLogSafely({
+            action:
+              'upload',
 
-              entity_type:
-                'document',
+            entity_type:
+              'document',
 
-              entity_id:
-                document.id,
+            entity_id:
+              document.id,
 
-              description:
-                `"${document.name}" belgesi toplu yükleme ile yüklendi`,
+            description:
+              `"${document.name}" belgesi toplu yükleme ile yüklendi`,
 
-              ...auditMetadata(
-                req
-              ),
-            }
-          );
-        } catch (error) {
+            ...auditMetadata(
+              req
+            ),
+          });
+        } catch (
+          error
+        ) {
           errors.push({
             file:
               file.originalname,
@@ -265,7 +299,8 @@ export const documentController = {
       }
 
       const statusCode =
-        documents.length > 0
+        documents.length >
+        0
           ? 201
           : 400;
 
@@ -279,14 +314,20 @@ export const documentController = {
             errors.length,
 
           documents,
+
           errors,
         },
-        documents.length > 0
+
+        documents.length >
+        0
           ? `${documents.length} documents uploaded successfully`
           : 'No documents could be uploaded',
+
         statusCode
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Upload multiple documents error:',
         error
@@ -309,7 +350,9 @@ export const documentController = {
     res
   ) {
     try {
-      if (!req.file) {
+      if (
+        !req.file
+      ) {
         return errorResponse(
           res,
           'No file uploaded',
@@ -320,15 +363,15 @@ export const documentController = {
       const document =
         await documentService.uploadVersion(
           req.params.id,
+
           {
             ...req.body,
 
-            uploaded_by:
-              req.user.id,
-
             file:
               req.file,
-          }
+          },
+
+          req.user
         );
 
       await createAuditLogSafely({
@@ -355,7 +398,9 @@ export const documentController = {
         'Document version uploaded successfully',
         201
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Upload document version error:',
         error
@@ -373,7 +418,10 @@ export const documentController = {
   // FIND ALL
   // ====================================================
 
-  async findAll(req, res) {
+  async findAll(
+    req,
+    res
+  ) {
     try {
       const {
         page = 1,
@@ -387,18 +435,22 @@ export const documentController = {
       } = req.query;
 
       const result =
-        await documentService.findAll(
-          {
-            page,
-            limit,
-            search,
-            category,
-            case_id,
-            client_id,
-            power_of_attorney_id,
-            include_archived,
-          }
-        );
+        await documentService.findAll({
+          page,
+          limit,
+          search,
+          category,
+          case_id,
+          client_id,
+          power_of_attorney_id,
+          include_archived,
+
+          /*
+           * Query-level BOLA scope.
+           */
+          actor:
+            req.user,
+        });
 
       return paginatedResponse(
         res,
@@ -406,7 +458,9 @@ export const documentController = {
         result.pagination,
         'Documents fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get documents error:',
         error
@@ -424,11 +478,15 @@ export const documentController = {
   // FIND ONE
   // ====================================================
 
-  async findOne(req, res) {
+  async findOne(
+    req,
+    res
+  ) {
     try {
       const document =
         await documentService.findOne(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       return successResponse(
@@ -436,12 +494,18 @@ export const documentController = {
         document,
         'Document fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get document error:',
         error
       );
 
+      /*
+       * Yetkisiz ID ile gerçekten olmayan ID arasında
+       * ayrım yapılmaz.
+       */
       return errorResponse(
         res,
         error.message,
@@ -454,12 +518,16 @@ export const documentController = {
   // UPDATE METADATA
   // ====================================================
 
-  async update(req, res) {
+  async update(
+    req,
+    res
+  ) {
     try {
       const document =
         await documentService.update(
           req.params.id,
-          req.body
+          req.body,
+          req.user
         );
 
       await createAuditLogSafely({
@@ -485,7 +553,9 @@ export const documentController = {
         document,
         'Document updated successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Update document error:',
         error
@@ -503,15 +573,30 @@ export const documentController = {
   // SOFT DELETE
   // ====================================================
 
-  async remove(req, res) {
+  async remove(
+    req,
+    res
+  ) {
     try {
+      /*
+       * findOne hem audit açıklaması için belgeyi getirir
+       * hem de ilk authorization kontrolünü yapar.
+       */
       const document =
         await documentService.findOne(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
+      /*
+       * remove kendi içinde authorization kontrolünü
+       * tekrar yapar.
+       *
+       * Defense-in-depth korunur.
+       */
       await documentService.remove(
-        req.params.id
+        req.params.id,
+        req.user
       );
 
       await createAuditLogSafely({
@@ -537,7 +622,9 @@ export const documentController = {
         null,
         'Document deleted successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Delete document error:',
         error
@@ -555,16 +642,29 @@ export const documentController = {
   // DOWNLOAD
   // ====================================================
 
-  async download(req, res) {
+  async download(
+    req,
+    res
+  ) {
     try {
+      /*
+       * Belge metadata'sı ancak authorization sonrası
+       * alınabilir.
+       */
       const document =
         await documentService.findOne(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
+      /*
+       * download/getFilePath kendi içinde belgeyi
+       * DB'den tekrar authorization ile doğrular.
+       */
       const fileStream =
         await documentService.download(
-          document
+          document,
+          req.user
         );
 
       const originalFilename =
@@ -588,14 +688,17 @@ export const documentController = {
         );
 
       /*
-       * UDF dosyaları XML tabanlı görünse bile
-       * tarayıcı tarafından XML olarak işlenmemeli.
-       *
-       * application/octet-stream kullanarak dosyanın
-       * doğrudan .udf olarak indirilmesini sağlıyoruz.
-       *
-       * Diğer dosya türlerinin mevcut MIME davranışı
-       * aynen korunuyor.
+       * Hassas hukuk belgelerinin browser/proxy cache
+       * katmanlarında tutulmasını istemiyoruz.
+       */
+      res.setHeader(
+        'Cache-Control',
+        'private, no-store'
+      );
+
+      /*
+       * UDF XML tabanlı görünse bile browser tarafından
+       * XML olarak yorumlanmaz.
        */
       res.setHeader(
         'Content-Type',
@@ -605,14 +708,6 @@ export const documentController = {
               'application/octet-stream'
       );
 
-      /*
-       * filename:
-       * Eski / farklı tarayıcılar için ASCII fallback.
-       *
-       * filename*:
-       * Türkçe karakterli gerçek dosya adını UTF-8
-       * olarak korur.
-       */
       res.setHeader(
         'Content-Disposition',
         `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodedFilename}`
@@ -643,7 +738,9 @@ export const documentController = {
 
       fileStream.on(
         'error',
-        (error) => {
+        (
+          error
+        ) => {
           logger.error(
             'Document stream error:',
             error
@@ -653,7 +750,9 @@ export const documentController = {
             !res.headersSent
           ) {
             res
-              .status(500)
+              .status(
+                500
+              )
               .end();
           } else {
             res.destroy();
@@ -664,7 +763,9 @@ export const documentController = {
       fileStream.pipe(
         res
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Download document error:',
         error
@@ -688,23 +789,48 @@ export const documentController = {
   // PREVIEW
   // ====================================================
 
-  async preview(req, res) {
+  async preview(
+    req,
+    res
+  ) {
     try {
       const document =
         await documentService.findOne(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       const fileStream =
         await documentService.download(
-          document
+          document,
+          req.user
         );
+
+      const originalFilename =
+        document.original_name ||
+        document.name ||
+        'document';
 
       const encodedFilename =
         encodeFilename(
-          document.original_name
+          originalFilename
         );
 
+      /*
+       * Preview edilen hassas belge proxy/browser
+       * cache'inde tutulmaz.
+       */
+      res.setHeader(
+        'Cache-Control',
+        'private, no-store'
+      );
+
+      /*
+       * Mevcut preview davranışını koruyoruz.
+       *
+       * UDF zaten service tarafında octet-stream
+       * olarak normalize edilmiş durumda.
+       */
       res.setHeader(
         'Content-Type',
         document.mime_type ||
@@ -723,7 +849,9 @@ export const documentController = {
 
       fileStream.on(
         'error',
-        (error) => {
+        (
+          error
+        ) => {
           logger.error(
             'Document preview stream error:',
             error
@@ -733,7 +861,9 @@ export const documentController = {
             !res.headersSent
           ) {
             res
-              .status(500)
+              .status(
+                500
+              )
               .end();
           } else {
             res.destroy();
@@ -744,7 +874,9 @@ export const documentController = {
       fileStream.pipe(
         res
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Preview document error:',
         error
@@ -775,7 +907,8 @@ export const documentController = {
     try {
       const versions =
         await documentService.getVersions(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       return successResponse(
@@ -783,7 +916,9 @@ export const documentController = {
         versions,
         'Versions fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get versions error:',
         error
@@ -792,7 +927,7 @@ export const documentController = {
       return errorResponse(
         res,
         error.message,
-        400
+        404
       );
     }
   },
@@ -806,15 +941,24 @@ export const documentController = {
     res
   ) {
     try {
+      /*
+       * Kategoriler artık sistemdeki tüm belgelerden
+       * değil yalnız kullanıcının erişebildiği
+       * belgelerden türetilir.
+       */
       const categories =
-        await documentService.getCategories();
+        await documentService.getCategories(
+          req.user
+        );
 
       return successResponse(
         res,
         categories,
         'Categories fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get categories error:',
         error
@@ -837,15 +981,23 @@ export const documentController = {
     res
   ) {
     try {
+      /*
+       * Belge sayısı, boyutu ve kategori istatistikleri
+       * actor scope'una göre hesaplanır.
+       */
       const stats =
-        await documentService.getStatistics();
+        await documentService.getStatistics(
+          req.user
+        );
 
       return successResponse(
         res,
         stats,
         'Document statistics fetched successfully'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get document statistics error:',
         error

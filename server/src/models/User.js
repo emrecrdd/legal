@@ -132,6 +132,41 @@ class User extends Sequelize.Model {
             true,
         },
 
+        // ====================================================
+        // TOKEN VERSION
+        //
+        // Access tokenların gerektiğinde topluca
+        // geçersiz hale getirilebilmesini sağlar.
+        //
+        // Örnek:
+        //
+        // DB token_version = 5
+        // JWT tokenVersion = 5
+        // → geçerli
+        //
+        // Şifre değişikliği:
+        // DB token_version = 6
+        //
+        // Eski JWT tokenVersion = 5
+        // → artık geçersiz
+        // ====================================================
+
+        token_version: {
+          type:
+            DataTypes.INTEGER,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            0,
+
+          validate: {
+            min:
+              0,
+          },
+        },
+
         last_login: {
           type:
             DataTypes.DATE,
@@ -381,6 +416,12 @@ class User extends Sequelize.Model {
     delete values.email_verification_token;
     delete values.password_reset_token;
     delete values.password_reset_expires;
+
+    /*
+     * İç session güvenlik değerini de
+     * API response'larında göstermiyoruz.
+     */
+    delete values.token_version;
 
     return values;
   }

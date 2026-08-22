@@ -1,5 +1,3 @@
-import jwt from 'jsonwebtoken';
-
 import {
   config,
 } from '../config/env.js';
@@ -13,10 +11,124 @@ import {
 } from '../config/logger.js';
 
 import {
+  verifyToken,
+  TOKEN_TYPES,
+  TOKEN_AUDIENCES,
+} from '../utils/jwt.js';
+
+import {
   ROLES,
   PERMISSIONS,
   isValidPermission,
 } from '../constants/roles.js';
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const getTokenUserId = (
+  decoded
+) => {
+  return (
+    decoded?.id ||
+    decoded?.userId ||
+    decoded?.sub ||
+    null
+  );
+};
+
+const isValidAccessTokenType = (
+  decoded
+) => {
+  if (!decoded) {
+    return false;
+  }
+
+  /*
+   * GEÇİŞ UYUMLULUĞU
+   *
+   * Eski access tokenlarda type alanı yok.
+   * Yeni tokenlarda type=access bulunuyor.
+   *
+   * Eski kullanıcıları deploy sırasında topluca
+   * logout etmemek için type olmayan legacy
+   * tokenları geçici olarak kabul ediyoruz.
+   *
+   * Açıkça refresh token verilirse reddedilir.
+   */
+  if (
+    decoded.type ===
+      undefined ||
+    decoded.type ===
+      null
+  ) {
+    return true;
+  }
+
+  return (
+    decoded.type ===
+    TOKEN_TYPES.ACCESS
+  );
+};
+
+const isValidTokenVersion = (
+  decoded,
+  user
+) => {
+  const databaseVersion =
+    Number(
+      user?.token_version ??
+        0
+    );
+
+  if (
+    !Number.isInteger(
+      databaseVersion
+    ) ||
+    databaseVersion < 0
+  ) {
+    return false;
+  }
+
+  /*
+   * LEGACY TOKEN KONTROLÜ
+   *
+   * Eski JWT'lerde tokenVersion yoktu.
+   *
+   * Legacy token yalnızca DB token_version
+   * hâlâ 0 ise kabul edilir.
+   */
+  if (
+    decoded?.tokenVersion ===
+      undefined ||
+    decoded?.tokenVersion ===
+      null
+  ) {
+    return (
+      databaseVersion ===
+      0
+    );
+  }
+
+  const jwtVersion =
+    Number(
+      decoded.tokenVersion
+    );
+
+  if (
+    !Number.isInteger(
+      jwtVersion
+    ) ||
+    jwtVersion < 0
+  ) {
+    return false;
+  }
+
+  return (
+    jwtVersion ===
+    databaseVersion
+  );
+};
 
 // ======================================================
 // AUTHENTICATE
@@ -31,6 +143,10 @@ export const authenticate = async (
     const authHeader =
       req.headers.authorization;
 
+    // ==================================================
+    // BEARER TOKEN
+    // ==================================================
+
     if (
       !authHeader ||
       !authHeader.startsWith(
@@ -40,36 +156,115 @@ export const authenticate = async (
       return res
         .status(401)
         .json({
-          success: false,
+          success:
+            false,
+
           message:
             'Oturum bilgisi bulunamadı',
         });
     }
 
     const token =
-      authHeader.substring(7);
+      authHeader
+        .substring(7)
+        .trim();
 
-    const decoded =
-      jwt.verify(
-        token,
-        config.JWT_SECRET
-      );
-
-    if (
-      !decoded?.id
-    ) {
+    if (!token) {
       return res
         .status(401)
         .json({
-          success: false,
+          success:
+            false,
+
           message:
             'Geçersiz oturum bilgisi',
         });
     }
 
+    // ==================================================
+    // JWT VERIFY
+    // ==================================================
+
+    /*
+     * Merkezi verifyToken:
+     *
+     * - signature
+     * - expiration
+     * - HS256
+     * - issuer
+     * - audience
+     *
+     * kontrollerini yapar.
+     *
+     * allowLegacyClaims=true:
+     *
+     * Eski iss/aud taşımayan tokenlar geçiş
+     * döneminde kabul edilir.
+     *
+     * Yeni token yanlış iss/aud taşıyorsa
+     * kesinlikle reddedilir.
+     */
+    const decoded =
+      verifyToken(
+        token,
+        config.JWT_SECRET,
+        {
+          audience:
+            TOKEN_AUDIENCES.ACCESS,
+
+          allowLegacyClaims:
+            true,
+        }
+      );
+
+    // ==================================================
+    // TOKEN TYPE
+    // ==================================================
+
+    if (
+      !isValidAccessTokenType(
+        decoded
+      )
+    ) {
+      return res
+        .status(401)
+        .json({
+          success:
+            false,
+
+          message:
+            'Geçersiz oturum türü',
+        });
+    }
+
+    // ==================================================
+    // USER ID
+    // ==================================================
+
+    const userId =
+      getTokenUserId(
+        decoded
+      );
+
+    if (!userId) {
+      return res
+        .status(401)
+        .json({
+          success:
+            false,
+
+          message:
+            'Geçersiz oturum bilgisi',
+        });
+    }
+
+    // ==================================================
+    // USER
+    // ==================================================
+
     const user =
       await User.findByPk(
-        decoded.id,
+        userId,
         {
           attributes: {
             exclude: [
@@ -87,29 +282,97 @@ export const authenticate = async (
       return res
         .status(401)
         .json({
-          success: false,
+          success:
+            false,
+
           message:
             'Kullanıcı bulunamadı',
         });
     }
 
+    // ==================================================
+    // ACCOUNT STATUS
+    // ==================================================
+
     if (
-      user.is_active !== true
+      user.is_active !==
+      true
     ) {
       return res
         .status(401)
         .json({
-          success: false,
+          success:
+            false,
+
           message:
             'Kullanıcı hesabı aktif değil',
         });
     }
 
+    // ==================================================
+    // TOKEN VERSION / REVOCATION
+    // ==================================================
+
+    if (
+      !isValidTokenVersion(
+        decoded,
+        user
+      )
+    ) {
+      return res
+        .status(401)
+        .json({
+          success:
+            false,
+
+          message:
+            'Oturum geçerliliğini kaybetti. Lütfen tekrar giriş yapın.',
+        });
+    }
+
+    // ==================================================
+    // REQUEST USER
+    // ==================================================
+
     req.user =
       user;
 
+    req.auth = {
+      tokenId:
+        decoded?.jti ||
+        null,
+
+      tokenType:
+        decoded?.type ||
+        null,
+
+      tokenVersion:
+        decoded?.tokenVersion ??
+        null,
+
+      issuer:
+        decoded?.iss ||
+        null,
+
+      audience:
+        decoded?.aud ||
+        null,
+
+      issuedAt:
+        decoded?.iat ||
+        null,
+
+      expiresAt:
+        decoded?.exp ||
+        null,
+    };
+
     return next();
   } catch (error) {
+    // ==================================================
+    // EXPIRED
+    // ==================================================
+
     if (
       error?.name ===
       'TokenExpiredError'
@@ -117,11 +380,36 @@ export const authenticate = async (
       return res
         .status(401)
         .json({
-          success: false,
+          success:
+            false,
+
           message:
             'Oturum süresi doldu',
         });
     }
+
+    // ==================================================
+    // NOT BEFORE
+    // ==================================================
+
+    if (
+      error?.name ===
+      'NotBeforeError'
+    ) {
+      return res
+        .status(401)
+        .json({
+          success:
+            false,
+
+          message:
+            'Oturum henüz geçerli değil',
+        });
+    }
+
+    // ==================================================
+    // INVALID JWT
+    // ==================================================
 
     if (
       error?.name ===
@@ -130,11 +418,17 @@ export const authenticate = async (
       return res
         .status(401)
         .json({
-          success: false,
+          success:
+            false,
+
           message:
             'Geçersiz oturum bilgisi',
         });
     }
+
+    // ==================================================
+    // INTERNAL ERROR
+    // ==================================================
 
     logger.error(
       'Auth middleware error:',
@@ -144,7 +438,9 @@ export const authenticate = async (
     return res
       .status(500)
       .json({
-        success: false,
+        success:
+          false,
+
         message:
           'Kimlik doğrulama sırasında sunucu hatası oluştu',
       });
@@ -155,8 +451,6 @@ export const authenticate = async (
 // ROLE AUTHORIZATION
 //
 // Mevcut route'lar için backward compatible.
-// Örn:
-// authorize(ROLES.ADMIN, ROLES.LAWYER)
 // ======================================================
 
 export const authorize = (
@@ -171,7 +465,9 @@ export const authorize = (
       return res
         .status(401)
         .json({
-          success: false,
+          success:
+            false,
+
           message:
             'Yetkilendirme için oturum gereklidir',
         });
@@ -192,7 +488,9 @@ export const authorize = (
       return res
         .status(403)
         .json({
-          success: false,
+          success:
+            false,
+
           message:
             'Bu işlem için yetkiniz bulunmuyor',
         });
@@ -204,16 +502,6 @@ export const authorize = (
 
 // ======================================================
 // PERMISSION OVERRIDES
-//
-// User.permissions örneği:
-//
-// {
-//   "delete_documents": true,
-//   "edit_payments": false
-// }
-//
-// true  = rol izninden bağımsız olarak aç
-// false = rol izni olsa bile kapat
 // ======================================================
 
 const getPermissionOverrides = (
@@ -251,13 +539,6 @@ export const hasPermission = (
     return false;
   }
 
-  // ====================================================
-  // ADMIN
-  //
-  // Admin custom override ile kilitlenmesin.
-  // Sistem yöneticisi her zaman tam erişime sahip.
-  // ====================================================
-
   if (
     user.role ===
     ROLES.ADMIN
@@ -265,8 +546,6 @@ export const hasPermission = (
     return true;
   }
 
-  // Bilinmeyen permission key kullanılıyorsa
-  // fail-closed davran.
   if (
     !isValidPermission(
       permission
@@ -289,18 +568,13 @@ export const hasPermission = (
       user
     );
 
-  // ====================================================
-  // USER OVERRIDE
-  //
-  // Kullanıcıya açıkça true veya false atanmışsa
-  // rol varsayılanından önce uygulanır.
-  // ====================================================
-
   if (
-    Object.prototype.hasOwnProperty.call(
-      overrides,
-      permission
-    )
+    Object.prototype
+      .hasOwnProperty
+      .call(
+        overrides,
+        permission
+      )
   ) {
     return (
       overrides[
@@ -308,10 +582,6 @@ export const hasPermission = (
       ] === true
     );
   }
-
-  // ====================================================
-  // ROLE DEFAULT
-  // ====================================================
 
   return (
     rolePermissions.includes(
@@ -342,7 +612,9 @@ export const hasAnyPermission = (
   }
 
   return permissions.some(
-    (permission) =>
+    (
+      permission
+    ) =>
       hasPermission(
         user,
         permission
@@ -369,7 +641,9 @@ export const hasAllPermissions = (
   }
 
   return permissions.every(
-    (permission) =>
+    (
+      permission
+    ) =>
       hasPermission(
         user,
         permission
@@ -379,15 +653,6 @@ export const hasAllPermissions = (
 
 // ======================================================
 // AUTHORIZE PERMISSION
-//
-// Varsayılan:
-// tüm verilen izinler gerekli.
-//
-// authorizePermission(
-//   'edit_cases',
-//   'manage_case_parties'
-// )
-//
 // ======================================================
 
 export const authorizePermission = (
@@ -402,7 +667,9 @@ export const authorizePermission = (
       return res
         .status(401)
         .json({
-          success: false,
+          success:
+            false,
+
           message:
             'Yetkilendirme için oturum gereklidir',
         });
@@ -425,7 +692,9 @@ export const authorizePermission = (
       return res
         .status(403)
         .json({
-          success: false,
+          success:
+            false,
+
           message:
             'Bu işlem için gerekli yetkiye sahip değilsiniz',
         });
@@ -437,14 +706,6 @@ export const authorizePermission = (
 
 // ======================================================
 // AUTHORIZE ANY PERMISSION
-//
-// En az bir izin yeterli.
-//
-// authorizeAnyPermission(
-//   'edit_documents',
-//   'delete_documents'
-// )
-//
 // ======================================================
 
 export const authorizeAnyPermission = (
@@ -459,7 +720,9 @@ export const authorizeAnyPermission = (
       return res
         .status(401)
         .json({
-          success: false,
+          success:
+            false,
+
           message:
             'Yetkilendirme için oturum gereklidir',
         });
@@ -482,7 +745,9 @@ export const authorizeAnyPermission = (
       return res
         .status(403)
         .json({
-          success: false,
+          success:
+            false,
+
           message:
             'Bu işlem için gerekli yetkiye sahip değilsiniz',
         });

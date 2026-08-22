@@ -1,6 +1,7 @@
 import {
   Op,
   QueryTypes,
+  Sequelize,
 } from 'sequelize';
 
 import {
@@ -31,6 +32,12 @@ import {
   paginate,
   getPaginationData,
 } from '../../utils/paginate.js';
+
+import {
+  ROLES,
+  PERMISSION_KEYS,
+  getEffectivePermissions,
+} from '../../constants/roles.js';
 
 // ======================================================
 // CONSTANTS
@@ -72,7 +79,448 @@ const CLIENT_TYPES =
   ]);
 
 // ======================================================
-// HELPERS
+// AUTHORIZATION HELPERS
+// ======================================================
+
+const getActorId = (
+  actor
+) => {
+  return (
+    actor?.id ||
+    null
+  );
+};
+
+const requireActor = (
+  actor
+) => {
+  const actorId =
+    getActorId(
+      actor
+    );
+
+  /*
+   * FAIL CLOSED
+   *
+   * Actor olmadan unrestricted client query
+   * çalıştırılmaz.
+   */
+  if (
+    !actorId
+  ) {
+    throw new Error(
+      'Client not found'
+    );
+  }
+
+  return actorId;
+};
+
+const getActorPermissions = (
+  actor
+) => {
+  if (
+    !actor
+  ) {
+    return [];
+  }
+
+  return getEffectivePermissions(
+    actor.role,
+    actor.permissions ||
+      {}
+  );
+};
+
+const isAdmin = (
+  actor
+) => {
+  return (
+    actor?.role ===
+    ROLES.ADMIN
+  );
+};
+
+const canViewAllCases = (
+  actor
+) => {
+  return (
+    isAdmin(
+      actor
+    ) ||
+    getActorPermissions(
+      actor
+    ).includes(
+      PERMISSION_KEYS.VIEW_ALL_CASES
+    )
+  );
+};
+
+// ======================================================
+// WHERE HELPERS
+// ======================================================
+
+const hasWhereContent = (
+  value
+) => {
+  return Boolean(
+    value &&
+    typeof value ===
+      'object' &&
+    Reflect.ownKeys(
+      value
+    ).length >
+      0
+  );
+};
+
+const combineWhere = (
+  ...conditions
+) => {
+  const validConditions =
+    conditions.filter(
+      hasWhereContent
+    );
+
+  if (
+    validConditions.length ===
+    0
+  ) {
+    return {};
+  }
+
+  if (
+    validConditions.length ===
+    1
+  ) {
+    return validConditions[0];
+  }
+
+  return {
+    [Op.and]:
+      validConditions,
+  };
+};
+
+// ======================================================
+// CASE ACCESS WHERE
+// ======================================================
+
+const buildCaseAccessWhere = (
+  actor
+) => {
+  const actorId =
+    requireActor(
+      actor
+    );
+
+  if (
+    canViewAllCases(
+      actor
+    )
+  ) {
+    return {};
+  }
+
+  return {
+    [Op.or]: [
+      {
+        created_by:
+          actorId,
+      },
+
+      {
+        assigned_to:
+          actorId,
+      },
+    ],
+  };
+};
+
+// ======================================================
+// CLIENT ACCESS WHERE
+// ======================================================
+
+const buildClientAccessWhere = (
+  actor
+) => {
+  const actorId =
+    requireActor(
+      actor
+    );
+
+  if (
+    isAdmin(
+      actor
+    )
+  ) {
+    return {};
+  }
+
+  /*
+   * Actor ID authentication'dan geliyor.
+   *
+   * Yine de SQL literal içine doğrudan yazmıyoruz;
+   * sequelize.escape kullanıyoruz.
+   */
+  const escapedActorId =
+    sequelize.escape(
+      actorId
+    );
+
+  /*
+   * VIEW_ALL_CASES sahibi:
+   *
+   * - herhangi bir aktif davaya bağlı client
+   * - kendi oluşturduğu bağımsız client
+   *
+   * Normal kullanıcı:
+   *
+   * - kendi oluşturduğu client
+   * - oluşturduğu/atandığı davaya bağlı client
+   */
+  const caseAccessPredicate =
+    canViewAllCases(
+      actor
+    )
+      ? `
+        EXISTS (
+          SELECT 1
+          FROM case_clients cc
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+          WHERE cc.client_id = "Client"."id"
+        )
+      `
+      : `
+        EXISTS (
+          SELECT 1
+          FROM case_clients cc
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+          WHERE cc.client_id = "Client"."id"
+            AND (
+              c.created_by = ${escapedActorId}
+              OR c.assigned_to = ${escapedActorId}
+            )
+        )
+      `;
+
+  return {
+    [Op.or]: [
+      {
+        created_by:
+          actorId,
+      },
+
+      Sequelize.where(
+        Sequelize.literal(
+          caseAccessPredicate
+        ),
+        true
+      ),
+    ],
+  };
+};
+
+// ======================================================
+// ASSERT CLIENT ACCESS
+// ======================================================
+
+const assertClientAccess =
+  async (
+    id,
+    actor,
+    options = {}
+  ) => {
+    const accessWhere =
+      buildClientAccessWhere(
+        actor
+      );
+
+    const client =
+      await Client.findOne({
+        where:
+          combineWhere(
+            {
+              id,
+            },
+
+            accessWhere
+          ),
+
+        transaction:
+          options.transaction,
+      });
+
+    /*
+     * Yetkisiz kayıt ile gerçekten olmayan kayıt
+     * arasında ayrım yapılmaz.
+     */
+    if (
+      !client
+    ) {
+      throw new Error(
+        'Client not found'
+      );
+    }
+
+    return client;
+  };
+
+// ======================================================
+// ACCESSIBLE CASE IDS FOR CLIENT
+// ======================================================
+
+const getAccessibleCaseIdsForClient =
+  async (
+    clientId,
+    actor
+  ) => {
+    const where =
+      buildCaseAccessWhere(
+        actor
+      );
+
+    const cases =
+      await Case.findAll({
+        where,
+
+        attributes: [
+          'id',
+        ],
+
+        include: [
+          {
+            model:
+              Client,
+
+            as:
+              'clients',
+
+            where: {
+              id:
+                clientId,
+            },
+
+            attributes:
+              [],
+
+            through: {
+              attributes:
+                [],
+            },
+
+            required:
+              true,
+          },
+        ],
+
+        raw:
+          true,
+      });
+
+    return cases.map(
+      (
+        caseItem
+      ) =>
+        caseItem.id
+    );
+  };
+
+// ======================================================
+// CLIENT CHILD RECORD SCOPE
+// ======================================================
+
+const buildClientChildWhere = ({
+  client,
+  actor,
+  accessibleCaseIds,
+}) => {
+  const actorId =
+    requireActor(
+      actor
+    );
+
+  /*
+   * Admin veya VIEW_ALL_CASES sahibi actor,
+   * erişebildiği client'ın tüm child kayıtlarını
+   * görebilir.
+   */
+  if (
+    canViewAllCases(
+      actor
+    )
+  ) {
+    return {
+      client_id:
+        client.id,
+    };
+  }
+
+  const scopes =
+    [];
+
+  /*
+   * Case-linked payment/note yalnız erişilebilir
+   * case'lere aitse görünür.
+   */
+  if (
+    accessibleCaseIds.length >
+    0
+  ) {
+    scopes.push({
+      case_id: {
+        [Op.in]:
+          accessibleCaseIds,
+      },
+    });
+  }
+
+  /*
+   * Case'e bağlı olmayan payment/note kayıtlarını
+   * yalnız client'ı oluşturan kişi görebilir.
+   */
+  if (
+    client.created_by ===
+    actorId
+  ) {
+    scopes.push({
+      case_id:
+        null,
+    });
+  }
+
+  if (
+    scopes.length ===
+    0
+  ) {
+    /*
+     * SQL seviyesinde hiçbir kayıt döndürmeyecek
+     * fail-closed condition.
+     */
+    return {
+      client_id:
+        client.id,
+
+      id:
+        null,
+    };
+  }
+
+  return {
+    client_id:
+      client.id,
+
+    [Op.or]:
+      scopes,
+  };
+};
+
+// ======================================================
+// NORMALIZATION HELPERS
 // ======================================================
 
 const normalizeSearch = (
@@ -96,7 +544,9 @@ const normalizeSearch = (
 const normalizeTags = (
   value
 ) => {
-  if (!value) {
+  if (
+    !value
+  ) {
     return [];
   }
 
@@ -113,12 +563,16 @@ const normalizeTags = (
     ...new Set(
       values
         .map(
-          (item) =>
+          (
+            item
+          ) =>
             String(
               item
             ).trim()
         )
-        .filter(Boolean)
+        .filter(
+          Boolean
+        )
     ),
   ];
 };
@@ -248,6 +702,10 @@ const normalizePagination = (
   };
 };
 
+// ======================================================
+// PREPARE CLIENT DATA
+// ======================================================
+
 const prepareClientData = (
   data = {}
 ) => {
@@ -263,14 +721,6 @@ const prepareClientData = (
   delete prepared.created_at;
   delete prepared.updated_at;
   delete prepared.deleted_at;
-
-  /*
-   * UPDATE sırasında created_by değiştirilmemeli.
-   * CREATE tarafında controller tarafından ekleniyor.
-   *
-   * Bu nedenle create/update ayrımı service metodunda
-   * ayrıca kontrol edilecek.
-   */
 
   // ====================================================
   // NAME
@@ -429,6 +879,10 @@ const prepareClientData = (
   return prepared;
 };
 
+// ======================================================
+// VALIDATION
+// ======================================================
+
 const validateClientData = (
   data,
   {
@@ -452,7 +906,9 @@ const validateClientData = (
           ''
       ).trim();
 
-    if (!name) {
+    if (
+      !name
+    ) {
       throw new Error(
         'Müvekkil adı gereklidir'
       );
@@ -556,12 +1012,6 @@ const validateClientData = (
       );
     }
 
-    /*
-     * UPDATE request'i client_type göndermeyebilir.
-     * Bu durumda model tarafındaki genel uzunluk
-     * kontrolünü bozmayalım.
-     */
-
     if (
       !clientType &&
       ![
@@ -599,6 +1049,10 @@ const validateClientData = (
   }
 };
 
+// ======================================================
+// UNIQUE ERROR
+// ======================================================
+
 const handleUniqueConstraint = (
   error
 ) => {
@@ -630,28 +1084,6 @@ const handleUniqueConstraint = (
   );
 };
 
-const assertClientExists = async (
-  id
-) => {
-  const client =
-    await Client.findByPk(
-      id,
-      {
-        attributes: [
-          'id',
-        ],
-      }
-    );
-
-  if (!client) {
-    throw new Error(
-      'Client not found'
-    );
-  }
-
-  return client;
-};
-
 // ======================================================
 // SERVICE
 // ======================================================
@@ -662,13 +1094,27 @@ export const clientService = {
   // ====================================================
 
   async create(
-    data
+    data,
+    actor
   ) {
     try {
+      const actorId =
+        requireActor(
+          actor
+        );
+
       const preparedData =
         prepareClientData(
           data
         );
+
+      /*
+       * Mass-assignment engeli.
+       *
+       * created_by body'den belirlenemez.
+       */
+      preparedData.created_by =
+        actorId;
 
       validateClientData(
         preparedData
@@ -677,7 +1123,9 @@ export const clientService = {
       return await Client.create(
         preparedData
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       handleUniqueConstraint(
         error
       );
@@ -686,13 +1134,6 @@ export const clientService = {
 
   // ====================================================
   // LIST
-  //
-  // Liste endpoint'i sadece ihtiyaç duyulan client
-  // alanlarını getirir.
-  //
-  // Case kayıtlarının tamamı JOIN edilmez.
-  // Sayfadaki client'ların dava sayıları junction
-  // table üzerinde GROUP BY ile hesaplanır.
   // ====================================================
 
   async findAll({
@@ -703,6 +1144,7 @@ export const clientService = {
     client_type,
     tags,
     city,
+    actor,
   }) {
     const {
       safePage,
@@ -713,7 +1155,7 @@ export const clientService = {
         limit
       );
 
-    const where = {};
+    const filters = {};
 
     // ==================================================
     // SEARCH
@@ -727,7 +1169,7 @@ export const clientService = {
     if (
       normalizedSearch
     ) {
-      where[Op.or] = [
+      filters[Op.or] = [
         {
           name: {
             [Op.iLike]:
@@ -768,7 +1210,7 @@ export const clientService = {
         status
       )
     ) {
-      where.status =
+      filters.status =
         status;
     }
 
@@ -782,7 +1224,7 @@ export const clientService = {
         client_type
       )
     ) {
-      where.client_type =
+      filters.client_type =
         client_type;
     }
 
@@ -798,7 +1240,7 @@ export const clientService = {
     if (
       normalizedCity
     ) {
-      where.city = {
+      filters.city = {
         [Op.iLike]:
           `%${normalizedCity}%`,
       };
@@ -817,11 +1259,23 @@ export const clientService = {
       normalizedTags.length >
       0
     ) {
-      where.tags = {
+      filters.tags = {
         [Op.overlap]:
           normalizedTags,
       };
     }
+
+    // ==================================================
+    // BOLA ACCESS SCOPE
+    // ==================================================
+
+    const where =
+      combineWhere(
+        filters,
+        buildClientAccessWhere(
+          actor
+        )
+      );
 
     // ==================================================
     // PAGINATED CLIENT QUERY
@@ -862,21 +1316,12 @@ export const clientService = {
           },
         ],
 
-        /*
-         * Burada belongsTo dışında çoğaltıcı JOIN yok.
-         * Bu yüzden DISTINCT kullanmıyoruz.
-         */
-
         order: [
           [
             'created_at',
             'DESC',
           ],
 
-          /*
-           * Aynı timestamp'e sahip kayıtların pagination
-           * sırası değişmesin diye deterministic tie-break.
-           */
           [
             'id',
             'DESC',
@@ -885,12 +1330,14 @@ export const clientService = {
       });
 
     // ==================================================
-    // CASE COUNTS
+    // ACCESSIBLE CASE COUNTS
     // ==================================================
 
     const clientIds =
       rows.map(
-        (client) =>
+        (
+          client
+        ) =>
           client.id
       );
 
@@ -901,27 +1348,55 @@ export const clientService = {
       clientIds.length >
       0
     ) {
-      /*
-       * Case modellerini hydrate etmiyoruz.
-       *
-       * Sadece case_clients junction table:
-       *
-       * client_id | case_count
-       */
+      const actorId =
+        requireActor(
+          actor
+        );
 
+      const hasAllCases =
+        canViewAllCases(
+          actor
+        );
+
+      /*
+       * Eskiden burada client'a bağlı TÜM davalar
+       * sayılıyordu.
+       *
+       * Artık normal kullanıcı yalnız erişebildiği
+       * davaların sayısını görür.
+       */
       const caseCounts =
         await sequelize.query(
           `
             SELECT
-              client_id,
+              cc.client_id,
               COUNT(*)::int AS case_count
-            FROM case_clients
-            WHERE client_id IN (:clientIds)
-            GROUP BY client_id
+
+            FROM case_clients cc
+
+            INNER JOIN cases c
+              ON c.id = cc.case_id
+             AND c.deleted_at IS NULL
+
+            WHERE cc.client_id IN (:clientIds)
+
+              ${
+                hasAllCases
+                  ? ''
+                  : `
+                    AND (
+                      c.created_by = :actorId
+                      OR c.assigned_to = :actorId
+                    )
+                  `
+              }
+
+            GROUP BY cc.client_id
           `,
           {
             replacements: {
               clientIds,
+              actorId,
             },
 
             type:
@@ -930,7 +1405,9 @@ export const clientService = {
         );
 
       caseCounts.forEach(
-        (row) => {
+        (
+          row
+        ) => {
           caseCountMap.set(
             row.client_id,
             Number(
@@ -947,7 +1424,9 @@ export const clientService = {
 
     const resultRows =
       rows.map(
-        (client) => {
+        (
+          client
+        ) => {
           const plain =
             client.toJSON();
 
@@ -977,44 +1456,76 @@ export const clientService = {
 
   // ====================================================
   // DETAIL
-  //
-  // Tek dev JOIN yerine client ana kaydı önce alınır.
-  // Case, payment ve note sorguları paralel çalıştırılır.
-  //
-  // Böylece cases × payments × notes şeklinde
-  // Cartesian satır çoğalması oluşmaz.
   // ====================================================
 
   async findOne(
-    id
+    id,
+    actor
   ) {
     const client =
-      await Client.findByPk(
-        id,
-        {
-          include: [
+      await Client.findOne({
+        where:
+          combineWhere(
             {
-              model:
-                User,
-
-              as:
-                'creator',
-
-              attributes:
-                USER_SUMMARY_ATTRIBUTES,
-
-              required:
-                false,
+              id,
             },
-          ],
-        }
-      );
 
-    if (!client) {
+            buildClientAccessWhere(
+              actor
+            )
+          ),
+
+        include: [
+          {
+            model:
+              User,
+
+            as:
+              'creator',
+
+            attributes:
+              USER_SUMMARY_ATTRIBUTES,
+
+            required:
+              false,
+          },
+        ],
+      });
+
+    if (
+      !client
+    ) {
       throw new Error(
         'Client not found'
       );
     }
+
+    const accessibleCaseIds =
+      await getAccessibleCaseIdsForClient(
+        id,
+        actor
+      );
+
+    const caseWhere =
+      accessibleCaseIds.length >
+      0
+        ? {
+            id: {
+              [Op.in]:
+                accessibleCaseIds,
+            },
+          }
+        : {
+            id:
+              null,
+          };
+
+    const childWhere =
+      buildClientChildWhere({
+        client,
+        actor,
+        accessibleCaseIds,
+      });
 
     const [
       cases,
@@ -1027,6 +1538,9 @@ export const clientService = {
         // ================================================
 
         Case.findAll({
+          where:
+            caseWhere,
+
           include: [
             {
               model:
@@ -1093,10 +1607,8 @@ export const clientService = {
         // ================================================
 
         Payment.findAll({
-          where: {
-            client_id:
-              id,
-          },
+          where:
+            childWhere,
 
           order: [
             [
@@ -1116,10 +1628,8 @@ export const clientService = {
         // ================================================
 
         Note.findAll({
-          where: {
-            client_id:
-              id,
-          },
+          where:
+            childWhere,
 
           include: [
             {
@@ -1178,19 +1688,15 @@ export const clientService = {
 
   async update(
     id,
-    data
+    data,
+    actor
   ) {
     try {
       const client =
-        await Client.findByPk(
-          id
+        await assertClientAccess(
+          id,
+          actor
         );
-
-      if (!client) {
-        throw new Error(
-          'Client not found'
-        );
-      }
 
       const preparedData =
         prepareClientData(
@@ -1201,15 +1707,6 @@ export const clientService = {
        * Server controlled.
        */
       delete preparedData.created_by;
-
-      /*
-       * Partial update olduğu için gönderilmeyen alanlar
-       * validation'a zorlanmaz.
-       *
-       * identification_number gönderilip client_type
-       * gönderilmediyse mevcut client_type validation
-       * için kullanılır.
-       */
 
       const validationData = {
         ...preparedData,
@@ -1231,27 +1728,17 @@ export const clientService = {
         preparedData
       );
 
-      return Client.findByPk(
+      /*
+       * Response da yeniden authorization üzerinden
+       * geçer.
+       */
+      return this.findOne(
         id,
-        {
-          include: [
-            {
-              model:
-                User,
-
-              as:
-                'creator',
-
-              attributes:
-                USER_SUMMARY_ATTRIBUTES,
-
-              required:
-                false,
-            },
-          ],
-        }
+        actor
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       handleUniqueConstraint(
         error
       );
@@ -1263,24 +1750,17 @@ export const clientService = {
   // ====================================================
 
   async remove(
-    id
+    id,
+    actor
   ) {
     const client =
-      await Client.findByPk(
-        id
+      await assertClientAccess(
+        id,
+        actor
       );
-
-    if (!client) {
-      throw new Error(
-        'Client not found'
-      );
-    }
 
     /*
-     * Client model paranoid:true olduğu için
-     * fiziksel DELETE gerçekleşmez.
-     *
-     * deleted_at doldurulur.
+     * paranoid:true
      */
     await client.destroy();
 
@@ -1291,7 +1771,19 @@ export const clientService = {
   // STATISTICS
   // ====================================================
 
-  async getStatistics() {
+  async getStatistics(
+    actor
+  ) {
+    const actorId =
+      requireActor(
+        actor
+      );
+
+    const accessWhere =
+      buildClientAccessWhere(
+        actor
+      );
+
     const [
       totalClients,
       activeClients,
@@ -1299,59 +1791,217 @@ export const clientService = {
       archivedClients,
       individualClients,
       corporateClients,
-      totalCases,
-      totalPayments,
     ] =
       await Promise.all([
-        Client.count(),
-
         Client.count({
-          where: {
-            status:
-              'active',
-          },
+          where:
+            accessWhere,
         }),
 
         Client.count({
-          where: {
-            status:
-              'passive',
-          },
+          where:
+            combineWhere(
+              accessWhere,
+              {
+                status:
+                  'active',
+              }
+            ),
         }),
 
         Client.count({
-          where: {
-            status:
-              'archived',
-          },
+          where:
+            combineWhere(
+              accessWhere,
+              {
+                status:
+                  'passive',
+              }
+            ),
         }),
 
         Client.count({
-          where: {
-            client_type:
-              'individual',
-          },
+          where:
+            combineWhere(
+              accessWhere,
+              {
+                status:
+                  'archived',
+              }
+            ),
         }),
 
         Client.count({
-          where: {
-            client_type:
-              'corporate',
-          },
+          where:
+            combineWhere(
+              accessWhere,
+              {
+                client_type:
+                  'individual',
+              }
+            ),
         }),
 
-        Case.count(),
-
-        Payment.sum(
-          'amount',
-          {
-            where: {
-              status:
-                'completed',
-            },
-          }
-        ),
+        Client.count({
+          where:
+            combineWhere(
+              accessWhere,
+              {
+                client_type:
+                  'corporate',
+              }
+            ),
+        }),
       ]);
+
+    // ==================================================
+    // ACCESSIBLE CASE IDS
+    // ==================================================
+
+    const accessibleCases =
+      await Case.findAll({
+        where:
+          buildCaseAccessWhere(
+            actor
+          ),
+
+        attributes: [
+          'id',
+        ],
+
+        raw:
+          true,
+      });
+
+    const accessibleCaseIds =
+      accessibleCases.map(
+        (
+          caseItem
+        ) =>
+          caseItem.id
+      );
+
+    const totalCases =
+      accessibleCaseIds.length;
+
+    // ==================================================
+    // ACCESSIBLE CLIENT IDS
+    // ==================================================
+
+    const accessibleClients =
+      await Client.findAll({
+        where:
+          accessWhere,
+
+        attributes: [
+          'id',
+          'created_by',
+        ],
+
+        raw:
+          true,
+      });
+
+    const accessibleClientIds =
+      accessibleClients.map(
+        (
+          client
+        ) =>
+          client.id
+      );
+
+    const ownClientIds =
+      accessibleClients
+        .filter(
+          (
+            client
+          ) =>
+            client.created_by ===
+            actorId
+        )
+        .map(
+          (
+            client
+          ) =>
+            client.id
+        );
+
+    let totalPayments =
+      0;
+
+    if (
+      accessibleClientIds.length >
+      0
+    ) {
+      const paymentScopes =
+        [];
+
+      if (
+        accessibleCaseIds.length >
+        0
+      ) {
+        paymentScopes.push({
+          case_id: {
+            [Op.in]:
+              accessibleCaseIds,
+          },
+        });
+      }
+
+      /*
+       * Case'siz payment yalnız actor'ın kendi
+       * oluşturduğu client için sayılır.
+       */
+      if (
+        ownClientIds.length >
+        0
+      ) {
+        paymentScopes.push({
+          [Op.and]: [
+            {
+              case_id:
+                null,
+            },
+
+            {
+              client_id: {
+                [Op.in]:
+                  ownClientIds,
+              },
+            },
+          ],
+        });
+      }
+
+      if (
+        paymentScopes.length >
+        0
+      ) {
+        const sum =
+          await Payment.sum(
+            'amount',
+            {
+              where: {
+                status:
+                  'completed',
+
+                client_id: {
+                  [Op.in]:
+                    accessibleClientIds,
+                },
+
+                [Op.or]:
+                  paymentScopes,
+              },
+            }
+          );
+
+        totalPayments =
+          Number(
+            sum
+          ) || 0;
+      }
+    }
 
     return {
       totalClients,
@@ -1368,10 +2018,7 @@ export const clientService = {
 
       totalCases,
 
-      totalPayments:
-        Number(
-          totalPayments
-        ) || 0,
+      totalPayments,
     };
   },
 
@@ -1380,13 +2027,23 @@ export const clientService = {
   // ====================================================
 
   async getCaseHistory(
-    clientId
+    clientId,
+    actor
   ) {
-    await assertClientExists(
-      clientId
+    await assertClientAccess(
+      clientId,
+      actor
     );
 
+    const accessWhere =
+      buildCaseAccessWhere(
+        actor
+      );
+
     return Case.findAll({
+      where:
+        accessWhere,
+
       include: [
         {
           model:
@@ -1455,17 +2112,28 @@ export const clientService = {
   // ====================================================
 
   async getPayments(
-    clientId
+    clientId,
+    actor
   ) {
-    await assertClientExists(
-      clientId
-    );
+    const client =
+      await assertClientAccess(
+        clientId,
+        actor
+      );
+
+    const accessibleCaseIds =
+      await getAccessibleCaseIdsForClient(
+        clientId,
+        actor
+      );
 
     return Payment.findAll({
-      where: {
-        client_id:
-          clientId,
-      },
+      where:
+        buildClientChildWhere({
+          client,
+          actor,
+          accessibleCaseIds,
+        }),
 
       order: [
         [
@@ -1486,17 +2154,28 @@ export const clientService = {
   // ====================================================
 
   async getNotes(
-    clientId
+    clientId,
+    actor
   ) {
-    await assertClientExists(
-      clientId
-    );
+    const client =
+      await assertClientAccess(
+        clientId,
+        actor
+      );
+
+    const accessibleCaseIds =
+      await getAccessibleCaseIdsForClient(
+        clientId,
+        actor
+      );
 
     return Note.findAll({
-      where: {
-        client_id:
-          clientId,
-      },
+      where:
+        buildClientChildWhere({
+          client,
+          actor,
+          accessibleCaseIds,
+        }),
 
       include: [
         {

@@ -42,9 +42,11 @@ import {
 import {
   reminderService,
 } from '../reminders/reminder.service.js';
+
 import {
   googleCalendarSyncService,
 } from '../calendar-integration/google-calendar-sync.service.js';
+
 // ======================================================
 // CONSTANTS
 // ======================================================
@@ -102,6 +104,11 @@ const CLIENT_ATTRIBUTES = [
   'status',
 ];
 
+/*
+ * created_by / assigned_to yalnız case-level görünürlüğü
+ * hesaplamak için include edilir; response dönmeden önce
+ * sanitizeEventForAccess() tarafından kaldırılır.
+ */
 const CASE_INCLUDE = {
   model: Case,
   as: 'case',
@@ -114,6 +121,8 @@ const CASE_INCLUDE = {
     'status',
     'judiciary_type',
     'judiciary_unit',
+    'created_by',
+    'assigned_to',
   ],
 
   required: false,
@@ -122,15 +131,8 @@ const CASE_INCLUDE = {
     {
       model: Client,
       as: 'clients',
-
-      attributes: [
-        'id',
-        'name',
-        'client_type',
-        'phone',
-        'email',
-        'status',
-      ],
+      attributes:
+        CLIENT_ATTRIBUTES,
 
       through: {
         attributes: [],
@@ -177,7 +179,7 @@ const ASSIGNEE_INCLUDE = {
 };
 
 // ======================================================
-// HELPERS
+// GENERIC HELPERS
 // ======================================================
 
 const shouldHaveReminders = (
@@ -262,10 +264,6 @@ const notifySafely = async (
   try {
     await callback();
   } catch (error) {
-    /*
-     * Bildirim hatası event CRUD işlemini
-     * bozmaz.
-     */
     logger.error(
       `Event notification failed: ${operation}`,
       {
@@ -399,81 +397,6 @@ const validateEnums = (
 };
 
 // ======================================================
-// RELATION VALIDATION
-// ======================================================
-
-const validateRelations = async (
-  data,
-  transaction
-) => {
-  let caseItem =
-    null;
-
-  let assignedUser =
-    null;
-
-  if (
-    data.case_id
-  ) {
-    caseItem =
-      await Case.findByPk(
-        data.case_id,
-        {
-          transaction,
-
-          attributes: [
-            'id',
-            'title',
-            'case_number',
-            'status',
-          ],
-        }
-      );
-
-    if (
-      !caseItem
-    ) {
-      throw new Error(
-        'İlişkili dava bulunamadı'
-      );
-    }
-  }
-
-  if (
-    data.assigned_to
-  ) {
-    assignedUser =
-      await User.findByPk(
-        data.assigned_to,
-        {
-          transaction,
-
-          attributes: [
-            'id',
-            'first_name',
-            'last_name',
-            'email',
-            'role',
-          ],
-        }
-      );
-
-    if (
-      !assignedUser
-    ) {
-      throw new Error(
-        'Atanan kullanıcı bulunamadı'
-      );
-    }
-  }
-
-  return {
-    caseItem,
-    assignedUser,
-  };
-};
-
-// ======================================================
 // INPUT NORMALIZATION
 // ======================================================
 
@@ -514,10 +437,6 @@ const normalizeEventData = (
     }
   );
 
-  /*
-   * hearing olmayan eventlerde hearing_type
-   * taşımaya gerek yok.
-   */
   if (
     normalized.event_type &&
     normalized.event_type !==
@@ -564,11 +483,262 @@ const normalizeEventData = (
 };
 
 // ======================================================
-// CASE VISIBILITY
-//
-// case_id varsa fakat Case paranoid nedeniyle include
-// içinde null geldiyse bağlı dava soft-delete edilmiştir.
-// Böyle bir event kullanıcıya gösterilmemelidir.
+// RECORD-LEVEL ACCESS
+// ======================================================
+
+const requireEventUserId = (
+  access = {}
+) => {
+  const userId =
+    access?.userId ||
+    null;
+
+  if (!userId) {
+    throw new Error(
+      'Event not found'
+    );
+  }
+
+  return userId;
+};
+
+const buildEventAccessWhere = ({
+  userId,
+  canViewAllEvents = false,
+} = {}) => {
+  if (
+    canViewAllEvents
+  ) {
+    return null;
+  }
+
+  if (!userId) {
+    return {
+      id: null,
+    };
+  }
+
+  return {
+    [Op.or]: [
+      {
+        created_by:
+          userId,
+      },
+
+      {
+        assigned_to:
+          userId,
+      },
+    ],
+  };
+};
+
+const applyEventAccessScope = (
+  where = {},
+  access = {}
+) => {
+  const accessWhere =
+    buildEventAccessWhere(
+      access
+    );
+
+  if (!accessWhere) {
+    return where;
+  }
+
+  if (
+    Object.keys(
+      where
+    ).length === 0 &&
+    Object.getOwnPropertySymbols(
+      where
+    ).length === 0
+  ) {
+    return accessWhere;
+  }
+
+  return {
+    [Op.and]: [
+      where,
+      accessWhere,
+    ],
+  };
+};
+
+const canAccessCaseInstance = (
+  caseItem,
+  access = {}
+) => {
+  if (!caseItem) {
+    return false;
+  }
+
+  if (
+    access?.canViewAllCases
+  ) {
+    return true;
+  }
+
+  const userId =
+    access?.userId;
+
+  if (!userId) {
+    return false;
+  }
+
+  return (
+    caseItem.created_by ===
+      userId ||
+    caseItem.assigned_to ===
+      userId
+  );
+};
+
+const assertCaseAccessForEvent =
+  async (
+    caseId,
+    access = {},
+    {
+      transaction = null,
+    } = {}
+  ) => {
+    if (!caseId) {
+      return null;
+    }
+
+    const userId =
+      requireEventUserId(
+        access
+      );
+
+    const where = {
+      id:
+        caseId,
+    };
+
+    if (
+      !access?.canViewAllCases
+    ) {
+      where[Op.or] = [
+        {
+          created_by:
+            userId,
+        },
+
+        {
+          assigned_to:
+            userId,
+        },
+      ];
+    }
+
+    const caseItem =
+      await Case.findOne({
+        where,
+
+        attributes: [
+          'id',
+          'title',
+          'case_number',
+          'status',
+          'created_by',
+          'assigned_to',
+        ],
+
+        transaction,
+      });
+
+    if (!caseItem) {
+      throw new Error(
+        'Event not found'
+      );
+    }
+
+    return caseItem;
+  };
+
+const validateAssignedUser =
+  async (
+    userId,
+    transaction
+  ) => {
+    if (!userId) {
+      return null;
+    }
+
+    const assignedUser =
+      await User.findOne({
+        where: {
+          id:
+            userId,
+
+          is_active:
+            true,
+        },
+
+        transaction,
+
+        attributes: [
+          'id',
+          'first_name',
+          'last_name',
+          'email',
+          'role',
+        ],
+      });
+
+    if (!assignedUser) {
+      throw new Error(
+        'Atanan kullanıcı bulunamadı'
+      );
+    }
+
+    return assignedUser;
+  };
+
+const validateRelations =
+  async (
+    data,
+    access = {},
+    transaction = null
+  ) => {
+    let caseItem =
+      null;
+
+    let assignedUser =
+      null;
+
+    if (
+      data.case_id
+    ) {
+      caseItem =
+        await assertCaseAccessForEvent(
+          data.case_id,
+          access,
+          {
+            transaction,
+          }
+        );
+    }
+
+    if (
+      data.assigned_to
+    ) {
+      assignedUser =
+        await validateAssignedUser(
+          data.assigned_to,
+          transaction
+        );
+    }
+
+    return {
+      caseItem,
+      assignedUser,
+    };
+  };
+
+// ======================================================
+// CASE VISIBILITY / RESPONSE SANITIZATION
 // ======================================================
 
 const assertCaseStillAvailable = (
@@ -579,10 +749,79 @@ const assertCaseStillAvailable = (
     !event?.case
   ) {
     throw new Error(
-      'Bu duruşmanın bağlı olduğu dava kaldırılmış'
+      'Event not found'
     );
   }
 };
+
+const sanitizeEventForAccess = (
+  event,
+  access = {}
+) => {
+  if (!event?.case) {
+    return event;
+  }
+
+  const caseItem =
+    event.case;
+
+  const canSeeCaseDetails =
+    canAccessCaseInstance(
+      caseItem,
+      access
+    );
+
+  /*
+   * Event creator/assignee event kaydını görebilir;
+   * fakat bağlı Case'e yetkisi yoksa müvekkil iletişim
+   * bilgileri event response üzerinden sızmamalıdır.
+   */
+  if (
+    !canSeeCaseDetails
+  ) {
+    caseItem.setDataValue?.(
+      'clients',
+      []
+    );
+
+    if (
+      caseItem.dataValues
+    ) {
+      caseItem.dataValues.clients =
+        [];
+    }
+  }
+
+  if (
+    caseItem.dataValues
+  ) {
+    delete caseItem
+      .dataValues
+      .created_by;
+
+    delete caseItem
+      .dataValues
+      .assigned_to;
+  }
+
+  return event;
+};
+
+const sanitizeEventsForAccess = (
+  events,
+  access = {}
+) => {
+  return events.map(
+    (
+      event
+    ) =>
+      sanitizeEventForAccess(
+        event,
+        access
+      )
+  );
+};
+
 // ======================================================
 // GOOGLE CALENDAR HELPERS
 // ======================================================
@@ -801,12 +1040,6 @@ const syncEventToGoogleForUsersSafely =
       return;
     }
 
-    /*
-     * cancelled event Google'dan kaldırılır.
-     *
-     * completed event geçmiş kayıt olarak
-     * Google Takvim'de kalır.
-     */
     if (
       event.status ===
         'cancelled' ||
@@ -832,22 +1065,47 @@ const syncEventToGoogleForUsersSafely =
       )
     );
   };
+
 // ======================================================
 // SERVICE
 // ======================================================
 
 export const eventService = {
+
   // ====================================================
   // CREATE
   // ====================================================
 
-    async create(
-    data
+  async create(
+    data,
+    access = {}
   ) {
+    const userId =
+      requireEventUserId(
+        access
+      );
+
+    const {
+      id,
+      created_by,
+      created_at,
+      updated_at,
+      deleted_at,
+      reminder_sent,
+      status,
+      ...inputData
+    } = data || {};
+
     const normalizedData =
       normalizeEventData(
-        data
+        inputData
       );
+
+    normalizedData.created_by =
+      userId;
+
+    normalizedData.status =
+      'scheduled';
 
     validateEnums(
       normalizedData
@@ -861,14 +1119,6 @@ export const eventService = {
         normalizedData.end_date,
     });
 
-    if (
-      !normalizedData.created_by
-    ) {
-      throw new Error(
-        'Kaydı oluşturan kullanıcı bulunamadı'
-      );
-    }
-
     const transaction =
       await sequelize.transaction();
 
@@ -877,6 +1127,7 @@ export const eventService = {
     try {
       await validateRelations(
         normalizedData,
+        access,
         transaction
       );
 
@@ -909,10 +1160,6 @@ export const eventService = {
       throw error;
     }
 
-    /*
-     * Oluşturma bildirimi ile tarih yaklaşma
-     * reminder'ı farklı kavramlardır.
-     */
     if (
       event.event_type ===
         'hearing' &&
@@ -941,10 +1188,6 @@ export const eventService = {
       );
     }
 
-    // ==================================================
-    // GOOGLE CALENDAR AUTO SYNC
-    // ==================================================
-
     await syncEventToGoogleForUsersSafely(
       event,
       getEventCalendarUserIds(
@@ -953,7 +1196,8 @@ export const eventService = {
     );
 
     return this.findOne(
-      event.id
+      event.id,
+      access
     );
   },
 
@@ -970,13 +1214,26 @@ export const eventService = {
     assigned_to,
     start_date,
     end_date,
+    userId,
+    canViewAllEvents = false,
+    canViewAllCases = false,
   }) {
-    const where = {};
+    const access = {
+      userId,
+      canViewAllEvents,
+      canViewAllCases,
+    };
+
+    requireEventUserId(
+      access
+    );
+
+    const filters = {};
 
     if (
       case_id
     ) {
-      where.case_id =
+      filters.case_id =
         case_id;
     }
 
@@ -993,7 +1250,7 @@ export const eventService = {
         );
       }
 
-      where.status =
+      filters.status =
         status;
     }
 
@@ -1010,14 +1267,24 @@ export const eventService = {
         );
       }
 
-      where.event_type =
+      filters.event_type =
         event_type;
     }
 
     if (
       assigned_to
     ) {
-      where.assigned_to =
+      if (
+        !canViewAllEvents &&
+        assigned_to !==
+          userId
+      ) {
+        throw new Error(
+          'Event not found'
+        );
+      }
+
+      filters.assigned_to =
         assigned_to;
     }
 
@@ -1025,7 +1292,7 @@ export const eventService = {
       start_date ||
       end_date
     ) {
-      where.start_date =
+      filters.start_date =
         {};
 
       if (
@@ -1046,7 +1313,7 @@ export const eventService = {
           );
         }
 
-        where.start_date[
+        filters.start_date[
           Op.gte
         ] =
           startDate;
@@ -1070,12 +1337,18 @@ export const eventService = {
           );
         }
 
-        where.start_date[
+        filters.start_date[
           Op.lte
         ] =
           endDate;
       }
     }
+
+    const where =
+      applyEventAccessScope(
+        filters,
+        access
+      );
 
     const {
       pageNumber,
@@ -1124,13 +1397,6 @@ export const eventService = {
         ],
       });
 
-    /*
-     * Soft-delete olmuş davaya bağlı Event'leri
-     * güvenlik amacıyla sonuçtan çıkarıyoruz.
-     *
-     * Standalone Event'ler case_id null olduğu için
-     * korunur.
-     */
     const visibleRows =
       rows.filter(
         (
@@ -1144,7 +1410,10 @@ export const eventService = {
 
     return {
       data:
-        visibleRows,
+        sanitizeEventsForAccess(
+          visibleRows,
+          access
+        ),
 
       pagination:
         getPaginationData(
@@ -1160,8 +1429,23 @@ export const eventService = {
   // ====================================================
 
   async getMyEvents(
-    userId
+    userId,
+    access = {}
   ) {
+    const actorId =
+      requireEventUserId(
+        access
+      );
+
+    if (
+      actorId !==
+      userId
+    ) {
+      throw new Error(
+        'Event not found'
+      );
+    }
+
     const events =
       await Event.findAll({
         where: {
@@ -1191,14 +1475,20 @@ export const eventService = {
         ],
       });
 
-    return events.filter(
-      (
-        event
-      ) =>
-        !event.case_id ||
-        Boolean(
-          event.case
-        )
+    const visibleEvents =
+      events.filter(
+        (
+          event
+        ) =>
+          !event.case_id ||
+          Boolean(
+            event.case
+          )
+      );
+
+    return sanitizeEventsForAccess(
+      visibleEvents,
+      access
     );
   },
 
@@ -1207,44 +1497,39 @@ export const eventService = {
   // ====================================================
 
   async getByCase(
-    caseId
+    caseId,
+    access = {}
   ) {
-    const caseItem =
-      await Case.findByPk(
-        caseId,
-        {
-          attributes: [
-            'id',
-          ],
-        }
-      );
+    await assertCaseAccessForEvent(
+      caseId,
+      access
+    );
 
-    if (
-      !caseItem
-    ) {
-      throw new Error(
-        'Dava bulunamadı'
-      );
-    }
+    const events =
+      await Event.findAll({
+        where: {
+          case_id:
+            caseId,
+        },
 
-    return Event.findAll({
-      where: {
-        case_id:
-          caseId,
-      },
-
-      include: [
-        ASSIGNEE_INCLUDE,
-        CREATOR_INCLUDE,
-      ],
-
-      order: [
-        [
-          'start_date',
-          'ASC',
+        include: [
+          CASE_INCLUDE,
+          ASSIGNEE_INCLUDE,
+          CREATOR_INCLUDE,
         ],
-      ],
-    });
+
+        order: [
+          [
+            'start_date',
+            'ASC',
+          ],
+        ],
+      });
+
+    return sanitizeEventsForAccess(
+      events,
+      access
+    );
   },
 
   // ====================================================
@@ -1252,25 +1537,33 @@ export const eventService = {
   // ====================================================
 
   async findOne(
-    id
+    id,
+    access = {}
   ) {
-    const event =
-      await Event.findByPk(
-        id,
-        {
-          include: [
-            CASE_INCLUDE,
-            CREATOR_INCLUDE,
-            ASSIGNEE_INCLUDE,
-          ],
-        }
-      );
+    requireEventUserId(
+      access
+    );
 
-    if (
-      !event
-    ) {
+    const event =
+      await Event.findOne({
+        where:
+          applyEventAccessScope(
+            {
+              id,
+            },
+            access
+          ),
+
+        include: [
+          CASE_INCLUDE,
+          CREATOR_INCLUDE,
+          ASSIGNEE_INCLUDE,
+        ],
+      });
+
+    if (!event) {
       throw new Error(
-        'Duruşma / etkinlik bulunamadı'
+        'Event not found'
       );
     }
 
@@ -1278,17 +1571,25 @@ export const eventService = {
       event
     );
 
-    return event;
+    return sanitizeEventForAccess(
+      event,
+      access
+    );
   },
 
   // ====================================================
   // UPDATE
   // ====================================================
 
-    async update(
+  async update(
     id,
-    data
+    data,
+    access = {}
   ) {
+    requireEventUserId(
+      access
+    );
+
     const transaction =
       await sequelize.transaction();
 
@@ -1305,37 +1606,32 @@ export const eventService = {
 
     try {
       event =
-        await Event.findByPk(
-          id,
-          {
-            transaction,
+        await Event.findOne({
+          where:
+            applyEventAccessScope(
+              {
+                id,
+              },
+              access
+            ),
 
-            lock:
-              transaction.LOCK.UPDATE,
-          }
-        );
+          transaction,
 
-      if (
-        !event
-      ) {
+          lock:
+            transaction.LOCK.UPDATE,
+        });
+
+      if (!event) {
         throw new Error(
-          'Duruşma / etkinlik bulunamadı'
+          'Event not found'
         );
       }
-
-      // ==================================================
-      // GOOGLE USERS BEFORE UPDATE
-      // ==================================================
 
       previousCalendarUserIds =
         getEventCalendarUserIds(
           event
         );
 
-      /*
-       * Sistem alanlarının body üzerinden
-       * değiştirilmesini engelliyoruz.
-       */
       const updateData =
         normalizeEventData({
           ...data,
@@ -1347,6 +1643,11 @@ export const eventService = {
       delete updateData.updated_at;
       delete updateData.deleted_at;
       delete updateData.reminder_sent;
+
+      /*
+       * Global status ayrı endpoint üzerinden yönetilir.
+       */
+      delete updateData.status;
 
       validateEnums(
         updateData
@@ -1364,20 +1665,27 @@ export const eventService = {
             : event.end_date,
       });
 
+      const effectiveCaseId =
+        updateData.case_id !==
+        undefined
+          ? updateData.case_id
+          : event.case_id;
+
+      const effectiveAssignedTo =
+        updateData.assigned_to !==
+        undefined
+          ? updateData.assigned_to
+          : event.assigned_to;
+
       await validateRelations(
         {
           case_id:
-            updateData.case_id !==
-            undefined
-              ? updateData.case_id
-              : event.case_id,
+            effectiveCaseId,
 
           assigned_to:
-            updateData.assigned_to !==
-            undefined
-              ? updateData.assigned_to
-              : event.assigned_to,
+            effectiveAssignedTo,
         },
+        access,
         transaction
       );
 
@@ -1528,10 +1836,6 @@ export const eventService = {
       throw error;
     }
 
-    // ==================================================
-    // HEARING NOTIFICATION
-    // ==================================================
-
     if (
       shouldNotifyAssignee
     ) {
@@ -1560,10 +1864,6 @@ export const eventService = {
       );
     }
 
-    // ==================================================
-    // GOOGLE CALENDAR OLD USER CLEANUP
-    // ==================================================
-
     const removedCalendarUserIds =
       previousCalendarUserIds.filter(
         (
@@ -1579,17 +1879,14 @@ export const eventService = {
       removedCalendarUserIds
     );
 
-    // ==================================================
-    // GOOGLE CALENDAR AUTO UPDATE
-    // ==================================================
-
     await syncEventToGoogleForUsersSafely(
       event,
       currentCalendarUserIds
     );
 
     return this.findOne(
-      id
+      id,
+      access
     );
   },
 
@@ -1597,10 +1894,15 @@ export const eventService = {
   // STATUS
   // ====================================================
 
-    async updateStatus(
+  async updateStatus(
     id,
-    status
+    status,
+    access = {}
   ) {
+    requireEventUserId(
+      access
+    );
+
     if (
       !EVENT_STATUSES.has(
         status
@@ -1620,21 +1922,24 @@ export const eventService = {
 
     try {
       event =
-        await Event.findByPk(
-          id,
-          {
-            transaction,
+        await Event.findOne({
+          where:
+            applyEventAccessScope(
+              {
+                id,
+              },
+              access
+            ),
 
-            lock:
-              transaction.LOCK.UPDATE,
-          }
-        );
+          transaction,
 
-      if (
-        !event
-      ) {
+          lock:
+            transaction.LOCK.UPDATE,
+        });
+
+      if (!event) {
         throw new Error(
-          'Duruşma / etkinlik bulunamadı'
+          'Event not found'
         );
       }
 
@@ -1674,6 +1979,17 @@ export const eventService = {
               transaction,
             }
           );
+      } else {
+        await reminderService
+          .cancelForSource({
+            sourceType:
+              'event',
+
+            sourceId:
+              event.id,
+
+            transaction,
+          });
       }
 
       calendarUserIds =
@@ -1688,17 +2004,14 @@ export const eventService = {
       throw error;
     }
 
-    // ==================================================
-    // GOOGLE CALENDAR STATUS SYNC
-    // ==================================================
-
     await syncEventToGoogleForUsersSafely(
       event,
       calendarUserIds
     );
 
     return this.findOne(
-      id
+      id,
+      access
     );
   },
 
@@ -1706,9 +2019,14 @@ export const eventService = {
   // REMOVE
   // ====================================================
 
-    async remove(
-    id
+  async remove(
+    id,
+    access = {}
   ) {
+    requireEventUserId(
+      access
+    );
+
     const transaction =
       await sequelize.transaction();
 
@@ -1718,28 +2036,27 @@ export const eventService = {
 
     try {
       event =
-        await Event.findByPk(
-          id,
-          {
-            transaction,
+        await Event.findOne({
+          where:
+            applyEventAccessScope(
+              {
+                id,
+              },
+              access
+            ),
 
-            lock:
-              transaction.LOCK.UPDATE,
-          }
-        );
+          transaction,
 
-      if (
-        !event
-      ) {
+          lock:
+            transaction.LOCK.UPDATE,
+        });
+
+      if (!event) {
         throw new Error(
-          'Duruşma / etkinlik bulunamadı'
+          'Event not found'
         );
       }
 
-      /*
-       * Destroy'dan önce Google kullanıcılarını
-       * saklıyoruz.
-       */
       calendarUserIds =
         getEventCalendarUserIds(
           event
@@ -1767,10 +2084,6 @@ export const eventService = {
       throw error;
     }
 
-    // ==================================================
-    // GOOGLE CALENDAR DELETE
-    // ==================================================
-
     await deleteEventFromGoogleForUsersSafely(
       event.id,
       calendarUserIds
@@ -1788,8 +2101,23 @@ export const eventService = {
     {
       year,
       month,
-    }
+    },
+    access = {}
   ) {
+    const actorId =
+      requireEventUserId(
+        access
+      );
+
+    if (
+      actorId !==
+      userId
+    ) {
+      throw new Error(
+        'Event not found'
+      );
+    }
+
     const parsedYear =
       Number.parseInt(
         year,
@@ -1858,126 +2186,125 @@ export const eventService = {
       );
 
     const [
-  events,
-  tasks,
-] =
-  await Promise.all([
-    Event.findAll({
-      where: {
-        [Op.or]: [
-          {
-            created_by:
-              userId,
-          },
+      events,
+      tasks,
+    ] =
+      await Promise.all([
+        Event.findAll({
+          where: {
+            [Op.or]: [
+              {
+                created_by:
+                  userId,
+              },
 
-          {
-            assigned_to:
-              userId,
-          },
-        ],
+              {
+                assigned_to:
+                  userId,
+              },
+            ],
 
-        start_date: {
-          [Op.gte]:
-            rangeStart,
+            start_date: {
+              [Op.gte]:
+                rangeStart,
 
-          [Op.lt]:
-            rangeEnd,
-        },
-      },
-
-      include: [
-        CASE_INCLUDE,
-      ],
-
-      order: [
-        [
-          'start_date',
-          'ASC',
-        ],
-      ],
-    }),
-
-    Task.findAll({
-      where: {
-        // ==================================================
-        // CREATOR OR ASSIGNEE
-        // ==================================================
-
-        [Op.or]: [
-          {
-            created_by:
-              userId,
-          },
-
-          {
-            id: {
-              [Op.in]:
-                sequelize.literal(
-                  `(
-                    SELECT "task_id"
-                    FROM "task_assignees"
-                    WHERE "user_id" = ${sequelize.escape(
-                      userId
-                    )}
-                  )`
-                ),
+              [Op.lt]:
+                rangeEnd,
             },
           },
-        ],
 
-        due_date: {
-          [Op.gte]:
-            rangeStart,
-
-          [Op.lt]:
-            rangeEnd,
-        },
-
-        status: {
-          [Op.notIn]: [
-            'completed',
-            'cancelled',
-          ],
-        },
-      },
-
-      include: [
-        {
-          model:
-            Case,
-
-          as:
-            'case',
-
-          attributes: [
-            'id',
-            'title',
-            'case_number',
+          include: [
+            CASE_INCLUDE,
           ],
 
-          required:
-            false,
-        },
-      ],
+          order: [
+            [
+              'start_date',
+              'ASC',
+            ],
+          ],
+        }),
 
-      order: [
-        [
-          'due_date',
-          'ASC',
-        ],
-      ],
-    }),
-  ]);
+        Task.findAll({
+          where: {
+            [Op.or]: [
+              {
+                created_by:
+                  userId,
+              },
+
+              {
+                id: {
+                  [Op.in]:
+                    sequelize.literal(
+                      `(
+                        SELECT "task_id"
+                        FROM "task_assignees"
+                        WHERE "user_id" = ${sequelize.escape(
+                          userId
+                        )}
+                      )`
+                    ),
+                },
+              },
+            ],
+
+            due_date: {
+              [Op.gte]:
+                rangeStart,
+
+              [Op.lt]:
+                rangeEnd,
+            },
+
+            status: {
+              [Op.notIn]: [
+                'completed',
+                'cancelled',
+              ],
+            },
+          },
+
+          include: [
+            {
+              model:
+                Case,
+
+              as:
+                'case',
+
+              attributes: [
+                'id',
+                'title',
+                'case_number',
+              ],
+
+              required:
+                false,
+            },
+          ],
+
+          order: [
+            [
+              'due_date',
+              'ASC',
+            ],
+          ],
+        }),
+      ]);
 
     const visibleEvents =
-      events.filter(
-        (
-          event
-        ) =>
-          !event.case_id ||
-          Boolean(
-            event.case
-          )
+      sanitizeEventsForAccess(
+        events.filter(
+          (
+            event
+          ) =>
+            !event.case_id ||
+            Boolean(
+              event.case
+            )
+        ),
+        access
       );
 
     const visibleTasks =

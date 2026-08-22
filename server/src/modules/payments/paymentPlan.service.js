@@ -1,5 +1,6 @@
 import {
   Op,
+  QueryTypes,
 } from 'sequelize';
 
 import {
@@ -29,6 +30,12 @@ import {
 import {
   User,
 } from '../../models/User.js';
+
+import {
+  ROLES,
+  PERMISSION_KEYS,
+  getEffectivePermissions,
+} from '../../constants/roles.js';
 
 // ======================================================
 // CONSTANTS
@@ -61,9 +68,6 @@ const SUPPORTED_CURRENCIES =
 
 // ======================================================
 // MONEY HELPERS
-//
-// Finans hesaplarında float hassasiyet sorununu azaltmak
-// için kuruş bazında integer hesaplıyoruz.
 // ======================================================
 
 const toCents = (
@@ -144,7 +148,9 @@ const normalizeNullableString = (
 const parseDateOnly = (
   value
 ) => {
-  if (!value) {
+  if (
+    !value
+  ) {
     return null;
   }
 
@@ -196,10 +202,6 @@ const parseDateOnly = (
     );
   }
 
-  /*
-   * 2026-02-31 gibi JS tarafından başka aya taşınan
-   * geçersiz tarihleri de yakalıyoruz.
-   */
   if (
     date.getUTCFullYear() !==
       year ||
@@ -324,6 +326,770 @@ const normalizePagination = (
 };
 
 // ======================================================
+// AUTHORIZATION HELPERS
+// ======================================================
+
+const getActorId = (
+  actor
+) => {
+  return (
+    actor?.id ||
+    null
+  );
+};
+
+const requireActor = (
+  actor
+) => {
+  const actorId =
+    getActorId(
+      actor
+    );
+
+  /*
+   * FAIL CLOSED
+   *
+   * Actor gelmeden unrestricted finance query
+   * çalıştırılmaz.
+   */
+  if (
+    !actorId
+  ) {
+    throw new Error(
+      'Ödeme planı bulunamadı'
+    );
+  }
+
+  return actorId;
+};
+
+const getActorPermissions = (
+  actor
+) => {
+  if (
+    !actor
+  ) {
+    return [];
+  }
+
+  return getEffectivePermissions(
+    actor.role,
+    actor.permissions ||
+      {}
+  );
+};
+
+const isAdmin = (
+  actor
+) => {
+  return (
+    actor?.role ===
+    ROLES.ADMIN
+  );
+};
+
+const canViewAllCases = (
+  actor
+) => {
+  return (
+    isAdmin(
+      actor
+    ) ||
+    getActorPermissions(
+      actor
+    ).includes(
+      PERMISSION_KEYS.VIEW_ALL_CASES
+    )
+  );
+};
+
+// ======================================================
+// WHERE HELPERS
+// ======================================================
+
+const hasWhereContent = (
+  value
+) => {
+  return Boolean(
+    value &&
+    typeof value ===
+      'object' &&
+    Reflect.ownKeys(
+      value
+    ).length >
+      0
+  );
+};
+
+const combineWhere = (
+  ...conditions
+) => {
+  const validConditions =
+    conditions.filter(
+      hasWhereContent
+    );
+
+  if (
+    validConditions.length ===
+    0
+  ) {
+    return {};
+  }
+
+  if (
+    validConditions.length ===
+    1
+  ) {
+    return validConditions[0];
+  }
+
+  return {
+    [Op.and]:
+      validConditions,
+  };
+};
+
+// ======================================================
+// CASE ACCESS
+// ======================================================
+
+const assertCaseAccess =
+  async (
+    caseId,
+    actor,
+    options = {}
+  ) => {
+    if (
+      !caseId
+    ) {
+      return null;
+    }
+
+    const actorId =
+      requireActor(
+        actor
+      );
+
+    const where = {
+      id:
+        caseId,
+    };
+
+    if (
+      !canViewAllCases(
+        actor
+      )
+    ) {
+      where[Op.or] = [
+        {
+          created_by:
+            actorId,
+        },
+
+        {
+          assigned_to:
+            actorId,
+        },
+      ];
+    }
+
+    const caseItem =
+      await Case.findOne({
+        where,
+
+        attributes: [
+          'id',
+          'title',
+          'status',
+          'created_by',
+          'assigned_to',
+        ],
+
+        transaction:
+          options.transaction,
+
+        lock:
+          options.lock,
+      });
+
+    if (
+      !caseItem
+    ) {
+      /*
+       * Yetkisiz ve olmayan ID aynı cevap.
+       */
+      throw new Error(
+        'Dava bulunamadı'
+      );
+    }
+
+    return caseItem;
+  };
+
+// ======================================================
+// CLIENT ACCESS
+// ======================================================
+
+const assertClientAccess =
+  async (
+    clientId,
+    actor,
+    options = {}
+  ) => {
+    const actorId =
+      requireActor(
+        actor
+      );
+
+    const client =
+      await Client.findByPk(
+        clientId,
+        {
+          attributes: [
+            'id',
+            'name',
+            'status',
+            'created_by',
+          ],
+
+          transaction:
+            options.transaction,
+
+          lock:
+            options.lock,
+        }
+      );
+
+    if (
+      !client
+    ) {
+      throw new Error(
+        'Müvekkil bulunamadı'
+      );
+    }
+
+    if (
+      isAdmin(
+        actor
+      )
+    ) {
+      return client;
+    }
+
+    /*
+     * Kendi oluşturduğu client.
+     */
+    if (
+      client.created_by ===
+      actorId
+    ) {
+      return client;
+    }
+
+    /*
+     * Veya erişebildiği bir case üzerinden client.
+     */
+    const caseCondition =
+      canViewAllCases(
+        actor
+      )
+        ? ''
+        : `
+          AND (
+            c.created_by = :actorId
+            OR c.assigned_to = :actorId
+          )
+        `;
+
+    const rows =
+      await sequelize.query(
+        `
+          SELECT 1
+
+          FROM case_clients cc
+
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+
+          WHERE cc.client_id = :clientId
+
+          ${caseCondition}
+
+          LIMIT 1
+        `,
+        {
+          replacements: {
+            clientId,
+            actorId,
+          },
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction:
+            options.transaction,
+        }
+      );
+
+    if (
+      rows.length ===
+      0
+    ) {
+      throw new Error(
+        'Müvekkil bulunamadı'
+      );
+    }
+
+    return client;
+  };
+
+// ======================================================
+// STANDALONE FINANCE ACCESS
+// ======================================================
+
+const assertStandaloneClientFinanceAccess = (
+  client,
+  actor
+) => {
+  const actorId =
+    requireActor(
+      actor
+    );
+
+  if (
+    isAdmin(
+      actor
+    ) ||
+    canViewAllCases(
+      actor
+    )
+  ) {
+    return;
+  }
+
+  /*
+   * Normal kullanıcı case'siz finans kaydını
+   * yalnız kendi oluşturduğu client için yönetebilir.
+   */
+  if (
+    client.created_by !==
+    actorId
+  ) {
+    throw new Error(
+      'Ödeme planı bulunamadı'
+    );
+  }
+};
+
+// ======================================================
+// CASE <-> CLIENT RELATION
+// ======================================================
+
+const assertCaseBelongsToClient =
+  async (
+    caseId,
+    clientId,
+    transaction
+  ) => {
+    const rows =
+      await sequelize.query(
+        `
+          SELECT 1
+
+          FROM case_clients
+
+          WHERE case_id = :caseId
+            AND client_id = :clientId
+
+          LIMIT 1
+        `,
+        {
+          replacements: {
+            caseId,
+            clientId,
+          },
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction,
+        }
+      );
+
+    if (
+      rows.length ===
+      0
+    ) {
+      throw new Error(
+        'Seçilen dava bu müvekkille ilişkili değil'
+      );
+    }
+  };
+
+// ======================================================
+// FINANCE ACCESS SCOPE
+// ======================================================
+
+const getFinancialAccessScope =
+  async (
+    actor,
+    transaction = null
+  ) => {
+    const actorId =
+      requireActor(
+        actor
+      );
+
+    if (
+      isAdmin(
+        actor
+      )
+    ) {
+      return {
+        unrestricted:
+          true,
+
+        allCases:
+          true,
+
+        caseIds:
+          [],
+
+        accessibleClientIds:
+          [],
+
+        standaloneClientIds:
+          [],
+      };
+    }
+
+    const allCases =
+      canViewAllCases(
+        actor
+      );
+
+    const caseRows =
+      allCases
+        ? []
+        : await Case.findAll({
+            where: {
+              [Op.or]: [
+                {
+                  created_by:
+                    actorId,
+                },
+
+                {
+                  assigned_to:
+                    actorId,
+                },
+              ],
+            },
+
+            attributes: [
+              'id',
+            ],
+
+            raw:
+              true,
+
+            transaction,
+          });
+
+    const caseIds =
+      caseRows.map(
+        (
+          caseItem
+        ) =>
+          caseItem.id
+      );
+
+    const caseCondition =
+      allCases
+        ? ''
+        : `
+          AND (
+            c.created_by = :actorId
+            OR c.assigned_to = :actorId
+          )
+        `;
+
+    /*
+     * Actor'ın erişebildiği bütün client kayıtları.
+     */
+    const accessibleClientRows =
+      await sequelize.query(
+        `
+          SELECT DISTINCT
+            cl.id
+
+          FROM clients cl
+
+          LEFT JOIN case_clients cc
+            ON cc.client_id = cl.id
+
+          LEFT JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+
+          WHERE cl.deleted_at IS NULL
+            AND (
+              cl.created_by = :actorId
+
+              OR (
+                c.id IS NOT NULL
+                ${caseCondition}
+              )
+            )
+        `,
+        {
+          replacements: {
+            actorId,
+          },
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction,
+        }
+      );
+
+    const accessibleClientIds =
+      accessibleClientRows.map(
+        (
+          row
+        ) =>
+          row.id
+      );
+
+    const ownClientRows =
+      await Client.findAll({
+        where: {
+          created_by:
+            actorId,
+        },
+
+        attributes: [
+          'id',
+        ],
+
+        raw:
+          true,
+
+        transaction,
+      });
+
+    /*
+     * VIEW_ALL_CASES:
+     *
+     * erişebildiği client'ların case'siz finance
+     * kayıtlarını da görebilir.
+     *
+     * Normal actor:
+     *
+     * case'siz finance yalnız kendi oluşturduğu
+     * client üzerinde.
+     */
+    const standaloneClientIds =
+      allCases
+        ? accessibleClientIds
+        : ownClientRows.map(
+            (
+              row
+            ) =>
+              row.id
+          );
+
+    return {
+      unrestricted:
+        false,
+
+      allCases,
+
+      caseIds,
+
+      accessibleClientIds,
+
+      standaloneClientIds,
+    };
+  };
+
+// ======================================================
+// PLAN ACCESS WHERE
+// ======================================================
+
+const buildPlanAccessWhere = (
+  scope
+) => {
+  if (
+    scope.unrestricted
+  ) {
+    return {};
+  }
+
+  const allowedScopes =
+    [];
+
+  /*
+   * Case-linked plan.
+   */
+  if (
+    scope.allCases
+  ) {
+    allowedScopes.push({
+      case_id: {
+        [Op.ne]:
+          null,
+      },
+    });
+  } else if (
+    scope.caseIds.length >
+    0
+  ) {
+    allowedScopes.push({
+      case_id: {
+        [Op.in]:
+          scope.caseIds,
+      },
+    });
+  }
+
+  /*
+   * Case'siz client finance.
+   */
+  if (
+    scope.standaloneClientIds.length >
+    0
+  ) {
+    allowedScopes.push({
+      [Op.and]: [
+        {
+          case_id:
+            null,
+        },
+
+        {
+          client_id: {
+            [Op.in]:
+              scope.standaloneClientIds,
+          },
+        },
+      ],
+    });
+  }
+
+  if (
+    allowedScopes.length ===
+    0
+  ) {
+    /*
+     * Hiç kayıt döndürmeyen fail-closed scope.
+     */
+    return {
+      id:
+        null,
+    };
+  }
+
+  return {
+    [Op.or]:
+      allowedScopes,
+  };
+};
+
+// ======================================================
+// ASSERT PLAN ACCESS
+// ======================================================
+
+const assertPlanAccess =
+  async (
+    id,
+    actor,
+    options = {}
+  ) => {
+    requireActor(
+      actor
+    );
+
+    const plan =
+      await PaymentPlan.findByPk(
+        id,
+        {
+          transaction:
+            options.transaction,
+
+          lock:
+            options.lock,
+        }
+      );
+
+    if (
+      !plan
+    ) {
+      throw new Error(
+        'Ödeme planı bulunamadı'
+      );
+    }
+
+    if (
+      isAdmin(
+        actor
+      )
+    ) {
+      return plan;
+    }
+
+    /*
+     * CASE-LINKED PLAN
+     *
+     * Case scope her şeyden üstün.
+     */
+    if (
+      plan.case_id
+    ) {
+      try {
+        await assertCaseAccess(
+          plan.case_id,
+          actor,
+          options
+        );
+
+        return plan;
+      } catch {
+        throw new Error(
+          'Ödeme planı bulunamadı'
+        );
+      }
+    }
+
+    /*
+     * CASE'SİZ PLAN
+     *
+     * Client scope.
+     */
+    try {
+      const client =
+        await assertClientAccess(
+          plan.client_id,
+          actor,
+          options
+        );
+
+      assertStandaloneClientFinanceAccess(
+        client,
+        actor
+      );
+
+      return plan;
+    } catch {
+      throw new Error(
+        'Ödeme planı bulunamadı'
+      );
+    }
+  };
+
+// ======================================================
 // VALIDATION
 // ======================================================
 
@@ -428,10 +1194,6 @@ const validatePlanData = (
     );
   }
 
-  /*
-   * Create sırasında completed/cancelled plan
-   * oluşturmak muhasebe akışını atlatır.
-   */
   if (
     [
       'completed',
@@ -524,102 +1286,71 @@ const validatePlanData = (
 };
 
 // ======================================================
-// ENTITY VALIDATION
+// RELATION VALIDATION
 // ======================================================
 
-const validateRelations = async (
-  {
-    clientId,
-    caseId,
-  },
-  transaction
-) => {
-  const client =
-    await Client.findByPk(
+const validateRelations =
+  async (
+    {
       clientId,
-      {
-        transaction,
+      caseId,
+    },
+    actor,
+    transaction
+  ) => {
+    const client =
+      await assertClientAccess(
+        clientId,
+        actor,
+        {
+          transaction,
+        }
+      );
 
-        attributes: [
-          'id',
-          'name',
-          'status',
-        ],
-      }
+    /*
+     * Case'siz ödeme planında standalone
+     * finance kuralı uygulanır.
+     */
+    if (
+      !caseId
+    ) {
+      assertStandaloneClientFinanceAccess(
+        client,
+        actor
+      );
+
+      return {
+        client,
+
+        caseItem:
+          null,
+      };
+    }
+
+    const caseItem =
+      await assertCaseAccess(
+        caseId,
+        actor,
+        {
+          transaction,
+        }
+      );
+
+    /*
+     * Case <-> Client N:N ilişkisinin gerçekten
+     * mevcut olduğunu ayrıca doğruluyoruz.
+     */
+    await assertCaseBelongsToClient(
+      caseItem.id,
+      client.id,
+      transaction
     );
 
-  if (!client) {
-    throw new Error(
-      'Müvekkil bulunamadı'
-    );
-  }
-
-  if (!caseId) {
     return {
       client,
-
-      caseItem:
-        null,
+      caseItem,
     };
-  }
-
-  const caseItem =
-    await Case.findByPk(
-      caseId,
-      {
-        transaction,
-
-        attributes: [
-          'id',
-          'title',
-          'status',
-        ],
-      }
-    );
-
-  if (!caseItem) {
-    throw new Error(
-      'Dava bulunamadı'
-    );
-  }
-
-  /*
-   * Case <-> Client N:N.
-   *
-   * Seçilen davanın gerçekten bu müvekkille ilişkili
-   * olup olmadığını ayrıca doğruluyoruz.
-   */
-  const linkedClients =
-    await caseItem.getClients({
-      where: {
-        id:
-          clientId,
-      },
-
-      attributes: [
-        'id',
-      ],
-
-      joinTableAttributes:
-        [],
-
-      transaction,
-    });
-
-  if (
-    linkedClients.length ===
-    0
-  ) {
-    throw new Error(
-      'Seçilen dava bu müvekkille ilişkili değil'
-    );
-  }
-
-  return {
-    client,
-    caseItem,
   };
-};
 
 // ======================================================
 // INSTALLMENT GENERATION
@@ -652,10 +1383,6 @@ const createEqualInstallments = ({
       10
     );
 
-  /*
-   * Tamamı peşinat olarak belirlenmişse
-   * taksit oluşturmaya gerek yok.
-   */
   if (
     financedCents <=
     0
@@ -680,7 +1407,9 @@ const createEqualInstallments = ({
       firstDueDate
     );
 
-  if (!dueDate) {
+  if (
+    !dueDate
+  ) {
     throw new Error(
       'İlk taksit tarihi gereklidir'
     );
@@ -798,7 +1527,9 @@ const normalizeCustomInstallments = (
             installment?.due_date
           );
 
-        if (!dueDate) {
+        if (
+          !dueDate
+        ) {
           throw new Error(
             `${index + 1}. taksit vade tarihi gereklidir`
           );
@@ -848,10 +1579,6 @@ const normalizeCustomInstallments = (
       }
     );
 
-  /*
-   * Kullanıcı özel taksitleri karışık sırayla gönderse bile
-   * taksit numaraları vade sırasına göre oluşsun.
-   */
   normalized.sort(
     (
       left,
@@ -905,18 +1632,6 @@ const normalizeCustomInstallments = (
 
 // ======================================================
 // PAYMENT ACCOUNTING
-//
-// Payment.adjustment tek başına pozitif/negatif yön
-// belirtmiyor.
-//
-// refund reversal:
-//   iadeyi geri alır -> tahsilata geri eklenir.
-//
-// expense reversal:
-//   gideri geri alır -> giderden düşülür.
-//
-// Manuel adjustment ileride desteklenirse sessizce
-// tahsilata yazılmamalıdır.
 // ======================================================
 
 const calculatePaymentTotals = (
@@ -1036,21 +1751,13 @@ const calculatePaymentTotals = (
 
   return {
     receivedCents,
-
     refundCents,
-
     expenseCents,
-
     refundReversalCents,
-
     expenseReversalCents,
-
     otherAdjustmentCents,
-
     effectiveRefundCents,
-
     effectiveExpenseCents,
-
     netCollectedCents,
   };
 };
@@ -1199,10 +1906,6 @@ const calculatePlanSummary = ({
         0
       ),
 
-    // ----------------------------------------------
-    // COLLECTION
-    // ----------------------------------------------
-
     collected_amount:
       fromCents(
         paymentTotals.receivedCents
@@ -1233,10 +1936,6 @@ const calculatePlanSummary = ({
         remaining
       ),
 
-    // ----------------------------------------------
-    // EXPENSE
-    // ----------------------------------------------
-
     expense_amount:
       fromCents(
         paymentTotals.expenseCents
@@ -1252,18 +1951,10 @@ const calculatePlanSummary = ({
         paymentTotals.effectiveExpenseCents
       ),
 
-    // ----------------------------------------------
-    // ADJUSTMENTS
-    // ----------------------------------------------
-
     adjustment_amount:
       fromCents(
         paymentTotals.otherAdjustmentCents
       ),
-
-    // ----------------------------------------------
-    // INSTALLMENTS
-    // ----------------------------------------------
 
     installment_count:
       installments.filter(
@@ -1315,9 +2006,7 @@ const calculatePlanSummary = ({
                 ) *
                   100
               )
-            ).toFixed(
-              2
-            )
+            ).toFixed(2)
           )
         : 0,
   };
@@ -1475,19 +2164,16 @@ export const paymentPlanService = {
 
   async create(
     data,
-    userId
+    actor
   ) {
     validatePlanData(
       data
     );
 
-    if (
-      !userId
-    ) {
-      throw new Error(
-        'Ödeme planını oluşturan kullanıcı bulunamadı'
+    const actorId =
+      requireActor(
+        actor
       );
-    }
 
     const transaction =
       await sequelize.transaction();
@@ -1501,6 +2187,7 @@ export const paymentPlanService = {
           caseId:
             data.case_id,
         },
+        actor,
         transaction
       );
 
@@ -1598,11 +2285,14 @@ export const paymentPlanService = {
               data.case_id ||
               null,
 
+            /*
+             * Server controlled.
+             */
             created_by:
-              userId,
+              actorId,
 
             updated_by:
-              userId,
+              actorId,
 
             reference_number:
               normalizeNullableString(
@@ -1699,10 +2389,6 @@ export const paymentPlanService = {
         }
       }
 
-      /*
-       * Active oluşturulan planın kalan ana parası varsa
-       * taksit bulunması zorunlu.
-       */
       if (
         status ===
           'active' &&
@@ -1719,9 +2405,12 @@ export const paymentPlanService = {
       await transaction.commit();
 
       return this.findOne(
-        plan.id
+        plan.id,
+        actor
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       await transaction.rollback();
 
       throw error;
@@ -1730,9 +2419,6 @@ export const paymentPlanService = {
 
   // ====================================================
   // LIST
-  //
-  // Liste endpointinde installments/payments taşımıyoruz.
-  // Plan seçildiğinde findOne kullanılır.
   // ====================================================
 
   async findAll({
@@ -1743,6 +2429,7 @@ export const paymentPlanService = {
     client_id,
     case_id,
     plan_type,
+    actor,
   }) {
     const pagination =
       normalizePagination(
@@ -1750,7 +2437,12 @@ export const paymentPlanService = {
         limit
       );
 
-    const where = {};
+    const scope =
+      await getFinancialAccessScope(
+        actor
+      );
+
+    const filters = {};
 
     const normalizedSearch =
       String(
@@ -1766,7 +2458,7 @@ export const paymentPlanService = {
     if (
       normalizedSearch
     ) {
-      where[Op.or] = [
+      filters[Op.or] = [
         {
           title: {
             [Op.iLike]:
@@ -1811,21 +2503,21 @@ export const paymentPlanService = {
         );
       }
 
-      where.status =
+      filters.status =
         status;
     }
 
     if (
       client_id
     ) {
-      where.client_id =
+      filters.client_id =
         client_id;
     }
 
     if (
       case_id
     ) {
-      where.case_id =
+      filters.case_id =
         case_id;
     }
 
@@ -1842,9 +2534,17 @@ export const paymentPlanService = {
         );
       }
 
-      where.plan_type =
+      filters.plan_type =
         plan_type;
     }
+
+    const where =
+      combineWhere(
+        filters,
+        buildPlanAccessWhere(
+          scope
+        )
+      );
 
     const {
       count,
@@ -1951,8 +2651,17 @@ export const paymentPlanService = {
   // ====================================================
 
   async findOne(
-    id
+    id,
+    actor
   ) {
+    /*
+     * Önce record-level authorization.
+     */
+    await assertPlanAccess(
+      id,
+      actor
+    );
+
     const plan =
       await PaymentPlan.findByPk(
         id,
@@ -1962,7 +2671,9 @@ export const paymentPlanService = {
         }
       );
 
-    if (!plan) {
+    if (
+      !plan
+    ) {
       throw new Error(
         'Ödeme planı bulunamadı'
       );
@@ -1974,7 +2685,6 @@ export const paymentPlanService = {
     plain.summary =
       calculatePlanSummary({
         plan:
-
           plain,
 
         installments:
@@ -1995,23 +2705,21 @@ export const paymentPlanService = {
 
   async activate(
     id,
-    userId
+    actor
   ) {
-    if (
-      !userId
-    ) {
-      throw new Error(
-        'İşlemi yapan kullanıcı bulunamadı'
+    const actorId =
+      requireActor(
+        actor
       );
-    }
 
     const transaction =
       await sequelize.transaction();
 
     try {
       const plan =
-        await PaymentPlan.findByPk(
+        await assertPlanAccess(
           id,
+          actor,
           {
             transaction,
 
@@ -2019,12 +2727,6 @@ export const paymentPlanService = {
               transaction.LOCK.UPDATE,
           }
         );
-
-      if (!plan) {
-        throw new Error(
-          'Ödeme planı bulunamadı'
-        );
-      }
 
       if (
         plan.status ===
@@ -2051,7 +2753,8 @@ export const paymentPlanService = {
         await transaction.commit();
 
         return this.findOne(
-          id
+          id,
+          actor
         );
       }
 
@@ -2105,7 +2808,7 @@ export const paymentPlanService = {
             null,
 
           updated_by:
-            userId,
+            actorId,
         },
         {
           transaction,
@@ -2115,9 +2818,12 @@ export const paymentPlanService = {
       await transaction.commit();
 
       return this.findOne(
-        id
+        id,
+        actor
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       await transaction.rollback();
 
       throw error;
@@ -2130,24 +2836,22 @@ export const paymentPlanService = {
 
   async cancel(
     id,
-    userId,
+    actor,
     reason = null
   ) {
-    if (
-      !userId
-    ) {
-      throw new Error(
-        'İşlemi yapan kullanıcı bulunamadı'
+    const actorId =
+      requireActor(
+        actor
       );
-    }
 
     const transaction =
       await sequelize.transaction();
 
     try {
       const plan =
-        await PaymentPlan.findByPk(
+        await assertPlanAccess(
           id,
+          actor,
           {
             transaction,
 
@@ -2155,12 +2859,6 @@ export const paymentPlanService = {
               transaction.LOCK.UPDATE,
           }
         );
-
-      if (!plan) {
-        throw new Error(
-          'Ödeme planı bulunamadı'
-        );
-      }
 
       if (
         plan.status ===
@@ -2178,7 +2876,8 @@ export const paymentPlanService = {
         await transaction.commit();
 
         return this.findOne(
-          id
+          id,
+          actor
         );
       }
 
@@ -2217,7 +2916,9 @@ export const paymentPlanService = {
             ? `İptal nedeni: ${normalizedReason}`
             : null,
         ]
-          .filter(Boolean)
+          .filter(
+            Boolean
+          )
           .join('\n');
 
       await plan.update(
@@ -2232,7 +2933,7 @@ export const paymentPlanService = {
             null,
 
           updated_by:
-            userId,
+            actorId,
 
           notes:
             notes ||
@@ -2246,9 +2947,12 @@ export const paymentPlanService = {
       await transaction.commit();
 
       return this.findOne(
-        id
+        id,
+        actor
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       await transaction.rollback();
 
       throw error;
@@ -2258,19 +2962,23 @@ export const paymentPlanService = {
   // ====================================================
   // MARK COMPLETED
   //
-  // Frontend normalde bunu doğrudan çağırmaz.
-  // Payment service plan tamamen kapanınca kullanabilir.
+  // Internal kullanımda bile actor zorunlu.
   // ====================================================
 
   async markCompleted(
     id,
-    userId,
+    actor,
     {
       transaction:
         externalTransaction =
           null,
     } = {}
   ) {
+    const actorId =
+      requireActor(
+        actor
+      );
+
     const ownsTransaction =
       !externalTransaction;
 
@@ -2280,8 +2988,9 @@ export const paymentPlanService = {
 
     try {
       const plan =
-        await PaymentPlan.findByPk(
+        await assertPlanAccess(
           id,
+          actor,
           {
             transaction,
 
@@ -2289,12 +2998,6 @@ export const paymentPlanService = {
               transaction.LOCK.UPDATE,
           }
         );
-
-      if (!plan) {
-        throw new Error(
-          'Ödeme planı bulunamadı'
-        );
-      }
 
       if (
         plan.status ===
@@ -2354,9 +3057,7 @@ export const paymentPlanService = {
             new Date(),
 
           updated_by:
-            userId ||
-            plan.updated_by ||
-            plan.created_by,
+            actorId,
         },
         {
           transaction,
@@ -2370,7 +3071,9 @@ export const paymentPlanService = {
       }
 
       return plan;
-    } catch (error) {
+    } catch (
+      error
+    ) {
       if (
         ownsTransaction
       ) {
@@ -2382,16 +3085,26 @@ export const paymentPlanService = {
   },
 
   // ====================================================
-  // GET CLIENT FINANCE SUMMARY
-  //
-  // hasMany + hasMany tek JOIN'e sokulmuyor.
-  // Böylece installment x payment cartesian büyümesi
-  // oluşmuyor.
+  // CLIENT FINANCE SUMMARY
   // ====================================================
 
   async getClientSummary(
-    clientId
+    clientId,
+    actor
   ) {
+    /*
+     * Client UUID BOLA.
+     */
+    await assertClientAccess(
+      clientId,
+      actor
+    );
+
+    const scope =
+      await getFinancialAccessScope(
+        actor
+      );
+
     const client =
       await Client.findByPk(
         clientId,
@@ -2403,23 +3116,36 @@ export const paymentPlanService = {
         }
       );
 
-    if (!client) {
+    if (
+      !client
+    ) {
       throw new Error(
         'Müvekkil bulunamadı'
       );
     }
 
+    /*
+     * Client filtrelemesi tek başına yeterli değil.
+     * Plan ayrıca actor finance scope'undan geçer.
+     */
     const plans =
       await PaymentPlan.findAll({
-        where: {
-          client_id:
-            clientId,
+        where:
+          combineWhere(
+            {
+              client_id:
+                clientId,
 
-          status: {
-            [Op.ne]:
-              'cancelled',
-          },
-        },
+              status: {
+                [Op.ne]:
+                  'cancelled',
+              },
+            },
+
+            buildPlanAccessWhere(
+              scope
+            )
+          ),
 
         include: [
           {
