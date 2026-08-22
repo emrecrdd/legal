@@ -192,6 +192,13 @@ export const API_ROUTES = {
 
     STATISTICS:
       '/tasks/statistics',
+      CLIENT_TASKS:
+  (clientId) =>
+    `/tasks/client/${clientId}`,
+
+CLIENT_OVERVIEW:
+  (clientId) =>
+    `/tasks/client/${clientId}/overview`,
   },
 
   // ====================================================
