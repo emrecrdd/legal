@@ -890,6 +890,46 @@ const buildDocumentAccessWhere = (
     ],
   };
 };
+// ======================================================
+// DOCUMENT READ ACCESS
+// ======================================================
+
+/*
+ * is_public burada "internete açık" değildir.
+ * Büro içi genel erişim anlamına gelir.
+ *
+ * Bu scope yalnız OKUMA işlemlerinde kullanılır.
+ * Yazma işlemleri mevcut BOLA kurallarını kullanmaya
+ * devam eder.
+ */
+const buildDocumentReadAccessWhere = (
+  actor
+) => {
+  requireActor(
+    actor
+  );
+
+  if (
+    isAdmin(
+      actor
+    )
+  ) {
+    return {};
+  }
+
+  return {
+    [Op.or]: [
+      {
+        is_public:
+          true,
+      },
+
+      buildDocumentAccessWhere(
+        actor
+      ),
+    ],
+  };
+};
 
 // ======================================================
 // DOCUMENT ACCESS INCLUDES
@@ -1022,6 +1062,60 @@ const assertDocumentAccess =
 
     throw new Error(
       'Document not found'
+    );
+  };
+  // ======================================================
+// ASSERT DOCUMENT READ ACCESS
+// ======================================================
+
+/*
+ * Büro içi genel erişime açılan belgeyi diğer
+ * VIEW_DOCUMENTS yetkili kullanıcılar okuyabilir.
+ *
+ * Bu helper update/delete/version upload işlemlerinde
+ * KULLANILMAZ.
+ */
+const assertDocumentReadAccess =
+  async (
+    documentId,
+    actor,
+    options = {}
+  ) => {
+    requireActor(
+      actor
+    );
+
+    const document =
+      await Document.findByPk(
+        documentId,
+        {
+          transaction:
+            options.transaction,
+        }
+      );
+
+    if (
+      !document
+    ) {
+      throw new Error(
+        'Document not found'
+      );
+    }
+
+    if (
+      isAdmin(
+        actor
+      ) ||
+      document.is_public ===
+        true
+    ) {
+      return document;
+    }
+
+    return assertDocumentAccess(
+      documentId,
+      actor,
+      options
     );
   };
 
@@ -1719,33 +1813,33 @@ export const documentService = {
   // ====================================================
 
   async findOne(
+  id,
+  actor
+) {
+  await assertDocumentReadAccess(
     id,
     actor
-  ) {
-    await assertDocumentAccess(
+  );
+
+  const document =
+    await Document.findByPk(
       id,
-      actor
+      {
+        include:
+          documentIncludes,
+      }
     );
 
-    const document =
-      await Document.findByPk(
-        id,
-        {
-          include:
-            documentIncludes,
-        }
-      );
+  if (
+    !document
+  ) {
+    throw new Error(
+      'Document not found'
+    );
+  }
 
-    if (
-      !document
-    ) {
-      throw new Error(
-        'Document not found'
-      );
-    }
-
-    return document;
-  },
+  return document;
+},
 
   // ====================================================
   // UPDATE
@@ -1981,10 +2075,10 @@ export const documentService = {
     }
 
     const document =
-      await assertDocumentAccess(
-        documentId,
-        actor
-      );
+  await assertDocumentReadAccess(
+    documentId,
+    actor
+  );
 
     const filePath =
       resolveStoredFilePath(
@@ -2024,44 +2118,44 @@ export const documentService = {
   // ====================================================
 
   async getVersions(
-    documentId,
-    actor
-  ) {
-    const document =
-      await assertDocumentAccess(
-        documentId,
-        actor
-      );
-
-    const rootId =
-      document.parent_id ||
-      document.id;
-
-    await assertDocumentAccess(
-      rootId,
+  documentId,
+  actor
+) {
+  const document =
+    await assertDocumentReadAccess(
+      documentId,
       actor
     );
 
-    const where =
-      combineWhere(
-        {
-          [Op.or]: [
-            {
-              id:
-                rootId,
-            },
+  const rootId =
+    document.parent_id ||
+    document.id;
 
-            {
-              parent_id:
-                rootId,
-            },
-          ],
-        },
+  await assertDocumentReadAccess(
+    rootId,
+    actor
+  );
 
-        buildDocumentAccessWhere(
-          actor
-        )
-      );
+  const where =
+    combineWhere(
+      {
+        [Op.or]: [
+          {
+            id:
+              rootId,
+          },
+
+          {
+            parent_id:
+              rootId,
+          },
+        ],
+      },
+
+      buildDocumentReadAccessWhere(
+        actor
+      )
+    );
 
     return Document.findAll({
       where,
@@ -2107,7 +2201,7 @@ export const documentService = {
             false,
         },
 
-        buildDocumentAccessWhere(
+         buildDocumentReadAccessWhere(
           actor
         )
       );
@@ -2158,7 +2252,7 @@ export const documentService = {
     actor
   ) {
     const accessWhere =
-      buildDocumentAccessWhere(
+      buildDocumentReadAccessWhere(
         actor
       );
 
