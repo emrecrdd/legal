@@ -27,17 +27,19 @@ import Empty from '../../components/shared/Empty.jsx';
 import {
   ArrowLeft,
   Bell,
+  BellOff,
   BellRing,
-  BriefcaseBusiness,
+  CalendarDays,
   Check,
   CheckCheck,
   ChevronLeft,
   ChevronRight,
   Eye,
-  FileCheck2,
-  FolderOpen,
+  ListTodo,
+  Scale,
   ShieldCheck,
   Trash2,
+  UsersRound,
 } from 'lucide-react';
 
 import dayjs from 'dayjs';
@@ -57,7 +59,7 @@ const TYPE_CONFIG = {
   task: {
     label: 'Görev',
     variant: 'primary',
-    icon: FileCheck2,
+    icon: ListTodo,
     iconClass:
       'bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400',
   },
@@ -65,7 +67,7 @@ const TYPE_CONFIG = {
   case: {
     label: 'Dava',
     variant: 'success',
-    icon: FolderOpen,
+    icon: Scale,
     iconClass:
       'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400',
   },
@@ -73,9 +75,17 @@ const TYPE_CONFIG = {
   event: {
     label: 'Etkinlik',
     variant: 'info',
-    icon: BriefcaseBusiness,
+    icon: CalendarDays,
     iconClass:
       'bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400',
+  },
+
+  meeting: {
+    label: 'Toplantı',
+    variant: 'info',
+    icon: UsersRound,
+    iconClass:
+      'bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400',
   },
 
   system: {
@@ -126,6 +136,24 @@ const formatDateTime = (
 
   return parsed.format(
     'DD.MM.YYYY HH:mm'
+  );
+};
+
+const cleanNotificationTitle = (
+  title
+) => {
+  const normalizedTitle =
+    typeof title === 'string'
+      ? title.trim()
+      : '';
+
+  if (!normalizedTitle) {
+    return 'Bildirim';
+  }
+
+  return normalizedTitle.replace(
+    /^(?:📋|⚖️|👤|📄|📁|🔔)\s*/u,
+    ''
   );
 };
 
@@ -709,7 +737,7 @@ const NotificationsPage = () => {
             <div className="py-8">
 
               <Empty
-                icon="📭"
+                icon={<BellOff className="h-7 w-7" />}
                 title="Bildirim yok"
                 description="Yeni bildirimler geldiğinde burada görüntülenecek."
               />
@@ -805,8 +833,9 @@ const NotificationsPage = () => {
                                     }
                                   `}
                                 >
-                                  {notification.title ||
-                                    'Bildirim'}
+                                  {cleanNotificationTitle(
+                                    notification.title
+                                  )}
                                 </p>
 
                                 {!notification.read && (
