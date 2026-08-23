@@ -29,15 +29,18 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
-  AlarmClock,
   ArrowLeft,
-  Building2,
   CalendarDays,
+  Eye,
   Gavel,
+  Languages,
   MapPin,
+  MessageCircle,
+  Microscope,
   Plus,
   Save,
   Scale,
+  Target,
   Trash2,
   UserRound,
   Users,
@@ -76,9 +79,6 @@ const INITIAL_FORM = {
 
   is_all_day:
     false,
-
-  reminder_minutes:
-    '30',
 };
 
 const HEARING_TYPES = [
@@ -142,96 +142,50 @@ const EXPENSE_OPTIONS = [
   },
 ];
 
-const REMINDER_OPTIONS = [
-  {
-    value: '0',
-    label: 'Hatırlatma yok',
-  },
-  {
-    value: '5',
-    label: '5 dakika önce',
-  },
-  {
-    value: '10',
-    label: '10 dakika önce',
-  },
-  {
-    value: '15',
-    label: '15 dakika önce',
-  },
-  {
-    value: '30',
-    label: '30 dakika önce',
-  },
-  {
-    value: '60',
-    label: '1 saat önce',
-  },
-  {
-    value: '120',
-    label: '2 saat önce',
-  },
-  {
-    value: '1440',
-    label: '1 gün önce',
-  },
-];
-
 const ROLE_OPTIONS = [
   {
     value: 'avukat',
     label: 'Avukat',
-    icon: '⚖️',
   },
   {
     value: 'karsi_taraf_avukati',
     label: 'Karşı Taraf Avukatı',
-    icon: '⚖️',
   },
   {
     value: 'müvekkil',
     label: 'Müvekkil',
-    icon: '👤',
   },
   {
     value: 'davaci',
     label: 'Davacı',
-    icon: '👤',
   },
   {
     value: 'davali',
     label: 'Davalı',
-    icon: '👤',
   },
   {
     value: 'tanik',
     label: 'Tanık',
-    icon: '🗣️',
   },
   {
     value: 'bilirkişi',
     label: 'Bilirkişi',
-    icon: '🔬',
   },
   {
     value: 'uzman',
     label: 'Uzman',
-    icon: '🎯',
   },
   {
     value: 'tercüman',
     label: 'Tercüman',
-    icon: '🌐',
   },
   {
     value: 'gözlemci',
     label: 'Gözlemci',
-    icon: '👁️',
   },
   {
     value: 'diger',
     label: 'Diğer',
-    icon: '👤',
   },
 ];
 
@@ -303,16 +257,43 @@ const getRoleLabel = (
 const getRoleIcon = (
   role
 ) => {
-  return (
-    ROLE_OPTIONS.find(
-      (
-        item
-      ) =>
-        item.value ===
-        role
-    )?.icon ||
-    '👤'
-  );
+  switch (role) {
+    case 'avukat':
+    case 'karsi_taraf_avukati':
+      return (
+        <Scale className="h-4 w-4" />
+      );
+
+    case 'tanik':
+      return (
+        <MessageCircle className="h-4 w-4" />
+      );
+
+    case 'bilirkişi':
+      return (
+        <Microscope className="h-4 w-4" />
+      );
+
+    case 'uzman':
+      return (
+        <Target className="h-4 w-4" />
+      );
+
+    case 'tercüman':
+      return (
+        <Languages className="h-4 w-4" />
+      );
+
+    case 'gözlemci':
+      return (
+        <Eye className="h-4 w-4" />
+      );
+
+    default:
+      return (
+        <UserRound className="h-4 w-4" />
+      );
+  }
 };
 
 // ======================================================
@@ -462,7 +443,9 @@ const EventCreate = () => {
             'lawyer',
           ].includes(
             item.role
-          )
+          ) &&
+          item?.is_active !==
+            false
       );
     }, [
       users,
@@ -481,9 +464,10 @@ const EventCreate = () => {
 
     /*
      * Avukat kendi oluşturduğu duruşmada varsayılan
-     * olarak kendisine atanır.
+     * olarak seçili gelir.
      *
-     * Admin isterse seçim yapar.
+     * Kullanıcı isterse listeden başka bir avukat
+     * seçebilir.
      */
     if (
       user.role ===
@@ -496,6 +480,7 @@ const EventCreate = () => {
           ...current,
 
           assigned_to:
+            current.assigned_to ||
             user.id,
         })
       );
@@ -848,11 +833,8 @@ const EventCreate = () => {
     }
 
     const assignedTo =
-      user?.role ===
-      'lawyer'
-        ? user.id
-        : formData.assigned_to ||
-          null;
+      formData.assigned_to ||
+      null;
 
     const payload = {
       title:
@@ -923,11 +905,6 @@ const EventCreate = () => {
         Boolean(
           formData.is_all_day
         ),
-
-      reminder_minutes:
-        Number(
-          formData.reminder_minutes
-        ) || 0,
 
       attendees:
         attendees.map(
@@ -1013,7 +990,7 @@ const EventCreate = () => {
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Duruşma tarihini, görevlendirilen avukatı, katılımcıları ve hatırlatma bilgilerini oluşturun.
+              Duruşma tarihini, görevlendirilen avukatı ve katılımcıları oluşturun.
             </p>
 
           </div>
@@ -1438,64 +1415,53 @@ const EventCreate = () => {
                   Atanan Avukat
                 </label>
 
-                {user?.role ===
-                'lawyer' ? (
-                  <div className="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white">
+                <select
+                  name="assigned_to"
+                  value={
+                    formData.assigned_to
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    isPending ||
+                    usersLoading
+                  }
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                >
 
-                    {user.first_name}{' '}
-                    {user.last_name}
+                  <option value="">
+                    {usersLoading
+                      ? 'Avukatlar yükleniyor...'
+                      : 'Avukat seçin'}
+                  </option>
 
-                    <span className="ml-2 text-xs text-gray-400">
-                      (Kendiniz)
-                    </span>
-
-                  </div>
-                ) : (
-                  <select
-                    name="assigned_to"
-                    value={
-                      formData.assigned_to
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    disabled={
-                      isPending ||
-                      usersLoading
-                    }
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                  >
-
-                    <option value="">
-                      {usersLoading
-                        ? 'Avukatlar yükleniyor...'
-                        : 'Avukat seçin'}
-                    </option>
-
-                    {assignableUsers.map(
-                      (
-                        person
-                      ) => (
-                        <option
-                          key={
-                            person.id
-                          }
-                          value={
-                            person.id
-                          }
-                        >
-                          {person.first_name}{' '}
-                          {person.last_name}
-                          {person.role ===
-                          'admin'
+                  {assignableUsers.map(
+                    (
+                      person
+                    ) => (
+                      <option
+                        key={
+                          person.id
+                        }
+                        value={
+                          person.id
+                        }
+                      >
+                        {person.first_name}{' '}
+                        {person.last_name}
+                        {person.id ===
+                        user?.id
+                          ? ' (Kendiniz)'
+                          : person.role ===
+                            'admin'
                             ? ' (Yönetici)'
                             : ' (Avukat)'}
-                        </option>
-                      )
-                    )}
+                      </option>
+                    )
+                  )}
 
-                  </select>
-                )}
+                </select>
 
               </div>
 
@@ -1595,7 +1561,6 @@ const EventCreate = () => {
                         option.value
                       }
                     >
-                      {option.icon}{' '}
                       {option.label}
                     </option>
                   )
@@ -1751,73 +1716,6 @@ const EventCreate = () => {
               >
 
                 {EXPENSE_OPTIONS.map(
-                  (
-                    option
-                  ) => (
-                    <option
-                      key={
-                        option.value
-                      }
-                      value={
-                        option.value
-                      }
-                    >
-                      {option.label}
-                    </option>
-                  )
-                )}
-
-              </select>
-
-            </div>
-
-          </section>
-
-          {/* ==================================================
-              REMINDER
-          ================================================== */}
-
-          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
-
-            <div className="flex items-start gap-3">
-
-              <AlarmClock className="mt-0.5 h-5 w-5 text-amber-500" />
-
-              <div>
-
-                <h2 className="font-semibold text-gray-900 dark:text-white">
-                  Hatırlatma
-                </h2>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  Atanan kullanıcıya duruşma öncesinde hatırlatma oluşturulur.
-                </p>
-
-              </div>
-
-            </div>
-
-            <div className="max-w-sm">
-
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Hatırlatma Zamanı
-              </label>
-
-              <select
-                name="reminder_minutes"
-                value={
-                  formData.reminder_minutes
-                }
-                onChange={
-                  handleChange
-                }
-                disabled={
-                  isPending
-                }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
-
-                {REMINDER_OPTIONS.map(
                   (
                     option
                   ) => (
