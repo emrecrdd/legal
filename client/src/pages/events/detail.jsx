@@ -24,7 +24,6 @@ import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 
 import {
-  AlarmClock,
   ArrowLeft,
   Building2,
   Calendar,
@@ -32,13 +31,19 @@ import {
   Clock,
   DollarSign,
   Edit2,
+  Eye,
   FileText,
   Gavel,
+  Languages,
   Mail,
   MapPin,
+  MessageCircle,
+  Microscope,
   Phone,
   Scale,
+  Target,
   User,
+  UserRound,
   Users,
 } from 'lucide-react';
 
@@ -52,57 +57,46 @@ const ROLE_OPTIONS = [
   {
     value: 'avukat',
     label: 'Avukat',
-    icon: '⚖️',
   },
   {
     value: 'karsi_taraf_avukati',
     label: 'Karşı Taraf Avukatı',
-    icon: '⚖️',
   },
   {
     value: 'müvekkil',
     label: 'Müvekkil',
-    icon: '👤',
   },
   {
     value: 'davaci',
     label: 'Davacı',
-    icon: '👤',
   },
   {
     value: 'davali',
     label: 'Davalı',
-    icon: '👤',
   },
   {
     value: 'tanik',
     label: 'Tanık',
-    icon: '🗣️',
   },
   {
     value: 'bilirkişi',
     label: 'Bilirkişi',
-    icon: '🔬',
   },
   {
     value: 'uzman',
     label: 'Uzman',
-    icon: '🎯',
   },
   {
     value: 'tercüman',
     label: 'Tercüman',
-    icon: '🌐',
   },
   {
     value: 'gözlemci',
     label: 'Gözlemci',
-    icon: '👁️',
   },
   {
     value: 'diger',
     label: 'Diğer',
-    icon: '👤',
   },
 ];
 
@@ -416,16 +410,43 @@ const createCalendarFileName = ({
 const getRoleIcon = (
   role
 ) => {
-  return (
-    ROLE_OPTIONS.find(
-      (
-        item
-      ) =>
-        item.value ===
-        role
-    )?.icon ||
-    '👤'
-  );
+  switch (role) {
+    case 'avukat':
+    case 'karsi_taraf_avukati':
+      return (
+        <Scale className="h-4 w-4" />
+      );
+
+    case 'tanik':
+      return (
+        <MessageCircle className="h-4 w-4" />
+      );
+
+    case 'bilirkişi':
+      return (
+        <Microscope className="h-4 w-4" />
+      );
+
+    case 'uzman':
+      return (
+        <Target className="h-4 w-4" />
+      );
+
+    case 'tercüman':
+      return (
+        <Languages className="h-4 w-4" />
+      );
+
+    case 'gözlemci':
+      return (
+        <Eye className="h-4 w-4" />
+      );
+
+    default:
+      return (
+        <UserRound className="h-4 w-4" />
+      );
+  }
 };
 
 const getRoleLabel = (
@@ -1343,8 +1364,8 @@ const EventDetail = () => {
 
                   <div className="flex items-center gap-3">
 
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg dark:bg-gray-800">
-                      ⚖️
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-purple-600 dark:bg-gray-800 dark:text-purple-300">
+                      <Scale className="h-5 w-5" />
                     </div>
 
                     <div>
@@ -1370,8 +1391,8 @@ const EventDetail = () => {
 
                   <div className="flex items-center gap-3">
 
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg dark:bg-gray-800">
-                      ⚖️
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-red-600 dark:bg-gray-800 dark:text-red-300">
+                      <Scale className="h-5 w-5" />
                     </div>
 
                     <div>
@@ -1413,7 +1434,7 @@ const EventDetail = () => {
 
                       <div className="flex items-center gap-3">
 
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/70 text-lg dark:bg-gray-800/60">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/70 dark:bg-gray-800/60">
                           {getRoleIcon(
                             role
                           )}
@@ -1560,7 +1581,7 @@ const EventDetail = () => {
 
         <Card.Body>
 
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2">
 
             <div className="flex items-start gap-3">
 
@@ -1587,29 +1608,6 @@ const EventDetail = () => {
                   </Badge>
 
                 </div>
-
-              </div>
-
-            </div>
-
-            <div className="flex items-start gap-3">
-
-              <AlarmClock className="mt-0.5 h-5 w-5 text-yellow-500" />
-
-              <div>
-
-                <p className="text-xs uppercase tracking-wide text-gray-400">
-                  Hatırlatma
-                </p>
-
-                <p className="mt-1 font-medium text-gray-900 dark:text-white">
-                  {Number(
-                    event.reminder_minutes
-                  ) >
-                  0
-                    ? `${event.reminder_minutes} dakika önce`
-                    : 'Hatırlatma yok'}
-                </p>
 
               </div>
 
