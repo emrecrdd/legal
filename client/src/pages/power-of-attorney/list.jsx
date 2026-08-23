@@ -16,6 +16,15 @@ import {
 
 import documentApi from '../../features/documents/document.api.js';
 
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Table from '../../components/ui/Table.jsx';
@@ -153,6 +162,16 @@ const getDocumentLabel = (
 // ======================================================
 
 const PowerOfAttorneyList = () => {
+  const {
+    user,
+  } = useAuth();
+
+  const canCreate =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.CREATE_POWER_OF_ATTORNEY
+    );
+
   const [
     search,
     setSearch,
@@ -484,14 +503,16 @@ const PowerOfAttorneyList = () => {
 
         </div>
 
-        <Link to="/power-of-attorney/create">
+        {canCreate && (
+          <Link to="/power-of-attorney/create">
 
-          <Button>
-            <Plus className="h-4 w-4" />
-            Yeni Vekaletname
-          </Button>
+            <Button>
+              <Plus className="h-4 w-4" />
+              Yeni Vekaletname
+            </Button>
 
-        </Link>
+          </Link>
+        )}
 
       </div>
 
@@ -638,7 +659,9 @@ const PowerOfAttorneyList = () => {
           description={
             hasFilters
               ? 'Arama veya durum filtresini değiştirerek tekrar deneyin.'
-              : 'Müvekkilleriniz için vekaletname kayıtları oluşturmaya başlayabilirsiniz.'
+              : canCreate
+                ? 'Müvekkilleriniz için vekaletname kayıtları oluşturmaya başlayabilirsiniz.'
+                : 'Henüz görüntüleyebileceğiniz bir vekaletname kaydı bulunmuyor.'
           }
           action={
             hasFilters ? (
@@ -650,7 +673,7 @@ const PowerOfAttorneyList = () => {
               >
                 Filtreleri Temizle
               </Button>
-            ) : (
+            ) : canCreate ? (
               <Link to="/power-of-attorney/create">
 
                 <Button>
@@ -659,7 +682,7 @@ const PowerOfAttorneyList = () => {
                 </Button>
 
               </Link>
-            )
+            ) : null
           }
         />
       ) : (
