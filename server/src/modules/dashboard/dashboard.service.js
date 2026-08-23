@@ -20,6 +20,21 @@ import {
 } from '../../constants/roles.js';
 
 // ======================================================
+// CONSTANTS
+// ======================================================
+
+const ISTANBUL_TIME_ZONE =
+  'Europe/Istanbul';
+
+/*
+ * Türkiye 2016'dan beri kalıcı UTC+03:00 kullanıyor.
+ * Intl yalnız "bugün"ün hangi takvim günü olduğunu
+ * Europe/Istanbul üzerinden belirlemek için kullanılır.
+ */
+const ISTANBUL_OFFSET =
+  '+03:00';
+
+// ======================================================
 // AUTHORIZATION HELPERS
 // ======================================================
 
@@ -72,6 +87,94 @@ const canViewAllTasks = (actor) =>
     actor,
     PERMISSION_KEYS.VIEW_ALL_TASKS
   );
+
+// ======================================================
+// DATE HELPERS
+// ======================================================
+
+const getIstanbulDateParts = (
+  date = new Date()
+) => {
+  const formatter =
+    new Intl.DateTimeFormat(
+      'en-CA',
+      {
+        timeZone:
+          ISTANBUL_TIME_ZONE,
+
+        year:
+          'numeric',
+
+        month:
+          '2-digit',
+
+        day:
+          '2-digit',
+      }
+    );
+
+  const parts =
+    formatter.formatToParts(
+      date
+    );
+
+  const values =
+    Object.fromEntries(
+      parts
+        .filter(
+          (
+            part
+          ) =>
+            part.type !==
+            'literal'
+        )
+        .map(
+          (
+            part
+          ) => [
+            part.type,
+            part.value,
+          ]
+        )
+    );
+
+  return {
+    year:
+      values.year,
+
+    month:
+      values.month,
+
+    day:
+      values.day,
+  };
+};
+
+const getIstanbulTodayRange =
+  () => {
+    const {
+      year,
+      month,
+      day,
+    } =
+      getIstanbulDateParts();
+
+    const start =
+      new Date(
+        `${year}-${month}-${day}T00:00:00${ISTANBUL_OFFSET}`
+      );
+
+    const end =
+      new Date(
+        start.getTime() +
+        24 * 60 * 60 * 1000
+      );
+
+    return {
+      start,
+      end,
+    };
+  };
 
 // ======================================================
 // WHERE HELPERS
@@ -640,33 +743,26 @@ export const dashboardService = {
   async getTodayHearings(actor) {
     requireActor(actor);
 
-    const today = new Date();
-
-    today.setHours(
-      0,
-      0,
-      0,
-      0
-    );
-
-    const tomorrow =
-      new Date(today);
-
-    tomorrow.setDate(
-      tomorrow.getDate() + 1
-    );
+    const {
+      start,
+      end,
+    } =
+      getIstanbulTodayRange();
 
     const events =
       await Event.findAll({
         where: combineWhere(
           {
             start_date: {
-              [Op.between]: [
-                today,
-                tomorrow,
-              ],
+              [Op.gte]:
+                start,
+
+              [Op.lt]:
+                end,
             },
-            event_type: 'hearing',
+
+            event_type:
+              'hearing',
           },
           buildEventAccessWhere(actor)
         ),
@@ -700,64 +796,106 @@ export const dashboardService = {
   // ====================================================
 
   async getUpcomingTasks(
-    userId,
+    actor,
     limit = 5
   ) {
-    if (!userId) {
-      throw new Error(
-        'Dashboard user not found'
+    const actorId =
+      requireActor(actor);
+
+    const now =
+      new Date();
+
+    const safeLimit =
+      Math.min(
+        Math.max(
+          Number.parseInt(
+            limit,
+            10
+          ) || 5,
+          1
+        ),
+        50
       );
+
+    const caseInclude = {
+      model:
+        Case,
+
+      as:
+        'case',
+
+      attributes: [
+        'id',
+        'title',
+      ],
+
+      required:
+        false,
+    };
+
+    if (
+      !canViewAllCases(
+        actor
+      )
+    ) {
+      caseInclude.where =
+        buildCaseAccessWhere(
+          actor
+        );
     }
 
-    const now = new Date();
+    const taskWhere = {
+      status: {
+        [Op.notIn]: [
+          'completed',
+          'cancelled',
+        ],
+      },
 
-    const safeLimit = Math.min(
-      Math.max(
-        Number.parseInt(
-          limit,
-          10
-        ) || 5,
-        1
-      ),
-      50
-    );
+      due_date: {
+        [Op.gte]:
+          now,
+      },
+    };
+
+    const includes = [
+      {
+        association:
+          'assignees',
+
+        attributes:
+          [],
+
+        through: {
+          attributes:
+            [],
+        },
+
+        required:
+          true,
+      },
+
+      caseInclude,
+    ];
+
+    if (
+      !canViewAllTasks(
+        actor
+      )
+    ) {
+      includes[0].where = {
+        id:
+          actorId,
+      };
+    }
 
     const tasks =
       await Task.findAll({
-        where: {
-          status: {
-            [Op.notIn]: [
-              'completed',
-              'cancelled',
-            ],
-          },
-          due_date: {
-            [Op.gte]: now,
-          },
-        },
+        where:
+          taskWhere,
 
-        include: [
-          {
-            association: 'assignees',
-            where: {
-              id: userId,
-            },
-            attributes: [],
-            through: {
-              attributes: [],
-            },
-            required: true,
-          },
-          {
-            model: Case,
-            as: 'case',
-            attributes: [
-              'id',
-              'title',
-            ],
-            required: false,
-          },
-        ],
+        include:
+          includes,
 
         order: [
           [
@@ -766,11 +904,48 @@ export const dashboardService = {
           ],
         ],
 
-        limit: safeLimit,
-        subQuery: false,
+        limit:
+          safeLimit,
+
+        subQuery:
+          false,
+
+        distinct:
+          true,
       });
 
-    return tasks;
+    /*
+     * Task actor'a görünür olsa bile bağlı case actor'a
+     * görünmüyorsa case UUID/title bilgisini dashboard
+     * response'undan sızdırma.
+     */
+    return tasks.map(
+      (
+        task
+      ) => {
+        if (
+          task.case_id &&
+          !task.case
+        ) {
+          task.setDataValue?.(
+            'case_id',
+            null
+          );
+
+          if (
+            task.dataValues
+          ) {
+            task.dataValues.case_id =
+              null;
+
+            task.dataValues.case =
+              null;
+          }
+        }
+
+        return task;
+      }
+    );
   },
 
   // ====================================================
@@ -864,3 +1039,5 @@ export const dashboardService = {
     };
   },
 };
+
+export default dashboardService;

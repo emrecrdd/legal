@@ -90,9 +90,14 @@ export const dashboardController = {
     res
   ) {
     try {
+      /*
+       * Sadece user id değil, actor'ın tamamını service'e
+       * geçiriyoruz. Böylece task ve bağlı case erişim
+       * permission'ları service katmanında doğrulanabilir.
+       */
       const tasks =
         await dashboardService.getUpcomingTasks(
-          req.user.id
+          req.user
         );
 
       return successResponse(
@@ -156,3 +161,5 @@ export const dashboardController = {
     }
   },
 };
+
+export default dashboardController;
