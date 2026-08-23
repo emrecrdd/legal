@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useState,
 } from 'react';
 
@@ -16,7 +15,7 @@ import {
 } from '@tanstack/react-query';
 
 import eventApi from '../../features/events/event.api.js';
-import userApi from '../../features/users/user.api.js';
+import caseApi from '../../features/cases/case.api.js';
 
 import {
   useAuth,
@@ -32,13 +31,18 @@ import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
 
 import {
-  AlarmClock,
   ArrowLeft,
   CalendarDays,
+  Eye,
   Gavel,
+  Languages,
   MapPin,
+  MessageCircle,
+  Microscope,
   Plus,
   Save,
+  Scale,
+  Target,
   Trash2,
   UserRound,
   Users,
@@ -72,29 +76,18 @@ const EXPENSE_OPTIONS = [
   { value: 'not_applicable', label: 'Yok' },
 ];
 
-const REMINDER_OPTIONS = [
-  { value: '0', label: 'Hatırlatma yok' },
-  { value: '5', label: '5 dakika önce' },
-  { value: '10', label: '10 dakika önce' },
-  { value: '15', label: '15 dakika önce' },
-  { value: '30', label: '30 dakika önce' },
-  { value: '60', label: '1 saat önce' },
-  { value: '120', label: '2 saat önce' },
-  { value: '1440', label: '1 gün önce' },
-];
-
 const ROLE_OPTIONS = [
-  { value: 'avukat', label: 'Avukat', icon: '⚖️' },
-  { value: 'karsi_taraf_avukati', label: 'Karşı Taraf Avukatı', icon: '⚖️' },
-  { value: 'müvekkil', label: 'Müvekkil', icon: '👤' },
-  { value: 'davaci', label: 'Davacı', icon: '👤' },
-  { value: 'davali', label: 'Davalı', icon: '👤' },
-  { value: 'tanik', label: 'Tanık', icon: '🗣️' },
-  { value: 'bilirkişi', label: 'Bilirkişi', icon: '🔬' },
-  { value: 'uzman', label: 'Uzman', icon: '🎯' },
-  { value: 'tercüman', label: 'Tercüman', icon: '🌐' },
-  { value: 'gözlemci', label: 'Gözlemci', icon: '👁️' },
-  { value: 'diger', label: 'Diğer', icon: '👤' },
+  { value: 'avukat', label: 'Avukat' },
+  { value: 'karsi_taraf_avukati', label: 'Karşı Taraf Avukatı' },
+  { value: 'müvekkil', label: 'Müvekkil' },
+  { value: 'davaci', label: 'Davacı' },
+  { value: 'davali', label: 'Davalı' },
+  { value: 'tanik', label: 'Tanık' },
+  { value: 'bilirkişi', label: 'Bilirkişi' },
+  { value: 'uzman', label: 'Uzman' },
+  { value: 'tercüman', label: 'Tercüman' },
+  { value: 'gözlemci', label: 'Gözlemci' },
+  { value: 'diger', label: 'Diğer' },
 ];
 
 // ======================================================
@@ -152,9 +145,45 @@ const getRoleLabel = (role) =>
   role ||
   'Katılımcı';
 
-const getRoleIcon = (role) =>
-  ROLE_OPTIONS.find((item) => item.value === role)?.icon ||
-  '👤';
+const getRoleIcon = (role) => {
+  switch (role) {
+    case 'avukat':
+    case 'karsi_taraf_avukati':
+      return (
+        <Scale className="h-4 w-4" />
+      );
+
+    case 'tanik':
+      return (
+        <MessageCircle className="h-4 w-4" />
+      );
+
+    case 'bilirkişi':
+      return (
+        <Microscope className="h-4 w-4" />
+      );
+
+    case 'uzman':
+      return (
+        <Target className="h-4 w-4" />
+      );
+
+    case 'tercüman':
+      return (
+        <Languages className="h-4 w-4" />
+      );
+
+    case 'gözlemci':
+      return (
+        <Eye className="h-4 w-4" />
+      );
+
+    default:
+      return (
+        <UserRound className="h-4 w-4" />
+      );
+  }
+};
 
 // ======================================================
 // COMPONENT
@@ -193,7 +222,6 @@ const EventEdit = () => {
     case_id: '',
     assigned_to: '',
     is_all_day: false,
-    reminder_minutes: '30',
   });
 
   const [attendeeName, setAttendeeName] =
@@ -292,12 +320,6 @@ const EventEdit = () => {
         Boolean(
           event.is_all_day
         ),
-
-      reminder_minutes:
-        String(
-          event.reminder_minutes ??
-          30
-        ),
     });
 
     setAttendees(
@@ -312,51 +334,31 @@ const EventEdit = () => {
   ]);
 
   // ======================================================
-  // USERS
+  // ASSIGNABLE LAWYERS
   // ======================================================
 
   const {
-    data: usersData,
-    isLoading: usersLoading,
+    data: lawyersData,
+    isLoading: lawyersLoading,
   } = useQuery({
     queryKey: [
-      'users',
-      'hearing-assignees',
+      'case-assignable-lawyers',
+      'event-edit',
     ],
 
     queryFn: () =>
-      userApi.getAll({
-        page: 1,
-        limit: 100,
-      }),
+      caseApi.getAssignableLawyers(),
 
     staleTime:
       5 * 60 * 1000,
   });
 
-  const users =
-    Array.isArray(
-      usersData?.data?.data
-    )
-      ? usersData.data.data
-      : [];
-
   const assignableUsers =
-    useMemo(
-      () =>
-        users.filter(
-          (item) =>
-            [
-              'admin',
-              'lawyer',
-            ].includes(
-              item.role
-            )
-        ),
-      [
-        users,
-      ]
-    );
+    Array.isArray(
+      lawyersData?.data?.data
+    )
+      ? lawyersData.data.data
+      : [];
 
   // ======================================================
   // MUTATIONS
@@ -730,11 +732,6 @@ const EventEdit = () => {
           formData.is_all_day
         ),
 
-      reminder_minutes:
-        Number(
-          formData.reminder_minutes
-        ) || 0,
-
       attendees:
         attendees.map(
           (attendee) => ({
@@ -779,7 +776,7 @@ const EventEdit = () => {
 
     const confirmed =
       window.confirm(
-        'Bu duruşmayı silmek istediğinize emin misiniz? Duruşmaya ait hatırlatmalar da iptal edilecektir.'
+        'Bu duruşmayı silmek istediğinize emin misiniz?'
       );
 
     if (!confirmed) {
@@ -864,7 +861,7 @@ const EventEdit = () => {
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Duruşma bilgilerini, sorumlu avukatı, katılımcıları ve hatırlatma ayarlarını güncelleyin.
+              Duruşma bilgilerini, sorumlu avukatı ve katılımcıları güncelleyin.
             </p>
           </div>
 
@@ -1060,8 +1057,7 @@ const EventEdit = () => {
                   onChange={handleChange}
                   disabled={
                     isPending ||
-                    usersLoading ||
-                    user?.role === 'lawyer'
+                    lawyersLoading
                   }
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 >
@@ -1077,9 +1073,12 @@ const EventEdit = () => {
                       >
                         {person.first_name}{' '}
                         {person.last_name}
-                        {person.role === 'admin'
-                          ? ' (Yönetici)'
-                          : ' (Avukat)'}
+                        {person.id ===
+                        user?.id
+                          ? ' (Kendiniz)'
+                          : person.role === 'admin'
+                            ? ' (Yönetici)'
+                            : ' (Avukat)'}
                       </option>
                     )
                   )}
@@ -1138,7 +1137,6 @@ const EventEdit = () => {
                       key={option.value}
                       value={option.value}
                     >
-                      {option.icon}{' '}
                       {option.label}
                     </option>
                   )
@@ -1167,19 +1165,24 @@ const EventEdit = () => {
                     key={`${attendee.name}-${attendee.role}-${index}`}
                     className="flex items-center justify-between rounded-lg border border-gray-200 p-3 dark:border-gray-700"
                   >
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-300">
                         {getRoleIcon(
                           attendee.role
-                        )}{' '}
-                        {attendee.name}
-                      </p>
-
-                      <p className="text-xs text-gray-500">
-                        {getRoleLabel(
-                          attendee.role
                         )}
-                      </p>
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-gray-900 dark:text-white">
+                          {attendee.name}
+                        </p>
+
+                        <p className="text-xs text-gray-500">
+                          {getRoleLabel(
+                            attendee.role
+                          )}
+                        </p>
+                      </div>
                     </div>
 
                     <button
@@ -1219,36 +1222,6 @@ const EventEdit = () => {
               className="w-full max-w-sm rounded-md border border-gray-300 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             >
               {EXPENSE_OPTIONS.map(
-                (option) => (
-                  <option
-                    key={option.value}
-                    value={option.value}
-                  >
-                    {option.label}
-                  </option>
-                )
-              )}
-            </select>
-
-          </section>
-
-          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
-
-            <div className="flex items-center gap-2">
-              <AlarmClock className="h-5 w-5 text-amber-500" />
-              <h2 className="font-semibold text-gray-900 dark:text-white">
-                Hatırlatma
-              </h2>
-            </div>
-
-            <select
-              name="reminder_minutes"
-              value={formData.reminder_minutes}
-              onChange={handleChange}
-              disabled={isPending}
-              className="w-full max-w-sm rounded-md border border-gray-300 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-            >
-              {REMINDER_OPTIONS.map(
                 (option) => (
                   <option
                     key={option.value}
