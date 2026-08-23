@@ -10,6 +10,15 @@ import {
 
 import eventApi from '../../features/events/event.api.js';
 
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Badge from '../../components/ui/Badge.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -483,6 +492,16 @@ const EventDetail = () => {
   } =
     useParams();
 
+  const {
+    user,
+  } = useAuth();
+
+  const canEdit =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_EVENTS
+    );
+
   // ====================================================
   // QUERY
   // ====================================================
@@ -889,15 +908,17 @@ const EventDetail = () => {
             </Button>
           )}
 
-          <Link
-            to={`/events/${event.id}/edit`}
-          >
-            <Button variant="outline">
-              <Edit2 className="mr-2 h-4 w-4" />
+          {canEdit && (
+            <Link
+              to={`/events/${event.id}/edit`}
+            >
+              <Button variant="outline">
+                <Edit2 className="mr-2 h-4 w-4" />
 
-              Düzenle
-            </Button>
-          </Link>
+                Düzenle
+              </Button>
+            </Link>
+          )}
 
         </div>
 

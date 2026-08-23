@@ -22,6 +22,11 @@ import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
 
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -159,6 +164,18 @@ const EventEdit = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { user } = useAuth();
+
+  const canEdit =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_EVENTS
+    );
+
+  const canDelete =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DELETE_EVENTS
+    );
 
   const [formData, setFormData] = useState({
     title: '',
@@ -617,6 +634,16 @@ const EventEdit = () => {
     e.preventDefault();
 
     if (
+      !canEdit
+    ) {
+      toast.error(
+        'Duruşma düzenleme yetkiniz bulunmuyor.'
+      );
+
+      return;
+    }
+
+    if (
       isPending
     ) {
       return;
@@ -734,6 +761,16 @@ const EventEdit = () => {
   // ======================================================
 
   const handleDelete = () => {
+    if (
+      !canDelete
+    ) {
+      toast.error(
+        'Duruşma silme yetkiniz bulunmuyor.'
+      );
+
+      return;
+    }
+
     if (
       isPending
     ) {
@@ -1227,14 +1264,16 @@ const EventEdit = () => {
 
           <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-6 dark:border-gray-700">
 
-            <Button
-              type="submit"
-              loading={mutation.isPending}
-              disabled={isPending}
-            >
-              <Save className="mr-2 h-4 w-4" />
-              Değişiklikleri Kaydet
-            </Button>
+            {canEdit && (
+              <Button
+                type="submit"
+                loading={mutation.isPending}
+                disabled={isPending}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                Değişiklikleri Kaydet
+              </Button>
+            )}
 
             <Button
               type="button"
@@ -1249,16 +1288,18 @@ const EventEdit = () => {
               Vazgeç
             </Button>
 
-            <Button
-              type="button"
-              variant="danger"
-              loading={deleteMutation.isPending}
-              disabled={isPending}
-              onClick={handleDelete}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Duruşmayı Sil
-            </Button>
+            {canDelete && (
+              <Button
+                type="button"
+                variant="danger"
+                loading={deleteMutation.isPending}
+                disabled={isPending}
+                onClick={handleDelete}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Duruşmayı Sil
+              </Button>
+            )}
 
           </div>
 
