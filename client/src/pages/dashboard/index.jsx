@@ -52,7 +52,7 @@ dayjs.locale('tr');
 // HELPERS
 // ======================================================
 
-const formatDateUTC = (
+const formatDateLocal = (
   date
 ) => {
   if (!date) {
@@ -60,28 +60,19 @@ const formatDateUTC = (
   }
 
   const value =
-    new Date(date);
+    dayjs(
+      date
+    );
 
   if (
-    Number.isNaN(
-      value.getTime()
-    )
+    !value.isValid()
   ) {
     return '-';
   }
 
-  return `${String(
-    value.getUTCDate()
-  ).padStart(
-    2,
-    '0'
-  )}.${String(
-    value.getUTCMonth() +
-      1
-  ).padStart(
-    2,
-    '0'
-  )}.${value.getUTCFullYear()}`;
+  return value.format(
+    'DD.MM.YYYY'
+  );
 };
 
 const formatMoney = (
@@ -266,6 +257,27 @@ const Dashboard = () => {
 
   const {
     data:
+      monthlyMeetingsData,
+  } =
+    useQuery({
+      queryKey: [
+        'dashboard-monthly-meetings',
+        currentYear,
+        currentMonth,
+      ],
+
+      queryFn: () =>
+        meetingApi.getAll({
+          page: 1,
+          limit: 100,
+        }),
+
+      staleTime:
+        5 * 60 * 1000,
+    });
+
+  const {
+    data:
       calendarData,
   } =
     useQuery({
@@ -331,6 +343,47 @@ const Dashboard = () => {
           .data
       : [];
 
+  const monthlyMeetings =
+    useMemo(
+      () => {
+        const rows =
+          Array.isArray(
+            monthlyMeetingsData
+              ?.data
+              ?.data
+          )
+            ? monthlyMeetingsData
+                .data
+                .data
+            : [];
+
+        return rows.filter(
+          (
+            meeting
+          ) => {
+            const start =
+              dayjs(
+                meeting.start_date
+              );
+
+            return (
+              start.isValid() &&
+              start.year() ===
+                currentYear &&
+              start.month() +
+                1 ===
+                currentMonth
+            );
+          }
+        );
+      },
+      [
+        monthlyMeetingsData,
+        currentYear,
+        currentMonth,
+      ]
+    );
+
   const events =
     Array.isArray(
       calendarData
@@ -373,7 +426,7 @@ const Dashboard = () => {
       () => [
         ...events,
 
-        ...meetings.map(
+        ...monthlyMeetings.map(
           (
             meeting
           ) => ({
@@ -400,7 +453,7 @@ const Dashboard = () => {
       ],
       [
         events,
-        meetings,
+        monthlyMeetings,
       ]
     );
 
@@ -853,7 +906,7 @@ const Dashboard = () => {
               </p>
 
               <p className="mt-1 text-sm font-semibold text-white">
-                {formatDateUTC(
+                {formatDateLocal(
                   new Date()
                 )}
               </p>
@@ -1830,7 +1883,7 @@ const Dashboard = () => {
                 </p>
 
                 <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-white">
-                  {meetings.length}
+                  {monthlyMeetings.length}
                 </p>
               </div>
 
