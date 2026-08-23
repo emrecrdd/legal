@@ -737,7 +737,7 @@ const NotificationsPage = () => {
             <div className="py-8">
 
               <Empty
-                icon={<BellOff className="h-7 w-7" />}
+                icon={BellOff}
                 title="Bildirim yok"
                 description="Yeni bildirimler geldiğinde burada görüntülenecek."
               />
