@@ -82,9 +82,6 @@ const createAuditLog = async ({
         ],
     });
   } catch (auditError) {
-    /*
-     * Audit log hatası ana CRUD işlemini bozmasın.
-     */
     logger.error(
       'Case party audit log error:',
       auditError
@@ -114,13 +111,17 @@ export const casePartyController = {
       const partyData = {
         ...req.body,
 
+        /*
+         * case_id body'den değil route'tan gelir.
+         */
         case_id:
           caseId,
       };
 
       const party =
         await casePartyService.create(
-          partyData
+          partyData,
+          req.user
         );
 
       await createAuditLog({
@@ -175,7 +176,8 @@ export const casePartyController = {
       const parties =
         await casePartyService
           .findByCase(
-            caseId
+            caseId,
+            req.user
           );
 
       return successResponse(
@@ -224,6 +226,12 @@ export const casePartyController = {
           case_id,
           party_type,
           search,
+
+          /*
+           * Record-level access scope service'te uygulanır.
+           */
+          actor:
+            req.user,
         });
 
       return paginatedResponse(
@@ -259,7 +267,8 @@ export const casePartyController = {
     try {
       const party =
         await casePartyService.findOne(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       return successResponse(
@@ -296,7 +305,8 @@ export const casePartyController = {
       const party =
         await casePartyService.update(
           req.params.id,
-          req.body
+          req.body,
+          req.user
         );
 
       await createAuditLog({
@@ -342,13 +352,10 @@ export const casePartyController = {
     res
   ) {
     try {
-      /*
-       * Service zaten silinen kaydı döndürüyor.
-       * Ayrı findOne sorgusuna gerek yok.
-       */
       const party =
         await casePartyService.remove(
-          req.params.id
+          req.params.id,
+          req.user
         );
 
       await createAuditLog({

@@ -15,6 +15,11 @@ import {
   getPaginationData,
 } from '../../utils/paginate.js';
 
+import {
+  PERMISSION_KEYS,
+  getEffectivePermissions,
+} from '../../constants/roles.js';
+
 // ======================================================
 // CONSTANTS
 // ======================================================
@@ -41,7 +46,229 @@ const ENTITY_TYPES =
   ]);
 
 // ======================================================
-// HELPERS
+// ACCESS CONTROL HELPERS
+// ======================================================
+
+const getActorId = (
+  actor
+) => {
+  return (
+    actor?.id ||
+    null
+  );
+};
+
+const getActorPermissions = (
+  actor
+) => {
+  if (
+    !actor
+  ) {
+    return [];
+  }
+
+  return getEffectivePermissions(
+    actor.role,
+    actor.permissions ||
+      {}
+  );
+};
+
+const canViewAllCases = (
+  actor
+) => {
+  return getActorPermissions(
+    actor
+  ).includes(
+    PERMISSION_KEYS.VIEW_ALL_CASES
+  );
+};
+
+const buildCaseAccessWhere = (
+  actor
+) => {
+  const actorId =
+    getActorId(
+      actor
+    );
+
+  /*
+   * FAIL CLOSED:
+   * authenticated actor yoksa unrestricted sorgu yok.
+   */
+  if (
+    !actorId
+  ) {
+    throw new Error(
+      'Dava bulunamadı'
+    );
+  }
+
+  if (
+    canViewAllCases(
+      actor
+    )
+  ) {
+    return {};
+  }
+
+  /*
+   * Referans case.service.js ile aynı record-level scope:
+   *
+   * - kullanıcının oluşturduğu dava
+   * - kullanıcıya atanmış dava
+   */
+  return {
+    [Op.or]: [
+      {
+        created_by:
+          actorId,
+      },
+
+      {
+        assigned_to:
+          actorId,
+      },
+    ],
+  };
+};
+
+const hasWhereContent = (
+  value
+) => {
+  return Boolean(
+    value &&
+    typeof value ===
+      'object' &&
+    Reflect.ownKeys(
+      value
+    ).length >
+      0
+  );
+};
+
+const combineWhere = (
+  ...conditions
+) => {
+  const validConditions =
+    conditions.filter(
+      hasWhereContent
+    );
+
+  if (
+    validConditions.length ===
+    0
+  ) {
+    return {};
+  }
+
+  if (
+    validConditions.length ===
+    1
+  ) {
+    return validConditions[0];
+  }
+
+  return {
+    [Op.and]:
+      validConditions,
+  };
+};
+
+const assertCaseAccess =
+  async (
+    caseId,
+    actor,
+    options = {}
+  ) => {
+    const accessWhere =
+      buildCaseAccessWhere(
+        actor
+      );
+
+    const caseItem =
+      await Case.findOne({
+        where:
+          combineWhere(
+            {
+              id:
+                caseId,
+            },
+
+            accessWhere
+          ),
+
+        attributes: [
+          'id',
+          'created_by',
+          'assigned_to',
+        ],
+
+        transaction:
+          options.transaction,
+
+        lock:
+          options.lock,
+      });
+
+    if (
+      !caseItem
+    ) {
+      throw new Error(
+        'Dava bulunamadı'
+      );
+    }
+
+    return caseItem;
+  };
+
+const assertPartyAccess =
+  async (
+    partyId,
+    actor,
+    options = {}
+  ) => {
+    const party =
+      await CaseParty.findByPk(
+        partyId,
+        {
+          transaction:
+            options.transaction,
+
+          lock:
+            options.lock,
+        }
+      );
+
+    if (
+      !party
+    ) {
+      throw new Error(
+        'Taraf bulunamadı'
+      );
+    }
+
+    try {
+      await assertCaseAccess(
+        party.case_id,
+        actor,
+        options
+      );
+    } catch {
+      /*
+       * Party gerçekten var olsa bile yetkisiz kullanıcıya
+       * kaynak varlığı bilgisi sızdırma.
+       */
+      throw new Error(
+        'Taraf bulunamadı'
+      );
+    }
+
+    return party;
+  };
+
+// ======================================================
+// NORMALIZATION / VALIDATION
 // ======================================================
 
 const normalizeNullable = (
@@ -189,8 +416,13 @@ const validatePartyData = (
 // ======================================================
 
 export const casePartyService = {
+  // ====================================================
+  // CREATE
+  // ====================================================
+
   async create(
-    data
+    data,
+    actor
   ) {
     const normalized =
       normalizePartyData(
@@ -209,28 +441,16 @@ export const casePartyService = {
       );
     }
 
-    const caseItem =
-      await Case.findByPk(
-        normalized.case_id,
-        {
-          attributes: [
-            'id',
-          ],
-        }
-      );
-
-    if (
-      !caseItem
-    ) {
-      throw new Error(
-        'Dava bulunamadı'
-      );
-    }
-
     /*
-     * Aynı davaya aynı kimlik numarasıyla aynı tarafı
-     * yanlışlıkla ikinci kez eklemeyi engelle.
+     * BOLA:
+     * Verilen case_id'nin actor tarafından erişilebilir
+     * olduğu doğrulanmadan taraf oluşturulamaz.
      */
+    await assertCaseAccess(
+      normalized.case_id,
+      actor
+    );
+
     if (
       normalized.identification_number
     ) {
@@ -259,26 +479,18 @@ export const casePartyService = {
     );
   },
 
-  async findByCase(
-    caseId
-  ) {
-    const caseItem =
-      await Case.findByPk(
-        caseId,
-        {
-          attributes: [
-            'id',
-          ],
-        }
-      );
+  // ====================================================
+  // FIND BY CASE
+  // ====================================================
 
-    if (
-      !caseItem
-    ) {
-      throw new Error(
-        'Dava bulunamadı'
-      );
-    }
+  async findByCase(
+    caseId,
+    actor
+  ) {
+    await assertCaseAccess(
+      caseId,
+      actor
+    );
 
     return CaseParty.findAll({
       where: {
@@ -300,41 +512,37 @@ export const casePartyService = {
     });
   },
 
+  // ====================================================
+  // FIND ONE
+  // ====================================================
+
   async findOne(
-    id
+    id,
+    actor
   ) {
-    const party =
-      await CaseParty.findByPk(
-        id
-      );
-
-    if (
-      !party
-    ) {
-      throw new Error(
-        'Taraf bulunamadı'
-      );
-    }
-
-    return party;
+    return assertPartyAccess(
+      id,
+      actor
+    );
   },
+
+  // ====================================================
+  // UPDATE
+  // ====================================================
 
   async update(
     id,
-    data
+    data,
+    actor
   ) {
+    /*
+     * Party alınmadan önce parent case ownership doğrulanır.
+     */
     const party =
-      await CaseParty.findByPk(
-        id
+      await assertPartyAccess(
+        id,
+        actor
       );
-
-    if (
-      !party
-    ) {
-      throw new Error(
-        'Taraf bulunamadı'
-      );
-    }
 
     const normalized =
       normalizePartyData(
@@ -392,26 +600,28 @@ export const casePartyService = {
     return party;
   },
 
+  // ====================================================
+  // REMOVE
+  // ====================================================
+
   async remove(
-    id
+    id,
+    actor
   ) {
     const party =
-      await CaseParty.findByPk(
-        id
+      await assertPartyAccess(
+        id,
+        actor
       );
-
-    if (
-      !party
-    ) {
-      throw new Error(
-        'Taraf bulunamadı'
-      );
-    }
 
     await party.destroy();
 
     return party;
   },
+
+  // ====================================================
+  // FIND ALL
+  // ====================================================
 
   async findAll({
     case_id,
@@ -419,7 +629,15 @@ export const casePartyService = {
     limit = 10,
     party_type,
     search,
+    actor,
   }) {
+    /*
+     * actor yoksa burada da fail-closed.
+     */
+    buildCaseAccessWhere(
+      actor
+    );
+
     const safePage =
       Math.max(
         Number.parseInt(
@@ -446,8 +664,52 @@ export const casePartyService = {
     if (
       case_id
     ) {
+      /*
+       * Belirli dava filtresinde doğrudan parent access check.
+       */
+      await assertCaseAccess(
+        case_id,
+        actor
+      );
+
       where.case_id =
         case_id;
+    } else if (
+      !canViewAllCases(
+        actor
+      )
+    ) {
+      /*
+       * Global party listesinde normal kullanıcı sadece
+       * erişebildiği davaların party kayıtlarını görür.
+       *
+       * Association alias'ına bağımlı JOIN yerine önce
+       * erişilebilir case id'leri çıkarılıyor.
+       */
+      const accessibleCases =
+        await Case.findAll({
+          where:
+            buildCaseAccessWhere(
+              actor
+            ),
+
+          attributes: [
+            'id',
+          ],
+        });
+
+      const accessibleCaseIds =
+        accessibleCases.map(
+          (
+            caseItem
+          ) =>
+            caseItem.id
+        );
+
+      where.case_id = {
+        [Op.in]:
+          accessibleCaseIds,
+      };
     }
 
     if (
@@ -546,9 +808,19 @@ export const casePartyService = {
     };
   },
 
+  // ====================================================
+  // COUNT BY CASE
+  // ====================================================
+
   async countByCase(
-    caseId
+    caseId,
+    actor
   ) {
+    await assertCaseAccess(
+      caseId,
+      actor
+    );
+
     return CaseParty.count({
       where: {
         case_id:
