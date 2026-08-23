@@ -12,6 +12,15 @@ import {
 
 import meetingApi from '../../features/meetings/meeting.api.js';
 
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Table from '../../components/ui/Table.jsx';
@@ -137,6 +146,16 @@ const formatDate = (
 // ======================================================
 
 const MeetingsList = () => {
+  const {
+    user,
+  } = useAuth();
+
+  const canCreate =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.CREATE_MEETINGS
+    );
+
   const [
     search,
     setSearch,
@@ -346,12 +365,14 @@ const MeetingsList = () => {
 
         </div>
 
-        <Link to="/meetings/create">
-          <Button>
-            <Plus className="h-4 w-4" />
-            Yeni Toplantı
-          </Button>
-        </Link>
+        {canCreate && (
+          <Link to="/meetings/create">
+            <Button>
+              <Plus className="h-4 w-4" />
+              Yeni Toplantı
+            </Button>
+          </Link>
+        )}
 
       </div>
 
@@ -421,7 +442,9 @@ const MeetingsList = () => {
           description={
             hasSearch
               ? 'Arama kriterinizi değiştirerek tekrar deneyin.'
-              : 'Yeni bir toplantı oluşturarak planlamaya başlayabilirsiniz.'
+              : canCreate
+                ? 'Yeni bir toplantı oluşturarak planlamaya başlayabilirsiniz.'
+                : 'Henüz görüntüleyebileceğiniz bir toplantı kaydı bulunmuyor.'
           }
           action={
             hasSearch ? (
@@ -433,14 +456,14 @@ const MeetingsList = () => {
               >
                 Aramayı Temizle
               </Button>
-            ) : (
+            ) : canCreate ? (
               <Link to="/meetings/create">
                 <Button>
                   <Plus className="h-4 w-4" />
                   İlk Toplantıyı Oluştur
                 </Button>
               </Link>
-            )
+            ) : null
           }
         />
       ) : (

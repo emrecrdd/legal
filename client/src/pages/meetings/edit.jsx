@@ -23,6 +23,11 @@ import userApi from '../../features/users/user.api.js';
 
 import { useAuth } from '../../app/providers/auth.provider.jsx';
 
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -379,12 +384,17 @@ const MeetingEdit = () => {
     user?.role ===
     'admin';
 
-  const canDelete = [
-    'admin',
-    'lawyer',
-  ].includes(
-    user?.role
-  );
+  const canEdit =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_MEETINGS
+    );
+
+  const canDelete =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DELETE_MEETINGS
+    );
 
   const assignableUsers =
     useMemo(() => {
@@ -700,6 +710,14 @@ const MeetingEdit = () => {
     event
   ) => {
     event.preventDefault();
+
+    if (!canEdit) {
+      toast.error(
+        'Bu toplantıyı düzenleme yetkiniz bulunmuyor'
+      );
+
+      return;
+    }
 
     if (
       updateMutation.isPending
@@ -1666,20 +1684,22 @@ const MeetingEdit = () => {
 
           <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
 
-            <Button
-              type="submit"
-              loading={
-                updateMutation.isPending
-              }
-              disabled={
-                updateMutation.isPending ||
-                deleteMutation.isPending
-              }
-            >
-              <Save className="mr-2 h-4 w-4" />
+            {canEdit && (
+              <Button
+                type="submit"
+                loading={
+                  updateMutation.isPending
+                }
+                disabled={
+                  updateMutation.isPending ||
+                  deleteMutation.isPending
+                }
+              >
+                <Save className="mr-2 h-4 w-4" />
 
-              Değişiklikleri Kaydet
-            </Button>
+                Değişiklikleri Kaydet
+              </Button>
+            )}
 
             <Button
               type="button"

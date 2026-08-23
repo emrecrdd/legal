@@ -10,6 +10,15 @@ import {
 
 import meetingApi from '../../features/meetings/meeting.api.js';
 
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Badge from '../../components/ui/Badge.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -278,6 +287,16 @@ const MeetingDetail = () => {
     id,
   } =
     useParams();
+
+  const {
+    user,
+  } = useAuth();
+
+  const canEdit =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_MEETINGS
+    );
 
   // ======================================================
   // QUERY
@@ -650,65 +669,67 @@ const MeetingDetail = () => {
 
         <div className="flex flex-wrap items-center gap-2">
 
-          <select
-            value={
-              meeting.status
-            }
-            onChange={(
-              event
-            ) =>
-              updateStatus.mutate(
-                event.target
-                  .value
-              )
-            }
-            disabled={
-              updateStatus
-                .isPending
-            }
-            className="
-              rounded-lg
-              border
-              border-gray-200
-              bg-white
-              px-3
-              py-2
-              text-sm
-              font-medium
-              text-gray-700
-              outline-none
-              transition
-              focus:border-blue-500
-              focus:ring-2
-              focus:ring-blue-500/10
-              disabled:cursor-not-allowed
-              disabled:opacity-60
-              dark:border-white/[0.08]
-              dark:bg-white/[0.035]
-              dark:text-slate-200
-            "
-          >
+          {canEdit && (
+            <select
+              value={
+                meeting.status
+              }
+              onChange={(
+                event
+              ) =>
+                updateStatus.mutate(
+                  event.target
+                    .value
+                )
+              }
+              disabled={
+                updateStatus
+                  .isPending
+              }
+              className="
+                rounded-lg
+                border
+                border-gray-200
+                bg-white
+                px-3
+                py-2
+                text-sm
+                font-medium
+                text-gray-700
+                outline-none
+                transition
+                focus:border-blue-500
+                focus:ring-2
+                focus:ring-blue-500/10
+                disabled:cursor-not-allowed
+                disabled:opacity-60
+                dark:border-white/[0.08]
+                dark:bg-white/[0.035]
+                dark:text-slate-200
+              "
+            >
 
-            {STATUS_OPTIONS.map(
-              (
-                status
-              ) => (
-                <option
-                  key={
-                    status.value
-                  }
-                  value={
-                    status.value
-                  }
-                >
-                  {
-                    status.label
-                  }
-                </option>
-              )
-            )}
+              {STATUS_OPTIONS.map(
+                (
+                  status
+                ) => (
+                  <option
+                    key={
+                      status.value
+                    }
+                    value={
+                      status.value
+                    }
+                  >
+                    {
+                      status.label
+                    }
+                  </option>
+                )
+              )}
 
-          </select>
+            </select>
+          )}
 
           {/* TAKVİME EKLE */}
 
@@ -734,20 +755,22 @@ const MeetingDetail = () => {
             </Button>
           )}
 
-          <Link
-            to={`/meetings/${meeting.id}/edit`}
-          >
-
-            <Button
-              variant="outline"
-              size="sm"
+          {canEdit && (
+            <Link
+              to={`/meetings/${meeting.id}/edit`}
             >
-              <Edit2 className="mr-2 h-4 w-4" />
 
-              Düzenle
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+              >
+                <Edit2 className="mr-2 h-4 w-4" />
 
-          </Link>
+                Düzenle
+              </Button>
+
+            </Link>
+          )}
 
         </div>
 
