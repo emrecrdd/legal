@@ -1,9 +1,11 @@
 import {
+  useEffect,
   useState,
 } from 'react';
 
 import {
   Link,
+  useSearchParams,
 } from 'react-router-dom';
 
 import {
@@ -26,6 +28,7 @@ import {
   CheckSquare,
   FileText,
   FolderOpen,
+  NotebookText,
   Search as SearchIcon,
   Sparkles,
   UserRound,
@@ -242,16 +245,30 @@ const formatFileSize = (
 const getAssigneeName = (
   task
 ) => {
-  const fullName = [
-    task?.assignee?.first_name,
-    task?.assignee?.last_name,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
+  const assignees =
+    Array.isArray(
+      task?.assignees
+    )
+      ? task.assignees
+      : [];
+
+  const names =
+    assignees
+      .map((
+        assignee
+      ) =>
+        [
+          assignee?.first_name,
+          assignee?.last_name,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .trim()
+      )
+      .filter(Boolean);
 
   return (
-    fullName ||
+    names.join(', ') ||
     'Atanmadı'
   );
 };
@@ -262,16 +279,59 @@ const getAssigneeName = (
 
 const Search = () => {
   const [
+    searchParams,
+  ] =
+    useSearchParams();
+
+  const urlQuery =
+    searchParams.get(
+      'q'
+    ) ||
+    '';
+
+  const requestedType =
+    searchParams.get(
+      'type'
+    ) ||
+    'all';
+
+  const urlType =
+    TYPE_OPTIONS.some(
+      (option) =>
+        option.value ===
+        requestedType
+    )
+      ? requestedType
+      : 'all';
+
+  const [
     query,
     setQuery,
   ] =
-    useState('');
+    useState(
+      urlQuery
+    );
 
   const [
     type,
     setType,
   ] =
-    useState('all');
+    useState(
+      urlType
+    );
+
+  useEffect(() => {
+    setQuery(
+      urlQuery
+    );
+
+    setType(
+      urlType
+    );
+  }, [
+    urlQuery,
+    urlType,
+  ]);
 
   const debouncedQuery =
     useDebounce(
@@ -301,9 +361,12 @@ const Search = () => {
       ],
 
       queryFn: () =>
-        searchApi.searchAll(
+        searchApi.search(
           debouncedQuery,
-          type
+          type,
+          type === 'all'
+            ? 10
+            : 20
         ),
 
       enabled:
@@ -341,11 +404,56 @@ const Search = () => {
   // DATA
   // ====================================================
 
-  const results =
+  const rawResults =
     data?.data?.data ||
     data?.data ||
     data ||
     null;
+
+  const results =
+    type === 'all'
+      ? rawResults
+      : {
+          clients:
+            type === 'clients' &&
+            Array.isArray(
+              rawResults
+            )
+              ? rawResults
+              : [],
+
+          cases:
+            type === 'cases' &&
+            Array.isArray(
+              rawResults
+            )
+              ? rawResults
+              : [],
+
+          documents:
+            type === 'documents' &&
+            Array.isArray(
+              rawResults
+            )
+              ? rawResults
+              : [],
+
+          tasks:
+            type === 'tasks' &&
+            Array.isArray(
+              rawResults
+            )
+              ? rawResults
+              : [],
+
+          notes:
+            type === 'notes' &&
+            Array.isArray(
+              rawResults
+            )
+              ? rawResults
+              : [],
+        };
 
   const suggestionData =
     suggestions?.data?.data ||
@@ -367,6 +475,9 @@ const Search = () => {
             0 ||
           (results.tasks?.length ||
             0) >
+            0 ||
+          (results.notes?.length ||
+            0) >
             0
         )
     );
@@ -379,6 +490,8 @@ const Search = () => {
     (results?.documents?.length ||
       0) +
     (results?.tasks?.length ||
+      0) +
+    (results?.notes?.length ||
       0);
 
   const hasSearch =
@@ -442,7 +555,7 @@ const Search = () => {
               dark:text-slate-400
             "
           >
-            Müvekkil, dava, belge ve görev kayıtlarında tek noktadan arama yapın.
+            Müvekkil, dava, belge, görev ve not kayıtlarında tek noktadan arama yapın.
           </p>
 
         </div>
@@ -462,7 +575,7 @@ const Search = () => {
             <div className="flex-1">
 
               <Input
-                placeholder="Müvekkil, dava, belge veya görev ara..."
+                placeholder="Müvekkil, dava, belge, görev veya not ara..."
                 value={
                   query
                 }
@@ -688,7 +801,7 @@ const Search = () => {
           </h2>
 
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500 dark:text-slate-400">
-            Aradığınız kaydın adını, dosya numarasını, belge başlığını veya görev bilgisini yazabilirsiniz.
+            Aradığınız kaydın adını, dosya numarasını, belge başlığını, görev veya not bilgisini yazabilirsiniz.
           </p>
 
         </div>
@@ -1282,6 +1395,146 @@ const Search = () => {
 
                         </Link>
                       )
+                    )}
+
+                  </div>
+
+                </Card.Body>
+
+              </Card>
+            )}
+
+            {/* ==================================================
+                NOTES
+            ================================================== */}
+
+            {results.notes?.length >
+              0 && (
+              <Card>
+
+                <Card.Header>
+
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-3">
+
+                      <div
+                        className="
+                          flex
+                          h-8
+                          w-8
+                          items-center
+                          justify-center
+                          rounded-lg
+                          bg-slate-100
+                          text-slate-600
+                          dark:bg-white/[0.05]
+                          dark:text-slate-400
+                        "
+                      >
+                        <NotebookText size={16} />
+                      </div>
+
+                      <h2 className="font-semibold text-gray-900 dark:text-white">
+                        Notlar
+                      </h2>
+
+                    </div>
+
+                    <Badge variant="default">
+                      {results.notes.length}
+                    </Badge>
+
+                  </div>
+
+                </Card.Header>
+
+                <Card.Body className="p-2">
+
+                  <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+
+                    {results.notes.map(
+                      (
+                        note
+                      ) => {
+                        const target =
+                          note?.case?.id
+                            ? `/cases/${note.case.id}`
+                            : note?.client?.id
+                              ? `/clients/${note.client.id}`
+                              : null;
+
+                        const content = (
+                          <>
+
+                            <div className="min-w-0 flex-1">
+
+                              <p className="line-clamp-2 text-sm font-semibold leading-6 text-gray-900 dark:text-white">
+                                {note.content ||
+                                  'Not'}
+                              </p>
+
+                              <p className="mt-1 truncate text-xs text-gray-500 dark:text-slate-500">
+                                {note?.case?.title ||
+                                  note?.client?.name ||
+                                  'Bağımsız not'}
+                              </p>
+
+                            </div>
+
+                            <ArrowRight className="h-4 w-4 shrink-0 text-gray-300 dark:text-slate-600" />
+
+                          </>
+                        );
+
+                        if (
+                          target
+                        ) {
+                          return (
+                            <Link
+                              key={
+                                note.id
+                              }
+                              to={
+                                target
+                              }
+                              className="
+                                flex
+                                items-center
+                                justify-between
+                                gap-4
+                                rounded-lg
+                                px-3
+                                py-3
+                                transition
+                                hover:bg-gray-50
+                                dark:hover:bg-white/[0.025]
+                              "
+                            >
+                              {content}
+                            </Link>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={
+                              note.id
+                            }
+                            className="
+                              flex
+                              items-center
+                              justify-between
+                              gap-4
+                              rounded-lg
+                              px-3
+                              py-3
+                            "
+                          >
+                            {content}
+                          </div>
+                        );
+                      }
                     )}
 
                   </div>

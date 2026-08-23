@@ -1,62 +1,87 @@
 import axios from '../../app/config/axios.js';
 
 const searchApi = {
+
   // Global search
+
   search: (query, type = 'all', limit = 20) => {
-    return axios.get('/search', { 
-      params: { q: query, type, limit } 
+
+    return axios.get('/search', {
+      params: { q: query, type, limit }
     });
+
   },
 
   // Search all
-  searchAll: (query, type = 'all', limit = 10) => {
-      console.log('🔍 Arama isteği gönderiliyor:', { query, type, limit }); // ← BUNU EKLE!
-    return axios.get('/search/all', { 
-      params: { q: query, type, limit } 
+
+  searchAll: (query, limit = 10) => {
+
+    return axios.get('/search/all', {
+      params: { q: query, limit }
     });
+
   },
 
   // Search clients
+
   searchClients: (query, limit = 20) => {
-    return axios.get('/search/clients', { 
-      params: { q: query, limit } 
+
+    return axios.get('/search/clients', {
+      params: { q: query, limit }
     });
+
   },
 
   // Search cases
+
   searchCases: (query, limit = 20) => {
-    return axios.get('/search/cases', { 
-      params: { q: query, limit } 
+
+    return axios.get('/search/cases', {
+      params: { q: query, limit }
     });
+
   },
 
   // Search documents
+
   searchDocuments: (query, limit = 20) => {
-    return axios.get('/search/documents', { 
-      params: { q: query, limit } 
+
+    return axios.get('/search/documents', {
+      params: { q: query, limit }
     });
+
   },
 
   // Search tasks
+
   searchTasks: (query, limit = 20) => {
-    return axios.get('/search/tasks', { 
-      params: { q: query, limit } 
+
+    return axios.get('/search/tasks', {
+      params: { q: query, limit }
     });
+
   },
 
   // Search notes
+
   searchNotes: (query, limit = 20) => {
-    return axios.get('/search/notes', { 
-      params: { q: query, limit } 
+
+    return axios.get('/search/notes', {
+      params: { q: query, limit }
     });
+
   },
 
   // Get search suggestions
+
   getSuggestions: (query) => {
-    return axios.get('/search/suggestions', { 
-      params: { q: query } 
+
+    return axios.get('/search/suggestions', {
+      params: { q: query }
     });
+
   },
+
 };
 
 export default searchApi;
