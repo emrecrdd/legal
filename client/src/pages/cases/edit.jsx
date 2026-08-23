@@ -17,7 +17,6 @@ import {
 
 import caseApi from '../../features/cases/case.api.js';
 import clientApi from '../../features/clients/client.api.js';
-import userApi from '../../features/users/user.api.js';
 
 import {
   useAuth,
@@ -243,16 +242,12 @@ const CaseEdit = () => {
     isLoading: lawyersLoading,
   } = useQuery({
     queryKey: [
-      'users',
-      {
-        role: 'lawyer',
-      },
+      'case-assignable-lawyers',
+      'case-edit',
     ],
 
     queryFn: () =>
-      userApi.getAll({
-        role: 'lawyer',
-      }),
+      caseApi.getAssignableLawyers(),
   });
 
   // ======================================================
