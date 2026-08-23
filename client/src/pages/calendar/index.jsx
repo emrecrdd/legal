@@ -57,7 +57,7 @@ const WEEK_DAYS = [
 // DATE HELPERS
 // ======================================================
 
-const formatDateUTC = (
+const formatDateLocal = (
   date
 ) => {
   if (!date) {
@@ -65,27 +65,19 @@ const formatDateUTC = (
   }
 
   const parsed =
-    new Date(date);
+    dayjs(
+      date
+    );
 
   if (
-    Number.isNaN(
-      parsed.getTime()
-    )
+    !parsed.isValid()
   ) {
     return '-';
   }
 
-  return `${String(
-    parsed.getUTCDate()
-  ).padStart(
-    2,
-    '0'
-  )}.${String(
-    parsed.getUTCMonth() + 1
-  ).padStart(
-    2,
-    '0'
-  )}.${parsed.getUTCFullYear()}`;
+  return parsed.format(
+    'DD.MM.YYYY'
+  );
 };
 
 const formatTime = (
@@ -1144,7 +1136,7 @@ const Calendar = () => {
           </div>
 
           <p className="text-xs text-gray-400 dark:text-slate-500">
-            {formatDateUTC(
+            {formatDateLocal(
               new Date()
             )}
           </p>
@@ -1642,7 +1634,7 @@ const Calendar = () => {
               </h2>
 
               <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
-                {formatDateUTC(
+                {formatDateLocal(
                   new Date()
                 )}
                 {' · '}

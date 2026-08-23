@@ -1,5 +1,6 @@
 import {
   Op,
+  Sequelize,
 } from 'sequelize';
 
 import {
@@ -56,6 +57,7 @@ import {
 } from '../../utils/paginate.js';
 
 import {
+  ROLES,
   PERMISSION_KEYS,
   getEffectivePermissions,
 } from '../../constants/roles.js';
@@ -89,13 +91,27 @@ const getActorPermissions = (
   );
 };
 
+const isAdmin = (
+  actor
+) => {
+  return (
+    actor?.role ===
+    ROLES.ADMIN
+  );
+};
+
 const canViewAllCases = (
   actor
 ) => {
-  return getActorPermissions(
-    actor
-  ).includes(
-    PERMISSION_KEYS.VIEW_ALL_CASES
+  return (
+    isAdmin(
+      actor
+    ) ||
+    getActorPermissions(
+      actor
+    ).includes(
+      PERMISSION_KEYS.VIEW_ALL_CASES
+    )
   );
 };
 
@@ -111,12 +127,6 @@ const buildCaseAccessWhere = (
       actor
     );
 
-  /*
-   * FAIL CLOSED
-   *
-   * Service'e authenticated actor gelmediyse
-   * unrestricted query çalıştırmıyoruz.
-   */
   if (
     !actorId
   ) {
@@ -125,10 +135,6 @@ const buildCaseAccessWhere = (
     );
   }
 
-  /*
-   * Admin veya VIEW_ALL_CASES sahibi kullanıcı
-   * tüm dava kayıtlarını görebilir.
-   */
   if (
     canViewAllCases(
       actor
@@ -137,14 +143,6 @@ const buildCaseAccessWhere = (
     return {};
   }
 
-  /*
-   * Diğer kullanıcılar yalnızca:
-   *
-   * - kendisinin oluşturduğu
-   * - kendisine atanmış
-   *
-   * davalara erişebilir.
-   */
   return {
     [Op.or]: [
       {
@@ -156,6 +154,96 @@ const buildCaseAccessWhere = (
         assigned_to:
           actorId,
       },
+    ],
+  };
+};
+
+// ======================================================
+// CLIENT ACCESS SCOPE
+// ======================================================
+
+const buildClientAccessWhere = (
+  actor
+) => {
+  const actorId =
+    getActorId(
+      actor
+    );
+
+  if (
+    !actorId
+  ) {
+    throw new Error(
+      'Client not found'
+    );
+  }
+
+  if (
+    isAdmin(
+      actor
+    )
+  ) {
+    return {};
+  }
+
+  const escapedActorId =
+    sequelize.escape(
+      actorId
+    );
+
+  /*
+   * client.service.js ile aynı erişim politikası:
+   *
+   * VIEW_ALL_CASES sahibi:
+   * - herhangi bir aktif davaya bağlı client
+   * - kendi oluşturduğu bağımsız client
+   *
+   * Normal kullanıcı:
+   * - kendi oluşturduğu client
+   * - oluşturduğu/atandığı davaya bağlı client
+   */
+  const caseAccessPredicate =
+    canViewAllCases(
+      actor
+    )
+      ? `
+        EXISTS (
+          SELECT 1
+          FROM case_clients cc
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+          WHERE cc.client_id = "Client"."id"
+        )
+      `
+      : `
+        EXISTS (
+          SELECT 1
+          FROM case_clients cc
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+           AND c.deleted_at IS NULL
+          WHERE cc.client_id = "Client"."id"
+            AND (
+              c.created_by = ${escapedActorId}
+              OR c.assigned_to = ${escapedActorId}
+            )
+        )
+      `;
+
+  return {
+    [Op.or]: [
+      {
+        created_by:
+          actorId,
+      },
+
+      Sequelize.where(
+        Sequelize.literal(
+          caseAccessPredicate
+        ),
+        true
+      ),
     ],
   };
 };
@@ -200,14 +288,6 @@ const combineWhere = (
     return validConditions[0];
   }
 
-  /*
-   * Search de Op.or kullanıyor,
-   * ownership scope da Op.or kullanıyor.
-   *
-   * Object spread ile birini diğerinin üzerine
-   * yazmak yerine Op.and ile güvenli şekilde
-   * birleştiriyoruz.
-   */
   return {
     [Op.and]:
       validConditions,
@@ -254,16 +334,6 @@ const assertCaseAccess =
           options.lock,
       });
 
-    /*
-     * Burada özellikle:
-     *
-     * "Dava var ama yetkin yok"
-     *
-     * demiyoruz.
-     *
-     * Böylece başka UUID'lerin varlığı da
-     * dışarı sızmıyor.
-     */
     if (
       !caseItem
     ) {
@@ -273,6 +343,101 @@ const assertCaseAccess =
     }
 
     return caseItem;
+  };
+
+// ======================================================
+// ASSERT CLIENT IDS ACCESS
+// ======================================================
+
+const normalizeClientIds = (
+  clientIds
+) => {
+  if (
+    !Array.isArray(
+      clientIds
+    )
+  ) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      clientIds
+        .map(
+          (
+            id
+          ) =>
+            String(
+              id ||
+              ''
+            ).trim()
+        )
+        .filter(
+          Boolean
+        )
+    ),
+  ];
+};
+
+const assertClientIdsAccess =
+  async (
+    clientIds,
+    actor,
+    options = {}
+  ) => {
+    const normalizedIds =
+      normalizeClientIds(
+        clientIds
+      );
+
+    if (
+      normalizedIds.length ===
+      0
+    ) {
+      return [];
+    }
+
+    const clients =
+      await Client.findAll({
+        where:
+          combineWhere(
+            {
+              id: {
+                [Op.in]:
+                  normalizedIds,
+              },
+            },
+
+            buildClientAccessWhere(
+              actor
+            )
+          ),
+
+        attributes: [
+          'id',
+        ],
+
+        transaction:
+          options.transaction,
+
+        raw:
+          true,
+      });
+
+    /*
+     * Bir UUID bile yoksa / silinmişse / actor scope'u
+     * dışındaysa ilişkilendirme tamamen reddedilir.
+     */
+    if (
+      clients.length !==
+      normalizedIds.length
+    ) {
+      throw new Error(
+        'Client not found'
+      );
+    }
+
+    return normalizedIds;
   };
 
 // ======================================================
@@ -293,14 +458,6 @@ export const caseService = {
       ...caseData
     } = data;
 
-    /*
-     * Controller created_by alanını actor'dan
-     * oluşturuyor.
-     *
-     * Defense-in-depth:
-     * service seviyesinde de authenticated actor
-     * olmadan case oluşturulmaz.
-     */
     const actorId =
       getActorId(
         actor
@@ -314,33 +471,62 @@ export const caseService = {
       );
     }
 
-    const newCase =
-      await Case.create({
-        ...caseData,
-
-        /*
-         * created_by request içeriğine güvenmez.
-         */
-        created_by:
-          actorId,
-      });
-
-    if (
+    /*
+     * Case.create'dan önce doğrulanır.
+     * Yabancı client UUID'si verilirse dava hiç oluşmaz.
+     */
+    const safeClientIds =
       Array.isArray(
         client_ids
-      ) &&
-      client_ids.length >
-        0
-    ) {
-      await newCase.setClients(
-        client_ids
-      );
-    }
+      )
+        ? await assertClientIdsAccess(
+            client_ids,
+            actor
+          )
+        : [];
 
-    return this.findOne(
-      newCase.id,
-      actor
-    );
+    const transaction =
+      await sequelize.transaction();
+
+    try {
+      const newCase =
+        await Case.create(
+          {
+            ...caseData,
+
+            created_by:
+              actorId,
+          },
+          {
+            transaction,
+          }
+        );
+
+      if (
+        safeClientIds.length >
+        0
+      ) {
+        await newCase.setClients(
+          safeClientIds,
+          {
+            transaction,
+          }
+        );
+      }
+
+      await transaction.commit();
+
+      return this.findOne(
+        newCase.id,
+        actor
+      );
+    } catch (
+      error
+    ) {
+      await transaction.rollback();
+
+      throw error;
+    }
   },
 
   // ====================================================
@@ -357,10 +543,6 @@ export const caseService = {
     const conditions =
       [];
 
-    // ==================================================
-    // RECORD-LEVEL ACCESS
-    // ==================================================
-
     const accessWhere =
       buildCaseAccessWhere(
         actor
@@ -375,10 +557,6 @@ export const caseService = {
         accessWhere
       );
     }
-
-    // ==================================================
-    // SEARCH
-    // ==================================================
 
     if (
       search &&
@@ -433,10 +611,6 @@ export const caseService = {
         ],
       });
     }
-
-    // ==================================================
-    // STATUS
-    // ==================================================
 
     if (
       status
@@ -580,12 +754,6 @@ export const caseService = {
         actor
       );
 
-    /*
-     * findByPk yerine findOne + ownership scope.
-     *
-     * Böylece başka UUID verilerek kayıt
-     * alınamaz.
-     */
     const caseItem =
       await Case.findOne({
         where:
@@ -679,10 +847,6 @@ export const caseService = {
               },
             ],
           },
-
-          // ==============================================
-          // TASKS
-          // ==============================================
 
           {
             model:
@@ -919,70 +1083,6 @@ export const caseService = {
       ...updateData
     } = data;
 
-    const accessWhere =
-      buildCaseAccessWhere(
-        actor
-      );
-
-    const caseItem =
-      await Case.findOne({
-        where:
-          combineWhere(
-            {
-              id,
-            },
-
-            accessWhere
-          ),
-      });
-
-    if (
-      !caseItem
-    ) {
-      throw new Error(
-        'Case not found'
-      );
-    }
-
-    /*
-     * created_by hiçbir zaman service update
-     * üzerinden değiştirilemez.
-     *
-     * Controller zaten filtreliyor ama service
-     * katmanında da defense-in-depth uygulanıyor.
-     */
-    delete updateData.created_by;
-
-    delete updateData.id;
-
-    await caseItem.update(
-      updateData
-    );
-
-    if (
-      Array.isArray(
-        client_ids
-      )
-    ) {
-      await caseItem.setClients(
-        client_ids
-      );
-    }
-
-    return this.findOne(
-      id,
-      actor
-    );
-  },
-
-  // ====================================================
-  // REMOVE
-  // ====================================================
-
-  async remove(
-    id,
-    actor
-  ) {
     const transaction =
       await sequelize.transaction();
 
@@ -992,10 +1092,6 @@ export const caseService = {
           actor
         );
 
-      /*
-       * Ownership kontrolü transaction ve row lock
-       * ile aynı sorguda uygulanır.
-       */
       const caseItem =
         await Case.findOne({
           where:
@@ -1021,9 +1117,101 @@ export const caseService = {
         );
       }
 
-      // ==================================================
-      // EVENT / HEARING REMINDERS
-      // ==================================================
+      /*
+       * client_ids request'te varsa tamamı actor scope'u
+       * içinde doğrulanır. [] mevcut ilişkileri temizler.
+       */
+      const safeClientIds =
+        Array.isArray(
+          client_ids
+        )
+          ? await assertClientIdsAccess(
+              client_ids,
+              actor,
+              {
+                transaction,
+              }
+            )
+          : null;
+
+      delete updateData.created_by;
+      delete updateData.id;
+
+      await caseItem.update(
+        updateData,
+        {
+          transaction,
+        }
+      );
+
+      if (
+        safeClientIds !==
+        null
+      ) {
+        await caseItem.setClients(
+          safeClientIds,
+          {
+            transaction,
+          }
+        );
+      }
+
+      await transaction.commit();
+
+      return this.findOne(
+        id,
+        actor
+      );
+    } catch (
+      error
+    ) {
+      await transaction.rollback();
+
+      throw error;
+    }
+  },
+
+  // ====================================================
+  // REMOVE
+  // ====================================================
+
+  async remove(
+    id,
+    actor
+  ) {
+    const transaction =
+      await sequelize.transaction();
+
+    try {
+      const accessWhere =
+        buildCaseAccessWhere(
+          actor
+        );
+
+      const caseItem =
+        await Case.findOne({
+          where:
+            combineWhere(
+              {
+                id,
+              },
+
+              accessWhere
+            ),
+
+          transaction,
+
+          lock:
+            transaction.LOCK.UPDATE,
+        });
+
+      if (
+        !caseItem
+      ) {
+        throw new Error(
+          'Case not found'
+        );
+      }
 
       const events =
         await Event.findAll({
@@ -1054,10 +1242,6 @@ export const caseService = {
         });
       }
 
-      // ==================================================
-      // TASK REMINDERS
-      // ==================================================
-
       const tasks =
         await Task.findAll({
           where: {
@@ -1087,10 +1271,6 @@ export const caseService = {
         });
       }
 
-      // ==================================================
-      // MEETING REMINDERS
-      // ==================================================
-
       const meetings =
         await Meeting.findAll({
           where: {
@@ -1119,10 +1299,6 @@ export const caseService = {
           transaction,
         });
       }
-
-      // ==================================================
-      // OPERATIONAL CHILD RECORDS
-      // ==================================================
 
       await Event.destroy({
         where: {
@@ -1169,19 +1345,9 @@ export const caseService = {
         transaction,
       });
 
-      // ==================================================
-      // CASE
-      // ==================================================
-
       await caseItem.destroy({
         transaction,
       });
-
-      // ==================================================
-      // IMPORTANT
-      //
-      // Document ve Payment kayıtlarına dokunmuyoruz.
-      // ==================================================
 
       await transaction.commit();
 
@@ -1204,9 +1370,6 @@ export const caseService = {
     partyData,
     actor
   ) {
-    /*
-     * Önce dava erişimi doğrulanır.
-     */
     await assertCaseAccess(
       caseId,
       actor
@@ -1215,10 +1378,6 @@ export const caseService = {
     return CaseParty.create({
       ...partyData,
 
-      /*
-       * Body'den gelen case_id varsa üzerine
-       * gerçek route caseId yazılır.
-       */
       case_id:
         caseId,
     });
@@ -1465,11 +1624,6 @@ export const caseService = {
   async getAssignableLawyers(
     actor
   ) {
-    /*
-     * Endpoint yalnız authenticated kullanıcılar için
-     * kullanılacağından service katmanında da fail-closed
-     * davranıyoruz.
-     */
     const actorId =
       getActorId(
         actor
@@ -1483,11 +1637,6 @@ export const caseService = {
       );
     }
 
-    /*
-     * Kullanıcı yönetimi listesini açmadan yalnızca
-     * dava sorumlusu olarak seçilebilecek aktif
-     * avukatların minimum gerekli alanlarını döndürür.
-     */
     return User.findAll({
       where: {
         is_active:
@@ -1542,15 +1691,6 @@ export const caseService = {
         actor
       );
 
-    /*
-     * Normal kullanıcı:
-     *
-     * istatistiklerde de yalnız erişebildiği davalar.
-     *
-     * VIEW_ALL_CASES:
-     *
-     * toplam sistem davaları.
-     */
     const [
       totalCases,
       preparationCases,
@@ -1667,3 +1807,5 @@ export const caseService = {
     return caseItem;
   },
 };
+
+export default caseService;
