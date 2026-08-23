@@ -1,27 +1,43 @@
 import axios from '../../app/config/axios.js';
-import { API_ROUTES } from '../../constants/apiRoutes.js';
 
-const { CASES } = API_ROUTES;
+import {
+  API_ROUTES,
+} from '../../constants/apiRoutes.js';
+
+const {
+  CASES,
+} = API_ROUTES;
 
 const caseApi = {
+
   // ======================================================
   // CASES
   // ======================================================
 
-  getAll: (params = {}) => {
+  getAll: (
+    params = {}
+  ) => {
     return axios.get(
       CASES.GET_ALL,
-      { params }
+      {
+        params,
+      }
     );
   },
 
-  getOne: (id) => {
+  getOne: (
+    id
+  ) => {
     return axios.get(
-      CASES.GET_ONE(id)
+      CASES.GET_ONE(
+        id
+      )
     );
   },
 
-  create: (data) => {
+  create: (
+    data
+  ) => {
     return axios.post(
       CASES.CREATE,
       data
@@ -29,36 +45,68 @@ const caseApi = {
   },
 
   // ======================================================
+  // ASSIGNABLE LAWYERS
+  // ======================================================
+
+  getAssignableLawyers:
+    () => {
+      return axios.get(
+        '/cases/assignable-lawyers'
+      );
+    },
+
+  // ======================================================
   // UPDATE
   // ======================================================
 
   // Normal tam güncelleme
-  update: (id, data) => {
+  update: (
+    id,
+    data
+  ) => {
     return axios.put(
-      CASES.UPDATE(id),
+      CASES.UPDATE(
+        id
+      ),
       data
     );
   },
 
   // AI önerileri / kısmi güncelleme
   // Sadece gönderilen alanları değiştirir
-  patch: (id, data) => {
+  patch: (
+    id,
+    data
+  ) => {
     return axios.patch(
-      CASES.UPDATE(id),
+      CASES.UPDATE(
+        id
+      ),
       data
     );
   },
 
-  delete: (id) => {
+  delete: (
+    id
+  ) => {
     return axios.delete(
-      CASES.DELETE(id)
+      CASES.DELETE(
+        id
+      )
     );
   },
 
-  updateStatus: (id, status) => {
+  updateStatus: (
+    id,
+    status
+  ) => {
     return axios.patch(
-      CASES.UPDATE_STATUS(id),
-      { status }
+      CASES.UPDATE_STATUS(
+        id
+      ),
+      {
+        status,
+      }
     );
   },
 
@@ -66,30 +114,43 @@ const caseApi = {
   // STATISTICS
   // ======================================================
 
-  getStatistics: () => {
-    return axios.get(
-      CASES.STATISTICS
-    );
-  },
+  getStatistics:
+    () => {
+      return axios.get(
+        CASES.STATISTICS
+      );
+    },
 
   // ======================================================
   // PARTIES
   // ======================================================
 
-  getParties: (id) => {
+  getParties: (
+    id
+  ) => {
     return axios.get(
-      CASES.GET_PARTIES(id)
+      CASES.GET_PARTIES(
+        id
+      )
     );
   },
 
-  addParty: (id, data) => {
+  addParty: (
+    id,
+    data
+  ) => {
     return axios.post(
-      CASES.ADD_PARTY(id),
+      CASES.ADD_PARTY(
+        id
+      ),
       data
     );
   },
 
-  removeParty: (id, partyId) => {
+  removeParty: (
+    id,
+    partyId
+  ) => {
     return axios.delete(
       CASES.REMOVE_PARTY(
         id,
@@ -102,35 +163,56 @@ const caseApi = {
   // RELATED DATA
   // ======================================================
 
-  getDocuments: (id) => {
+  getDocuments: (
+    id
+  ) => {
     return axios.get(
-      CASES.GET_DOCUMENTS(id)
+      CASES.GET_DOCUMENTS(
+        id
+      )
     );
   },
 
-  getTasks: (id) => {
+  getTasks: (
+    id
+  ) => {
     return axios.get(
-      CASES.GET_TASKS(id)
+      CASES.GET_TASKS(
+        id
+      )
     );
   },
 
-  getEvents: (id) => {
+  getEvents: (
+    id
+  ) => {
     return axios.get(
-      CASES.GET_EVENTS(id)
+      CASES.GET_EVENTS(
+        id
+      )
     );
   },
 
-  getPayments: (id) => {
+  getPayments: (
+    id
+  ) => {
     return axios.get(
-      CASES.GET_PAYMENTS(id)
+      CASES.GET_PAYMENTS(
+        id
+      )
     );
   },
 
-  getNotes: (id) => {
+  getNotes: (
+    id
+  ) => {
     return axios.get(
-      CASES.GET_NOTES(id)
+      CASES.GET_NOTES(
+        id
+      )
     );
   },
+
 };
 
 export default caseApi;

@@ -889,6 +889,51 @@ export const caseController = {
   },
 
   // ====================================================
+  // ASSIGNABLE LAWYERS
+  // ====================================================
+
+  async getAssignableLawyers(
+    req,
+    res
+  ) {
+    try {
+      /*
+       * Kullanıcı yönetimi listesini açmadan,
+       * yalnız dava atamasında kullanılabilecek
+       * aktif avukatları service üzerinden döndürür.
+       *
+       * Actor ayrıca service'e taşınır; böylece
+       * yetki / kapsam politikası service katmanında
+       * merkezi olarak uygulanabilir.
+       */
+      const lawyers =
+        await caseService.getAssignableLawyers(
+          req.user
+        );
+
+      return successResponse(
+        res,
+        lawyers,
+        'Assignable lawyers fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get assignable lawyers error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message ||
+          'Atanabilir avukatlar getirilemedi',
+        400
+      );
+    }
+  },
+
+  // ====================================================
   // STATISTICS
   // ====================================================
 

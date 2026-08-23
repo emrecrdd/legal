@@ -1459,6 +1459,65 @@ export const caseService = {
   },
 
   // ====================================================
+  // ASSIGNABLE LAWYERS
+  // ====================================================
+
+  async getAssignableLawyers(
+    actor
+  ) {
+    /*
+     * Endpoint yalnız authenticated kullanıcılar için
+     * kullanılacağından service katmanında da fail-closed
+     * davranıyoruz.
+     */
+    const actorId =
+      getActorId(
+        actor
+      );
+
+    if (
+      !actorId
+    ) {
+      throw new Error(
+        'Case not found'
+      );
+    }
+
+    /*
+     * Kullanıcı yönetimi listesini açmadan yalnızca
+     * dava sorumlusu olarak seçilebilecek aktif
+     * avukatların minimum gerekli alanlarını döndürür.
+     */
+    return User.findAll({
+      where: {
+        is_active:
+          true,
+
+        role:
+          'lawyer',
+      },
+
+      attributes: [
+        'id',
+        'first_name',
+        'last_name',
+      ],
+
+      order: [
+        [
+          'first_name',
+          'ASC',
+        ],
+
+        [
+          'last_name',
+          'ASC',
+        ],
+      ],
+    });
+  },
+
+  // ====================================================
   // STATISTICS
   // ====================================================
 

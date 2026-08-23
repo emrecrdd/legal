@@ -15,7 +15,10 @@ import {
 
 import caseApi from '../../features/cases/case.api.js';
 import clientApi from '../../features/clients/client.api.js';
-import userApi from '../../features/users/user.api.js';
+
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
 
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
@@ -165,6 +168,10 @@ const CaseCreate = () => {
   const navigate =
     useNavigate();
 
+  const {
+    user,
+  } = useAuth();
+
   const [
     formData,
     setFormData,
@@ -227,16 +234,11 @@ const CaseCreate = () => {
   } =
     useQuery({
       queryKey: [
-        'users',
-        {
-          role: 'lawyer',
-        },
+        'case-assignable-lawyers',
       ],
 
       queryFn: () =>
-        userApi.getAll({
-          role: 'lawyer',
-        }),
+        caseApi.getAssignableLawyers(),
     });
 
   // ======================================================
@@ -1154,6 +1156,14 @@ const CaseCreate = () => {
                     >
                       {lawyer.first_name}{' '}
                       {lawyer.last_name}
+                      {String(
+                        lawyer.id
+                      ) ===
+                      String(
+                        user?.id
+                      )
+                        ? ' (Ben)'
+                        : ''}
                     </option>
                   )
                 )}
