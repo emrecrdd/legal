@@ -22,6 +22,11 @@ import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
 
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
@@ -876,16 +881,23 @@ const DocumentDetail = () => {
   // PERMISSIONS
   // ======================================================
 
-  const canEdit = [
-    'admin',
-    'lawyer',
-    'secretary',
-  ].includes(
-    user?.role
-  );
+  const canEdit =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_DOCUMENTS
+    );
+
+  const canDownload =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DOWNLOAD_DOCUMENTS
+    );
 
   const canUploadVersion =
-    canEdit;
+    hasPermission(
+      user,
+      PERMISSION_KEYS.MANAGE_DOCUMENT_VERSIONS
+    );
 
   // ======================================================
   // DOCUMENT QUERY
@@ -997,6 +1009,14 @@ const DocumentDetail = () => {
     targetDocument =
       currentDocument
   ) => {
+    if (!canDownload) {
+      toast.error(
+        'Belge indirme yetkiniz bulunmuyor.'
+      );
+
+      return;
+    }
+
     if (!targetDocument?.id) {
       toast.error(
         'İndirilecek belge bulunamadı'
@@ -1342,6 +1362,14 @@ const DocumentDetail = () => {
 
   const handleUploadVersion =
     () => {
+      if (!canUploadVersion) {
+        toast.error(
+          'Belge versiyonu yönetme yetkiniz bulunmuyor.'
+        );
+
+        return;
+      }
+
       if (!versionFile) {
         toast.error(
           'Yeni versiyon dosyasını seçin'
@@ -1554,16 +1582,18 @@ const DocumentDetail = () => {
             Günceli Aç
           </Button>
 
-          <Button
-            variant="outline"
-            onClick={() =>
-              handleDownload()
-            }
-          >
-            <Download className="mr-2 h-4 w-4" />
+          {canDownload && (
+            <Button
+              variant="outline"
+              onClick={() =>
+                handleDownload()
+              }
+            >
+              <Download className="mr-2 h-4 w-4" />
 
-            Günceli İndir
-          </Button>
+              Günceli İndir
+            </Button>
+          )}
 
           {canUploadVersion && (
             <Button
@@ -2103,19 +2133,21 @@ const DocumentDetail = () => {
                           Aç
                         </Button>
 
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            handleDownload(
-                              version
-                            )
-                          }
-                        >
-                          <Download className="mr-1 h-4 w-4" />
+                        {canDownload && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              handleDownload(
+                                version
+                              )
+                            }
+                          >
+                            <Download className="mr-1 h-4 w-4" />
 
-                          İndir
-                        </Button>
+                            İndir
+                          </Button>
+                        )}
 
                       </div>
 
@@ -2133,7 +2165,8 @@ const DocumentDetail = () => {
 
       {/* VERSION MODAL */}
 
-      {showVersionModal && (
+      {canUploadVersion &&
+        showVersionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
 
           <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-gray-800">
