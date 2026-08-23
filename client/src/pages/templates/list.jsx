@@ -14,6 +14,15 @@ import {
   templateApi,
 } from '../../features/templates/template.api.js';
 
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Table from '../../components/ui/Table.jsx';
@@ -157,6 +166,16 @@ const getLawAreaVariant = (
 // ======================================================
 
 const TemplatesList = () => {
+  const {
+    user,
+  } = useAuth();
+
+  const canCreate =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.CREATE_TEMPLATES
+    );
+
   const [
     search,
     setSearch,
@@ -499,14 +518,16 @@ const TemplatesList = () => {
 
         </div>
 
-        <Link to="/templates/create">
+        {canCreate && (
+          <Link to="/templates/create">
 
-          <Button>
-            <Plus className="h-4 w-4" />
-            Yeni Şablon
-          </Button>
+            <Button>
+              <Plus className="h-4 w-4" />
+              Yeni Şablon
+            </Button>
 
-        </Link>
+          </Link>
+        )}
 
       </div>
 
@@ -698,7 +719,9 @@ const TemplatesList = () => {
           description={
             hasFilters
               ? 'Arama veya filtre kriterlerini değiştirerek tekrar deneyin.'
-              : 'Yeni bir hukuk belgesi şablonu oluşturarak kütüphanenizi hazırlayabilirsiniz.'
+              : canCreate
+                ? 'Yeni bir hukuk belgesi şablonu oluşturarak kütüphanenizi hazırlayabilirsiniz.'
+                : 'Henüz görüntüleyebileceğiniz bir şablon kaydı bulunmuyor.'
           }
           action={
             hasFilters ? (
@@ -710,7 +733,7 @@ const TemplatesList = () => {
               >
                 Filtreleri Temizle
               </Button>
-            ) : (
+            ) : canCreate ? (
               <Link to="/templates/create">
 
                 <Button>
@@ -719,7 +742,7 @@ const TemplatesList = () => {
                 </Button>
 
               </Link>
-            )
+            ) : null
           }
         />
       ) : (

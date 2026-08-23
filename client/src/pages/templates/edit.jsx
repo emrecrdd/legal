@@ -20,6 +20,15 @@ import {
   templateApi,
 } from '../../features/templates/template.api.js';
 
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -57,17 +66,14 @@ const CATEGORY_OPTIONS = [
   {
     value: 'dilekce',
     label: 'Dilekçe',
-    icon: '📝',
   },
   {
     value: 'ihtar',
     label: 'İhtar',
-    icon: '⚡',
   },
   {
     value: 'sozlesme',
     label: 'Sözleşme',
-    icon: '📄',
   },
 ];
 
@@ -75,22 +81,18 @@ const LAW_AREA_OPTIONS = [
   {
     value: 'ozel_hukuk',
     label: 'Özel Hukuk',
-    icon: '🏛️',
   },
   {
     value: 'ceza_hukuku',
     label: 'Ceza Hukuku',
-    icon: '⚖️',
   },
   {
     value: 'idare_hukuku',
     label: 'İdare Hukuku',
-    icon: '🏢',
   },
   {
     value: 'ofis_ici',
     label: 'Ofis İçi',
-    icon: '📋',
   },
 ];
 
@@ -165,6 +167,16 @@ const TemplateEdit = () => {
 
   const queryClient =
     useQueryClient();
+
+  const {
+    user,
+  } = useAuth();
+
+  const canDelete =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DELETE_TEMPLATES
+    );
 
   const fileInputRef =
     useRef(null);
@@ -535,6 +547,14 @@ const TemplateEdit = () => {
   // ======================================================
 
   const handleDelete = () => {
+    if (!canDelete) {
+      toast.error(
+        'Bu şablonu silme yetkiniz bulunmuyor'
+      );
+
+      return;
+    }
+
     const confirmed =
       window.confirm(
         `"${template?.title || 'Bu şablon'}" şablonunu silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`
@@ -580,8 +600,8 @@ const TemplateEdit = () => {
     return (
       <div className="py-12 text-center">
 
-        <div className="mb-4 text-5xl">
-          📄
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-400 dark:bg-gray-800">
+          <FileText className="h-6 w-6" />
         </div>
 
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -910,7 +930,6 @@ const TemplateEdit = () => {
                           item.value
                         }
                       >
-                        {item.icon}{' '}
                         {item.label}
                       </option>
                     )
@@ -971,7 +990,6 @@ const TemplateEdit = () => {
                           item.value
                         }
                       >
-                        {item.icon}{' '}
                         {item.label}
                       </option>
                     )
@@ -1064,7 +1082,7 @@ const TemplateEdit = () => {
                   dark:bg-white/[0.04]
                 "
               >
-                📄
+                <FileText className="h-6 w-6" />
               </div>
 
               <div className="min-w-0 flex-1">
@@ -1192,7 +1210,7 @@ const TemplateEdit = () => {
                     dark:bg-white/[0.04]
                   "
                 >
-                  📄
+                  <FileText className="h-5 w-5" />
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -1471,53 +1489,55 @@ const TemplateEdit = () => {
           DANGER ZONE
       ================================================== */}
 
-      <Card className="border border-red-200 shadow-none dark:border-red-500/20">
+      {canDelete && (
+        <Card className="border border-red-200 shadow-none dark:border-red-500/20">
 
-        <Card.Body>
+          <Card.Body>
 
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
-            <div>
+              <div>
 
-              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
 
-                <Trash2 className="h-5 w-5 text-red-500" />
+                  <Trash2 className="h-5 w-5 text-red-500" />
 
-                <h2 className="font-semibold text-red-600 dark:text-red-400">
-                  Tehlikeli Bölge
-                </h2>
+                  <h2 className="font-semibold text-red-600 dark:text-red-400">
+                    Tehlikeli Bölge
+                  </h2>
+
+                </div>
+
+                <p className="mt-2 max-w-xl text-sm text-gray-500 dark:text-slate-400">
+                  Şablonu silmek geri alınamaz. Bu işlem kayıt ve ilişkili dosya davranışlarını backend kurallarınıza göre etkileyebilir.
+                </p>
 
               </div>
 
-              <p className="mt-2 max-w-xl text-sm text-gray-500 dark:text-slate-400">
-                Şablonu silmek geri alınamaz. Bu işlem kayıt ve ilişkili dosya davranışlarını backend kurallarınıza göre etkileyebilir.
-              </p>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  handleDelete
+                }
+                loading={
+                  deleteMutation.isPending
+                }
+                disabled={
+                  updateMutation.isPending
+                }
+              >
+                <Trash2 className="h-4 w-4" />
+
+                Şablonu Sil
+              </Button>
 
             </div>
 
-            <Button
-              type="button"
-              variant="danger"
-              onClick={
-                handleDelete
-              }
-              loading={
-                deleteMutation.isPending
-              }
-              disabled={
-                updateMutation.isPending
-              }
-            >
-              <Trash2 className="h-4 w-4" />
+          </Card.Body>
 
-              Şablonu Sil
-            </Button>
-
-          </div>
-
-        </Card.Body>
-
-      </Card>
+        </Card>
+      )}
 
     </div>
   );

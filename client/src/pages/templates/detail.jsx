@@ -13,6 +13,15 @@ import {
   templateApi,
 } from '../../features/templates/template.api.js';
 
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Badge from '../../components/ui/Badge.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -152,6 +161,22 @@ const TemplateDetail = () => {
 
   const navigate =
     useNavigate();
+
+  const {
+    user,
+  } = useAuth();
+
+  const canEdit =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_TEMPLATES
+    );
+
+  const canDelete =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DELETE_TEMPLATES
+    );
 
   // ======================================================
   // QUERY
@@ -307,6 +332,14 @@ const TemplateDetail = () => {
   // ======================================================
 
   const handleDelete = () => {
+    if (!canDelete) {
+      toast.error(
+        'Bu şablonu silme yetkiniz bulunmuyor'
+      );
+
+      return;
+    }
+
     const confirmed =
       window.confirm(
         `"${template?.title || 'Bu şablon'}" şablonunu silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`
@@ -352,8 +385,8 @@ const TemplateDetail = () => {
     return (
       <div className="py-12 text-center">
 
-        <div className="mb-4 text-5xl">
-          📄
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-400 dark:bg-gray-800">
+          <FileText className="h-6 w-6" />
         </div>
 
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -513,17 +546,19 @@ const TemplateDetail = () => {
               İndir
             </Button>
 
-            <Link
-              to={`/templates/${template.id}/edit`}
-            >
-              <Button
-                variant="outline"
+            {canEdit && (
+              <Link
+                to={`/templates/${template.id}/edit`}
               >
-                <Edit2 className="mr-2 h-4 w-4" />
+                <Button
+                  variant="outline"
+                >
+                  <Edit2 className="mr-2 h-4 w-4" />
 
-                Düzenle
-              </Button>
-            </Link>
+                  Düzenle
+                </Button>
+              </Link>
+            )}
 
           </div>
 
@@ -1092,7 +1127,7 @@ const TemplateDetail = () => {
                 dark:bg-white/[0.04]
               "
             >
-              📄
+              <FileText className="h-6 w-6" />
             </div>
 
             <div className="min-w-0 flex-1">
@@ -1143,50 +1178,52 @@ const TemplateDetail = () => {
           DANGER ZONE
       ================================================== */}
 
-      <Card className="border border-red-200 shadow-none dark:border-red-500/20">
+      {canDelete && (
+        <Card className="border border-red-200 shadow-none dark:border-red-500/20">
 
-        <Card.Body>
+          <Card.Body>
 
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
-            <div>
+              <div>
 
-              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
 
-                <Trash2 className="h-5 w-5 text-red-500" />
+                  <Trash2 className="h-5 w-5 text-red-500" />
 
-                <h2 className="font-semibold text-red-600 dark:text-red-400">
-                  Tehlikeli Bölge
-                </h2>
+                  <h2 className="font-semibold text-red-600 dark:text-red-400">
+                    Tehlikeli Bölge
+                  </h2>
+
+                </div>
+
+                <p className="mt-2 max-w-xl text-sm text-gray-500 dark:text-slate-400">
+                  Bu şablon kaydını silmek geri alınamaz. Silmeden önce dosyanın artık kullanılmadığından emin olun.
+                </p>
 
               </div>
 
-              <p className="mt-2 max-w-xl text-sm text-gray-500 dark:text-slate-400">
-                Bu şablon kaydını silmek geri alınamaz. Silmeden önce dosyanın artık kullanılmadığından emin olun.
-              </p>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  handleDelete
+                }
+                loading={
+                  deleteMutation.isPending
+                }
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+
+                Şablonu Sil
+              </Button>
 
             </div>
 
-            <Button
-              type="button"
-              variant="danger"
-              onClick={
-                handleDelete
-              }
-              loading={
-                deleteMutation.isPending
-              }
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
+          </Card.Body>
 
-              Şablonu Sil
-            </Button>
-
-          </div>
-
-        </Card.Body>
-
-      </Card>
+        </Card>
+      )}
 
     </div>
   );
