@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -10,6 +11,10 @@ import {
 import {
   useTasks,
 } from '../../features/tasks/task.query.js';
+
+import {
+  useDebounce,
+} from '../../hooks/useDebounce.js';
 
 import {
   useAuth,
@@ -346,11 +351,11 @@ const TasksList = () => {
   ] =
     useState('');
 
-  const [
-    searchQuery,
-    setSearchQuery,
-  ] =
-    useState('');
+  const debouncedSearch =
+    useDebounce(
+      search,
+      400
+    );
 
   const [
     statusFilter,
@@ -407,7 +412,7 @@ const TasksList = () => {
       page,
 
       search:
-        searchQuery,
+        debouncedSearch,
 
       status:
         statusFilter,
@@ -427,6 +432,12 @@ const TasksList = () => {
   const pagination =
     data?.data
       ?.pagination;
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    debouncedSearch,
+  ]);
 
   // ====================================================
   // DERIVED DATA
@@ -500,7 +511,7 @@ const TasksList = () => {
 
   const hasFilters =
     Boolean(
-      searchQuery ||
+      search ||
       statusFilter ||
       priorityFilter
     );
@@ -508,29 +519,6 @@ const TasksList = () => {
   // ====================================================
   // HANDLERS
   // ====================================================
-
-  const handleSearch =
-    () => {
-      setSearchQuery(
-        search.trim()
-      );
-
-      setPage(
-        1
-      );
-    };
-
-  const handleKeyDown =
-    (
-      event
-    ) => {
-      if (
-        event.key ===
-        'Enter'
-      ) {
-        handleSearch();
-      }
-    };
 
   const handleStatusChange =
     (
@@ -561,7 +549,6 @@ const TasksList = () => {
   const handleClearFilters =
     () => {
       setSearch('');
-      setSearchQuery('');
       setStatusFilter('');
       setPriorityFilter('');
       setPage(1);
@@ -572,7 +559,8 @@ const TasksList = () => {
   // ====================================================
 
   if (
-    isLoading
+    isLoading &&
+    !data
   ) {
     return (
       <div className="flex min-h-[420px] items-center justify-center">
@@ -775,22 +763,10 @@ const TasksList = () => {
                     event.target.value
                   )
                 }
-                onKeyDown={
-                  handleKeyDown
-                }
                 icon={
                   <Search size={16} />
                 }
               />
-
-              <Button
-                onClick={
-                  handleSearch
-                }
-              >
-                <Search className="h-4 w-4" />
-                Ara
-              </Button>
 
             </div>
 
