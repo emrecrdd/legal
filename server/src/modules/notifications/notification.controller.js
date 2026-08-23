@@ -162,7 +162,7 @@ export const notificationController = {
       return errorResponse(
         res,
         error.message,
-        400
+        404
       );
     }
   },
@@ -228,7 +228,7 @@ export const notificationController = {
       return errorResponse(
         res,
         error.message,
-        400
+        404
       );
     }
   },
@@ -265,3 +265,5 @@ export const notificationController = {
     }
   },
 };
+
+export default notificationController;

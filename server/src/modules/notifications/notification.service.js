@@ -64,6 +64,35 @@ const findOwnedNotification =
     return notification;
   };
 
+const formatDateForIstanbul = (
+  value
+) => {
+  if (!value) {
+    return '-';
+  }
+
+  const parsed =
+    new Date(
+      value
+    );
+
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
+    return '-';
+  }
+
+  return parsed.toLocaleDateString(
+    'tr-TR',
+    {
+      timeZone:
+        'Europe/Istanbul',
+    }
+  );
+};
+
 // ======================================================
 // SERVICE
 // ======================================================
@@ -384,10 +413,8 @@ export const notificationService = {
     eventDate
   ) {
     const dateStr =
-      new Date(
+      formatDateForIstanbul(
         eventDate
-      ).toLocaleDateString(
-        'tr-TR'
       );
 
     return this.create(
@@ -411,10 +438,8 @@ export const notificationService = {
     meetingDate
   ) {
     const dateStr =
-      new Date(
+      formatDateForIstanbul(
         meetingDate
-      ).toLocaleDateString(
-        'tr-TR'
       );
 
     return this.create(
@@ -500,3 +525,5 @@ export const notificationService = {
     );
   },
 };
+
+export default notificationService;
