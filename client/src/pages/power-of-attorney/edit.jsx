@@ -22,6 +22,15 @@ import {
 import clientApi from '../../features/clients/client.api.js';
 import caseApi from '../../features/cases/case.api.js';
 
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -33,7 +42,9 @@ import {
   FilePlus2,
   KeyRound,
   Save,
+  ScrollText,
   Trash2,
+  X,
 } from 'lucide-react';
 
 import toast from 'react-hot-toast';
@@ -157,6 +168,16 @@ const PowerOfAttorneyEdit = () => {
 
   const queryClient =
     useQueryClient();
+
+  const {
+    user,
+  } = useAuth();
+
+  const canDelete =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DELETE_POWER_OF_ATTORNEY
+    );
 
   const [
     formData,
@@ -674,6 +695,14 @@ const PowerOfAttorneyEdit = () => {
 
   const handleDelete =
     () => {
+      if (!canDelete) {
+        toast.error(
+          'Bu vekaletnameyi silme yetkiniz bulunmuyor'
+        );
+
+        return;
+      }
+
       const confirmed =
         window.confirm(
           `"${poa?.title || 'Bu vekaletname'}" kaydını silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`
@@ -719,8 +748,8 @@ const PowerOfAttorneyEdit = () => {
     return (
       <div className="py-12 text-center">
 
-        <div className="mb-4 text-5xl">
-          📜
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-400 dark:bg-gray-800">
+          <ScrollText className="h-6 w-6" />
         </div>
 
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -795,7 +824,10 @@ const PowerOfAttorneyEdit = () => {
           </Badge>
 
           <Badge variant="default">
-            📜 Vekaletname
+            <span className="inline-flex items-center gap-1">
+              <ScrollText className="h-3.5 w-3.5" />
+              Vekaletname
+            </span>
           </Badge>
 
         </div>
@@ -829,9 +861,10 @@ const PowerOfAttorneyEdit = () => {
 
             <Link
               to={`/documents/upload?power_of_attorney_id=${id}`}
-              className="mt-2 inline-block text-sm font-medium text-blue-700 hover:underline dark:text-blue-300"
+              className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-blue-700 hover:underline dark:text-blue-300"
             >
-              + Bu vekaletnameye belge ekle
+              <FilePlus2 className="h-4 w-4" />
+              Bu vekaletnameye belge ekle
             </Link>
 
           </div>
@@ -1183,7 +1216,7 @@ const PowerOfAttorneyEdit = () => {
                         className="ml-1 text-gray-400 hover:text-red-600"
                         aria-label={`${authority} yetkisini kaldır`}
                       >
-                        ×
+                        <X className="h-3.5 w-3.5" />
                       </button>
 
                     </Badge>
@@ -1270,23 +1303,25 @@ const PowerOfAttorneyEdit = () => {
               Vazgeç
             </Button>
 
-            <Button
-              type="button"
-              variant="danger"
-              onClick={
-                handleDelete
-              }
-              loading={
-                deleteMutation.isPending
-              }
-              disabled={
-                deleteMutation.isPending
-              }
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
+            {canDelete && (
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  handleDelete
+                }
+                loading={
+                  deleteMutation.isPending
+                }
+                disabled={
+                  deleteMutation.isPending
+                }
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
 
-              Vekaletnameyi Sil
-            </Button>
+                Vekaletnameyi Sil
+              </Button>
+            )}
 
           </div>
 
