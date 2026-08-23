@@ -135,7 +135,7 @@
 },
     {
       key: 'calendar',
-      label: 'Takvim ve Etkinlikler',
+      label: 'Takvim ve Duruşmalar',
       keywords: [
         'events',
         'calendar',
@@ -282,16 +282,16 @@ view_own_performance:
 view_team_performance:
   'Ekip performansını görüntüle',
     view_events:
-      'Etkinlikleri görüntüle',
+      'Duruşmaları görüntüle',
 
     create_events:
-      'Etkinlik oluştur',
+      'Duruşma oluştur',
 
     edit_events:
-      'Etkinlik düzenle',
+      'Duruşma düzenle',
 
     delete_events:
-      'Etkinlik sil',
+      'Duruşma sil',
 
     view_calendar:
       'Takvimi görüntüle',
