@@ -16,6 +16,15 @@ import {
 
 import documentApi from '../../features/documents/document.api.js';
 
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
 import Badge from '../../components/ui/Badge.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -26,9 +35,14 @@ import {
   Download,
   Edit2,
   FilePlus2,
+  FileSpreadsheet,
   FileText,
+  Image,
+  Inbox,
   KeyRound,
   Link2,
+  Paperclip,
+  ScrollText,
   Trash2,
   UserRound,
 } from 'lucide-react';
@@ -94,20 +108,26 @@ const getFileIcon = (
   fileType
 ) => {
   switch (fileType) {
-    case 'pdf':
-      return '📄';
-
-    case 'word':
-      return '📝';
-
     case 'excel':
-      return '📊';
+      return (
+        <FileSpreadsheet className="h-5 w-5" />
+      );
 
     case 'image':
-      return '🖼️';
+      return (
+        <Image className="h-5 w-5" />
+      );
+
+    case 'pdf':
+    case 'word':
+      return (
+        <FileText className="h-5 w-5" />
+      );
 
     default:
-      return '📎';
+      return (
+        <Paperclip className="h-5 w-5" />
+      );
   }
 };
 
@@ -256,6 +276,40 @@ const PowerOfAttorneyDetail = () => {
   const queryClient =
     useQueryClient();
 
+  const {
+    user,
+  } = useAuth();
+
+  const canEdit =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_POWER_OF_ATTORNEY
+    );
+
+  const canDelete =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DELETE_POWER_OF_ATTORNEY
+    );
+
+  const canViewDocuments =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_DOCUMENTS
+    );
+
+  const canUploadDocuments =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.UPLOAD_DOCUMENTS
+    );
+
+  const canDownloadDocuments =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.DOWNLOAD_DOCUMENTS
+    );
+
   // ======================================================
   // QUERY
   // ======================================================
@@ -369,6 +423,14 @@ const PowerOfAttorneyDetail = () => {
       docId,
       docName
     ) => {
+      if (!canDownloadDocuments) {
+        toast.error(
+          'Belge indirme yetkiniz bulunmuyor'
+        );
+
+        return;
+      }
+
       if (!docId) {
         toast.error(
           'Belge bulunamadı'
@@ -440,6 +502,14 @@ const PowerOfAttorneyDetail = () => {
 
   const handleDelete =
     () => {
+      if (!canDelete) {
+        toast.error(
+          'Bu vekaletnameyi silme yetkiniz bulunmuyor'
+        );
+
+        return;
+      }
+
       const confirmed =
         window.confirm(
           `"${item?.title || 'Bu vekaletname'}" kaydını silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`
@@ -485,8 +555,8 @@ const PowerOfAttorneyDetail = () => {
     return (
       <div className="py-12 text-center">
 
-        <div className="mb-4 text-5xl">
-          📜
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-400 dark:bg-gray-800">
+          <ScrollText className="h-6 w-6" />
         </div>
 
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -578,7 +648,10 @@ const PowerOfAttorneyDetail = () => {
             </Badge>
 
             <Badge variant="default">
-              📜 Vekaletname
+              <span className="inline-flex items-center gap-1">
+                <ScrollText className="h-3.5 w-3.5" />
+                Vekaletname
+              </span>
             </Badge>
 
             {documents.length >
@@ -597,87 +670,93 @@ const PowerOfAttorneyDetail = () => {
 
         <div className="flex flex-wrap gap-2">
 
-          <select
-            value={
-              item.status
-            }
-            onChange={(event) =>
-              updateStatusMutation.mutate(
-                event.target.value
-              )
-            }
-            disabled={
-              updateStatusMutation.isPending
-            }
-            className="
-              rounded-md
-              border
-              border-gray-300
-              bg-white
-              px-3
-              py-2
-              text-sm
-              text-gray-900
-              outline-none
-              focus:ring-2
-              focus:ring-blue-500
-              disabled:cursor-not-allowed
-              disabled:opacity-60
-              dark:border-gray-600
-              dark:bg-gray-700
-              dark:text-white
-            "
-          >
-
-            {STATUS_OPTIONS.map(
-              (status) => (
-                <option
-                  key={
-                    status.value
-                  }
-                  value={
-                    status.value
-                  }
-                >
-                  {
-                    status.label
-                  }
-                </option>
-              )
-            )}
-
-          </select>
-
-          <Link
-            to={`/power-of-attorney/${item.id}/edit`}
-          >
-            <Button
-              variant="outline"
-              size="sm"
+          {canEdit && (
+            <select
+              value={
+                item.status
+              }
+              onChange={(event) =>
+                updateStatusMutation.mutate(
+                  event.target.value
+                )
+              }
+              disabled={
+                updateStatusMutation.isPending
+              }
+              className="
+                rounded-md
+                border
+                border-gray-300
+                bg-white
+                px-3
+                py-2
+                text-sm
+                text-gray-900
+                outline-none
+                focus:ring-2
+                focus:ring-blue-500
+                disabled:cursor-not-allowed
+                disabled:opacity-60
+                dark:border-gray-600
+                dark:bg-gray-700
+                dark:text-white
+              "
             >
-              <Edit2 className="mr-2 h-4 w-4" />
 
-              Düzenle
+              {STATUS_OPTIONS.map(
+                (status) => (
+                  <option
+                    key={
+                      status.value
+                    }
+                    value={
+                      status.value
+                    }
+                  >
+                    {
+                      status.label
+                    }
+                  </option>
+                )
+              )}
+
+            </select>
+          )}
+
+          {canEdit && (
+            <Link
+              to={`/power-of-attorney/${item.id}/edit`}
+            >
+              <Button
+                variant="outline"
+                size="sm"
+              >
+                <Edit2 className="mr-2 h-4 w-4" />
+
+                Düzenle
+              </Button>
+            </Link>
+          )}
+
+          {canDelete && (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={
+                handleDelete
+              }
+              loading={
+                deleteMutation.isPending
+              }
+              disabled={
+                deleteMutation.isPending
+              }
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+
+              Sil
             </Button>
-          </Link>
-
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={
-              handleDelete
-            }
-            loading={
-              deleteMutation.isPending
-            }
-            disabled={
-              deleteMutation.isPending
-            }
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-
-            Sil
-          </Button>
+          )}
 
         </div>
 
@@ -957,18 +1036,20 @@ const PowerOfAttorneyDetail = () => {
 
             </div>
 
-            <Link
-              to={`/documents/upload?power_of_attorney_id=${item.id}`}
-            >
-              <Button
-                size="sm"
-                variant="outline"
+            {canUploadDocuments && (
+              <Link
+                to={`/documents/upload?power_of_attorney_id=${item.id}`}
               >
-                <FilePlus2 className="mr-2 h-4 w-4" />
+                <Button
+                  size="sm"
+                  variant="outline"
+                >
+                  <FilePlus2 className="mr-2 h-4 w-4" />
 
-                Belge Ekle
-              </Button>
-            </Link>
+                  Belge Ekle
+                </Button>
+              </Link>
+            )}
 
           </div>
 
@@ -980,8 +1061,8 @@ const PowerOfAttorneyDetail = () => {
           0 ? (
             <div className="py-8 text-center">
 
-              <div className="text-4xl">
-                📭
+              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-400 dark:bg-gray-800">
+                <Inbox className="h-5 w-5" />
               </div>
 
               <p className="mt-3 font-medium text-gray-700 dark:text-gray-300">
@@ -992,12 +1073,14 @@ const PowerOfAttorneyDetail = () => {
                 Vekaletname dosyasını veya ilgili ek belgeleri buraya bağlayabilirsiniz.
               </p>
 
-              <Link
-                to={`/documents/upload?power_of_attorney_id=${item.id}`}
-                className="mt-3 inline-block text-sm text-blue-600 hover:underline"
-              >
-                İlk belgeyi ekle
-              </Link>
+              {canUploadDocuments && (
+                <Link
+                  to={`/documents/upload?power_of_attorney_id=${item.id}`}
+                  className="mt-3 inline-block text-sm text-blue-600 hover:underline"
+                >
+                  İlk belgeyi ekle
+                </Link>
+              )}
 
             </div>
           ) : (
@@ -1079,33 +1162,37 @@ const PowerOfAttorneyDetail = () => {
 
                     <div className="flex shrink-0 items-center gap-2">
 
-                      <Link
-                        to={`/documents/${doc.id}`}
-                      >
-                        <Button
-                          size="sm"
-                          variant="outline"
+                      {canViewDocuments && (
+                        <Link
+                          to={`/documents/${doc.id}`}
                         >
-                          Görüntüle
+                          <Button
+                            size="sm"
+                            variant="outline"
+                          >
+                            Görüntüle
+                          </Button>
+                        </Link>
+                      )}
+
+                      {canDownloadDocuments && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() =>
+                            handleDownload(
+                              doc.id,
+                              doc.original_name ||
+                                doc.name
+                            )
+                          }
+                        >
+                          <Download className="mr-2 h-4 w-4" />
+
+                          İndir
                         </Button>
-                      </Link>
-
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() =>
-                          handleDownload(
-                            doc.id,
-                            doc.original_name ||
-                              doc.name
-                          )
-                        }
-                      >
-                        <Download className="mr-2 h-4 w-4" />
-
-                        İndir
-                      </Button>
+                      )}
 
                     </div>
 
@@ -1141,8 +1228,8 @@ const PowerOfAttorneyDetail = () => {
 
                 <div className="flex min-w-0 items-center gap-3">
 
-                  <span className="text-3xl">
-                    📄
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-800/40 dark:text-amber-300">
+                    <FileText className="h-5 w-5" />
                   </span>
 
                   <div className="min-w-0">
@@ -1166,18 +1253,20 @@ const PowerOfAttorneyDetail = () => {
 
                 </div>
 
-                <a
-                  href={
-                    item.file_url
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:underline"
-                >
-                  <Download className="h-4 w-4" />
+                {canDownloadDocuments && (
+                  <a
+                    href={
+                      item.file_url
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:underline"
+                  >
+                    <Download className="h-4 w-4" />
 
-                  Dosyayı Aç
-                </a>
+                    Dosyayı Aç
+                  </a>
+                )}
 
               </div>
 
@@ -1193,9 +1282,13 @@ const PowerOfAttorneyDetail = () => {
 
           <Card.Header>
 
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              📝 Notlar
-            </h2>
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-blue-600" />
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Notlar
+              </h2>
+            </div>
 
           </Card.Header>
 
