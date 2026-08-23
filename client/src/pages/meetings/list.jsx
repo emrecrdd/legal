@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useState,
 } from 'react';
 
@@ -171,7 +172,7 @@ const MeetingsList = () => {
   const debouncedSearch =
     useDebounce(
       search,
-      300
+      400
     );
 
   // ====================================================
@@ -206,8 +207,9 @@ const MeetingsList = () => {
       staleTime:
         1000,
 
-      keepPreviousData:
-        true,
+      placeholderData: (
+        previousData
+      ) => previousData,
     });
 
   const meetings =
@@ -220,6 +222,12 @@ const MeetingsList = () => {
   const pagination =
     data?.data
       ?.pagination;
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    debouncedSearch,
+  ]);
 
   const hasSearch =
     Boolean(
@@ -237,10 +245,6 @@ const MeetingsList = () => {
       setSearch(
         event.target.value
       );
-
-      setPage(
-        1
-      );
     };
 
   const handleClearSearch =
@@ -254,7 +258,8 @@ const MeetingsList = () => {
   // ====================================================
 
   if (
-    isLoading
+    isLoading &&
+    !data
   ) {
     return (
       <div className="flex min-h-[420px] items-center justify-center">
