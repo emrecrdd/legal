@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useState,
 } from 'react';
 
@@ -20,6 +21,10 @@ import {
 } from 'lucide-react';
 
 import caseApi from '../../features/cases/case.api.js';
+
+import {
+  useDebounce,
+} from '../../hooks/useDebounce.js';
 
 import {
   useAuth,
@@ -151,11 +156,11 @@ const CasesList = () => {
   ] =
     useState('');
 
-  const [
-    searchQuery,
-    setSearchQuery,
-  ] =
-    useState('');
+  const debouncedSearch =
+    useDebounce(
+      search,
+      400
+    );
 
   const [
     statusFilter,
@@ -186,7 +191,7 @@ const CasesList = () => {
         {
           page,
           search:
-            searchQuery,
+            debouncedSearch,
           status:
             statusFilter,
         },
@@ -197,7 +202,7 @@ const CasesList = () => {
           page,
 
           search:
-            searchQuery,
+            debouncedSearch,
 
           status:
             statusFilter,
@@ -221,32 +226,15 @@ const CasesList = () => {
     data?.data
       ?.pagination;
 
+  useEffect(() => {
+    setPage(1);
+  }, [
+    debouncedSearch,
+  ]);
+
   // ====================================================
   // ACTIONS
   // ====================================================
-
-  const handleSearch =
-    () => {
-      setSearchQuery(
-        search.trim()
-      );
-
-      setPage(
-        1
-      );
-    };
-
-  const handleKeyDown =
-    (
-      event
-    ) => {
-      if (
-        event.key ===
-        'Enter'
-      ) {
-        handleSearch();
-      }
-    };
 
   const handleStatusChange =
     (
@@ -264,14 +252,13 @@ const CasesList = () => {
   const clearFilters =
     () => {
       setSearch('');
-      setSearchQuery('');
       setStatusFilter('');
       setPage(1);
     };
 
   const hasFilters =
     Boolean(
-      searchQuery ||
+      search ||
       statusFilter
     );
 
@@ -407,24 +394,11 @@ const CasesList = () => {
                     event.target.value
                   )
                 }
-                onKeyDown={
-                  handleKeyDown
-                }
                 placeholder="Dosya no, mahkeme, konu veya yargı birimi ara..."
                 icon={
                   <Search size={16} />
                 }
               />
-
-              <Button
-                onClick={
-                  handleSearch
-                }
-                className="sm:w-auto"
-              >
-                <Search className="h-4 w-4" />
-                Ara
-              </Button>
 
             </div>
 
