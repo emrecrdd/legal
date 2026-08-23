@@ -211,8 +211,9 @@ const CasesList = () => {
       staleTime:
         1000,
 
-      keepPreviousData:
-        true,
+      placeholderData: (
+        previousData
+      ) => previousData,
     });
 
   const cases =
@@ -267,7 +268,8 @@ const CasesList = () => {
   // ====================================================
 
   if (
-    isLoading
+    isLoading &&
+    !data
   ) {
     return (
       <div className="flex min-h-[420px] items-center justify-center">
