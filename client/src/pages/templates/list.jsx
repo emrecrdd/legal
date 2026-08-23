@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useState,
 } from 'react';
 
@@ -13,6 +14,10 @@ import {
 import {
   templateApi,
 } from '../../features/templates/template.api.js';
+
+import {
+  useDebounce,
+} from '../../hooks/useDebounce.js';
 
 import {
   useAuth,
@@ -182,11 +187,11 @@ const TemplatesList = () => {
   ] =
     useState('');
 
-  const [
-    searchQuery,
-    setSearchQuery,
-  ] =
-    useState('');
+  const debouncedSearch =
+    useDebounce(
+      search,
+      400
+    );
 
   const [
     categoryFilter,
@@ -229,7 +234,7 @@ const TemplatesList = () => {
         {
           page,
           search:
-            searchQuery,
+            debouncedSearch,
           category:
             categoryFilter,
           law_area:
@@ -241,7 +246,7 @@ const TemplatesList = () => {
         templateApi.getAll({
           page,
           search:
-            searchQuery,
+            debouncedSearch,
           category:
             categoryFilter,
           law_area:
@@ -251,8 +256,9 @@ const TemplatesList = () => {
       staleTime:
         1000,
 
-      keepPreviousData:
-        true,
+      placeholderData: (
+        previousData
+      ) => previousData,
     });
 
   const templates =
@@ -266,9 +272,15 @@ const TemplatesList = () => {
     data?.data
       ?.pagination;
 
+  useEffect(() => {
+    setPage(1);
+  }, [
+    debouncedSearch,
+  ]);
+
   const hasFilters =
     Boolean(
-      searchQuery ||
+      search ||
       categoryFilter ||
       lawAreaFilter
     );
@@ -276,27 +288,6 @@ const TemplatesList = () => {
   // ====================================================
   // SEARCH / FILTERS
   // ====================================================
-
-  const handleSearch =
-    () => {
-      setSearchQuery(
-        search.trim()
-      );
-
-      setPage(1);
-    };
-
-  const handleKeyDown =
-    (
-      event
-    ) => {
-      if (
-        event.key ===
-        'Enter'
-      ) {
-        handleSearch();
-      }
-    };
 
   const handleCategoryChange =
     (
@@ -323,7 +314,6 @@ const TemplatesList = () => {
   const handleClearFilters =
     () => {
       setSearch('');
-      setSearchQuery('');
       setCategoryFilter('');
       setLawAreaFilter('');
       setPage(1);
@@ -419,7 +409,8 @@ const TemplatesList = () => {
   // ====================================================
 
   if (
-    isLoading
+    isLoading &&
+    !data
   ) {
     return (
       <div className="flex min-h-[420px] items-center justify-center">
@@ -553,22 +544,10 @@ const TemplatesList = () => {
                     event.target.value
                   )
                 }
-                onKeyDown={
-                  handleKeyDown
-                }
                 icon={
                   <Search size={16} />
                 }
               />
-
-              <Button
-                onClick={
-                  handleSearch
-                }
-              >
-                <Search className="h-4 w-4" />
-                Ara
-              </Button>
 
             </div>
 
