@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useState,
 } from 'react';
 
@@ -16,7 +15,6 @@ import {
 } from '@tanstack/react-query';
 
 import eventApi from '../../features/events/event.api.js';
-import userApi from '../../features/users/user.api.js';
 import caseApi from '../../features/cases/case.api.js';
 
 import {
@@ -394,62 +392,35 @@ const EventCreate = () => {
     null;
 
   // ======================================================
-  // USERS
+  // ASSIGNABLE LAWYERS
   // ======================================================
 
   const {
     data:
-      usersData,
+      lawyersData,
 
     isLoading:
-      usersLoading,
+      lawyersLoading,
   } =
     useQuery({
       queryKey: [
-        'users',
-        'hearing-assignees',
+        'case-assignable-lawyers',
+        'event-create',
       ],
 
       queryFn: () =>
-        userApi.getAll({
-          page: 1,
-          limit: 100,
-        }),
+        caseApi.getAssignableLawyers(),
 
       staleTime:
         5 * 60 * 1000,
     });
 
-  const users =
-    Array.isArray(
-      usersData?.data?.data
-    )
-      ? usersData.data.data
-      : [];
-
-  /*
-   * Alanın adı "Atanan Avukat".
-   * Bu nedenle sekreter veya stajyeri burada
-   * seçenek olarak göstermiyoruz.
-   */
   const assignableUsers =
-    useMemo(() => {
-      return users.filter(
-        (
-          item
-        ) =>
-          [
-            'admin',
-            'lawyer',
-          ].includes(
-            item.role
-          ) &&
-          item?.is_active !==
-            false
-      );
-    }, [
-      users,
-    ]);
+    Array.isArray(
+      lawyersData?.data?.data
+    )
+      ? lawyersData.data.data
+      : [];
 
   // ======================================================
   // DEFAULT ASSIGNEE
@@ -1425,13 +1396,13 @@ const EventCreate = () => {
                   }
                   disabled={
                     isPending ||
-                    usersLoading
+                    lawyersLoading
                   }
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 >
 
                   <option value="">
-                    {usersLoading
+                    {lawyersLoading
                       ? 'Avukatlar yükleniyor...'
                       : 'Avukat seçin'}
                   </option>
