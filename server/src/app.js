@@ -166,6 +166,10 @@ app.set(
 // REAL CLIENT IP
 // ======================================================
 
+// ======================================================
+// REAL CLIENT IP
+// ======================================================
+
 const normalizeIp = (
   value
 ) => {
@@ -187,13 +191,13 @@ const normalizeIp = (
   }
 
   /*
-   * Node bazı IPv4 adreslerini şu formatta
-   * döndürebilir:
+   * IPv4-mapped IPv6:
    *
    * ::ffff:82.222.98.50
    *
-   * Audit logda daha temiz görünmesi için
-   * IPv4 kısmını ayırıyoruz.
+   * ->
+   *
+   * 82.222.98.50
    */
   if (
     candidate.startsWith(
@@ -216,6 +220,134 @@ const normalizeIp = (
 
   return candidate;
 };
+
+const getForwardedClientIp = (
+  req
+) => {
+  const forwardedFor =
+    req.headers[
+      'x-forwarded-for'
+    ];
+
+  if (
+    typeof forwardedFor ===
+      'string'
+  ) {
+    /*
+     * Render gerçek istemci IP'sini
+     * X-Forwarded-For listesinin
+     * ilk elemanına koyar.
+     *
+     * Örnek:
+     *
+     * 82.222.98.50, 10.24.207.3
+     *
+     * ->
+     *
+     * 82.222.98.50
+     */
+    const firstIp =
+      forwardedFor
+        .split(',')[0]
+        ?.trim();
+
+    return normalizeIp(
+      firstIp
+    );
+  }
+
+  if (
+    Array.isArray(
+      forwardedFor
+    ) &&
+    forwardedFor.length >
+      0
+  ) {
+    const firstIp =
+      String(
+        forwardedFor[0]
+      )
+        .split(',')[0]
+        ?.trim();
+
+    return normalizeIp(
+      firstIp
+    );
+  }
+
+  return null;
+};
+
+const getRealClientIp = (
+  req
+) => {
+  /*
+   * Render production ortamında gerçek client IP
+   * X-Forwarded-For üzerinden gelir.
+   */
+  if (
+    isProduction
+  ) {
+    const forwardedIp =
+      getForwardedClientIp(
+        req
+      );
+
+    if (
+      forwardedIp
+    ) {
+      return forwardedIp;
+    }
+  }
+
+  /*
+   * Fallback:
+   * Express tarafından çözülen IP.
+   */
+  const expressIp =
+    normalizeIp(
+      req.ip
+    );
+
+  if (
+    expressIp
+  ) {
+    return expressIp;
+  }
+
+  /*
+   * Son fallback:
+   * doğrudan socket adresi.
+   */
+  const socketIp =
+    normalizeIp(
+      req.socket
+        ?.remoteAddress
+    );
+
+  if (
+    socketIp
+  ) {
+    return socketIp;
+  }
+
+  return null;
+};
+
+app.use(
+  (
+    req,
+    res,
+    next
+  ) => {
+    req.realClientIp =
+      getRealClientIp(
+        req
+      );
+
+    return next();
+  }
+);
 
 const getRealClientIp = (
   req
