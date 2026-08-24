@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -30,6 +31,8 @@ import Badge from '../../components/ui/Badge.jsx';
 import {
   CalendarDays,
   CheckCircle2,
+  Eye,
+  EyeOff,
   KeyRound,
   Link2,
   LogOut,
@@ -76,6 +79,14 @@ const TABS = [
   },
 ];
 
+const EMPTY_PROFILE = {
+  first_name: '',
+  last_name: '',
+  phone: '',
+  title: '',
+  bio: '',
+};
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -108,6 +119,97 @@ const getApiData = (
       ?.data ??
     null
   );
+};
+
+const normalizePhone = (
+  value
+) => {
+  return String(
+    value || ''
+  )
+    .replace(
+      /[^\d+]/g,
+      ''
+    )
+    .trim();
+};
+
+const normalizeProfile = (
+  profile
+) => ({
+  first_name:
+    String(
+      profile?.first_name ||
+      ''
+    ).trim(),
+
+  last_name:
+    String(
+      profile?.last_name ||
+      ''
+    ).trim(),
+
+  phone:
+    normalizePhone(
+      profile?.phone
+    ),
+
+  title:
+    String(
+      profile?.title ||
+      ''
+    ).trim(),
+
+  bio:
+    String(
+      profile?.bio ||
+      ''
+    ).trim(),
+});
+
+const validatePasswordStrength = (
+  value
+) => {
+  if (
+    value.length <
+    8
+  ) {
+    return 'Yeni şifre en az 8 karakter olmalıdır';
+  }
+
+  if (
+    !/[a-z]/.test(
+      value
+    )
+  ) {
+    return 'Yeni şifre en az bir küçük harf içermelidir';
+  }
+
+  if (
+    !/[A-Z]/.test(
+      value
+    )
+  ) {
+    return 'Yeni şifre en az bir büyük harf içermelidir';
+  }
+
+  if (
+    !/\d/.test(
+      value
+    )
+  ) {
+    return 'Yeni şifre en az bir rakam içermelidir';
+  }
+
+  if (
+    !/[^A-Za-z0-9]/.test(
+      value
+    )
+  ) {
+    return 'Yeni şifre en az bir özel karakter içermelidir';
+  }
+
+  return '';
 };
 
 // ======================================================
@@ -152,41 +254,26 @@ const Settings = () => {
     profileForm,
     setProfileForm,
   ] =
-    useState({
-      first_name:
-        user?.first_name ||
-        '',
+    useState(
+      EMPTY_PROFILE
+    );
 
-      last_name:
-        user?.last_name ||
-        '',
-
-      phone:
-        user?.phone ||
-        '',
-
-      title:
-        user?.title ||
-        '',
-
-      bio:
-        user?.bio ||
-        '',
-    });
+  const [
+    initialProfileForm,
+    setInitialProfileForm,
+  ] =
+    useState(
+      EMPTY_PROFILE
+    );
 
   const [
     passwordForm,
     setPasswordForm,
   ] =
     useState({
-      currentPassword:
-        '',
-
-      newPassword:
-        '',
-
-      confirmPassword:
-        '',
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
     });
 
   const [
@@ -195,35 +282,115 @@ const Settings = () => {
   ] =
     useState({});
 
+  const [
+    showCurrentPassword,
+    setShowCurrentPassword,
+  ] =
+    useState(
+      false
+    );
+
+  const [
+    showNewPassword,
+    setShowNewPassword,
+  ] =
+    useState(
+      false
+    );
+
+  const [
+    showConfirmPassword,
+    setShowConfirmPassword,
+  ] =
+    useState(
+      false
+    );
+
   // ====================================================
   // SYNC USER
   // ====================================================
 
   useEffect(() => {
-    setProfileForm({
-      first_name:
-        user?.first_name ||
-        '',
+    const nextProfile =
+      normalizeProfile({
+        first_name:
+          user?.first_name,
 
-      last_name:
-        user?.last_name ||
-        '',
+        last_name:
+          user?.last_name,
 
-      phone:
-        user?.phone ||
-        '',
+        phone:
+          user?.phone,
 
-      title:
-        user?.title ||
-        '',
+        title:
+          user?.title,
 
-      bio:
-        user?.bio ||
-        '',
-    });
+        bio:
+          user?.bio,
+      });
+
+    setProfileForm(
+      nextProfile
+    );
+
+    setInitialProfileForm(
+      nextProfile
+    );
   }, [
     user,
   ]);
+
+  // ====================================================
+  // DERIVED
+  // ====================================================
+
+  const normalizedProfile =
+    useMemo(() => {
+      return normalizeProfile(
+        profileForm
+      );
+    }, [
+      profileForm,
+    ]);
+
+  const normalizedInitialProfile =
+    useMemo(() => {
+      return normalizeProfile(
+        initialProfileForm
+      );
+    }, [
+      initialProfileForm,
+    ]);
+
+  const isProfileDirty =
+    useMemo(() => {
+      return (
+        JSON.stringify(
+          normalizedProfile
+        ) !==
+        JSON.stringify(
+          normalizedInitialProfile
+        )
+      );
+    }, [
+      normalizedProfile,
+      normalizedInitialProfile,
+    ]);
+
+  const passwordStrengthError =
+    useMemo(() => {
+      if (
+        !passwordForm.newPassword
+      ) {
+        return '';
+      }
+
+      return validatePasswordStrength(
+        passwordForm.newPassword
+      );
+    }, [
+      passwordForm.newPassword,
+    ]);
 
   // ====================================================
   // GOOGLE CALENDAR STATUS
@@ -252,13 +419,6 @@ const Settings = () => {
       refetchOnWindowFocus:
         true,
 
-      /*
-       * Google popup açıkken backend'i periyodik
-       * olarak kontrol ediyoruz.
-       *
-       * Callback tamamlanınca calendar_integrations
-       * kaydı oluşur ve connected=true döner.
-       */
       refetchInterval:
         isGoogleConnecting
           ? 1500
@@ -379,21 +539,95 @@ const Settings = () => {
           data
         ),
 
-      onSuccess: () => {
+      onSuccess: (
+        response
+      ) => {
+        const updated =
+          getApiData(
+            response
+          );
+
+        const nextProfile =
+          normalizeProfile(
+            updated ||
+            normalizedProfile
+          );
+
+        setProfileForm(
+          nextProfile
+        );
+
+        setInitialProfileForm(
+          nextProfile
+        );
+
+        setErrors(
+          {}
+        );
+
         toast.success(
-          'Profil güncellendi'
+          'Profil bilgileri güncellendi'
         );
       },
 
       onError: (
         error
       ) => {
+        const backendErrors =
+          error?.response
+            ?.data?.errors;
+
+        const message =
+          error?.response
+            ?.data?.message ||
+          'Profil güncellenemedi';
+
+        const nextErrors =
+          {};
+
+        if (
+          Array.isArray(
+            backendErrors
+          )
+        ) {
+          backendErrors.forEach(
+            (
+              item
+            ) => {
+              const field =
+                item?.path ||
+                item?.param;
+
+              if (
+                field
+              ) {
+                nextErrors[field] =
+                  item?.msg ||
+                  'Geçersiz değer';
+              }
+            }
+          );
+        }
+
+        if (
+          Object.keys(
+            nextErrors
+          ).length >
+          0
+        ) {
+          setErrors(
+            nextErrors
+          );
+
+          toast.error(
+            'Profildeki hatalı alanları kontrol edin'
+          );
+
+          return;
+        }
+
         toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
-            'Güncelleme başarısız'
+          message
         );
       },
     });
@@ -413,18 +647,13 @@ const Settings = () => {
 
       onSuccess: () => {
         toast.success(
-          'Şifre değiştirildi'
+          'Şifreniz başarıyla değiştirildi'
         );
 
         setPasswordForm({
-          currentPassword:
-            '',
-
-          newPassword:
-            '',
-
-          confirmPassword:
-            '',
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: '',
         });
 
         setErrors(
@@ -522,7 +751,7 @@ const Settings = () => {
 
         if (!popup) {
           toast.error(
-            'Google bağlantı penceresi açılamadı. Tarayıcı popup engelini kontrol edin.'
+            'Google bağlantı penceresi açılamadı. Tarayıcınızın açılır pencere engelini kontrol edin.'
           );
 
           return;
@@ -538,8 +767,7 @@ const Settings = () => {
         try {
           popup.focus();
         } catch {
-          // Popup focus desteklenmiyorsa
-          // bağlantı akışını engelleme.
+          // noop
         }
       },
 
@@ -608,7 +836,7 @@ const Settings = () => {
     });
 
   // ====================================================
-  // HANDLERS
+  // PROFILE CHANGE
   // ====================================================
 
   const handleProfileChange =
@@ -621,16 +849,53 @@ const Settings = () => {
       } =
         event.target;
 
+      let nextValue =
+        value;
+
+      if (
+        name ===
+        'phone'
+      ) {
+        nextValue =
+          value
+            .replace(
+              /[^\d+\s()-]/g,
+              ''
+            )
+            .slice(
+              0,
+              25
+            );
+      }
+
       setProfileForm(
         (
           current
         ) => ({
           ...current,
           [name]:
-            value,
+            nextValue,
         })
       );
+
+      if (
+        errors[name]
+      ) {
+        setErrors(
+          (
+            current
+          ) => ({
+            ...current,
+            [name]:
+              '',
+          })
+        );
+      }
     };
+
+  // ====================================================
+  // PASSWORD CHANGE
+  // ====================================================
 
   const handlePasswordChange =
     (
@@ -667,16 +932,151 @@ const Settings = () => {
       }
     };
 
+  // ====================================================
+  // PROFILE SUBMIT
+  // ====================================================
+
   const handleProfileSubmit =
     (
       event
     ) => {
       event.preventDefault();
 
+      if (
+        updateProfile.isPending
+      ) {
+        return;
+      }
+
+      const newErrors =
+        {};
+
+      if (
+        !normalizedProfile
+          .first_name
+      ) {
+        newErrors.first_name =
+          'Ad gereklidir';
+      } else if (
+        normalizedProfile
+          .first_name
+          .length <
+        2
+      ) {
+        newErrors.first_name =
+          'Ad en az 2 karakter olmalıdır';
+      } else if (
+        normalizedProfile
+          .first_name
+          .length >
+        100
+      ) {
+        newErrors.first_name =
+          'Ad en fazla 100 karakter olabilir';
+      }
+
+      if (
+        !normalizedProfile
+          .last_name
+      ) {
+        newErrors.last_name =
+          'Soyad gereklidir';
+      } else if (
+        normalizedProfile
+          .last_name
+          .length <
+        2
+      ) {
+        newErrors.last_name =
+          'Soyad en az 2 karakter olmalıdır';
+      } else if (
+        normalizedProfile
+          .last_name
+          .length >
+        100
+      ) {
+        newErrors.last_name =
+          'Soyad en fazla 100 karakter olabilir';
+      }
+
+      if (
+        normalizedProfile
+          .phone
+      ) {
+        const digits =
+          normalizedProfile
+            .phone
+            .replace(
+              /\D/g,
+              ''
+            );
+
+        if (
+          digits.length <
+            10 ||
+          digits.length >
+            15
+        ) {
+          newErrors.phone =
+            'Geçerli bir telefon numarası giriniz';
+        }
+      }
+
+      if (
+        normalizedProfile
+          .title
+          .length >
+        150
+      ) {
+        newErrors.title =
+          'Ünvan en fazla 150 karakter olabilir';
+      }
+
+      if (
+        normalizedProfile
+          .bio
+          .length >
+        1000
+      ) {
+        newErrors.bio =
+          'Biyografi en fazla 1000 karakter olabilir';
+      }
+
+      if (
+        Object.keys(
+          newErrors
+        ).length >
+        0
+      ) {
+        setErrors(
+          newErrors
+        );
+
+        toast.error(
+          'Profildeki hatalı alanları kontrol edin'
+        );
+
+        return;
+      }
+
+      if (
+        !isProfileDirty
+      ) {
+        toast(
+          'Kaydedilecek bir değişiklik bulunmuyor'
+        );
+
+        return;
+      }
+
       updateProfile.mutate(
-        profileForm
+        normalizedProfile
       );
     };
+
+  // ====================================================
+  // PASSWORD SUBMIT
+  // ====================================================
 
   const handlePasswordSubmit =
     (
@@ -684,38 +1084,68 @@ const Settings = () => {
     ) => {
       event.preventDefault();
 
+      if (
+        changePassword.isPending
+      ) {
+        return;
+      }
+
       const newErrors =
         {};
 
       if (
-        !passwordForm.currentPassword
+        !passwordForm
+          .currentPassword
       ) {
         newErrors.currentPassword =
           'Mevcut şifre gereklidir';
       }
 
       if (
-        !passwordForm.newPassword
+        !passwordForm
+          .newPassword
       ) {
         newErrors.newPassword =
           'Yeni şifre gereklidir';
-      } else if (
-        passwordForm.newPassword
-          .length <
-        6
-      ) {
-        newErrors.newPassword =
-          'Yeni şifre en az 6 karakter olmalıdır';
+      } else {
+        const strengthError =
+          validatePasswordStrength(
+            passwordForm.newPassword
+          );
+
+        if (
+          strengthError
+        ) {
+          newErrors.newPassword =
+            strengthError;
+        }
       }
 
       if (
-        !passwordForm.confirmPassword
+        passwordForm
+          .currentPassword &&
+        passwordForm
+          .newPassword &&
+        passwordForm
+          .currentPassword ===
+        passwordForm
+          .newPassword
+      ) {
+        newErrors.newPassword =
+          'Yeni şifre mevcut şifrenizle aynı olamaz';
+      }
+
+      if (
+        !passwordForm
+          .confirmPassword
       ) {
         newErrors.confirmPassword =
           'Yeni şifreyi tekrar girin';
       } else if (
-        passwordForm.newPassword !==
-        passwordForm.confirmPassword
+        passwordForm
+          .newPassword !==
+        passwordForm
+          .confirmPassword
       ) {
         newErrors.confirmPassword =
           'Şifreler eşleşmiyor';
@@ -743,11 +1173,15 @@ const Settings = () => {
       });
     };
 
+  // ====================================================
+  // GOOGLE DISCONNECT
+  // ====================================================
+
   const handleGoogleDisconnect =
     () => {
       const confirmed =
         window.confirm(
-          'Google Calendar bağlantısını kaldırmak istediğinize emin misiniz?'
+          'Google Calendar bağlantısını kaldırmak istediğinize emin misiniz? Takvim senkronizasyonu durdurulacaktır.'
         );
 
       if (!confirmed) {
@@ -758,70 +1192,59 @@ const Settings = () => {
     };
 
   // ====================================================
+  // LOGOUT
+  // ====================================================
+
+  const handleLogout =
+    () => {
+      if (
+        isProfileDirty
+      ) {
+        const confirmed =
+          window.confirm(
+            'Kaydedilmemiş profil değişiklikleriniz var. Yine de çıkış yapmak istiyor musunuz?'
+          );
+
+        if (
+          !confirmed
+        ) {
+          return;
+        }
+      }
+
+      logout();
+    };
+
+  // ====================================================
   // RENDER
   // ====================================================
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
 
-      {/* ==================================================
-          HEADER
-      ================================================== */}
+      {/* HEADER */}
 
       <div className="flex items-start gap-3">
 
-        <div
-          className="
-            flex
-            h-11
-            w-11
-            shrink-0
-            items-center
-            justify-center
-            rounded-xl
-            bg-slate-100
-            text-slate-600
-            dark:bg-white/[0.05]
-            dark:text-slate-300
-          "
-        >
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-white/[0.05] dark:text-slate-300">
           <Settings2 size={21} />
         </div>
 
         <div>
 
-          <h1
-            className="
-              text-2xl
-              font-semibold
-              tracking-[-0.035em]
-              text-gray-900
-              dark:text-white
-            "
-          >
+          <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
             Ayarlar
           </h1>
 
-          <p
-            className="
-              mt-1
-              max-w-2xl
-              text-sm
-              leading-6
-              text-gray-500
-              dark:text-slate-400
-            "
-          >
-            Profil bilgilerinizi, güvenlik ayarlarınızı ve kişisel tercihlerinizi yönetin.
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-slate-400">
+            Profil bilgilerinizi, güvenlik ayarlarınızı, görünüm tercihlerinizi ve takvim bağlantılarınızı yönetin.
           </p>
 
         </div>
 
       </div>
 
-      {/* ==================================================
-          TAB NAVIGATION
-      ================================================== */}
+      {/* TABS */}
 
       <Card>
 
@@ -851,38 +1274,19 @@ const Settings = () => {
                         tab.id
                       )
                     }
-                    className={`
-                      flex
-                      items-center
-                      gap-3
-                      rounded-xl
-                      px-4
-                      py-3
-                      text-left
-                      transition
-                      ${
-                        isActive
-                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/[0.08] dark:text-blue-300'
-                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-white/[0.03] dark:hover:text-white'
-                      }
-                    `}
+                    className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left transition ${
+                      isActive
+                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/[0.08] dark:text-blue-300'
+                        : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-white/[0.03] dark:hover:text-white'
+                    }`}
                   >
 
                     <div
-                      className={`
-                        flex
-                        h-9
-                        w-9
-                        shrink-0
-                        items-center
-                        justify-center
-                        rounded-lg
-                        ${
-                          isActive
-                            ? 'bg-blue-100 text-blue-600 dark:bg-blue-500/[0.12] dark:text-blue-400'
-                            : 'bg-gray-100 text-gray-500 dark:bg-white/[0.04] dark:text-slate-500'
-                        }
-                      `}
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                        isActive
+                          ? 'bg-blue-100 text-blue-600 dark:bg-blue-500/[0.12] dark:text-blue-400'
+                          : 'bg-gray-100 text-gray-500 dark:bg-white/[0.04] dark:text-slate-500'
+                      }`}
                     >
                       <Icon size={17} />
                     </div>
@@ -894,16 +1298,11 @@ const Settings = () => {
                       </p>
 
                       <p
-                        className={`
-                          mt-0.5
-                          truncate
-                          text-[10px]
-                          ${
-                            isActive
-                              ? 'text-blue-500/70 dark:text-blue-400/60'
-                              : 'text-gray-400 dark:text-slate-600'
-                          }
-                        `}
+                        className={`mt-0.5 truncate text-[10px] ${
+                          isActive
+                            ? 'text-blue-500/70 dark:text-blue-400/60'
+                            : 'text-gray-400 dark:text-slate-600'
+                        }`}
                       >
                         {tab.description}
                       </p>
@@ -921,9 +1320,7 @@ const Settings = () => {
 
       </Card>
 
-      {/* ==================================================
-          PROFILE
-      ================================================== */}
+      {/* PROFILE */}
 
       {activeTab ===
         'profile' && (
@@ -933,28 +1330,27 @@ const Settings = () => {
 
             <div className="flex items-center gap-3">
 
-              <div
-                className="
-                  flex
-                  h-9
-                  w-9
-                  items-center
-                  justify-center
-                  rounded-lg
-                  bg-blue-50
-                  text-blue-600
-                  dark:bg-blue-500/[0.08]
-                  dark:text-blue-400
-                "
-              >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
                 <UserRound size={17} />
               </div>
 
               <div>
 
-                <h2 className="font-semibold text-gray-900 dark:text-white">
-                  Profil Bilgileri
-                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Profil Bilgileri
+                  </h2>
+
+                  {isProfileDirty && (
+                    <Badge
+                      variant="warning"
+                    >
+                      Kaydedilmemiş değişiklik
+                    </Badge>
+                  )}
+
+                </div>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
                   Sistem içerisinde görüntülenen kişisel bilgileriniz
@@ -975,41 +1371,11 @@ const Settings = () => {
               className="space-y-5"
             >
 
-              <div
-                className="
-                  flex
-                  flex-col
-                  gap-4
-                  rounded-xl
-                  border
-                  border-gray-100
-                  bg-gray-50/70
-                  p-4
-                  dark:border-white/[0.05]
-                  dark:bg-white/[0.025]
-                  sm:flex-row
-                  sm:items-center
-                  sm:justify-between
-                "
-              >
+              <div className="flex flex-col gap-4 rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/[0.05] dark:bg-white/[0.025] sm:flex-row sm:items-center sm:justify-between">
 
                 <div className="flex items-center gap-3">
 
-                  <div
-                    className="
-                      flex
-                      h-12
-                      w-12
-                      shrink-0
-                      items-center
-                      justify-center
-                      rounded-full
-                      bg-blue-600
-                      text-sm
-                      font-bold
-                      text-white
-                    "
-                  >
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
                     {user?.first_name?.[0] || ''}
                     {user?.last_name?.[0] || ''}
                   </div>
@@ -1022,8 +1388,7 @@ const Settings = () => {
                     </p>
 
                     <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-500">
-                      {user?.email ||
-                        '-'}
+                      {user?.email || '-'}
                     </p>
 
                   </div>
@@ -1061,7 +1426,7 @@ const Settings = () => {
               <div className="grid gap-4 md:grid-cols-2">
 
                 <Input
-                  label="Ad"
+                  label="Ad *"
                   name="first_name"
                   value={
                     profileForm.first_name
@@ -1069,11 +1434,17 @@ const Settings = () => {
                   onChange={
                     handleProfileChange
                   }
-                  required
+                  error={
+                    errors.first_name
+                  }
+                  maxLength={100}
+                  disabled={
+                    updateProfile.isPending
+                  }
                 />
 
                 <Input
-                  label="Soyad"
+                  label="Soyad *"
                   name="last_name"
                   value={
                     profileForm.last_name
@@ -1081,7 +1452,13 @@ const Settings = () => {
                   onChange={
                     handleProfileChange
                   }
-                  required
+                  error={
+                    errors.last_name
+                  }
+                  maxLength={100}
+                  disabled={
+                    updateProfile.isPending
+                  }
                 />
 
               </div>
@@ -1091,13 +1468,20 @@ const Settings = () => {
                 <Input
                   label="Telefon"
                   name="phone"
+                  type="tel"
                   value={
                     profileForm.phone
                   }
                   onChange={
                     handleProfileChange
                   }
-                  placeholder="05xx xxx xx xx"
+                  error={
+                    errors.phone
+                  }
+                  disabled={
+                    updateProfile.isPending
+                  }
+                  placeholder="05XX XXX XX XX"
                 />
 
                 <Input
@@ -1108,6 +1492,13 @@ const Settings = () => {
                   }
                   onChange={
                     handleProfileChange
+                  }
+                  error={
+                    errors.title
+                  }
+                  maxLength={150}
+                  disabled={
+                    updateProfile.isPending
                   }
                   placeholder="Örn: Avukat"
                 />
@@ -1128,37 +1519,30 @@ const Settings = () => {
                   onChange={
                     handleProfileChange
                   }
+                  disabled={
+                    updateProfile.isPending
+                  }
                   rows={5}
                   maxLength={1000}
                   placeholder="Mesleki uzmanlık alanlarınız veya kısa profil bilginiz..."
-                  className="
-                    w-full
-                    resize-y
-                    rounded-lg
-                    border
-                    border-gray-200
-                    bg-white
-                    px-3.5
-                    py-2.5
-                    text-sm
-                    leading-6
-                    text-gray-900
-                    outline-none
-                    transition
-                    placeholder:text-gray-400
-                    focus:border-blue-500
-                    focus:ring-2
-                    focus:ring-blue-500/10
-                    dark:border-white/[0.08]
-                    dark:bg-white/[0.035]
-                    dark:text-white
-                    dark:placeholder:text-slate-500
-                  "
+                  className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm leading-6 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white dark:placeholder:text-slate-500"
                 />
 
-                <p className="mt-1 text-right text-[10px] text-gray-400 dark:text-slate-600">
-                  {profileForm.bio.length} / 1000
-                </p>
+                <div className="mt-1 flex justify-between gap-3">
+
+                  {errors.bio ? (
+                    <p className="text-xs text-red-600">
+                      {errors.bio}
+                    </p>
+                  ) : (
+                    <span />
+                  )}
+
+                  <p className="text-[10px] text-gray-400 dark:text-slate-600">
+                    {profileForm.bio.length} / 1000
+                  </p>
+
+                </div>
 
               </div>
 
@@ -1169,8 +1553,13 @@ const Settings = () => {
                   loading={
                     updateProfile.isPending
                   }
+                  disabled={
+                    updateProfile.isPending ||
+                    !isProfileDirty
+                  }
                 >
                   <Save className="h-4 w-4" />
+
                   Değişiklikleri Kaydet
                 </Button>
 
@@ -1183,9 +1572,7 @@ const Settings = () => {
         </Card>
       )}
 
-      {/* ==================================================
-          SECURITY
-      ================================================== */}
+      {/* SECURITY */}
 
       {activeTab ===
         'security' && (
@@ -1195,20 +1582,7 @@ const Settings = () => {
 
             <div className="flex items-center gap-3">
 
-              <div
-                className="
-                  flex
-                  h-9
-                  w-9
-                  items-center
-                  justify-center
-                  rounded-lg
-                  bg-emerald-50
-                  text-emerald-600
-                  dark:bg-emerald-500/[0.08]
-                  dark:text-emerald-400
-                "
-              >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400">
                 <KeyRound size={17} />
               </div>
 
@@ -1239,53 +1613,172 @@ const Settings = () => {
                 className="space-y-4"
               >
 
-                <Input
-                  label="Mevcut Şifre"
-                  name="currentPassword"
-                  type="password"
-                  autoComplete="current-password"
-                  value={
-                    passwordForm.currentPassword
-                  }
-                  onChange={
-                    handlePasswordChange
-                  }
-                  error={
-                    errors.currentPassword
-                  }
-                />
+                <div className="relative">
 
-                <Input
-                  label="Yeni Şifre"
-                  name="newPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  value={
-                    passwordForm.newPassword
-                  }
-                  onChange={
-                    handlePasswordChange
-                  }
-                  error={
-                    errors.newPassword
-                  }
-                />
+                  <Input
+                    label="Mevcut Şifre"
+                    name="currentPassword"
+                    type={
+                      showCurrentPassword
+                        ? 'text'
+                        : 'password'
+                    }
+                    autoComplete="current-password"
+                    value={
+                      passwordForm.currentPassword
+                    }
+                    onChange={
+                      handlePasswordChange
+                    }
+                    error={
+                      errors.currentPassword
+                    }
+                    disabled={
+                      changePassword.isPending
+                    }
+                  />
 
-                <Input
-                  label="Yeni Şifre Tekrar"
-                  name="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  value={
-                    passwordForm.confirmPassword
-                  }
-                  onChange={
-                    handlePasswordChange
-                  }
-                  error={
-                    errors.confirmPassword
-                  }
-                />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowCurrentPassword(
+                        (
+                          current
+                        ) =>
+                          !current
+                      )
+                    }
+                    className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-700 dark:hover:text-white"
+                    aria-label={
+                      showCurrentPassword
+                        ? 'Şifreyi gizle'
+                        : 'Şifreyi göster'
+                    }
+                  >
+                    {showCurrentPassword ? (
+                      <EyeOff size={17} />
+                    ) : (
+                      <Eye size={17} />
+                    )}
+                  </button>
+
+                </div>
+
+                <div className="relative">
+
+                  <Input
+                    label="Yeni Şifre"
+                    name="newPassword"
+                    type={
+                      showNewPassword
+                        ? 'text'
+                        : 'password'
+                    }
+                    autoComplete="new-password"
+                    value={
+                      passwordForm.newPassword
+                    }
+                    onChange={
+                      handlePasswordChange
+                    }
+                    error={
+                      errors.newPassword
+                    }
+                    disabled={
+                      changePassword.isPending
+                    }
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowNewPassword(
+                        (
+                          current
+                        ) =>
+                          !current
+                      )
+                    }
+                    className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-700 dark:hover:text-white"
+                    aria-label={
+                      showNewPassword
+                        ? 'Şifreyi gizle'
+                        : 'Şifreyi göster'
+                    }
+                  >
+                    {showNewPassword ? (
+                      <EyeOff size={17} />
+                    ) : (
+                      <Eye size={17} />
+                    )}
+                  </button>
+
+                </div>
+
+                {passwordForm.newPassword &&
+                  !errors.newPassword && (
+                  <p
+                    className={`text-xs ${
+                      passwordStrengthError
+                        ? 'text-amber-600'
+                        : 'text-emerald-600'
+                    }`}
+                  >
+                    {passwordStrengthError ||
+                      'Şifre güvenlik kriterlerini karşılıyor'}
+                  </p>
+                )}
+
+                <div className="relative">
+
+                  <Input
+                    label="Yeni Şifre Tekrar"
+                    name="confirmPassword"
+                    type={
+                      showConfirmPassword
+                        ? 'text'
+                        : 'password'
+                    }
+                    autoComplete="new-password"
+                    value={
+                      passwordForm.confirmPassword
+                    }
+                    onChange={
+                      handlePasswordChange
+                    }
+                    error={
+                      errors.confirmPassword
+                    }
+                    disabled={
+                      changePassword.isPending
+                    }
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowConfirmPassword(
+                        (
+                          current
+                        ) =>
+                          !current
+                      )
+                    }
+                    className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-700 dark:hover:text-white"
+                    aria-label={
+                      showConfirmPassword
+                        ? 'Şifreyi gizle'
+                        : 'Şifreyi göster'
+                    }
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff size={17} />
+                    ) : (
+                      <Eye size={17} />
+                    )}
+                  </button>
+
+                </div>
 
                 <div className="flex justify-end pt-2">
 
@@ -1294,8 +1787,12 @@ const Settings = () => {
                     loading={
                       changePassword.isPending
                     }
+                    disabled={
+                      changePassword.isPending
+                    }
                   >
                     <KeyRound className="h-4 w-4" />
+
                     Şifreyi Değiştir
                   </Button>
 
@@ -1303,18 +1800,7 @@ const Settings = () => {
 
               </form>
 
-              <div
-                className="
-                  h-fit
-                  rounded-xl
-                  border
-                  border-emerald-100
-                  bg-emerald-50/50
-                  p-4
-                  dark:border-emerald-500/10
-                  dark:bg-emerald-500/[0.025]
-                "
-              >
+              <div className="h-fit rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 dark:border-emerald-500/10 dark:bg-emerald-500/[0.025]">
 
                 <div className="flex items-start gap-3">
 
@@ -1323,11 +1809,11 @@ const Settings = () => {
                   <div>
 
                     <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                      Güvenli şifre önerisi
+                      Güvenli şifre
                     </p>
 
                     <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-slate-400">
-                      Şifrenizde büyük/küçük harf, sayı ve özel karakter kombinasyonu kullanmanız önerilir.
+                      En az 8 karakter, büyük ve küçük harf, rakam ve özel karakter kullanın.
                     </p>
 
                   </div>
@@ -1343,9 +1829,7 @@ const Settings = () => {
         </Card>
       )}
 
-      {/* ==================================================
-          PREFERENCES
-      ================================================== */}
+      {/* PREFERENCES */}
 
       {activeTab ===
         'preferences' && (
@@ -1354,47 +1838,18 @@ const Settings = () => {
           <Card>
 
             <Card.Header>
-
               <h2 className="font-semibold text-gray-900 dark:text-white">
                 Görünüm
               </h2>
-
             </Card.Header>
 
             <Card.Body>
 
-              <div
-                className="
-                  flex
-                  flex-col
-                  gap-4
-                  rounded-xl
-                  border
-                  border-gray-100
-                  p-4
-                  dark:border-white/[0.06]
-                  sm:flex-row
-                  sm:items-center
-                  sm:justify-between
-                "
-              >
+              <div className="flex flex-col gap-4 rounded-xl border border-gray-100 p-4 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between">
 
                 <div className="flex items-center gap-3">
 
-                  <div
-                    className="
-                      flex
-                      h-10
-                      w-10
-                      items-center
-                      justify-center
-                      rounded-lg
-                      bg-gray-100
-                      text-gray-600
-                      dark:bg-white/[0.05]
-                      dark:text-slate-300
-                    "
-                  >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-white/[0.05] dark:text-slate-300">
                     {theme ===
                     'dark' ? (
                       <Moon size={18} />
@@ -1450,32 +1905,22 @@ const Settings = () => {
           <Card>
 
             <Card.Header>
-
               <h2 className="font-semibold text-gray-900 dark:text-white">
                 Hesap
               </h2>
-
             </Card.Header>
 
             <Card.Body>
 
               <div className="grid gap-4 sm:grid-cols-2">
 
-                <div
-                  className="
-                    rounded-xl
-                    border
-                    border-gray-100
-                    p-4
-                    dark:border-white/[0.06]
-                  "
-                >
+                <div className="rounded-xl border border-gray-100 p-4 dark:border-white/[0.06]">
+
                   <p className="text-xs font-medium text-gray-400 dark:text-slate-500">
                     Kullanıcı Rolü
                   </p>
 
                   <div className="mt-2">
-
                     <Badge
                       variant="primary"
                       dot
@@ -1484,26 +1929,17 @@ const Settings = () => {
                         user?.role
                       )}
                     </Badge>
-
                   </div>
 
                 </div>
 
-                <div
-                  className="
-                    rounded-xl
-                    border
-                    border-gray-100
-                    p-4
-                    dark:border-white/[0.06]
-                  "
-                >
+                <div className="rounded-xl border border-gray-100 p-4 dark:border-white/[0.06]">
+
                   <p className="text-xs font-medium text-gray-400 dark:text-slate-500">
                     Hesap Durumu
                   </p>
 
                   <div className="mt-2">
-
                     <Badge
                       variant={
                         user?.is_active
@@ -1516,7 +1952,6 @@ const Settings = () => {
                         ? 'Aktif'
                         : 'Pasif'}
                     </Badge>
-
                   </div>
 
                 </div>
@@ -1528,7 +1963,7 @@ const Settings = () => {
                 <Button
                   variant="danger"
                   onClick={
-                    logout
+                    handleLogout
                   }
                 >
                   <LogOut className="h-4 w-4" />
@@ -1541,66 +1976,10 @@ const Settings = () => {
 
           </Card>
 
-          <Card
-            className="
-              border
-              border-red-200
-              dark:border-red-500/15
-            "
-          >
-
-            <Card.Header>
-
-              <div>
-
-                <h2 className="font-semibold text-red-600 dark:text-red-400">
-                  Tehlikeli Bölge
-                </h2>
-
-                <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
-                  Geri dönüşü olmayan hesap işlemleri
-                </p>
-
-              </div>
-
-            </Card.Header>
-
-            <Card.Body>
-
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
-                <div>
-
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    Hesabı kalıcı olarak sil
-                  </p>
-
-                  <p className="mt-1 max-w-xl text-xs leading-5 text-gray-500 dark:text-slate-400">
-                    burayı sonra yapcam
-                  </p>
-
-                </div>
-
-                <Button
-                  variant="danger"
-                  disabled
-                  title="Hesap silme akışı henüz aktif değil"
-                >
-                  Hesabı Sil
-                </Button>
-
-              </div>
-
-            </Card.Body>
-
-          </Card>
-
         </div>
       )}
 
-      {/* ==================================================
-          CALENDAR
-      ================================================== */}
+      {/* CALENDAR */}
 
       {activeTab ===
         'calendar' && (
@@ -1612,20 +1991,7 @@ const Settings = () => {
 
               <div className="flex items-center gap-3">
 
-                <div
-                  className="
-                    flex
-                    h-9
-                    w-9
-                    items-center
-                    justify-center
-                    rounded-lg
-                    bg-blue-50
-                    text-blue-600
-                    dark:bg-blue-500/[0.08]
-                    dark:text-blue-400
-                  "
-                >
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
                   <CalendarDays size={17} />
                 </div>
 
@@ -1636,7 +2002,7 @@ const Settings = () => {
                   </h2>
 
                   <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                    Derkenar kayıtlarınızı Google Takvim hesabınızla senkronize edin
+                    Görev, toplantı ve duruşmalarınızı Google Takvim ile senkronize edin
                   </p>
 
                 </div>
@@ -1649,43 +2015,25 @@ const Settings = () => {
 
               {googleCalendarStatus
                 .isLoading ? (
-                <div
-                  className="
-                    flex
-                    items-center
-                    gap-3
-                    rounded-xl
-                    border
-                    border-gray-100
-                    p-4
-                    dark:border-white/[0.06]
-                  "
-                >
+                <div className="flex items-center gap-3 rounded-xl border border-gray-100 p-4 dark:border-white/[0.06]">
+
                   <RefreshCw className="h-5 w-5 animate-spin text-gray-400" />
 
                   <p className="text-sm text-gray-500 dark:text-slate-400">
                     Google Calendar bağlantısı kontrol ediliyor...
                   </p>
+
                 </div>
               ) : googleCalendarStatus
                   .isError ? (
-                <div
-                  className="
-                    rounded-xl
-                    border
-                    border-red-100
-                    bg-red-50/50
-                    p-4
-                    dark:border-red-500/10
-                    dark:bg-red-500/[0.025]
-                  "
-                >
+                <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 dark:border-red-500/10 dark:bg-red-500/[0.025]">
+
                   <p className="text-sm font-semibold text-red-600 dark:text-red-400">
                     Bağlantı durumu alınamadı
                   </p>
 
                   <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">
-                    Google Calendar entegrasyon servisine erişilemedi.
+                    Google Calendar servisine şu anda erişilemiyor.
                   </p>
 
                   <div className="mt-3">
@@ -1702,45 +2050,16 @@ const Settings = () => {
                     </Button>
 
                   </div>
+
                 </div>
               ) : googleConnected ? (
                 <div className="space-y-4">
 
-                  <div
-                    className="
-                      flex
-                      flex-col
-                      gap-4
-                      rounded-xl
-                      border
-                      border-emerald-100
-                      bg-emerald-50/40
-                      p-4
-                      dark:border-emerald-500/10
-                      dark:bg-emerald-500/[0.025]
-                      sm:flex-row
-                      sm:items-center
-                      sm:justify-between
-                    "
-                  >
+                  <div className="flex flex-col gap-4 rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 dark:border-emerald-500/10 dark:bg-emerald-500/[0.025] sm:flex-row sm:items-center sm:justify-between">
 
                     <div className="flex items-start gap-3">
 
-                      <div
-                        className="
-                          flex
-                          h-10
-                          w-10
-                          shrink-0
-                          items-center
-                          justify-center
-                          rounded-lg
-                          bg-emerald-100
-                          text-emerald-600
-                          dark:bg-emerald-500/[0.10]
-                          dark:text-emerald-400
-                        "
-                      >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-500/[0.10] dark:text-emerald-400">
                         <CheckCircle2 size={19} />
                       </div>
 
@@ -1756,13 +2075,13 @@ const Settings = () => {
                             variant="success"
                             dot
                           >
-                            Aktif
+                            Senkronizasyon Aktif
                           </Badge>
 
                         </div>
 
                         <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">
-                          Derkenar, Google Calendar hesabınıza takvim kayıtları gönderebilir.
+                          Derkenar'daki görev, toplantı ve duruşmalar Google Takvim hesabınızla senkronize edilir.
                         </p>
 
                         {googleIntegration
@@ -1799,23 +2118,25 @@ const Settings = () => {
 
                   </div>
 
-                  <div
-                    className="
-                      rounded-xl
-                      border
-                      border-gray-100
-                      p-4
-                      dark:border-white/[0.06]
-                    "
-                  >
+                  <div className="rounded-xl border border-gray-100 p-4 dark:border-white/[0.06]">
 
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                      Senkronizasyon
-                    </p>
+                    <div className="flex items-start gap-3">
 
-                    <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">
-                      Google hesabı bağlantısı hazır. Bir sonraki aşamada görev, toplantı ve duruşmaların Google Calendar'a otomatik gönderilmesini etkinleştireceğiz.
-                    </p>
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+
+                      <div>
+
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                          Takvim senkronizasyonu çalışıyor
+                        </p>
+
+                        <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">
+                          Görevleriniz, toplantılarınız ve duruşmalarınız Google Calendar hesabınıza otomatik olarak aktarılır ve takvim bağlantınız aktif kaldığı sürece senkronize edilir.
+                        </p>
+
+                      </div>
+
+                    </div>
 
                     {googleIntegration
                       ?.last_synced_at && (
@@ -1832,21 +2153,7 @@ const Settings = () => {
 
                     {googleIntegration
                       ?.last_error && (
-                      <div
-                        className="
-                          mt-3
-                          rounded-lg
-                          border
-                          border-red-100
-                          bg-red-50
-                          p-3
-                          text-xs
-                          text-red-600
-                          dark:border-red-500/10
-                          dark:bg-red-500/[0.04]
-                          dark:text-red-400
-                        "
-                      >
+                      <div className="mt-3 rounded-lg border border-red-100 bg-red-50 p-3 text-xs text-red-600 dark:border-red-500/10 dark:bg-red-500/[0.04] dark:text-red-400">
                         {
                           googleIntegration
                             .last_error
@@ -1858,39 +2165,11 @@ const Settings = () => {
 
                 </div>
               ) : (
-                <div
-                  className="
-                    flex
-                    flex-col
-                    gap-5
-                    rounded-xl
-                    border
-                    border-gray-100
-                    p-5
-                    dark:border-white/[0.06]
-                    sm:flex-row
-                    sm:items-center
-                    sm:justify-between
-                  "
-                >
+                <div className="flex flex-col gap-5 rounded-xl border border-gray-100 p-5 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between">
 
                   <div className="flex items-start gap-3">
 
-                    <div
-                      className="
-                        flex
-                        h-11
-                        w-11
-                        shrink-0
-                        items-center
-                        justify-center
-                        rounded-xl
-                        bg-blue-50
-                        text-blue-600
-                        dark:bg-blue-500/[0.08]
-                        dark:text-blue-400
-                      "
-                    >
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
                       <CalendarDays size={20} />
                     </div>
 
@@ -1901,7 +2180,7 @@ const Settings = () => {
                       </p>
 
                       <p className="mt-1 max-w-xl text-xs leading-5 text-gray-500 dark:text-slate-400">
-                        Google hesabınızı bağladıktan sonra Derkenar'daki görev, toplantı ve duruşmalarınızı Google Calendar ile senkronize edebilirsiniz.
+                        Google hesabınızı bağlayarak görev, toplantı ve duruşmalarınızı otomatik olarak Google Calendar ile senkronize edebilirsiniz.
                       </p>
 
                     </div>
@@ -1927,7 +2206,7 @@ const Settings = () => {
                     <Link2 className="h-4 w-4" />
 
                     {isGoogleConnecting
-                      ? 'Google Bekleniyor...'
+                      ? 'Google hesabınızda onaylayın...'
                       : 'Google Takvimimi Bağla'}
                   </Button>
 
