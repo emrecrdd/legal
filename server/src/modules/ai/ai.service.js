@@ -6,6 +6,9 @@ import { fileURLToPath } from 'url';
 import { config } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 
+import { Op, Sequelize } from 'sequelize';
+import { sequelize } from '../../config/database.js';
+
 import { aiProvider, AIProviderError } from '../../integrations/ai.provider.js';
 
 import { AIAnalysis } from '../../models/AIAnalysis.js';
@@ -17,6 +20,7 @@ import { Event } from '../../models/Event.js';
 import { Meeting } from '../../models/Meeting.js';
 import { Note } from '../../models/Note.js';
 import { Task } from '../../models/Task.js';
+import { User } from '../../models/User.js';
 
 import {
   caseCompletionSchema,
@@ -42,6 +46,12 @@ import {
   buildLegalResearchInput,
   getDraftPrompt,
 } from './ai.prompts.js';
+
+import {
+  ROLES,
+  PERMISSION_KEYS,
+  getEffectivePermissions,
+} from '../../constants/roles.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -106,6 +116,165 @@ export class AIServiceError extends Error {
   }
 }
 
+
+// ======================================================
+// ACCESS CONTROL HELPERS
+// ======================================================
+
+const getActorId = (actor) => actor?.id || null;
+
+const getActorPermissions = (actor) => {
+  if (!actor) return [];
+
+  return getEffectivePermissions(
+    actor.role,
+    actor.permissions || {}
+  );
+};
+
+const isAdmin = (actor) => actor?.role === ROLES.ADMIN;
+
+const canViewAllCases = (actor) =>
+  isAdmin(actor) ||
+  getActorPermissions(actor).includes(
+    PERMISSION_KEYS.VIEW_ALL_CASES
+  );
+
+const requireActorId = (actor) => {
+  const actorId = getActorId(actor);
+
+  if (!actorId) {
+    throw new AIServiceError('Kimlik doğrulaması gerekli.', {
+      code: 'AUTH_REQUIRED',
+      statusCode: 401,
+    });
+  }
+
+  return actorId;
+};
+
+const hasWhereContent = (value) =>
+  Boolean(
+    value &&
+      typeof value === 'object' &&
+      Reflect.ownKeys(value).length > 0
+  );
+
+const combineWhere = (...conditions) => {
+  const validConditions = conditions.filter(hasWhereContent);
+
+  if (validConditions.length === 0) return {};
+  if (validConditions.length === 1) return validConditions[0];
+
+  return {
+    [Op.and]: validConditions,
+  };
+};
+
+const buildCaseAccessWhere = (actor) => {
+  const actorId = requireActorId(actor);
+
+  if (canViewAllCases(actor)) {
+    return {};
+  }
+
+  return {
+    [Op.or]: [
+      { created_by: actorId },
+      { assigned_to: actorId },
+    ],
+  };
+};
+
+const buildDocumentReadAccessWhere = (actor) => {
+  const actorId = requireActorId(actor);
+
+  if (isAdmin(actor)) {
+    return {};
+  }
+
+  const caseLinkedScope = canViewAllCases(actor)
+    ? {
+        case_id: {
+          [Op.ne]: null,
+        },
+      }
+    : {
+        [Op.and]: [
+          {
+            case_id: {
+              [Op.ne]: null,
+            },
+          },
+          {
+            [Op.or]: [
+              { '$case.created_by$': actorId },
+              { '$case.assigned_to$': actorId },
+            ],
+          },
+        ],
+      };
+
+  const clientCasePredicate = canViewAllCases(actor)
+    ? `
+      EXISTS (
+        SELECT 1
+        FROM case_clients cc
+        INNER JOIN cases c
+          ON c.id = cc.case_id
+         AND c.deleted_at IS NULL
+        WHERE cc.client_id = "Document"."client_id"
+      )
+    `
+    : `
+      EXISTS (
+        SELECT 1
+        FROM case_clients cc
+        INNER JOIN cases c
+          ON c.id = cc.case_id
+         AND c.deleted_at IS NULL
+        WHERE cc.client_id = "Document"."client_id"
+          AND (
+            c.created_by = ${sequelize.escape(actorId)}
+            OR c.assigned_to = ${sequelize.escape(actorId)}
+          )
+      )
+    `;
+
+  return {
+    [Op.or]: [
+      { is_public: true },
+      caseLinkedScope,
+      {
+        [Op.and]: [
+          { case_id: null },
+          {
+            client_id: {
+              [Op.ne]: null,
+            },
+          },
+          {
+            [Op.or]: [
+              { '$client.created_by$': actorId },
+              Sequelize.where(
+                Sequelize.literal(clientCasePredicate),
+                true
+              ),
+            ],
+          },
+        ],
+      },
+      {
+        [Op.and]: [
+          { case_id: null },
+          { client_id: null },
+          { uploaded_by: actorId },
+        ],
+      },
+    ],
+  };
+};
+
 class AIService {
   /**
    * Kayıtlı bir belgeyi documentId üzerinden analiz eder.
@@ -117,13 +286,22 @@ class AIService {
    */
   async analyzeDocument({
     documentId,
-    userId,
+    userId: legacyUserId = null,
+    actor = null,
     force = false,
   }) {
     this.validateUuidLike(documentId, 'documentId');
-    this.validateUuidLike(userId, 'userId');
 
-    const document = await this.getDocument(documentId);
+    const actorContext = await this.resolveActorContext({
+      actor,
+      userId: legacyUserId,
+    });
+    const userId = requireActorId(actorContext);
+
+    const document = await this.getDocument(
+      documentId,
+      actorContext
+    );
     const file = await this.readDocumentFile(document);
     const inputHash = this.createInputHash({
       buffer: file.buffer,
@@ -135,6 +313,7 @@ class AIService {
       const cached = await this.findCachedAnalysis({
         analysisType: ANALYSIS_TYPES.DOCUMENT_ANALYSIS,
         documentId,
+        userId,
         inputHash,
       });
 
@@ -214,7 +393,7 @@ class AIService {
       );
     } finally {
       if (openAIFileId) {
-        await aiProvider.deleteFile(openAIFileId);
+        await this.deleteProviderFileSafely(openAIFileId);
       }
     }
   }
@@ -228,13 +407,22 @@ class AIService {
    */
   async classifyDocument({
     documentId,
-    userId,
+    userId: legacyUserId = null,
+    actor = null,
     force = false,
   }) {
     this.validateUuidLike(documentId, 'documentId');
-    this.validateUuidLike(userId, 'userId');
 
-    const document = await this.getDocument(documentId);
+    const actorContext = await this.resolveActorContext({
+      actor,
+      userId: legacyUserId,
+    });
+    const userId = requireActorId(actorContext);
+
+    const document = await this.getDocument(
+      documentId,
+      actorContext
+    );
     const file = await this.readDocumentFile(document);
     const inputHash = this.createInputHash({
       buffer: file.buffer,
@@ -247,6 +435,7 @@ class AIService {
         analysisType:
           ANALYSIS_TYPES.DOCUMENT_CLASSIFICATION,
         documentId,
+        userId,
         inputHash,
       });
 
@@ -314,7 +503,7 @@ class AIService {
       );
     } finally {
       if (openAIFileId) {
-        await aiProvider.deleteFile(openAIFileId);
+        await this.deleteProviderFileSafely(openAIFileId);
       }
     }
   }
@@ -324,13 +513,22 @@ class AIService {
    */
   async summarizeCase({
     caseId,
-    userId,
+    userId: legacyUserId = null,
+    actor = null,
     force = false,
   }) {
     this.validateUuidLike(caseId, 'caseId');
-    this.validateUuidLike(userId, 'userId');
 
-    const caseRecord = await this.getCaseWithContext(caseId);
+    const actorContext = await this.resolveActorContext({
+      actor,
+      userId: legacyUserId,
+    });
+    const userId = requireActorId(actorContext);
+
+    const caseRecord = await this.getCaseWithContext(
+      caseId,
+      actorContext
+    );
     const casePayload = this.prepareCasePayload(caseRecord);
     const input = buildCaseSummaryInput(casePayload);
 
@@ -344,6 +542,7 @@ class AIService {
       const cached = await this.findCachedAnalysis({
         analysisType: ANALYSIS_TYPES.CASE_SUMMARY,
         caseId,
+        userId,
         inputHash,
       });
 
@@ -407,14 +606,23 @@ class AIService {
   }
 async analyzeCaseCompletion({
   caseId,
-  userId,
+  userId: legacyUserId = null,
+  actor = null,
   force = false,
 }) {
   this.validateUuidLike(caseId, 'caseId');
-  this.validateUuidLike(userId, 'userId');
+
+  const actorContext = await this.resolveActorContext({
+    actor,
+    userId: legacyUserId,
+  });
+  const userId = requireActorId(actorContext);
 
   const caseRecord =
-    await this.getCaseWithContext(caseId);
+    await this.getCaseWithContext(
+      caseId,
+      actorContext
+    );
 
   const casePayload =
     this.prepareCasePayload(caseRecord);
@@ -460,6 +668,7 @@ async analyzeCaseCompletion({
         analysisType:
           ANALYSIS_TYPES.CASE_COMPLETION,
         caseId,
+        userId,
         inputHash,
       });
 
@@ -593,9 +802,14 @@ async analyzeCaseCompletion({
   async generateLegalResearch({
     query,
     context = '',
-    userId,
+    userId: legacyUserId = null,
+    actor = null,
   }) {
-    this.validateUuidLike(userId, 'userId');
+    const actorContext = await this.resolveActorContext({
+      actor,
+      userId: legacyUserId,
+    });
+    const userId = requireActorId(actorContext);
     this.validateRequiredText(query, 'query', 10_000);
     this.validateOptionalText(context, 'context', 50_000);
 
@@ -659,13 +873,19 @@ async analyzeCaseCompletion({
    */
   async extractEntities({
     text,
-    userId,
+    userId: legacyUserId = null,
+    actor = null,
     documentId = null,
   }) {
-    this.validateUuidLike(userId, 'userId');
+    const actorContext = await this.resolveActorContext({
+      actor,
+      userId: legacyUserId,
+    });
+    const userId = requireActorId(actorContext);
 
     if (documentId) {
       this.validateUuidLike(documentId, 'documentId');
+      await this.findAccessibleDocument(documentId, actorContext);
     }
 
     this.validateRequiredText(
@@ -733,13 +953,19 @@ async analyzeCaseCompletion({
   async generateDraft({
     type,
     data,
-    userId,
+    userId: legacyUserId = null,
+    actor = null,
     caseId = null,
   }) {
-    this.validateUuidLike(userId, 'userId');
+    const actorContext = await this.resolveActorContext({
+      actor,
+      userId: legacyUserId,
+    });
+    const userId = requireActorId(actorContext);
 
     if (caseId) {
       this.validateUuidLike(caseId, 'caseId');
+      await this.assertCaseAccess(caseId, actorContext);
     }
 
     if (!DRAFT_TYPES.includes(type)) {
@@ -825,40 +1051,22 @@ async analyzeCaseCompletion({
 
   async getAnalysisById({
     analysisId,
-    userId,
+    userId: legacyUserId = null,
+    actor = null,
   }) {
     this.validateUuidLike(analysisId, 'analysisId');
-    this.validateUuidLike(userId, 'userId');
+
+    const actorContext = await this.resolveActorContext({
+      actor,
+      userId: legacyUserId,
+    });
+    const userId = requireActorId(actorContext);
 
     const analysis = await AIAnalysis.findOne({
       where: {
         id: analysisId,
         user_id: userId,
       },
-      include: [
-        {
-          model: Document,
-          as: 'document',
-          attributes: [
-            'id',
-            'name',
-            'original_name',
-            'mime_type',
-            'file_type',
-            'case_id',
-          ],
-          required: false,
-        },
-        {
-          model: Case,
-          as: 'case',
-          attributes: [
-            'id',
-            'title',
-          ],
-          required: false,
-        },
-      ],
     });
 
     if (!analysis) {
@@ -871,16 +1079,30 @@ async analyzeCaseCompletion({
       );
     }
 
+    if (analysis.document_id) {
+      await this.findAccessibleDocument(analysis.document_id, actorContext);
+    } else if (analysis.case_id) {
+      await this.assertCaseAccess(analysis.case_id, actorContext);
+    }
+
     return this.formatAnalysisResponse(analysis, false);
   }
 
   async getDocumentAnalyses({
     documentId,
-    userId,
+    userId: legacyUserId = null,
+    actor = null,
     limit = 20,
   }) {
     this.validateUuidLike(documentId, 'documentId');
-    this.validateUuidLike(userId, 'userId');
+
+    const actorContext = await this.resolveActorContext({
+      actor,
+      userId: legacyUserId,
+    });
+    const userId = requireActorId(actorContext);
+
+    await this.findAccessibleDocument(documentId, actorContext);
 
     const safeLimit = Math.min(
       Math.max(Number.parseInt(limit, 10) || 20, 1),
@@ -897,8 +1119,30 @@ async analyzeCaseCompletion({
     });
   }
 
-  async getDocument(documentId) {
-    const document = await Document.findByPk(documentId);
+  async findAccessibleDocument(documentId, actor) {
+    const accessWhere = buildDocumentReadAccessWhere(actor);
+
+    const document = await Document.findOne({
+      where: combineWhere(
+        { id: documentId },
+        accessWhere
+      ),
+      include: [
+        {
+          model: Case,
+          as: 'case',
+          attributes: [],
+          required: false,
+        },
+        {
+          model: Client,
+          as: 'client',
+          attributes: [],
+          required: false,
+        },
+      ],
+      subQuery: false,
+    });
 
     if (!document) {
       throw new AIServiceError('Belge bulunamadı.', {
@@ -906,6 +1150,15 @@ async analyzeCaseCompletion({
         statusCode: 404,
       });
     }
+
+    return document;
+  }
+
+  async getDocument(documentId, actor) {
+    const document = await this.findAccessibleDocument(
+      documentId,
+      actor
+    );
 
     if (document.is_archived) {
       throw new AIServiceError(
@@ -920,8 +1173,14 @@ async analyzeCaseCompletion({
     return document;
   }
 
- async getCaseWithContext(caseId) {
-  const caseRecord = await Case.findByPk(caseId, {
+ async getCaseWithContext(caseId, actor) {
+  const actorId = requireActorId(actor);
+
+  const caseRecord = await Case.findOne({
+    where: combineWhere(
+      { id: caseId },
+      buildCaseAccessWhere(actor)
+    ),
     include: [
       {
         model: Client,
@@ -986,6 +1245,7 @@ async analyzeCaseCompletion({
             where: {
               status: 'completed',
               analysis_type: ANALYSIS_TYPES.DOCUMENT_ANALYSIS,
+              user_id: actorId,
             },
             attributes: [
               'id',
@@ -1377,6 +1637,60 @@ prepareCasePayload(caseRecord) {
   };
 }
 
+  async resolveActorContext({ actor = null, userId = null } = {}) {
+    if (actor?.id) {
+      this.validateUuidLike(actor.id, 'userId');
+      return actor;
+    }
+
+    this.validateUuidLike(userId, 'userId');
+
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      throw new AIServiceError('Kimlik doğrulaması gerekli.', {
+        code: 'AUTH_REQUIRED',
+        statusCode: 401,
+      });
+    }
+
+    return typeof user.toJSON === 'function'
+      ? user.toJSON()
+      : user;
+  }
+
+  async assertCaseAccess(caseId, actor) {
+    const caseRecord = await Case.findOne({
+      where: combineWhere(
+        { id: caseId },
+        buildCaseAccessWhere(actor)
+      ),
+      attributes: ['id'],
+    });
+
+    if (!caseRecord) {
+      throw new AIServiceError('Dava bulunamadı.', {
+        code: 'CASE_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    return caseRecord;
+  }
+
+  async deleteProviderFileSafely(fileId) {
+    if (!fileId) return;
+
+    try {
+      await aiProvider.deleteFile(fileId);
+    } catch (error) {
+      logger.warn('AI sağlayıcı dosyası temizlenemedi', {
+        fileId,
+        message: error?.message,
+      });
+    }
+  }
+
   async readDocumentFile(document) {
     if (!document.file_path) {
       throw new AIServiceError(
@@ -1482,12 +1796,14 @@ prepareCasePayload(caseRecord) {
 
   async findCachedAnalysis({
     analysisType,
+    userId,
     documentId = null,
     caseId = null,
     inputHash,
   }) {
     return AIAnalysis.findOne({
       where: {
+        user_id: userId,
         analysis_type: analysisType,
         status: 'completed',
         input_hash: inputHash,

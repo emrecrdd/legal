@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+
+import { useAuth } from '../../app/providers/auth.provider.jsx';
 
 import aiApi from '../../features/ai/ai.api.js';
 import documentApi from '../../features/documents/document.api.js';
@@ -388,6 +390,8 @@ const AnalysisResult = ({ analysis }) => {
 
 const AIAssistant = () => {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const actorCacheKey = user?.id || 'anonymous';
 
   const [activeTab, setActiveTab] = useState('documents');
   const [selectedDocumentId, setSelectedDocumentId] =
@@ -400,13 +404,21 @@ const AIAssistant = () => {
   );
   const [result, setResult] = useState(null);
 
+  // Kullanıcı kimliği değiştiğinde önceki hesabın seçili kaydı veya
+  // AI sonucu ekranda kalmamalı.
+  useEffect(() => {
+    setSelectedDocumentId('');
+    setResult(null);
+  }, [actorCacheKey]);
+
   const documentsQuery = useQuery({
-    queryKey: ['documents', 'ai-workspace'],
+    queryKey: ['documents', 'ai-workspace', actorCacheKey],
     queryFn: () =>
       documentApi.getAll({
         page: 1,
         limit: 100,
       }),
+    enabled: Boolean(user?.id),
   });
 
   const documents = useMemo(
@@ -417,11 +429,12 @@ const AIAssistant = () => {
   const analysesQuery = useQuery({
     queryKey: [
       'ai-document-analyses',
+      actorCacheKey,
       selectedDocumentId,
     ],
     queryFn: () =>
       aiApi.getDocumentAnalyses(selectedDocumentId),
-    enabled: Boolean(selectedDocumentId),
+    enabled: Boolean(user?.id && selectedDocumentId),
   });
 
   const analyses = useMemo(() => {
@@ -444,6 +457,7 @@ const AIAssistant = () => {
       queryClient.invalidateQueries({
         queryKey: [
           'ai-document-analyses',
+          actorCacheKey,
           selectedDocumentId,
         ],
       });
@@ -478,6 +492,7 @@ const AIAssistant = () => {
       queryClient.invalidateQueries({
         queryKey: [
           'ai-document-analyses',
+          actorCacheKey,
           selectedDocumentId,
         ],
       });

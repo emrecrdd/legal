@@ -165,8 +165,7 @@ export const aiController = {
       const result =
         await aiService.analyzeDocument({
           documentId,
-          userId:
-            req.user.id,
+          actor: req.user,
           force,
         });
 
@@ -240,8 +239,7 @@ async analyzeCaseCompletion(req, res) {
     const result =
       await aiService.analyzeCaseCompletion({
         caseId,
-        userId:
-          req.user.id,
+        actor: req.user,
         force,
       });
 
@@ -318,8 +316,7 @@ async analyzeCaseCompletion(req, res) {
       const result =
         await aiService.classifyDocument({
           documentId,
-          userId:
-            req.user.id,
+          actor: req.user,
           force,
         });
 
@@ -418,8 +415,7 @@ async analyzeCaseCompletion(req, res) {
       const result =
         await aiService.summarizeCase({
           caseId,
-          userId:
-            req.user.id,
+          actor: req.user,
           force,
         });
 
@@ -512,8 +508,7 @@ async analyzeCaseCompletion(req, res) {
         await aiService.generateLegalResearch({
           query,
           context,
-          userId:
-            req.user.id,
+          actor: req.user,
         });
 
       await createAuditLogSafely({
@@ -583,8 +578,7 @@ async analyzeCaseCompletion(req, res) {
         await aiService.extractEntities({
           text,
           documentId,
-          userId:
-            req.user.id,
+          actor: req.user,
         });
 
       await createAuditLogSafely({
@@ -658,8 +652,7 @@ async analyzeCaseCompletion(req, res) {
           type,
           data,
           caseId,
-          userId:
-            req.user.id,
+          actor: req.user,
         });
 
       await createAuditLogSafely({
@@ -732,8 +725,7 @@ async analyzeCaseCompletion(req, res) {
       const result =
         await aiService.getAnalysisById({
           analysisId,
-          userId:
-            req.user.id,
+          actor: req.user,
         });
 
       return successResponse(
@@ -772,8 +764,7 @@ async analyzeCaseCompletion(req, res) {
       const analyses =
         await aiService.getDocumentAnalyses({
           documentId,
-          userId:
-            req.user.id,
+          actor: req.user,
           limit,
         });
 
