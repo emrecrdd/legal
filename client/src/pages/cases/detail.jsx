@@ -208,6 +208,42 @@ const PRIORITY_LABELS = {
   critical: 'Kritik',
 };
 
+const CASE_UPDATE_LABELS = {
+  title: 'Dava Başlığı',
+  judiciary_type: 'Yargı Türü',
+  judiciary_unit: 'Yargı Birimi',
+  court_name: 'Mahkeme',
+  case_number: 'Dosya / Esas No',
+  subject: 'Konu',
+  description: 'Açıklama',
+  opening_date: 'Dava Açılış Tarihi',
+  status: 'Durum',
+  priority: 'Öncelik',
+  assigned_to: 'Atanan Avukat',
+};
+
+const getCaseUpdateLabel = (field) => {
+  return CASE_UPDATE_LABELS[field] || field || 'Dava bilgisi';
+};
+
+const getApiErrorMessage = (error, fallback) => {
+  const validationErrors = error?.response?.data?.errors;
+
+  if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+    const firstMessage = validationErrors.find((item) => item?.msg)?.msg;
+
+    if (firstMessage) {
+      return firstMessage;
+    }
+  }
+
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    fallback
+  );
+};
+
 const RISK_LABELS = {
   low: 'Düşük',
   medium: 'Orta',
@@ -813,7 +849,7 @@ const CaseCompletionAnalysis = ({
 
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Dava kaydı ile analiz edilmiş belgeler karşılaştırıldı.
-              Öneriler otomatik uygulanmaz.
+              Öneriler otomatik uygulanmaz; yalnızca sizin seçip onayladığınız bilgiler kayda işlenir.
             </p>
           </div>
 
@@ -938,7 +974,7 @@ const CaseCompletionAnalysis = ({
       loading={addingMissingParties}
       onClick={onAddSelectedMissingParties}
     >
-      Seçilen Tarafları Davaya Ekle
+      Seçilen Tarafları Onayla ve Ekle
     </Button>
   )}
 
@@ -964,7 +1000,7 @@ const CaseCompletionAnalysis = ({
             <div className="space-y-3">
               {partyConflicts.map((conflict, index) => (
                 <div
-                  key={`${conflict.partyName}-${conflict.field}-${index}`}
+                  key={`${conflict.partyName}-${getCaseUpdateLabel(conflict.field)}-${index}`}
                   className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -973,7 +1009,7 @@ const CaseCompletionAnalysis = ({
                     </p>
 
                     <Badge variant="warning">
-                      {conflict.field}
+                      {getCaseUpdateLabel(conflict.field)}
                     </Badge>
                   </div>
 
@@ -1042,7 +1078,7 @@ const CaseCompletionAnalysis = ({
         <div className="flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-medium text-gray-900 dark:text-white">
-              {item.field}
+              {getCaseUpdateLabel(item.field)}
             </p>
 
             {item.requiresHumanConfirmation && (
@@ -1096,7 +1132,7 @@ const CaseCompletionAnalysis = ({
                     loading={applyingCaseUpdates}
                     onClick={onApplySelectedCaseUpdates}
                   >
-                    Seçilen Güncellemeleri Uygula
+                    Seçilenleri Onayla ve Uygula
                   </Button>
                 )}
 
@@ -1334,9 +1370,10 @@ const CaseDetail = () => {
         );
 
         toast.error(
-          error.response?.data
-            ?.message ||
+          getApiErrorMessage(
+            error,
             'Dava AI analizi oluşturulamadı'
+          )
         );
       },
     });
@@ -1380,9 +1417,10 @@ const CaseDetail = () => {
         );
 
         toast.error(
-          error.response?.data
-            ?.message ||
+          getApiErrorMessage(
+            error,
             'Dosya tamamlama analizi oluşturulamadı'
+          )
         );
       },
     });
@@ -1444,9 +1482,10 @@ const addMissingPartiesMutation =
       ]);
 
       setSelectedMissingParties([]);
+      setCaseCompletion(null);
 
       toast.success(
-        `${parties.length} taraf davaya eklendi`
+        `${parties.length} taraf davaya eklendi. Güncel öneriler için dosyayı yeniden tarayın.`
       );
     },
 
@@ -1457,8 +1496,10 @@ const addMissingPartiesMutation =
       );
 
       toast.error(
-        error.response?.data?.message ||
-        'Taraflar eklenemedi'
+        getApiErrorMessage(
+          error,
+          'Taraflar eklenemedi'
+        )
       );
     },
   });
@@ -1479,9 +1520,10 @@ const addMissingPartiesMutation =
     });
 
     setSelectedCaseUpdates([]);
+    setCaseCompletion(null);
 
     toast.success(
-      'Seçilen dava bilgileri güncellendi'
+      'Seçilen dava bilgileri güncellendi. Güncel öneriler için dosyayı yeniden tarayın.'
     );
   },
 
@@ -1492,8 +1534,10 @@ const addMissingPartiesMutation =
     );
 
     toast.error(
-      error.response?.data?.message ||
+      getApiErrorMessage(
+        error,
         'Dava bilgileri güncellenemedi'
+      )
     );
   },
 });
@@ -1554,6 +1598,14 @@ const handleAddSelectedMissingParties = () => {
     return;
   }
 
+  const confirmed = window.confirm(
+    `${selected.length} taraf dava kaydına eklenecek. Devam etmek istiyor musunuz?`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
   addMissingPartiesMutation.mutate(
     selected
   );
@@ -1571,6 +1623,14 @@ const handleApplySelectedCaseUpdates = () => {
 
   if (selected.length === 0) {
     toast.error('En az bir dava bilgisi seçin');
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `${selected.length} dava bilgisi AI önerisine göre güncellenecek. Devam etmek istiyor musunuz?`
+  );
+
+  if (!confirmed) {
     return;
   }
 
@@ -1674,7 +1734,10 @@ const handleApplySelectedCaseUpdates = () => {
         );
 
         toast.error(
-          'Dosya indirilemedi'
+          getApiErrorMessage(
+            error,
+            'Dosya indirilemedi'
+          )
         );
       }
     };
@@ -1682,7 +1745,13 @@ const handleApplySelectedCaseUpdates = () => {
   if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600" />
+        <div className="text-center">
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600 dark:border-gray-700 dark:border-b-blue-400" />
+
+          <p className="mt-4 text-sm text-gray-500 dark:text-slate-400">
+            Dava dosyası yükleniyor...
+          </p>
+        </div>
       </div>
     );
   }
@@ -1692,16 +1761,26 @@ const handleApplySelectedCaseUpdates = () => {
     !caseItem
   ) {
     return (
-      <div className="py-12 text-center">
-        <p className="text-red-600">
-          Dava bulunamadı
+      <div className="py-14 text-center">
+        <AlertTriangle className="mx-auto h-10 w-10 text-red-500" />
+
+        <h2 className="mt-3 text-lg font-semibold text-gray-900 dark:text-white">
+          Dava dosyası açılamadı
+        </h2>
+
+        <p className="mx-auto mt-2 max-w-lg text-sm text-gray-500 dark:text-slate-400">
+          {getApiErrorMessage(
+            error,
+            'Dava kaydı bulunamadı veya bu dosyayı görüntüleme yetkiniz bulunmuyor.'
+          )}
         </p>
 
         <Link
           to="/cases"
-          className="text-blue-600 hover:underline"
+          className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
         >
-          ← Davalara Dön
+          <ArrowLeft className="h-4 w-4" />
+          Davalara Dön
         </Link>
       </div>
     );
@@ -2064,7 +2143,7 @@ const handleApplySelectedCaseUpdates = () => {
           </p>
 
           <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
-            Dosyaya kayıtlı taraf
+            Müvekkilden ayrı dava tarafı
           </p>
         </div>
 
@@ -2112,7 +2191,7 @@ const handleApplySelectedCaseUpdates = () => {
           </p>
 
           <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
-            Dosyaya bağlı belge
+            Dava dosyasındaki belgeler
           </p>
         </div>
 
@@ -2160,7 +2239,7 @@ const handleApplySelectedCaseUpdates = () => {
           </p>
 
           <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
-            Toplam görev kaydı
+            Dosyaya bağlı görevler
           </p>
         </div>
 
@@ -2422,7 +2501,7 @@ const handleApplySelectedCaseUpdates = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Bu dava ile ilişkili müvekkiller
+                  Büronun temsil ettiği ve bu dava ile ilişkilendirilmiş müvekkiller
                 </p>
               </div>
 
@@ -2616,7 +2695,7 @@ const handleApplySelectedCaseUpdates = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Davacı, davalı ve diğer dosya tarafları
+                  Davacı, davalı, sanık, müşteki ve diğer dava tarafları. Müvekkil kaydından ayrıdır.
                 </p>
 
               </div>
@@ -2682,8 +2761,20 @@ const handleApplySelectedCaseUpdates = () => {
               </p>
 
               <p className="mt-1 text-sm text-gray-500 dark:text-slate-500">
-                Dosyanın davacı, davalı veya diğer taraflarını ekleyin.
+                Dosyanın davacı, davalı veya diğer taraflarını ekleyin. Müvekkiller bu bölümden ayrı tutulur.
               </p>
+
+              {canManageParties && (
+                <Link
+                  to={`/cases/${caseItem.id}/parties/create`}
+                  className="mt-4 inline-flex"
+                >
+                  <Button type="button" size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    İlk Tarafı Ekle
+                  </Button>
+                </Link>
+              )}
 
             </div>
           ) : (
@@ -2910,8 +3001,20 @@ const handleApplySelectedCaseUpdates = () => {
                 <FileText className="mx-auto h-7 w-7 text-gray-300 dark:text-slate-600" />
 
                 <p className="mt-3 text-sm text-gray-500">
-                  Henüz belge eklenmemiş
+                  Bu dava dosyasına henüz belge yüklenmemiş.
                 </p>
+
+                {canUploadDocuments && (
+                  <Link
+                    to={`/documents/upload?case_id=${caseItem.id}`}
+                    className="mt-4 inline-flex"
+                  >
+                    <Button type="button" size="sm" variant="outline">
+                      <Plus className="mr-2 h-4 w-4" />
+                      İlk Belgeyi Yükle
+                    </Button>
+                  </Link>
+                )}
 
               </div>
             ) : (
@@ -3067,8 +3170,20 @@ const handleApplySelectedCaseUpdates = () => {
                 <ListTodo className="mx-auto h-7 w-7 text-gray-300 dark:text-slate-600" />
 
                 <p className="mt-3 text-sm text-gray-500">
-                  Henüz görev eklenmemiş
+                  Bu dava için henüz görev oluşturulmamış.
                 </p>
+
+                {canCreateTasks && (
+                  <Link
+                    to={`/tasks/create?case_id=${caseItem.id}`}
+                    className="mt-4 inline-flex"
+                  >
+                    <Button type="button" size="sm" variant="outline">
+                      <Plus className="mr-2 h-4 w-4" />
+                      İlk Görevi Oluştur
+                    </Button>
+                  </Link>
+                )}
 
               </div>
             ) : (
@@ -3226,8 +3341,20 @@ const handleApplySelectedCaseUpdates = () => {
               <CalendarDays className="mx-auto h-7 w-7 text-gray-300 dark:text-slate-600" />
 
               <p className="mt-3 text-sm text-gray-500">
-                Henüz duruşma eklenmemiş
+                Bu dava için henüz duruşma veya etkinlik eklenmemiş.
               </p>
+
+              {canCreateEvents && (
+                <Link
+                  to={`/events/create?case=${caseItem.id}`}
+                  className="mt-4 inline-flex"
+                >
+                  <Button type="button" size="sm" variant="outline">
+                    <Plus className="mr-2 h-4 w-4" />
+                    İlk Duruşmayı Ekle
+                  </Button>
+                </Link>
+              )}
 
             </div>
           ) : (

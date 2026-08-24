@@ -15,9 +15,11 @@ import {
   ArrowLeft,
   ArrowRight,
   BriefcaseBusiness,
+  FilterX,
   Plus,
   Search,
   Scale,
+  UserRound,
 } from 'lucide-react';
 
 import caseApi from '../../features/cases/case.api.js';
@@ -83,6 +85,25 @@ const STATUSES = [
   },
 ];
 
+const PRIORITIES = [
+  {
+    value: 'low',
+    label: 'Düşük',
+  },
+  {
+    value: 'normal',
+    label: 'Normal',
+  },
+  {
+    value: 'high',
+    label: 'Yüksek',
+  },
+  {
+    value: 'critical',
+    label: 'Kritik',
+  },
+];
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -135,6 +156,76 @@ const getStatusVariant = (
   );
 };
 
+const getPriorityLabel = (
+  priority
+) => {
+  return (
+    PRIORITIES.find(
+      (
+        item
+      ) =>
+        item.value ===
+        priority
+    )?.label ||
+    priority ||
+    'Normal'
+  );
+};
+
+const getPriorityVariant = (
+  priority
+) => {
+  const variants = {
+    low:
+      'default',
+
+    normal:
+      'primary',
+
+    high:
+      'warning',
+
+    critical:
+      'danger',
+  };
+
+  return (
+    variants[priority] ||
+    'default'
+  );
+};
+
+const getAssigneeName = (
+  caseItem
+) => {
+  const assignee =
+    caseItem?.assignee;
+
+  if (
+    !assignee
+  ) {
+    return null;
+  }
+
+  const fullName =
+    [
+      assignee.first_name,
+      assignee.last_name,
+    ]
+      .filter(
+        Boolean
+      )
+      .join(
+        ' '
+      )
+      .trim();
+
+  return (
+    fullName ||
+    null
+  );
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -142,13 +233,18 @@ const getStatusVariant = (
 const CasesList = () => {
   const {
     user,
-  } = useAuth();
+  } =
+    useAuth();
 
   const canCreate =
     hasPermission(
       user,
       PERMISSION_KEYS.CREATE_CASES
     );
+
+  // ====================================================
+  // STATE
+  // ====================================================
 
   const [
     search,
@@ -172,7 +268,9 @@ const CasesList = () => {
     page,
     setPage,
   ] =
-    useState(1);
+    useState(
+      1
+    );
 
   // ====================================================
   // QUERY
@@ -190,8 +288,10 @@ const CasesList = () => {
         'cases',
         {
           page,
+
           search:
             debouncedSearch,
+
           status:
             statusFilter,
         },
@@ -211,30 +311,70 @@ const CasesList = () => {
       staleTime:
         1000,
 
-      placeholderData: (
-        previousData
-      ) => previousData,
+      placeholderData:
+        (
+          previousData
+        ) =>
+          previousData,
     });
+
+  // ====================================================
+  // DATA
+  // ====================================================
 
   const cases =
     Array.isArray(
-      data?.data?.data
+      data
+        ?.data
+        ?.data
     )
       ? data.data.data
       : [];
 
   const pagination =
-    data?.data
+    data
+      ?.data
       ?.pagination;
 
+  // ====================================================
+  // RESET PAGE ON SEARCH
+  // ====================================================
+
   useEffect(() => {
-    setPage(1);
+    setPage(
+      1
+    );
   }, [
     debouncedSearch,
   ]);
 
   // ====================================================
-  // ACTIONS
+  // INVALID PAGE PROTECTION
+  // ====================================================
+
+  useEffect(() => {
+    if (
+      !pagination
+        ?.totalPages
+    ) {
+      return;
+    }
+
+    if (
+      page >
+      pagination.totalPages
+    ) {
+      setPage(
+        pagination.totalPages
+      );
+    }
+  }, [
+    page,
+    pagination?.totalPages,
+  ]);
+
+  // ====================================================
+  // FILTER ACTIONS
   // ====================================================
 
   const handleStatusChange =
@@ -252,16 +392,31 @@ const CasesList = () => {
 
   const clearFilters =
     () => {
-      setSearch('');
-      setStatusFilter('');
-      setPage(1);
+      setSearch(
+        ''
+      );
+
+      setStatusFilter(
+        ''
+      );
+
+      setPage(
+        1
+      );
     };
 
   const hasFilters =
     Boolean(
-      search ||
+      search.trim() ||
       statusFilter
     );
+
+  const activeStatusLabel =
+    statusFilter
+      ? getStatusLabel(
+          statusFilter
+        )
+      : null;
 
   // ====================================================
   // LOADING
@@ -273,7 +428,9 @@ const CasesList = () => {
   ) {
     return (
       <div className="flex min-h-[420px] items-center justify-center">
+
         <Loader text="Davalar yükleniyor..." />
+
       </div>
     );
   }
@@ -288,8 +445,16 @@ const CasesList = () => {
     return (
       <Error
         title="Davalar yüklenemedi"
-        message="Dava kayıtları alınırken bir hata oluştu."
-        error={error}
+        message={
+          error
+            ?.response
+            ?.data
+            ?.message ||
+          'Dava kayıtları alınırken bir hata oluştu.'
+        }
+        error={
+          error
+        }
         onRetry={() =>
           refetch()
         }
@@ -314,45 +479,17 @@ const CasesList = () => {
 
           <div className="flex items-center gap-3">
 
-            <div
-              className="
-                flex
-                h-11
-                w-11
-                items-center
-                justify-center
-                rounded-xl
-                bg-blue-50
-                text-blue-600
-                dark:bg-blue-500/[0.08]
-                dark:text-blue-400
-              "
-            >
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
               <BriefcaseBusiness size={21} />
             </div>
 
             <div>
 
-              <h1
-                className="
-                  text-2xl
-                  font-semibold
-                  tracking-[-0.035em]
-                  text-gray-900
-                  dark:text-white
-                "
-              >
+              <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
                 Davalar
               </h1>
 
-              <p
-                className="
-                  mt-1
-                  text-sm
-                  text-gray-500
-                  dark:text-slate-400
-                "
-              >
+              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
                 Büroya kayıtlı dava dosyalarını görüntüleyin ve yönetin.
               </p>
 
@@ -363,9 +500,12 @@ const CasesList = () => {
         </div>
 
         {canCreate && (
-          <Link to="/cases/create">
+          <Link
+            to="/cases/create"
+          >
             <Button>
               <Plus className="h-4 w-4" />
+
               Yeni Dava
             </Button>
           </Link>
@@ -383,7 +523,7 @@ const CasesList = () => {
 
           <div className="flex flex-col gap-3 lg:flex-row">
 
-            <div className="flex flex-1 flex-col gap-2 sm:flex-row">
+            <div className="min-w-0 flex-1">
 
               <Input
                 value={
@@ -396,6 +536,7 @@ const CasesList = () => {
                     event.target.value
                   )
                 }
+                maxLength={150}
                 placeholder="Dosya no, mahkeme, konu veya yargı birimi ara..."
                 icon={
                   <Search size={16} />
@@ -415,30 +556,13 @@ const CasesList = () => {
                   onChange={
                     handleStatusChange
                   }
-                  className="
-                    h-10
-                    w-full
-                    rounded-lg
-                    border
-                    border-gray-200
-                    bg-white
-                    px-3.5
-                    text-sm
-                    text-gray-700
-                    shadow-sm
-                    outline-none
-                    transition
-                    hover:border-gray-300
-                    focus:border-blue-500
-                    focus:ring-2
-                    focus:ring-blue-500/10
-                    dark:border-white/[0.08]
-                    dark:bg-white/[0.035]
-                    dark:text-slate-300
-                    dark:hover:border-white/[0.14]
-                    dark:focus:border-blue-500/60
-                  "
+                  disabled={
+                    isFetching
+                  }
+                  aria-label="Dava durumuna göre filtrele"
+                  className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-sm text-gray-700 shadow-sm outline-none transition hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300 dark:hover:border-white/[0.14] dark:focus:border-blue-500/60"
                 >
+
                   {STATUSES.map(
                     (
                       status
@@ -455,17 +579,24 @@ const CasesList = () => {
                       </option>
                     )
                   )}
+
                 </select>
 
               </div>
 
               {hasFilters && (
                 <Button
+                  type="button"
                   variant="ghost"
+                  disabled={
+                    isFetching
+                  }
                   onClick={
                     clearFilters
                   }
                 >
+                  <FilterX className="h-4 w-4" />
+
                   Filtreleri Temizle
                 </Button>
               )}
@@ -474,10 +605,48 @@ const CasesList = () => {
 
           </div>
 
+          {/* ACTIVE FILTER INFO */}
+
+          {hasFilters && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+
+              <span className="text-xs text-gray-400 dark:text-slate-500">
+                Aktif filtreler:
+              </span>
+
+              {search.trim() && (
+                <Badge
+                  variant="default"
+                >
+                  Arama: “{search.trim()}”
+                </Badge>
+              )}
+
+              {activeStatusLabel && (
+                <Badge
+                  variant={
+                    getStatusVariant(
+                      statusFilter
+                    )
+                  }
+                >
+                  {activeStatusLabel}
+                </Badge>
+              )}
+
+            </div>
+          )}
+
           {isFetching && (
-            <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
-              Liste güncelleniyor...
-            </p>
+            <div className="mt-3 flex items-center gap-2">
+
+              <div className="h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-b-blue-600" />
+
+              <p className="text-xs text-gray-400 dark:text-slate-500">
+                Liste güncelleniyor...
+              </p>
+
+            </div>
           )}
 
         </Card.Body>
@@ -485,13 +654,15 @@ const CasesList = () => {
       </Card>
 
       {/* ==================================================
-          TABLE
+          EMPTY
       ================================================== */}
 
       {cases.length ===
       0 ? (
         <Empty
-          icon={Scale}
+          icon={
+            Scale
+          }
           title={
             hasFilters
               ? 'Eşleşen dava bulunamadı'
@@ -499,7 +670,7 @@ const CasesList = () => {
           }
           description={
             hasFilters
-              ? 'Arama veya filtre kriterlerinizi değiştirerek tekrar deneyin.'
+              ? 'Arama veya durum filtresini değiştirerek tekrar deneyin.'
               : canCreate
                 ? 'İlk dava kaydınızı oluşturarak dosya yönetimine başlayabilirsiniz.'
                 : 'Henüz görüntüleyebileceğiniz bir dava kaydı bulunmuyor.'
@@ -507,17 +678,23 @@ const CasesList = () => {
           action={
             hasFilters ? (
               <Button
+                type="button"
                 variant="secondary"
                 onClick={
                   clearFilters
                 }
               >
+                <FilterX className="h-4 w-4" />
+
                 Filtreleri Temizle
               </Button>
             ) : canCreate ? (
-              <Link to="/cases/create">
+              <Link
+                to="/cases/create"
+              >
                 <Button>
                   <Plus className="h-4 w-4" />
+
                   İlk Davayı Oluştur
                 </Button>
               </Link>
@@ -527,10 +704,20 @@ const CasesList = () => {
       ) : (
         <>
 
+          {/* ==================================================
+              TABLE
+          ================================================== */}
+
           <Table>
 
             <Table.Head>
-              <Table.Row hover={false}>
+
+              <Table.Row
+                hover={
+                  false
+                }
+              >
+
                 <Table.HeadCell>
                   Dosya
                 </Table.HeadCell>
@@ -548,13 +735,23 @@ const CasesList = () => {
                 </Table.HeadCell>
 
                 <Table.HeadCell>
+                  Sorumlu
+                </Table.HeadCell>
+
+                <Table.HeadCell>
+                  Öncelik
+                </Table.HeadCell>
+
+                <Table.HeadCell>
                   Durum
                 </Table.HeadCell>
 
                 <Table.HeadCell className="text-right">
                   İşlem
                 </Table.HeadCell>
+
               </Table.Row>
+
             </Table.Head>
 
             <Table.Body>
@@ -562,250 +759,300 @@ const CasesList = () => {
               {cases.map(
                 (
                   caseItem
-                ) => (
-                  <Table.Row
-                    key={
-                      caseItem.id
-                    }
-                  >
+                ) => {
+                  const assigneeName =
+                    getAssigneeName(
+                      caseItem
+                    );
 
-                    {/* DOSYA */}
+                  return (
+                    <Table.Row
+                      key={
+                        caseItem.id
+                      }
+                    >
 
-                    <Table.Cell>
+                      {/* ==============================
+                          FILE
+                      ============================== */}
 
-                      <div className="min-w-[150px]">
+                      <Table.Cell>
 
-                        <Link
-                          to={`/cases/${caseItem.id}`}
-                          className="
-                            font-semibold
-                            text-gray-900
-                            transition
-                            hover:text-blue-600
-                            dark:text-white
-                            dark:hover:text-blue-400
-                          "
-                        >
-                          {caseItem.judiciary_type ||
-                            caseItem.title ||
-                            'Dava Dosyası'}
-                        </Link>
+                        <div className="min-w-[180px] max-w-[260px]">
 
-                        <p className="mt-1 text-xs font-medium text-gray-400 dark:text-slate-500">
-                          {caseItem.case_number ||
-                            'Dosya no belirtilmemiş'}
-                        </p>
+                          <Link
+                            to={`/cases/${caseItem.id}`}
+                            className="font-semibold text-gray-900 transition hover:text-blue-600 dark:text-white dark:hover:text-blue-400"
+                          >
+                            {caseItem.judiciary_type ||
+                              caseItem.title ||
+                              'Dava Dosyası'}
+                          </Link>
 
-                      </div>
+                          <p className="mt-1 text-xs font-medium text-gray-400 dark:text-slate-500">
+                            {caseItem.case_number ||
+                              'Dosya no belirtilmemiş'}
+                          </p>
 
-                    </Table.Cell>
-
-                    {/* YARGI BİRİMİ */}
-
-                    <Table.Cell>
-
-                      <div className="min-w-[130px]">
-
-                        <p className="font-medium text-gray-700 dark:text-slate-300">
-                          {caseItem.judiciary_unit ||
-                            '-'}
-                        </p>
-
-                      </div>
-
-                    </Table.Cell>
-
-                    {/* MAHKEME */}
-
-                    <Table.Cell>
-
-                      <div className="max-w-[220px]">
-
-                        <p className="text-gray-700 dark:text-slate-300">
-                          {caseItem.court_name ||
-                            '-'}
-                        </p>
-
-                      </div>
-
-                    </Table.Cell>
-
-                    {/* CLIENTS */}
-
-                    <Table.Cell>
-
-                      {caseItem.clients &&
-                      caseItem.clients
-                        .length >
-                        0 ? (
-                        <div className="flex max-w-[260px] flex-wrap gap-1.5">
-
-                          {caseItem.clients
-                            .slice(
-                              0,
-                              2
-                            )
-                            .map(
-                              (
-                                client
-                              ) => (
-                                <Link
-                                  key={
-                                    client.id
-                                  }
-                                  to={`/clients/${client.id}`}
-                                  className="
-                                    rounded-md
-                                    border
-                                    border-gray-200
-                                    bg-gray-50
-                                    px-2
-                                    py-1
-                                    text-[11px]
-                                    font-semibold
-                                    text-gray-600
-                                    transition
-                                    hover:border-blue-200
-                                    hover:bg-blue-50
-                                    hover:text-blue-600
-                                    dark:border-white/[0.07]
-                                    dark:bg-white/[0.03]
-                                    dark:text-slate-300
-                                    dark:hover:border-blue-500/20
-                                    dark:hover:bg-blue-500/[0.05]
-                                    dark:hover:text-blue-400
-                                  "
-                                >
-                                  {client.name}
-                                </Link>
-                              )
-                            )}
-
-                          {caseItem.clients
-                            .length >
-                            2 && (
-                            <span
-                              className="
-                                rounded-md
-                                bg-gray-100
-                                px-2
-                                py-1
-                                text-[11px]
-                                font-semibold
-                                text-gray-500
-                                dark:bg-white/[0.04]
-                                dark:text-slate-400
-                              "
+                          {caseItem.subject && (
+                            <p
+                              className="mt-1 truncate text-xs text-gray-500 dark:text-slate-400"
+                              title={
+                                caseItem.subject
+                              }
                             >
-                              +
-                              {caseItem.clients
-                                .length -
-                                2}
-                            </span>
+                              {caseItem.subject}
+                            </p>
                           )}
 
                         </div>
-                      ) : (
-                        <span className="text-gray-400 dark:text-slate-600">
-                          -
-                        </span>
-                      )}
 
-                    </Table.Cell>
+                      </Table.Cell>
 
-                    {/* STATUS */}
+                      {/* ==============================
+                          JUDICIARY
+                      ============================== */}
 
-                    <Table.Cell>
+                      <Table.Cell>
 
-                      <Badge
-                        variant={
-                          getStatusVariant(
-                            caseItem.status
-                          )
-                        }
-                        dot
-                      >
-                        {getStatusLabel(
-                          caseItem.status
+                        <div className="min-w-[130px] max-w-[220px]">
+
+                          <p
+                            className="truncate font-medium text-gray-700 dark:text-slate-300"
+                            title={
+                              caseItem.judiciary_unit ||
+                              ''
+                            }
+                          >
+                            {caseItem.judiciary_unit ||
+                              '-'}
+                          </p>
+
+                        </div>
+
+                      </Table.Cell>
+
+                      {/* ==============================
+                          COURT
+                      ============================== */}
+
+                      <Table.Cell>
+
+                        <div className="max-w-[240px]">
+
+                          <p
+                            className="truncate text-gray-700 dark:text-slate-300"
+                            title={
+                              caseItem.court_name ||
+                              ''
+                            }
+                          >
+                            {caseItem.court_name ||
+                              '-'}
+                          </p>
+
+                        </div>
+
+                      </Table.Cell>
+
+                      {/* ==============================
+                          CLIENTS
+                      ============================== */}
+
+                      <Table.Cell>
+
+                        {Array.isArray(
+                          caseItem.clients
+                        ) &&
+                        caseItem.clients
+                          .length >
+                          0 ? (
+                          <div className="flex max-w-[260px] flex-wrap gap-1.5">
+
+                            {caseItem.clients
+                              .slice(
+                                0,
+                                2
+                              )
+                              .map(
+                                (
+                                  client
+                                ) => (
+                                  <Link
+                                    key={
+                                      client.id
+                                    }
+                                    to={`/clients/${client.id}`}
+                                    className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-blue-500/20 dark:hover:bg-blue-500/[0.05] dark:hover:text-blue-400"
+                                  >
+                                    {client.name}
+                                  </Link>
+                                )
+                              )}
+
+                            {caseItem.clients
+                              .length >
+                              2 && (
+                              <span className="rounded-md bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-500 dark:bg-white/[0.04] dark:text-slate-400">
+                                +
+                                {caseItem.clients
+                                  .length -
+                                  2}
+                              </span>
+                            )}
+
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 dark:text-slate-600">
+                            Müvekkil yok
+                          </span>
                         )}
-                      </Badge>
 
-                    </Table.Cell>
+                      </Table.Cell>
 
-                    {/* ACTION */}
+                      {/* ==============================
+                          ASSIGNEE
+                      ============================== */}
 
-                    <Table.Cell className="text-right">
+                      <Table.Cell>
 
-                      <Link
-                        to={`/cases/${caseItem.id}`}
-                      >
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        {assigneeName ? (
+                          <div className="flex min-w-[130px] items-center gap-2">
+
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:bg-white/[0.05] dark:text-slate-400">
+                              <UserRound size={13} />
+                            </div>
+
+                            <span className="text-sm text-gray-700 dark:text-slate-300">
+                              {assigneeName}
+
+                              {String(
+                                caseItem.assignee?.id
+                              ) ===
+                              String(
+                                user?.id
+                              )
+                                ? ' (Ben)'
+                                : ''}
+                            </span>
+
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 dark:text-slate-600">
+                            Atanmadı
+                          </span>
+                        )}
+
+                      </Table.Cell>
+
+                      {/* ==============================
+                          PRIORITY
+                      ============================== */}
+
+                      <Table.Cell>
+
+                        <Badge
+                          variant={
+                            getPriorityVariant(
+                              caseItem.priority
+                            )
+                          }
                         >
-                          İncele
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </Button>
-                      </Link>
+                          {getPriorityLabel(
+                            caseItem.priority
+                          )}
+                        </Badge>
 
-                    </Table.Cell>
+                      </Table.Cell>
 
-                  </Table.Row>
-                )
+                      {/* ==============================
+                          STATUS
+                      ============================== */}
+
+                      <Table.Cell>
+
+                        <Badge
+                          variant={
+                            getStatusVariant(
+                              caseItem.status
+                            )
+                          }
+                          dot
+                        >
+                          {getStatusLabel(
+                            caseItem.status
+                          )}
+                        </Badge>
+
+                      </Table.Cell>
+
+                      {/* ==============================
+                          ACTION
+                      ============================== */}
+
+                      <Table.Cell className="text-right">
+
+                        <Link
+                          to={`/cases/${caseItem.id}`}
+                        >
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                          >
+                            İncele
+
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
+
+                      </Table.Cell>
+
+                    </Table.Row>
+                  );
+                }
               )}
 
             </Table.Body>
 
           </Table>
 
-          {/* ================================================
+          {/* ==================================================
               PAGINATION
-          ================================================ */}
+          ================================================== */}
 
           {pagination &&
             pagination.totalPages >
               1 && (
-              <div
-                className="
-                  flex
-                  flex-col
-                  gap-3
-                  rounded-xl
-                  border
-                  border-gray-200
-                  bg-white
-                  px-4
-                  py-3
-                  dark:border-white/[0.07]
-                  dark:bg-[#0b1b33]
-                  sm:flex-row
-                  sm:items-center
-                  sm:justify-between
-                "
-              >
+              <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-white/[0.07] dark:bg-[#0b1b33] sm:flex-row sm:items-center sm:justify-between">
 
-                <p
-                  className="
-                    text-xs
-                    text-gray-500
-                    dark:text-slate-400
-                  "
-                >
-                  Toplam{' '}
-                  <span className="font-semibold text-gray-700 dark:text-slate-300">
-                    {pagination.total}
-                  </span>{' '}
-                  dava
-                </p>
+                <div>
+
+                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                    Toplam{' '}
+                    <span className="font-semibold text-gray-700 dark:text-slate-300">
+                      {pagination.total}
+                    </span>{' '}
+                    dava
+                  </p>
+
+                  {hasFilters && (
+                    <p className="mt-1 text-[11px] text-gray-400 dark:text-slate-600">
+                      Sonuçlar aktif filtrelere göre gösteriliyor.
+                    </p>
+                  )}
+
+                </div>
 
                 <div className="flex items-center gap-2">
 
                   <Button
+                    type="button"
                     variant="secondary"
                     size="sm"
                     disabled={
-                      page ===
-                      1
+                      page <=
+                        1 ||
+                      isFetching
                     }
                     onClick={() =>
                       setPage(
@@ -821,29 +1068,23 @@ const CasesList = () => {
                     }
                   >
                     <ArrowLeft className="h-3.5 w-3.5" />
+
                     Önceki
                   </Button>
 
-                  <span
-                    className="
-                      min-w-[70px]
-                      text-center
-                      text-xs
-                      font-semibold
-                      text-gray-600
-                      dark:text-slate-400
-                    "
-                  >
+                  <span className="min-w-[78px] text-center text-xs font-semibold text-gray-600 dark:text-slate-400">
                     {page} /{' '}
                     {pagination.totalPages}
                   </span>
 
                   <Button
+                    type="button"
                     variant="secondary"
                     size="sm"
                     disabled={
-                      page ===
-                      pagination.totalPages
+                      page >=
+                        pagination.totalPages ||
+                      isFetching
                     }
                     onClick={() =>
                       setPage(
@@ -859,6 +1100,7 @@ const CasesList = () => {
                     }
                   >
                     Sonraki
+
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
 

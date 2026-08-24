@@ -45,6 +45,20 @@ import toast from 'react-hot-toast';
 // CONSTANTS
 // ======================================================
 
+const INITIAL_FORM = {
+  judiciary_type: '',
+  judiciary_unit: '',
+  court_name: '',
+  case_number: '',
+  client_ids: [],
+  assigned_to: '',
+  status: 'preparation',
+  priority: 'normal',
+  subject: '',
+  description: '',
+  opening_date: '',
+};
+
 const STATUS_OPTIONS = [
   {
     value: 'preparation',
@@ -160,6 +174,58 @@ const getPriorityLabel = (
   );
 };
 
+const normalizeText = (
+  value
+) => {
+  return String(
+    value || ''
+  )
+    .replace(
+      /\s+/g,
+      ' '
+    )
+    .trim();
+};
+
+const normalizeNullable = (
+  value
+) => {
+  const normalized =
+    normalizeText(
+      value
+    );
+
+  return normalized || null;
+};
+
+const isFutureDate = (
+  value
+) => {
+  if (!value) {
+    return false;
+  }
+
+  const selected =
+    new Date(
+      `${value}T00:00:00`
+    );
+
+  const today =
+    new Date();
+
+  today.setHours(
+    0,
+    0,
+    0,
+    0
+  );
+
+  return (
+    selected >
+    today
+  );
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -176,19 +242,9 @@ const CaseCreate = () => {
     formData,
     setFormData,
   ] =
-    useState({
-      judiciary_type: '',
-      judiciary_unit: '',
-      court_name: '',
-      case_number: '',
-      client_ids: [],
-      assigned_to: '',
-      status: 'preparation',
-      priority: 'normal',
-      subject: '',
-      description: '',
-      opening_date: '',
-    });
+    useState(
+      INITIAL_FORM
+    );
 
   const [
     errors,
@@ -289,6 +345,42 @@ const CaseCreate = () => {
       formData.client_ids,
     ]);
 
+  const isDirty =
+    useMemo(() => {
+      return (
+        normalizeText(
+          formData.judiciary_type
+        ) !== '' ||
+        normalizeText(
+          formData.judiciary_unit
+        ) !== '' ||
+        normalizeText(
+          formData.court_name
+        ) !== '' ||
+        normalizeText(
+          formData.case_number
+        ) !== '' ||
+        formData.client_ids.length >
+          0 ||
+        formData.assigned_to !==
+          '' ||
+        formData.status !==
+          'preparation' ||
+        formData.priority !==
+          'normal' ||
+        normalizeText(
+          formData.subject
+        ) !== '' ||
+        normalizeText(
+          formData.description
+        ) !== '' ||
+        formData.opening_date !==
+          ''
+      );
+    }, [
+      formData,
+    ]);
+
   // ======================================================
   // MUTATION
   // ======================================================
@@ -329,12 +421,139 @@ const CaseCreate = () => {
       onError: (
         error
       ) => {
+        const backendErrors =
+          error?.response
+            ?.data?.errors;
+
+        const message =
+          error?.response
+            ?.data?.message ||
+          error?.message ||
+          'Dava oluşturulamadı';
+
+        const nextErrors =
+          {};
+
+        if (
+          Array.isArray(
+            backendErrors
+          )
+        ) {
+          backendErrors.forEach(
+            (
+              item
+            ) => {
+              const field =
+                item?.path ||
+                item?.param;
+
+              if (
+                field
+              ) {
+                nextErrors[field] =
+                  item?.msg ||
+                  'Geçersiz değer';
+              }
+            }
+          );
+        }
+
+        if (
+          /yargı türü|judiciary_type/i.test(
+            message
+          )
+        ) {
+          nextErrors.judiciary_type =
+            message;
+        }
+
+        if (
+          /yargı birimi|judiciary_unit/i.test(
+            message
+          )
+        ) {
+          nextErrors.judiciary_unit =
+            message;
+        }
+
+        if (
+          /mahkeme|court_name/i.test(
+            message
+          )
+        ) {
+          nextErrors.court_name =
+            message;
+        }
+
+        if (
+          /dosya|esas|case_number/i.test(
+            message
+          )
+        ) {
+          nextErrors.case_number =
+            message;
+        }
+
+        if (
+          /müvekkil|client_ids/i.test(
+            message
+          )
+        ) {
+          nextErrors.client_ids =
+            message;
+        }
+
+        if (
+          /konu|subject/i.test(
+            message
+          )
+        ) {
+          nextErrors.subject =
+            message;
+        }
+
+        if (
+          /açıklama|description/i.test(
+            message
+          )
+        ) {
+          nextErrors.description =
+            message;
+        }
+
+        if (
+          /açılış|opening_date/i.test(
+            message
+          )
+        ) {
+          nextErrors.opening_date =
+            message;
+        }
+
+        if (
+          Object.keys(
+            nextErrors
+          ).length >
+          0
+        ) {
+          setErrors(
+            (
+              current
+            ) => ({
+              ...current,
+              ...nextErrors,
+            })
+          );
+
+          toast.error(
+            'Formdaki hatalı alanları kontrol edin'
+          );
+
+          return;
+        }
+
         toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
-            'Dava oluşturulamadı'
+          message
         );
       },
     });
@@ -353,13 +572,82 @@ const CaseCreate = () => {
       } =
         event.target;
 
+      let nextValue =
+        value;
+
+      if (
+        name ===
+        'judiciary_type'
+      ) {
+        nextValue =
+          value.slice(
+            0,
+            100
+          );
+      }
+
+      if (
+        name ===
+        'judiciary_unit'
+      ) {
+        nextValue =
+          value.slice(
+            0,
+            150
+          );
+      }
+
+      if (
+        name ===
+        'court_name'
+      ) {
+        nextValue =
+          value.slice(
+            0,
+            200
+          );
+      }
+
+      if (
+        name ===
+        'case_number'
+      ) {
+        nextValue =
+          value.slice(
+            0,
+            100
+          );
+      }
+
+      if (
+        name ===
+        'subject'
+      ) {
+        nextValue =
+          value.slice(
+            0,
+            255
+          );
+      }
+
+      if (
+        name ===
+        'description'
+      ) {
+        nextValue =
+          value.slice(
+            0,
+            5000
+          );
+      }
+
       setFormData(
         (
           current
         ) => ({
           ...current,
           [name]:
-            value,
+            nextValue,
         })
       );
 
@@ -453,6 +741,38 @@ const CaseCreate = () => {
     };
 
   // ======================================================
+  // CANCEL
+  // ======================================================
+
+  const handleCancel =
+    () => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
+      if (
+        isDirty
+      ) {
+        const confirmed =
+          window.confirm(
+            'Kaydedilmemiş dava bilgileri var. Sayfadan ayrılmak istediğinize emin misiniz?'
+          );
+
+        if (
+          !confirmed
+        ) {
+          return;
+        }
+      }
+
+      navigate(
+        '/cases'
+      );
+    };
+
+  // ======================================================
   // SUBMIT
   // ======================================================
 
@@ -462,22 +782,107 @@ const CaseCreate = () => {
     ) => {
       event.preventDefault();
 
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       const newErrors =
         {};
 
+      const judiciaryType =
+        normalizeText(
+          formData.judiciary_type
+        );
+
+      const judiciaryUnit =
+        normalizeText(
+          formData.judiciary_unit
+        );
+
+      const courtName =
+        normalizeText(
+          formData.court_name
+        );
+
+      const caseNumber =
+        normalizeText(
+          formData.case_number
+        );
+
+      const subject =
+        normalizeText(
+          formData.subject
+        );
+
+      const description =
+        String(
+          formData.description ||
+          ''
+        ).trim();
+
+      // ==================================================
+      // JUDICIARY TYPE
+      // ==================================================
+
       if (
-        !formData.judiciary_type.trim()
+        !judiciaryType
       ) {
         newErrors.judiciary_type =
           'Yargı türü gereklidir';
+      } else if (
+        judiciaryType.length >
+        100
+      ) {
+        newErrors.judiciary_type =
+          'Yargı türü en fazla 100 karakter olabilir';
       }
 
+      // ==================================================
+      // JUDICIARY UNIT
+      // ==================================================
+
       if (
-        !formData.judiciary_unit.trim()
+        !judiciaryUnit
       ) {
         newErrors.judiciary_unit =
           'Yargı birimi gereklidir';
+      } else if (
+        judiciaryUnit.length >
+        150
+      ) {
+        newErrors.judiciary_unit =
+          'Yargı birimi en fazla 150 karakter olabilir';
       }
+
+      // ==================================================
+      // COURT
+      // ==================================================
+
+      if (
+        courtName.length >
+        200
+      ) {
+        newErrors.court_name =
+          'Mahkeme adı en fazla 200 karakter olabilir';
+      }
+
+      // ==================================================
+      // CASE NUMBER
+      // ==================================================
+
+      if (
+        caseNumber.length >
+        100
+      ) {
+        newErrors.case_number =
+          'Dosya / esas numarası en fazla 100 karakter olabilir';
+      }
+
+      // ==================================================
+      // CLIENT
+      // ==================================================
 
       if (
         formData.client_ids.length ===
@@ -485,6 +890,44 @@ const CaseCreate = () => {
       ) {
         newErrors.client_ids =
           'En az bir müvekkil seçilmelidir';
+      }
+
+      // ==================================================
+      // OPENING DATE
+      // ==================================================
+
+      if (
+        formData.opening_date &&
+        isFutureDate(
+          formData.opening_date
+        )
+      ) {
+        newErrors.opening_date =
+          'Dava açılış tarihi bugünden ileri bir tarih olamaz';
+      }
+
+      // ==================================================
+      // SUBJECT
+      // ==================================================
+
+      if (
+        subject.length >
+        255
+      ) {
+        newErrors.subject =
+          'Dava konusu en fazla 255 karakter olabilir';
+      }
+
+      // ==================================================
+      // DESCRIPTION
+      // ==================================================
+
+      if (
+        description.length >
+        5000
+      ) {
+        newErrors.description =
+          'Açıklama en fazla 5000 karakter olabilir';
       }
 
       if (
@@ -497,11 +940,15 @@ const CaseCreate = () => {
           newErrors
         );
 
+        toast.error(
+          'Formdaki eksik veya hatalı alanları kontrol edin'
+        );
+
         return;
       }
 
       const title =
-        `${formData.judiciary_type.trim()} - ${formData.judiciary_unit.trim()}`;
+        `${judiciaryType} - ${judiciaryUnit}`;
 
       const submitData = {
         ...formData,
@@ -509,25 +956,25 @@ const CaseCreate = () => {
         title,
 
         judiciary_type:
-          formData.judiciary_type.trim(),
+          judiciaryType,
 
         judiciary_unit:
-          formData.judiciary_unit.trim(),
+          judiciaryUnit,
 
         court_name:
-          formData.court_name.trim() ||
+          courtName ||
           null,
 
         case_number:
-          formData.case_number.trim() ||
+          caseNumber ||
           null,
 
         subject:
-          formData.subject.trim() ||
+          subject ||
           null,
 
         description:
-          formData.description.trim() ||
+          description ||
           null,
 
         assigned_to:
@@ -551,76 +998,31 @@ const CaseCreate = () => {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
 
-      {/* ==================================================
-          HEADER
-      ================================================== */}
+      {/* HEADER */}
 
       <div>
 
         <Link
           to="/cases"
-          className="
-            inline-flex
-            items-center
-            gap-1.5
-            text-xs
-            font-medium
-            text-gray-500
-            transition
-            hover:text-blue-600
-            dark:text-slate-500
-            dark:hover:text-blue-400
-          "
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 transition hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-
           Davalar
         </Link>
 
         <div className="mt-3 flex items-start gap-3">
 
-          <div
-            className="
-              flex
-              h-11
-              w-11
-              shrink-0
-              items-center
-              justify-center
-              rounded-xl
-              bg-blue-50
-              text-blue-600
-              dark:bg-blue-500/[0.08]
-              dark:text-blue-400
-            "
-          >
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
             <Gavel size={21} />
           </div>
 
           <div>
 
-            <h1
-              className="
-                text-2xl
-                font-semibold
-                tracking-[-0.035em]
-                text-gray-900
-                dark:text-white
-              "
-            >
+            <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
               Yeni Dava
             </h1>
 
-            <p
-              className="
-                mt-1
-                max-w-2xl
-                text-sm
-                leading-6
-                text-gray-500
-                dark:text-slate-400
-              "
-            >
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-slate-400">
               Dava dosyasının yargı bilgilerini, müvekkillerini ve sorumlu avukatı belirleyin.
             </p>
 
@@ -637,9 +1039,7 @@ const CaseCreate = () => {
         className="space-y-5"
       >
 
-        {/* ==================================================
-            JUDICIARY INFO
-        ================================================== */}
+        {/* YARGI */}
 
         <Card>
 
@@ -647,20 +1047,7 @@ const CaseCreate = () => {
 
             <div className="flex items-center gap-3">
 
-              <div
-                className="
-                  flex
-                  h-9
-                  w-9
-                  items-center
-                  justify-center
-                  rounded-lg
-                  bg-blue-50
-                  text-blue-600
-                  dark:bg-blue-500/[0.08]
-                  dark:text-blue-400
-                "
-              >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
                 <Scale size={17} />
               </div>
 
@@ -671,7 +1058,7 @@ const CaseCreate = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Dava dosyasının temel mahkeme ve yargı bilgileri
+                  Bilgileri dosyada yer aldığı şekliyle elle girebilirsiniz.
                 </p>
 
               </div>
@@ -696,6 +1083,10 @@ const CaseCreate = () => {
                 error={
                   errors.judiciary_type
                 }
+                disabled={
+                  mutation.isPending
+                }
+                maxLength={100}
                 placeholder="Örn: Hukuk, Ceza, İdare, CBS"
                 autoFocus
               />
@@ -712,6 +1103,10 @@ const CaseCreate = () => {
                 error={
                   errors.judiciary_unit
                 }
+                disabled={
+                  mutation.isPending
+                }
+                maxLength={150}
                 placeholder="Örn: Asliye Hukuk Mahkemesi"
               />
 
@@ -728,6 +1123,13 @@ const CaseCreate = () => {
                 onChange={
                   handleChange
                 }
+                error={
+                  errors.court_name
+                }
+                disabled={
+                  mutation.isPending
+                }
+                maxLength={200}
                 placeholder="Örn: İstanbul 5. Asliye Hukuk Mahkemesi"
               />
 
@@ -740,6 +1142,13 @@ const CaseCreate = () => {
                 onChange={
                   handleChange
                 }
+                error={
+                  errors.case_number
+                }
+                disabled={
+                  mutation.isPending
+                }
+                maxLength={100}
                 placeholder="Örn: 2026/123 E."
               />
 
@@ -755,15 +1164,19 @@ const CaseCreate = () => {
               onChange={
                 handleChange
               }
+              error={
+                errors.opening_date
+              }
+              disabled={
+                mutation.isPending
+              }
             />
 
           </Card.Body>
 
         </Card>
 
-        {/* ==================================================
-            CLIENTS
-        ================================================== */}
+        {/* MÜVEKKİLLER */}
 
         <Card>
 
@@ -771,20 +1184,7 @@ const CaseCreate = () => {
 
             <div className="flex items-center gap-3">
 
-              <div
-                className="
-                  flex
-                  h-9
-                  w-9
-                  items-center
-                  justify-center
-                  rounded-lg
-                  bg-emerald-50
-                  text-emerald-600
-                  dark:bg-emerald-500/[0.08]
-                  dark:text-emerald-400
-                "
-              >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400">
                 <Users size={17} />
               </div>
 
@@ -795,7 +1195,7 @@ const CaseCreate = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Davaya bağlı bir veya birden fazla müvekkil ekleyin
+                  Davaya en az bir müvekkil bağlayın.
                 </p>
 
               </div>
@@ -823,26 +1223,11 @@ const CaseCreate = () => {
                   clientsLoading ||
                   mutation.isPending
                 }
-                className={`
-                  h-10
-                  flex-1
-                  rounded-lg
-                  border
-                  bg-white
-                  px-3.5
-                  text-sm
-                  text-gray-700
-                  outline-none
-                  focus:ring-2
-                  focus:ring-blue-500/10
-                  dark:bg-white/[0.035]
-                  dark:text-slate-300
-                  ${
-                    errors.client_ids
-                      ? 'border-red-400 focus:border-red-500'
-                      : 'border-gray-200 focus:border-blue-500 dark:border-white/[0.08]'
-                  }
-                `}
+                className={`h-10 flex-1 rounded-lg border bg-white px-3.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/10 dark:bg-white/[0.035] dark:text-slate-300 ${
+                  errors.client_ids
+                    ? 'border-red-400 focus:border-red-500'
+                    : 'border-gray-200 focus:border-blue-500 dark:border-white/[0.08]'
+                }`}
               >
 
                 <option value="">
@@ -867,7 +1252,6 @@ const CaseCreate = () => {
                       }
                     >
                       {client.name}
-
                       {client.client_type ===
                         'corporate'
                         ? ' · Kurumsal'
@@ -890,7 +1274,6 @@ const CaseCreate = () => {
                 }
               >
                 <Plus className="h-4 w-4" />
-
                 Ekle
               </Button>
 
@@ -916,35 +1299,12 @@ const CaseCreate = () => {
                         key={
                           client.id
                         }
-                        className="
-                          flex
-                          items-center
-                          justify-between
-                          gap-3
-                          bg-white
-                          px-4
-                          py-3
-                          dark:bg-transparent
-                        "
+                        className="flex items-center justify-between gap-3 bg-white px-4 py-3 dark:bg-transparent"
                       >
 
                         <div className="flex min-w-0 items-center gap-3">
 
-                          <div
-                            className="
-                              flex
-                              h-9
-                              w-9
-                              shrink-0
-                              items-center
-                              justify-center
-                              rounded-lg
-                              bg-gray-100
-                              text-gray-500
-                              dark:bg-white/[0.04]
-                              dark:text-slate-400
-                            "
-                          >
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-white/[0.04] dark:text-slate-400">
                             <UserRound size={16} />
                           </div>
 
@@ -992,21 +1352,7 @@ const CaseCreate = () => {
                           disabled={
                             mutation.isPending
                           }
-                          className="
-                            inline-flex
-                            h-8
-                            w-8
-                            shrink-0
-                            items-center
-                            justify-center
-                            rounded-lg
-                            text-gray-400
-                            transition
-                            hover:bg-red-50
-                            hover:text-red-600
-                            dark:hover:bg-red-500/[0.08]
-                            dark:hover:text-red-400
-                          "
+                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-500/[0.08] dark:hover:text-red-400"
                           title="Müvekkili kaldır"
                         >
                           <X className="h-4 w-4" />
@@ -1020,18 +1366,8 @@ const CaseCreate = () => {
 
               </div>
             ) : (
-              <div
-                className="
-                  rounded-xl
-                  border
-                  border-dashed
-                  border-gray-200
-                  px-4
-                  py-6
-                  text-center
-                  dark:border-white/[0.07]
-                "
-              >
+              <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center dark:border-white/[0.07]">
+
                 <Users className="mx-auto h-6 w-6 text-gray-300 dark:text-slate-600" />
 
                 <p className="mt-2 text-sm text-gray-500 dark:text-slate-500">
@@ -1049,9 +1385,7 @@ const CaseCreate = () => {
 
         </Card>
 
-        {/* ==================================================
-            RESPONSIBLE & STATUS
-        ================================================== */}
+        {/* DOSYA YÖNETİMİ */}
 
         <Card>
 
@@ -1059,20 +1393,7 @@ const CaseCreate = () => {
 
             <div className="flex items-center gap-3">
 
-              <div
-                className="
-                  flex
-                  h-9
-                  w-9
-                  items-center
-                  justify-center
-                  rounded-lg
-                  bg-violet-50
-                  text-violet-600
-                  dark:bg-violet-500/[0.08]
-                  dark:text-violet-400
-                "
-              >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400">
                 <BriefcaseBusiness size={17} />
               </div>
 
@@ -1094,8 +1415,6 @@ const CaseCreate = () => {
 
           <Card.Body className="space-y-5">
 
-            {/* LAWYER */}
-
             <div>
 
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
@@ -1114,26 +1433,7 @@ const CaseCreate = () => {
                   lawyersLoading ||
                   mutation.isPending
                 }
-                className="
-                  h-10
-                  w-full
-                  rounded-lg
-                  border
-                  border-gray-200
-                  bg-white
-                  px-3.5
-                  text-sm
-                  text-gray-700
-                  outline-none
-                  focus:border-blue-500
-                  focus:ring-2
-                  focus:ring-blue-500/10
-                  disabled:cursor-not-allowed
-                  disabled:opacity-50
-                  dark:border-white/[0.08]
-                  dark:bg-white/[0.035]
-                  dark:text-slate-300
-                "
+                className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
               >
 
                 <option value="">
@@ -1174,8 +1474,6 @@ const CaseCreate = () => {
 
             <div className="grid gap-4 md:grid-cols-2">
 
-              {/* STATUS */}
-
               <div>
 
                 <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
@@ -1190,24 +1488,10 @@ const CaseCreate = () => {
                   onChange={
                     handleChange
                   }
-                  className="
-                    h-10
-                    w-full
-                    rounded-lg
-                    border
-                    border-gray-200
-                    bg-white
-                    px-3.5
-                    text-sm
-                    text-gray-700
-                    outline-none
-                    focus:border-blue-500
-                    focus:ring-2
-                    focus:ring-blue-500/10
-                    dark:border-white/[0.08]
-                    dark:bg-white/[0.035]
-                    dark:text-slate-300
-                  "
+                  disabled={
+                    mutation.isPending
+                  }
+                  className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
                 >
 
                   {STATUS_OPTIONS.map(
@@ -1231,8 +1515,6 @@ const CaseCreate = () => {
 
               </div>
 
-              {/* PRIORITY */}
-
               <div>
 
                 <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
@@ -1247,24 +1529,10 @@ const CaseCreate = () => {
                   onChange={
                     handleChange
                   }
-                  className="
-                    h-10
-                    w-full
-                    rounded-lg
-                    border
-                    border-gray-200
-                    bg-white
-                    px-3.5
-                    text-sm
-                    text-gray-700
-                    outline-none
-                    focus:border-blue-500
-                    focus:ring-2
-                    focus:ring-blue-500/10
-                    dark:border-white/[0.08]
-                    dark:bg-white/[0.035]
-                    dark:text-slate-300
-                  "
+                  disabled={
+                    mutation.isPending
+                  }
+                  className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
                 >
 
                   {PRIORITY_OPTIONS.map(
@@ -1294,9 +1562,7 @@ const CaseCreate = () => {
 
         </Card>
 
-        {/* ==================================================
-            CASE DETAIL
-        ================================================== */}
+        {/* DAVA DETAY */}
 
         <Card>
 
@@ -1304,20 +1570,7 @@ const CaseCreate = () => {
 
             <div className="flex items-center gap-3">
 
-              <div
-                className="
-                  flex
-                  h-9
-                  w-9
-                  items-center
-                  justify-center
-                  rounded-lg
-                  bg-amber-50
-                  text-amber-600
-                  dark:bg-amber-500/[0.08]
-                  dark:text-amber-400
-                "
-              >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
                 <FileText size={17} />
               </div>
 
@@ -1348,6 +1601,13 @@ const CaseCreate = () => {
               onChange={
                 handleChange
               }
+              error={
+                errors.subject
+              }
+              disabled={
+                mutation.isPending
+              }
+              maxLength={255}
               placeholder="Örn: Tapu iptali ve tescil"
             />
 
@@ -1365,31 +1625,34 @@ const CaseCreate = () => {
                 onChange={
                   handleChange
                 }
+                disabled={
+                  mutation.isPending
+                }
+                maxLength={5000}
                 rows={5}
                 placeholder="Davanın özeti, önemli hususlar ve dosya hakkında açıklamalar..."
-                className="
-                  w-full
-                  resize-y
-                  rounded-lg
-                  border
-                  border-gray-200
-                  bg-white
-                  px-3.5
-                  py-2.5
-                  text-sm
-                  leading-6
-                  text-gray-900
-                  outline-none
-                  placeholder:text-gray-400
-                  focus:border-blue-500
-                  focus:ring-2
-                  focus:ring-blue-500/10
-                  dark:border-white/[0.08]
-                  dark:bg-white/[0.035]
-                  dark:text-white
-                  dark:placeholder:text-slate-500
-                "
+                className={`w-full resize-y rounded-lg border bg-white px-3.5 py-2.5 text-sm leading-6 text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white/[0.035] dark:text-white dark:placeholder:text-slate-500 ${
+                  errors.description
+                    ? 'border-red-400 focus:border-red-500'
+                    : 'border-gray-200 focus:border-blue-500 dark:border-white/[0.08]'
+                }`}
               />
+
+              <div className="mt-1 flex justify-between gap-3">
+
+                {errors.description ? (
+                  <p className="text-xs text-red-600 dark:text-red-400">
+                    {errors.description}
+                  </p>
+                ) : (
+                  <span />
+                )}
+
+                <p className="text-xs text-gray-400 dark:text-slate-600">
+                  {formData.description.length}/5000
+                </p>
+
+              </div>
 
             </div>
 
@@ -1397,45 +1660,24 @@ const CaseCreate = () => {
 
         </Card>
 
-        {/* ==================================================
-            SUMMARY
-        ================================================== */}
+        {/* SUMMARY */}
 
-        <div
-          className="
-            grid
-            gap-3
-            rounded-xl
-            border
-            border-gray-200
-            bg-gray-50/50
-            p-4
-            dark:border-white/[0.07]
-            dark:bg-white/[0.015]
-            sm:grid-cols-4
-          "
-        >
+        <div className="grid gap-3 rounded-xl border border-gray-200 bg-gray-50/50 p-4 dark:border-white/[0.07] dark:bg-white/[0.015] sm:grid-cols-4">
 
           <div>
-
             <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
               Müvekkil
             </p>
-
             <p className="mt-1 text-sm font-medium text-gray-700 dark:text-slate-300">
               {formData.client_ids.length} kişi
             </p>
-
           </div>
 
           <div>
-
             <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
               Durum
             </p>
-
             <div className="mt-1">
-
               <Badge
                 variant={
                   getStatusVariant(
@@ -1448,19 +1690,14 @@ const CaseCreate = () => {
                   formData.status
                 )}
               </Badge>
-
             </div>
-
           </div>
 
           <div>
-
             <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
               Öncelik
             </p>
-
             <div className="mt-1">
-
               <Badge
                 variant={
                   getPriorityVariant(
@@ -1472,52 +1709,25 @@ const CaseCreate = () => {
                   formData.priority
                 )}
               </Badge>
-
             </div>
-
           </div>
 
           <div>
-
             <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
               Açılış
             </p>
-
             <div className="mt-1 flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-slate-300">
-
               <CalendarDays className="h-3.5 w-3.5 text-gray-400" />
-
               {formData.opening_date ||
                 'Belirtilmedi'}
-
             </div>
-
           </div>
 
         </div>
 
-        {/* ==================================================
-            ACTIONS
-        ================================================== */}
+        {/* ACTIONS */}
 
-        <div
-          className="
-            flex
-            flex-col-reverse
-            gap-3
-            rounded-xl
-            border
-            border-gray-200
-            bg-white
-            p-4
-            shadow-sm
-            dark:border-white/[0.07]
-            dark:bg-[#0b1b33]
-            sm:flex-row
-            sm:items-center
-            sm:justify-end
-          "
-        >
+        <div className="flex flex-col-reverse gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.07] dark:bg-[#0b1b33] sm:flex-row sm:items-center sm:justify-end">
 
           <Button
             type="button"
@@ -1525,10 +1735,8 @@ const CaseCreate = () => {
             disabled={
               mutation.isPending
             }
-            onClick={() =>
-              navigate(
-                '/cases'
-              )
+            onClick={
+              handleCancel
             }
           >
             İptal
@@ -1539,9 +1747,11 @@ const CaseCreate = () => {
             loading={
               mutation.isPending
             }
+            disabled={
+              mutation.isPending
+            }
           >
             <Save className="h-4 w-4" />
-
             Dava Oluştur
           </Button>
 
