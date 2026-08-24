@@ -14,13 +14,23 @@ import {
   useQuery,
 } from '@tanstack/react-query';
 
-import casePartyApi from '../../features/case-parties/case-party.api.js';
-import caseApi from '../../features/cases/case.api.js';
+import casePartyApi
+  from '../../features/case-parties/case-party.api.js';
 
-import Button from '../../components/ui/Button.jsx';
-import Input from '../../components/ui/Input.jsx';
-import Card from '../../components/ui/Card.jsx';
-import Badge from '../../components/ui/Badge.jsx';
+import caseApi
+  from '../../features/cases/case.api.js';
+
+import Button
+  from '../../components/ui/Button.jsx';
+
+import Input
+  from '../../components/ui/Input.jsx';
+
+import Card
+  from '../../components/ui/Card.jsx';
+
+import Badge
+  from '../../components/ui/Badge.jsx';
 
 import {
   ArrowLeft,
@@ -32,44 +42,99 @@ import {
   Users,
 } from 'lucide-react';
 
-import toast from 'react-hot-toast';
+import toast
+  from 'react-hot-toast';
 
 // ======================================================
 // CONSTANTS
 // ======================================================
 
 const PARTY_TYPES = [
-  { value: 'davaci', label: 'Davacı' },
-  { value: 'davali', label: 'Davalı' },
-  { value: 'supheli', label: 'Şüpheli' },
-  { value: 'sanik', label: 'Sanık' },
-  { value: 'musteki', label: 'Müşteki' },
-  { value: 'katilan', label: 'Katılan' },
-  { value: 'magdur', label: 'Mağdur' },
-  { value: 'maktul', label: 'Maktul' },
-  { value: 'alacakli', label: 'Alacaklı' },
-  { value: 'borclu', label: 'Borçlu' },
-  { value: 'ucuncu_kisi', label: 'Üçüncü Kişi' },
+  {
+    value: 'davaci',
+    label: 'Davacı',
+  },
+  {
+    value: 'davali',
+    label: 'Davalı',
+  },
+  {
+    value: 'supheli',
+    label: 'Şüpheli',
+  },
+  {
+    value: 'sanik',
+    label: 'Sanık',
+  },
+  {
+    value: 'musteki',
+    label: 'Müşteki',
+  },
+  {
+    value: 'katilan',
+    label: 'Katılan',
+  },
+  {
+    value: 'magdur',
+    label: 'Mağdur',
+  },
+  {
+    value: 'maktul',
+    label: 'Maktul',
+  },
+  {
+    value: 'alacakli',
+    label: 'Alacaklı',
+  },
+  {
+    value: 'borclu',
+    label: 'Borçlu',
+  },
+  {
+    value: 'ucuncu_kisi',
+    label: 'Üçüncü Kişi',
+  },
 ];
 
 const INITIAL_FORM = {
-  party_type: 'davali',
-  entity_type: 'person',
+  party_type:
+    'davali',
 
-  name: '',
-  identification_number: '',
-  tax_office: '',
+  entity_type:
+    'person',
 
-  phone: '',
-  email: '',
-  address: '',
+  name:
+    '',
 
-  lawyer_name: '',
-  lawyer_phone: '',
-  lawyer_email: '',
-  lawyer_registry_number: '',
+  identification_number:
+    '',
 
-  notes: '',
+  tax_office:
+    '',
+
+  phone:
+    '',
+
+  email:
+    '',
+
+  address:
+    '',
+
+  lawyer_name:
+    '',
+
+  lawyer_phone:
+    '',
+
+  lawyer_email:
+    '',
+
+  lawyer_registry_number:
+    '',
+
+  notes:
+    '',
 };
 
 // ======================================================
@@ -90,6 +155,22 @@ const normalizeNullable = (
   );
 };
 
+const normalizeEmail = (
+  value
+) => {
+  const normalized =
+    String(
+      value || ''
+    )
+      .trim()
+      .toLowerCase();
+
+  return (
+    normalized ||
+    null
+  );
+};
+
 const onlyDigits = (
   value
 ) => {
@@ -100,6 +181,128 @@ const onlyDigits = (
     ''
   );
 };
+
+const normalizePhone = (
+  value
+) => {
+  return String(
+    value || ''
+  )
+    .replace(
+      /[^\d+\s()-]/g,
+      ''
+    )
+    .slice(
+      0,
+      25
+    );
+};
+
+const validateEmail = (
+  value
+) => {
+  if (
+    !value
+  ) {
+    return true;
+  }
+
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+    value
+  );
+};
+
+const validatePhone = (
+  value
+) => {
+  if (
+    !value
+  ) {
+    return true;
+  }
+
+  const digits =
+    String(
+      value
+    ).replace(
+      /\D/g,
+      ''
+    );
+
+  return (
+    digits.length >= 10 &&
+    digits.length <= 15
+  );
+};
+
+const normalizeFormForComparison = (
+  form
+) => ({
+  party_type:
+    form.party_type,
+
+  entity_type:
+    form.entity_type,
+
+  name:
+    String(
+      form.name || ''
+    ).trim(),
+
+  identification_number:
+    onlyDigits(
+      form.identification_number
+    ),
+
+  tax_office:
+    String(
+      form.tax_office || ''
+    ).trim(),
+
+  phone:
+    normalizePhone(
+      form.phone
+    ).trim(),
+
+  email:
+    String(
+      form.email || ''
+    )
+      .trim()
+      .toLowerCase(),
+
+  address:
+    String(
+      form.address || ''
+    ).trim(),
+
+  lawyer_name:
+    String(
+      form.lawyer_name || ''
+    ).trim(),
+
+  lawyer_phone:
+    normalizePhone(
+      form.lawyer_phone
+    ).trim(),
+
+  lawyer_email:
+    String(
+      form.lawyer_email || ''
+    )
+      .trim()
+      .toLowerCase(),
+
+  lawyer_registry_number:
+    String(
+      form.lawyer_registry_number || ''
+    ).trim(),
+
+  notes:
+    String(
+      form.notes || ''
+    ).trim(),
+});
 
 // ======================================================
 // COMPONENT
@@ -113,6 +316,10 @@ const CasePartyCreate = () => {
 
   const navigate =
     useNavigate();
+
+  // ======================================================
+  // STATE
+  // ======================================================
 
   const [
     formData,
@@ -129,7 +336,7 @@ const CasePartyCreate = () => {
     useState({});
 
   // ======================================================
-  // CASE
+  // CASE QUERY
   // ======================================================
 
   const {
@@ -138,6 +345,9 @@ const CasePartyCreate = () => {
 
     isLoading:
       caseLoading,
+
+    error:
+      caseError,
   } =
     useQuery({
       queryKey: [
@@ -157,11 +367,15 @@ const CasePartyCreate = () => {
         ),
 
       staleTime:
-        5 * 60 * 1000,
+        5 *
+        60 *
+        1000,
     });
 
   const caseItem =
-    caseData?.data?.data ||
+    caseData
+      ?.data
+      ?.data ||
     null;
 
   // ======================================================
@@ -198,6 +412,30 @@ const CasePartyCreate = () => {
       formData.party_type,
     ]);
 
+  const isDirty =
+    useMemo(() => {
+      const current =
+        normalizeFormForComparison(
+          formData
+        );
+
+      const initial =
+        normalizeFormForComparison(
+          INITIAL_FORM
+        );
+
+      return (
+        JSON.stringify(
+          current
+        ) !==
+        JSON.stringify(
+          initial
+        )
+      );
+    }, [
+      formData,
+    ]);
+
   // ======================================================
   // MUTATION
   // ======================================================
@@ -220,8 +458,11 @@ const CasePartyCreate = () => {
         );
 
         const party =
-          response?.data?.data ??
-          response?.data ??
+          response
+            ?.data
+            ?.data ??
+          response
+            ?.data ??
           null;
 
         if (
@@ -242,34 +483,132 @@ const CasePartyCreate = () => {
       onError: (
         error
       ) => {
+        const backendErrors =
+          error
+            ?.response
+            ?.data
+            ?.errors;
+
         const message =
           error
             ?.response
             ?.data
             ?.message ||
-          error?.message ||
+          error
+            ?.message ||
           'Taraf eklenemedi';
 
-        toast.error(
-          message
-        );
+        const nextErrors =
+          {};
 
         if (
-          /kimlik|vergi|identification/i.test(
+          Array.isArray(
+            backendErrors
+          )
+        ) {
+          backendErrors.forEach(
+            (
+              item
+            ) => {
+              const field =
+                item?.path ||
+                item?.param;
+
+              if (
+                field
+              ) {
+                nextErrors[field] =
+                  item?.msg ||
+                  'Geçersiz değer';
+              }
+            }
+          );
+        }
+
+        if (
+          /kimlik|tckn|tckno|identification/i.test(
             message
           )
+        ) {
+          nextErrors.identification_number =
+            message;
+        }
+
+        if (
+          /vergi|vkn/i.test(
+            message
+          )
+        ) {
+          nextErrors.identification_number =
+            message;
+        }
+
+        if (
+          /ad soyad|unvan|name/i.test(
+            message
+          )
+        ) {
+          nextErrors.name =
+            message;
+        }
+
+        if (
+          /avukat.*e-posta|lawyer_email/i.test(
+            message
+          )
+        ) {
+          nextErrors.lawyer_email =
+            message;
+        } else if (
+          /e-posta|email/i.test(
+            message
+          )
+        ) {
+          nextErrors.email =
+            message;
+        }
+
+        if (
+          /avukat.*telefon|lawyer_phone/i.test(
+            message
+          )
+        ) {
+          nextErrors.lawyer_phone =
+            message;
+        } else if (
+          /telefon|phone/i.test(
+            message
+          )
+        ) {
+          nextErrors.phone =
+            message;
+        }
+
+        if (
+          Object.keys(
+            nextErrors
+          ).length >
+          0
         ) {
           setErrors(
             (
               current
             ) => ({
               ...current,
-
-              identification_number:
-                message,
+              ...nextErrors,
             })
           );
+
+          toast.error(
+            'Formdaki hatalı alanları kontrol edin'
+          );
+
+          return;
         }
+
+        toast.error(
+          message
+        );
       },
     });
 
@@ -307,6 +646,97 @@ const CasePartyCreate = () => {
         );
     }
 
+    if (
+      name ===
+      'phone' ||
+      name ===
+      'lawyer_phone'
+    ) {
+      nextValue =
+        normalizePhone(
+          value
+        );
+    }
+
+    if (
+      name ===
+      'name'
+    ) {
+      nextValue =
+        value.slice(
+          0,
+          255
+        );
+    }
+
+    if (
+      name ===
+      'tax_office'
+    ) {
+      nextValue =
+        value.slice(
+          0,
+          150
+        );
+    }
+
+    if (
+      name ===
+      'email' ||
+      name ===
+      'lawyer_email'
+    ) {
+      nextValue =
+        value.slice(
+          0,
+          254
+        );
+    }
+
+    if (
+      name ===
+      'address'
+    ) {
+      nextValue =
+        value.slice(
+          0,
+          1000
+        );
+    }
+
+    if (
+      name ===
+      'lawyer_name'
+    ) {
+      nextValue =
+        value.slice(
+          0,
+          255
+        );
+    }
+
+    if (
+      name ===
+      'lawyer_registry_number'
+    ) {
+      nextValue =
+        value.slice(
+          0,
+          100
+        );
+    }
+
+    if (
+      name ===
+      'notes'
+    ) {
+      nextValue =
+        value.slice(
+          0,
+          3000
+        );
+    }
+
     setFormData(
       (
         current
@@ -321,6 +751,7 @@ const CasePartyCreate = () => {
           ? {
               identification_number:
                 '',
+
               tax_office:
                 value ===
                 'company'
@@ -348,6 +779,55 @@ const CasePartyCreate = () => {
   };
 
   // ======================================================
+  // ENTITY TYPE
+  // ======================================================
+
+  const handleEntityTypeChange =
+    (
+      type
+    ) => {
+      if (
+        isPending
+      ) {
+        return;
+      }
+
+      setFormData(
+        (
+          current
+        ) => ({
+          ...current,
+
+          entity_type:
+            type,
+
+          identification_number:
+            '',
+
+          tax_office:
+            type ===
+            'company'
+              ? current.tax_office
+              : '',
+        })
+      );
+
+      setErrors(
+        (
+          current
+        ) => ({
+          ...current,
+
+          identification_number:
+            '',
+
+          tax_office:
+            '',
+        })
+      );
+    };
+
+  // ======================================================
   // VALIDATION
   // ======================================================
 
@@ -357,22 +837,62 @@ const CasePartyCreate = () => {
         {};
 
       const name =
-        formData.name.trim();
+        String(
+          formData.name ||
+          ''
+        ).trim();
 
       const identity =
         onlyDigits(
           formData.identification_number
         );
 
+      const email =
+        String(
+          formData.email ||
+          ''
+        )
+          .trim()
+          .toLowerCase();
+
+      const lawyerEmail =
+        String(
+          formData.lawyer_email ||
+          ''
+        )
+          .trim()
+          .toLowerCase();
+
+      // ==================================================
+      // NAME
+      // ==================================================
+
       if (
-        name.length <
-        2
+        !name
       ) {
         nextErrors.name =
           isCompany
             ? 'Kurum / şirket unvanı gereklidir'
             : 'Ad soyad gereklidir';
+      } else if (
+        name.length <
+        2
+      ) {
+        nextErrors.name =
+          isCompany
+            ? 'Kurum / şirket unvanı en az 2 karakter olmalıdır'
+            : 'Ad soyad en az 2 karakter olmalıdır';
+      } else if (
+        name.length >
+        255
+      ) {
+        nextErrors.name =
+          'Ad / unvan en fazla 255 karakter olabilir';
       }
+
+      // ==================================================
+      // IDENTIFICATION
+      // ==================================================
 
       if (
         identity
@@ -380,7 +900,7 @@ const CasePartyCreate = () => {
         if (
           !isCompany &&
           identity.length !==
-            11
+          11
         ) {
           nextErrors.identification_number =
             'T.C. Kimlik No 11 haneli olmalıdır';
@@ -389,31 +909,119 @@ const CasePartyCreate = () => {
         if (
           isCompany &&
           identity.length !==
-            10
+          10
         ) {
           nextErrors.identification_number =
             'Vergi Kimlik No 10 haneli olmalıdır';
         }
       }
 
+      // ==================================================
+      // TAX OFFICE
+      // ==================================================
+
       if (
-        formData.email &&
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-          formData.email
+        isCompany &&
+        formData.tax_office
+          .trim()
+          .length >
+        150
+      ) {
+        nextErrors.tax_office =
+          'Vergi dairesi en fazla 150 karakter olabilir';
+      }
+
+      // ==================================================
+      // PHONE
+      // ==================================================
+
+      if (
+        !validatePhone(
+          formData.phone
+        )
+      ) {
+        nextErrors.phone =
+          'Geçerli bir telefon numarası girin';
+      }
+
+      // ==================================================
+      // EMAIL
+      // ==================================================
+
+      if (
+        !validateEmail(
+          email
         )
       ) {
         nextErrors.email =
           'Geçerli bir e-posta adresi girin';
       }
 
+      // ==================================================
+      // ADDRESS
+      // ==================================================
+
       if (
-        formData.lawyer_email &&
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-          formData.lawyer_email
+        formData.address.length >
+        1000
+      ) {
+        nextErrors.address =
+          'Adres en fazla 1000 karakter olabilir';
+      }
+
+      // ==================================================
+      // LAWYER
+      // ==================================================
+
+      if (
+        formData.lawyer_name
+          .trim()
+          .length >
+        255
+      ) {
+        nextErrors.lawyer_name =
+          'Avukat adı en fazla 255 karakter olabilir';
+      }
+
+      if (
+        !validatePhone(
+          formData.lawyer_phone
+        )
+      ) {
+        nextErrors.lawyer_phone =
+          'Geçerli bir avukat telefon numarası girin';
+      }
+
+      if (
+        !validateEmail(
+          lawyerEmail
         )
       ) {
         nextErrors.lawyer_email =
           'Geçerli bir avukat e-posta adresi girin';
+      }
+
+      if (
+        formData
+          .lawyer_registry_number
+          .trim()
+          .length >
+        100
+      ) {
+        nextErrors.lawyer_registry_number =
+          'Baro sicil numarası en fazla 100 karakter olabilir';
+      }
+
+      // ==================================================
+      // NOTES
+      // ==================================================
+
+      if (
+        formData.notes.length >
+        3000
+      ) {
+        nextErrors.notes =
+          'İç not en fazla 3000 karakter olabilir';
       }
 
       setErrors(
@@ -468,7 +1076,9 @@ const CasePartyCreate = () => {
 
       identification_number:
         normalizeNullable(
-          formData.identification_number
+          onlyDigits(
+            formData.identification_number
+          )
         ),
 
       tax_office:
@@ -480,11 +1090,13 @@ const CasePartyCreate = () => {
 
       phone:
         normalizeNullable(
-          formData.phone
+          normalizePhone(
+            formData.phone
+          )
         ),
 
       email:
-        normalizeNullable(
+        normalizeEmail(
           formData.email
         ),
 
@@ -500,11 +1112,13 @@ const CasePartyCreate = () => {
 
       lawyer_phone:
         normalizeNullable(
-          formData.lawyer_phone
+          normalizePhone(
+            formData.lawyer_phone
+          )
         ),
 
       lawyer_email:
-        normalizeNullable(
+        normalizeEmail(
           formData.lawyer_email
         ),
 
@@ -525,41 +1139,85 @@ const CasePartyCreate = () => {
   };
 
   // ======================================================
+  // CANCEL
+  // ======================================================
+
+  const handleCancel =
+    () => {
+      if (
+        isPending
+      ) {
+        return;
+      }
+
+      if (
+        isDirty
+      ) {
+        const confirmed =
+          window.confirm(
+            'Kaydedilmemiş taraf bilgileri var. Sayfadan ayrılmak istediğinize emin misiniz?'
+          );
+
+        if (
+          !confirmed
+        ) {
+          return;
+        }
+      }
+
+      navigate(
+        `/cases/${caseId}`
+      );
+    };
+
+  // ======================================================
   // RENDER
   // ======================================================
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
 
-      {/* HEADER */}
+      {/* ==================================================
+          HEADER
+      ================================================== */}
 
       <div>
 
         <Link
           to={`/cases/${caseId}`}
-          className="inline-flex items-center gap-1 text-sm text-gray-500 transition-colors hover:text-blue-600"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 transition hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-3.5 w-3.5" />
 
           Davaya Dön
         </Link>
 
-        <div className="mt-4 flex items-start gap-3">
+        <div className="mt-3 flex items-start gap-3">
 
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/20">
-
-            <Users className="h-6 w-6 text-blue-600" />
-
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
+            <Users size={21} />
           </div>
 
-          <div>
+          <div className="min-w-0">
 
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Yeni Taraf Ekle
-            </h1>
+            <div className="flex flex-wrap items-center gap-2">
 
-            <p className="mt-1 text-sm text-gray-500">
-              Davacı, davalı, şüpheli, sanık veya diğer dava taraflarının kimlik ve vekil bilgilerini kaydedin.
+              <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
+                Yeni Taraf Ekle
+              </h1>
+
+              {isDirty && (
+                <Badge
+                  variant="warning"
+                >
+                  Kaydedilmemiş bilgi
+                </Badge>
+              )}
+
+            </div>
+
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-slate-400">
+              Davacı, davalı, şüpheli, sanık veya diğer dava taraflarının kimlik, iletişim ve vekil bilgilerini kaydedin.
             </p>
 
           </div>
@@ -568,36 +1226,62 @@ const CasePartyCreate = () => {
 
       </div>
 
-      {/* CASE SUMMARY */}
+      {/* ==================================================
+          CASE SUMMARY
+      ================================================== */}
 
       <Card>
 
         <Card.Body>
 
           {caseLoading ? (
-            <p className="text-sm text-gray-500">
-              Dava bilgileri yükleniyor...
-            </p>
+            <div className="flex items-center gap-3">
+
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-b-blue-600" />
+
+              <p className="text-sm text-gray-500 dark:text-slate-400">
+                Dava bilgileri yükleniyor...
+              </p>
+
+            </div>
+          ) : caseError ? (
+            <div>
+
+              <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                Dava bilgileri yüklenemedi
+              </p>
+
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+                {caseError
+                  ?.response
+                  ?.data
+                  ?.message ||
+                  caseError
+                    ?.message ||
+                  'Dava kaydına erişilemedi.'}
+              </p>
+
+            </div>
           ) : caseItem ? (
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
-              <div className="flex items-start gap-3">
+              <div className="flex min-w-0 items-start gap-3">
 
-                <div className="rounded-xl bg-gray-100 p-3 dark:bg-gray-800">
-
-                  <Scale className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-white/[0.05] dark:text-slate-300">
+                  <Scale className="h-5 w-5" />
                 </div>
 
-                <div>
+                <div className="min-w-0">
 
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {caseItem.title}
+                  <p className="truncate font-semibold text-gray-900 dark:text-white">
+                    {caseItem.title ||
+                      caseItem.judiciary_type ||
+                      'Dava Dosyası'}
                   </p>
 
-                  <p className="mt-1 text-sm text-gray-500">
+                  <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
                     {caseItem.case_number ||
-                      'Dosya numarası yok'}
+                      'Dosya numarası belirtilmemiş'}
 
                     {caseItem.court_name
                       ? ` · ${caseItem.court_name}`
@@ -608,14 +1292,16 @@ const CasePartyCreate = () => {
 
               </div>
 
-              <Badge variant="default">
+              <Badge
+                variant="primary"
+              >
                 {selectedPartyTypeLabel}
               </Badge>
 
             </div>
           ) : (
-            <p className="text-sm text-red-600">
-              Dava bilgisi yüklenemedi.
+            <p className="text-sm text-red-600 dark:text-red-400">
+              Dava bilgisi bulunamadı.
             </p>
           )}
 
@@ -623,7 +1309,9 @@ const CasePartyCreate = () => {
 
       </Card>
 
-      {/* FORM */}
+      {/* ==================================================
+          FORM
+      ================================================== */}
 
       <Card>
 
@@ -634,7 +1322,9 @@ const CasePartyCreate = () => {
           className="space-y-8 p-6"
         >
 
-          {/* PARTY CLASSIFICATION */}
+          {/* ==================================================
+              PARTY CLASSIFICATION
+          ================================================== */}
 
           <section className="space-y-4">
 
@@ -644,7 +1334,7 @@ const CasePartyCreate = () => {
                 Taraf Bilgileri
               </h2>
 
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
                 Tarafın dosyadaki hukuki rolünü ve kişi türünü belirleyin.
               </p>
 
@@ -652,9 +1342,11 @@ const CasePartyCreate = () => {
 
             <div className="grid gap-4 md:grid-cols-2">
 
+              {/* PARTY TYPE */}
+
               <div>
 
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
                   Taraf Türü *
                 </label>
 
@@ -669,7 +1361,7 @@ const CasePartyCreate = () => {
                   disabled={
                     isPending
                   }
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-sm text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
                 >
 
                   {PARTY_TYPES.map(
@@ -693,9 +1385,11 @@ const CasePartyCreate = () => {
 
               </div>
 
+              {/* ENTITY TYPE */}
+
               <div>
 
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
                   Kişi Türü *
                 </label>
 
@@ -707,35 +1401,27 @@ const CasePartyCreate = () => {
                       isPending
                     }
                     onClick={() =>
-                      setFormData(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-
-                          entity_type:
-                            'person',
-
-                          identification_number:
-                            '',
-
-                          tax_office:
-                            '',
-                        })
+                      handleEntityTypeChange(
+                        'person'
                       )
                     }
-                    className={`rounded-xl border p-3 text-left transition-colors ${
-                      formData.entity_type ===
-                      'person'
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700'
+                    className={`rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      !isCompany
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/[0.08]'
+                        : 'border-gray-200 hover:border-gray-300 dark:border-white/[0.08]'
                     }`}
                   >
-                    <UserRound className="h-5 w-5 text-blue-600" />
 
-                    <p className="mt-2 font-medium text-gray-900 dark:text-white">
+                    <UserRound className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+
+                    <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">
                       Gerçek Kişi
                     </p>
+
+                    <p className="mt-1 text-[11px] text-gray-500 dark:text-slate-500">
+                      T.C. kimlik bilgileri
+                    </p>
+
                   </button>
 
                   <button
@@ -744,32 +1430,27 @@ const CasePartyCreate = () => {
                       isPending
                     }
                     onClick={() =>
-                      setFormData(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-
-                          entity_type:
-                            'company',
-
-                          identification_number:
-                            '',
-                        })
+                      handleEntityTypeChange(
+                        'company'
                       )
                     }
-                    className={`rounded-xl border p-3 text-left transition-colors ${
-                      formData.entity_type ===
-                      'company'
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700'
+                    className={`rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      isCompany
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/[0.08]'
+                        : 'border-gray-200 hover:border-gray-300 dark:border-white/[0.08]'
                     }`}
                   >
-                    <Building2 className="h-5 w-5 text-blue-600" />
 
-                    <p className="mt-2 font-medium text-gray-900 dark:text-white">
+                    <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+
+                    <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">
                       Tüzel Kişi
                     </p>
+
+                    <p className="mt-1 text-[11px] text-gray-500 dark:text-slate-500">
+                      Şirket veya kurum
+                    </p>
+
                   </button>
 
                 </div>
@@ -780,17 +1461,27 @@ const CasePartyCreate = () => {
 
           </section>
 
-          {/* IDENTITY */}
+          {/* ==================================================
+              IDENTITY
+          ================================================== */}
 
-          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-white/[0.07]">
 
             <div className="flex items-center gap-2">
 
-              <Gavel className="h-5 w-5 text-blue-600" />
+              <Gavel className="h-5 w-5 text-blue-600 dark:text-blue-400" />
 
-              <h2 className="font-semibold text-gray-900 dark:text-white">
-                Kimlik / Kurum Bilgileri
-              </h2>
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Kimlik / Kurum Bilgileri
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-500">
+                  Tarafın temel kimlik veya kurum bilgilerini girin.
+                </p>
+
+              </div>
 
             </div>
 
@@ -813,11 +1504,13 @@ const CasePartyCreate = () => {
               disabled={
                 isPending
               }
+              maxLength={255}
               placeholder={
                 isCompany
                   ? 'Örn: ABC İnşaat A.Ş.'
                   : 'Örn: Ahmet Yılmaz'
               }
+              autoFocus
             />
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -840,6 +1533,11 @@ const CasePartyCreate = () => {
                   isPending
                 }
                 inputMode="numeric"
+                maxLength={
+                  isCompany
+                    ? 10
+                    : 11
+                }
                 placeholder={
                   identityPlaceholder
                 }
@@ -855,39 +1553,64 @@ const CasePartyCreate = () => {
                   onChange={
                     handleChange
                   }
+                  error={
+                    errors.tax_office
+                  }
                   disabled={
                     isPending
                   }
+                  maxLength={150}
                   placeholder="Örn: Büyük Mükellefler"
                 />
               )}
 
             </div>
 
+            <p className="text-xs text-gray-400 dark:text-slate-600">
+              {isCompany
+                ? 'VKN girilecekse 10 haneli olmalıdır.'
+                : 'TCKN girilecekse 11 haneli olmalıdır.'}
+            </p>
+
           </section>
 
-          {/* CONTACT */}
+          {/* ==================================================
+              CONTACT
+          ================================================== */}
 
-          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-white/[0.07]">
 
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              İletişim Bilgileri
-            </h2>
+            <div>
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                İletişim Bilgileri
+              </h2>
+
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+                Tarafın bilinen iletişim ve adres bilgilerini ekleyin.
+              </p>
+
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
 
               <Input
                 label="Telefon"
                 name="phone"
+                type="tel"
                 value={
                   formData.phone
                 }
                 onChange={
                   handleChange
                 }
+                error={
+                  errors.phone
+                }
                 disabled={
                   isPending
                 }
+                maxLength={25}
                 placeholder="+90 555 123 45 67"
               />
 
@@ -907,6 +1630,7 @@ const CasePartyCreate = () => {
                 disabled={
                   isPending
                 }
+                maxLength={254}
                 placeholder="ornek@email.com"
               />
 
@@ -914,7 +1638,7 @@ const CasePartyCreate = () => {
 
             <div>
 
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
                 Adres
               </label>
 
@@ -929,18 +1653,41 @@ const CasePartyCreate = () => {
                 disabled={
                   isPending
                 }
-                rows="3"
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                placeholder="Adres bilgisi..."
+                rows={4}
+                maxLength={1000}
+                placeholder="Tarafın bilinen adres bilgisi..."
+                className={`w-full resize-y rounded-lg border bg-white px-3.5 py-2.5 text-sm leading-6 text-gray-900 outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white/[0.035] dark:text-white dark:placeholder:text-slate-500 ${
+                  errors.address
+                    ? 'border-red-400 focus:border-red-500'
+                    : 'border-gray-200 focus:border-blue-500 dark:border-white/[0.08]'
+                }`}
               />
+
+              <div className="mt-1 flex justify-between gap-3">
+
+                {errors.address ? (
+                  <p className="text-xs text-red-600 dark:text-red-400">
+                    {errors.address}
+                  </p>
+                ) : (
+                  <span />
+                )}
+
+                <p className="text-[11px] text-gray-400 dark:text-slate-600">
+                  {formData.address.length}/1000
+                </p>
+
+              </div>
 
             </div>
 
           </section>
 
-          {/* LAWYER */}
+          {/* ==================================================
+              LAWYER
+          ================================================== */}
 
-          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-white/[0.07]">
 
             <div>
 
@@ -948,8 +1695,8 @@ const CasePartyCreate = () => {
                 Vekil Bilgileri
               </h2>
 
-              <p className="mt-1 text-xs text-gray-500">
-                Tarafın avukatı varsa iletişim ve baro sicil bilgilerini kaydedin.
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+                Tarafın avukatı varsa ad, iletişim ve baro sicil bilgilerini kaydedin.
               </p>
 
             </div>
@@ -963,9 +1710,13 @@ const CasePartyCreate = () => {
               onChange={
                 handleChange
               }
+              error={
+                errors.lawyer_name
+              }
               disabled={
                 isPending
               }
+              maxLength={255}
               placeholder="Örn: Av. Ahmet Yılmaz"
             />
 
@@ -974,15 +1725,20 @@ const CasePartyCreate = () => {
               <Input
                 label="Telefon"
                 name="lawyer_phone"
+                type="tel"
                 value={
                   formData.lawyer_phone
                 }
                 onChange={
                   handleChange
                 }
+                error={
+                  errors.lawyer_phone
+                }
                 disabled={
                   isPending
                 }
+                maxLength={25}
                 placeholder="+90 555 000 00 00"
               />
 
@@ -1002,6 +1758,7 @@ const CasePartyCreate = () => {
                 disabled={
                   isPending
                 }
+                maxLength={254}
                 placeholder="avukat@baro.com"
               />
 
@@ -1014,9 +1771,13 @@ const CasePartyCreate = () => {
                 onChange={
                   handleChange
                 }
+                error={
+                  errors.lawyer_registry_number
+                }
                 disabled={
                   isPending
                 }
+                maxLength={100}
                 placeholder="123456"
               />
 
@@ -1024,13 +1785,23 @@ const CasePartyCreate = () => {
 
           </section>
 
-          {/* NOTES */}
+          {/* ==================================================
+              NOTES
+          ================================================== */}
 
-          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+          <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-white/[0.07]">
 
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              İç Not
-            </h2>
+            <div>
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                İç Not
+              </h2>
+
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+                Sadece büro içinde kullanılacak yardımcı bilgileri ekleyin.
+              </p>
+
+            </div>
 
             <textarea
               name="notes"
@@ -1043,30 +1814,92 @@ const CasePartyCreate = () => {
               disabled={
                 isPending
               }
-              rows="3"
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              rows={4}
+              maxLength={3000}
               placeholder="Tarafla ilgili büro içi not..."
+              className={`w-full resize-y rounded-lg border bg-white px-3.5 py-2.5 text-sm leading-6 text-gray-900 outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white/[0.035] dark:text-white dark:placeholder:text-slate-500 ${
+                errors.notes
+                  ? 'border-red-400 focus:border-red-500'
+                  : 'border-gray-200 focus:border-blue-500 dark:border-white/[0.08]'
+              }`}
             />
+
+            <div className="flex justify-between gap-3">
+
+              {errors.notes ? (
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  {errors.notes}
+                </p>
+              ) : (
+                <span />
+              )}
+
+              <p className="text-[11px] text-gray-400 dark:text-slate-600">
+                {formData.notes.length}/3000
+              </p>
+
+            </div>
 
           </section>
 
-          {/* ACTIONS */}
+          {/* ==================================================
+              SUMMARY
+          ================================================== */}
 
-          <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-6 dark:border-gray-700">
+          <div className="grid gap-3 rounded-xl border border-gray-200 bg-gray-50/50 p-4 dark:border-white/[0.07] dark:bg-white/[0.015] sm:grid-cols-3">
 
-            <Button
-              type="submit"
-              loading={
-                isPending
-              }
-              disabled={
-                isPending
-              }
-            >
-              <Save className="mr-2 h-4 w-4" />
+            <div>
 
-              Tarafı Kaydet
-            </Button>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+                Taraf
+              </p>
+
+              <div className="mt-1">
+
+                <Badge
+                  variant="primary"
+                >
+                  {selectedPartyTypeLabel}
+                </Badge>
+
+              </div>
+
+            </div>
+
+            <div>
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+                Tür
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-700 dark:text-slate-300">
+                {isCompany
+                  ? 'Tüzel Kişi'
+                  : 'Gerçek Kişi'}
+              </p>
+
+            </div>
+
+            <div>
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+                Kayıt
+              </p>
+
+              <p className="mt-1 truncate text-sm font-medium text-gray-700 dark:text-slate-300">
+                {formData.name.trim() ||
+                  'Henüz ad / unvan girilmedi'}
+              </p>
+
+            </div>
+
+          </div>
+
+          {/* ==================================================
+              ACTIONS
+          ================================================== */}
+
+          <div className="flex flex-col-reverse gap-3 border-t border-gray-200 pt-6 dark:border-white/[0.07] sm:flex-row sm:items-center sm:justify-end">
 
             <Button
               type="button"
@@ -1074,13 +1907,27 @@ const CasePartyCreate = () => {
               disabled={
                 isPending
               }
-              onClick={() =>
-                navigate(
-                  `/cases/${caseId}`
-                )
+              onClick={
+                handleCancel
               }
             >
               Vazgeç
+            </Button>
+
+            <Button
+              type="submit"
+              loading={
+                isPending
+              }
+              disabled={
+                isPending ||
+                caseLoading ||
+                !caseItem
+              }
+            >
+              <Save className="h-4 w-4" />
+
+              Tarafı Kaydet
             </Button>
 
           </div>

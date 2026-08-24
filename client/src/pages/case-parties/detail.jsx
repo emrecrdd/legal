@@ -1,4 +1,8 @@
 import {
+  useState,
+} from 'react';
+
+import {
   Link,
   useParams,
 } from 'react-router-dom';
@@ -7,21 +11,39 @@ import {
   useQuery,
 } from '@tanstack/react-query';
 
-import casePartyApi from '../../features/case-parties/case-party.api.js';
+import casePartyApi
+  from '../../features/case-parties/case-party.api.js';
 
-import Card from '../../components/ui/Card.jsx';
-import Badge from '../../components/ui/Badge.jsx';
-import Button from '../../components/ui/Button.jsx';
+import {
+  useAuth,
+} from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
+
+import Card
+  from '../../components/ui/Card.jsx';
+
+import Badge
+  from '../../components/ui/Badge.jsx';
+
+import Button
+  from '../../components/ui/Button.jsx';
 
 import {
   ArrowLeft,
   Building2,
   Edit2,
+  Eye,
+  EyeOff,
   FileText,
   Mail,
   MapPin,
   Phone,
   Scale,
+  ShieldCheck,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -34,17 +56,38 @@ const getPartyTypeLabel = (
   type
 ) => {
   const labels = {
-    davaci: 'Davacı',
-    davali: 'Davalı',
-    supheli: 'Şüpheli',
-    sanik: 'Sanık',
-    musteki: 'Müşteki',
-    katilan: 'Katılan',
-    magdur: 'Mağdur',
-    maktul: 'Maktul',
-    alacakli: 'Alacaklı',
-    borclu: 'Borçlu',
-    ucuncu_kisi: 'Üçüncü Kişi',
+    davaci:
+      'Davacı',
+
+    davali:
+      'Davalı',
+
+    supheli:
+      'Şüpheli',
+
+    sanik:
+      'Sanık',
+
+    musteki:
+      'Müşteki',
+
+    katilan:
+      'Katılan',
+
+    magdur:
+      'Mağdur',
+
+    maktul:
+      'Maktul',
+
+    alacakli:
+      'Alacaklı',
+
+    borclu:
+      'Borçlu',
+
+    ucuncu_kisi:
+      'Üçüncü Kişi',
   };
 
   return (
@@ -58,21 +101,38 @@ const getPartyTypeVariant = (
   type
 ) => {
   const variants = {
-    davaci: 'success',
-    davali: 'danger',
+    davaci:
+      'success',
 
-    supheli: 'warning',
-    sanik: 'danger',
+    davali:
+      'danger',
 
-    musteki: 'info',
-    katilan: 'info',
-    magdur: 'warning',
-    maktul: 'default',
+    supheli:
+      'warning',
 
-    alacakli: 'success',
-    borclu: 'warning',
+    sanik:
+      'danger',
 
-    ucuncu_kisi: 'default',
+    musteki:
+      'info',
+
+    katilan:
+      'info',
+
+    magdur:
+      'warning',
+
+    maktul:
+      'default',
+
+    alacakli:
+      'success',
+
+    borclu:
+      'warning',
+
+    ucuncu_kisi:
+      'default',
   };
 
   return (
@@ -84,21 +144,27 @@ const getPartyTypeVariant = (
 const getEntityTypeLabel = (
   type
 ) => {
-  return type ===
+  return (
+    type ===
     'company'
-    ? 'Tüzel Kişi'
-    : 'Gerçek Kişi';
+      ? 'Tüzel Kişi'
+      : 'Gerçek Kişi'
+  );
 };
 
 const formatDateTime = (
   value
 ) => {
-  if (!value) {
+  if (
+    !value
+  ) {
     return '-';
   }
 
   const date =
-    new Date(value);
+    new Date(
+      value
+    );
 
   if (
     Number.isNaN(
@@ -111,10 +177,58 @@ const formatDateTime = (
   return new Intl.DateTimeFormat(
     'tr-TR',
     {
-      dateStyle: 'medium',
-      timeStyle: 'short',
+      dateStyle:
+        'medium',
+
+      timeStyle:
+        'short',
     }
-  ).format(date);
+  ).format(
+    date
+  );
+};
+
+const maskIdentityNumber = (
+  value
+) => {
+  if (
+    !value
+  ) {
+    return '-';
+  }
+
+  const text =
+    String(
+      value
+    );
+
+  if (
+    text.length <=
+    4
+  ) {
+    return text;
+  }
+
+  return (
+    `${'•'.repeat(
+      text.length -
+        4
+    )}${text.slice(
+      -4
+    )}`
+  );
+};
+
+const normalizeCaseId = (
+  party,
+  fallbackCaseId
+) => {
+  return (
+    party?.case_id ||
+    party?.case?.id ||
+    fallbackCaseId ||
+    null
+  );
 };
 
 // ======================================================
@@ -129,9 +243,45 @@ const CasePartyDetail = () => {
     useParams();
 
   const {
+    user,
+  } =
+    useAuth();
+
+  const [
+    showIdentity,
+    setShowIdentity,
+  ] =
+    useState(
+      false
+    );
+
+  // ====================================================
+  // PERMISSION
+  // ====================================================
+
+  /*
+   * Taraf düzenleme ayrı bir permission'a bağlıysa
+   * ileride burada ilgili permission key kullanılabilir.
+   *
+   * Mevcut dava yetki yapısıyla uyumlu olması için
+   * EDIT_CASES kullanıyoruz.
+   */
+  const canEdit =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.EDIT_CASES
+    );
+
+  // ====================================================
+  // QUERY
+  // ====================================================
+
+  const {
     data,
     isLoading,
     error,
+    refetch,
+    isFetching,
   } =
     useQuery({
       queryKey: [
@@ -145,15 +295,26 @@ const CasePartyDetail = () => {
         ),
 
       enabled:
-        Boolean(id),
+        Boolean(
+          id
+        ),
 
       staleTime:
-        2 * 60 * 1000,
+        2 *
+        60 *
+        1000,
     });
 
+  // ====================================================
+  // DATA
+  // ====================================================
+
   const party =
-    data?.data?.data ??
-    data?.data ??
+    data
+      ?.data
+      ?.data ??
+    data
+      ?.data ??
     null;
 
   // ====================================================
@@ -164,11 +325,11 @@ const CasePartyDetail = () => {
     isLoading
   ) {
     return (
-      <div className="flex min-h-[20rem] flex-col items-center justify-center gap-3">
+      <div className="flex min-h-[24rem] flex-col items-center justify-center gap-3">
 
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600 dark:border-white/[0.08] dark:border-b-blue-500" />
 
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-500 dark:text-slate-400">
           Taraf bilgileri yükleniyor...
         </p>
 
@@ -184,29 +345,62 @@ const CasePartyDetail = () => {
     error ||
     !party
   ) {
-    return (
-      <div className="py-16 text-center">
+    const message =
+      error
+        ?.response
+        ?.data
+        ?.message ||
+      error
+        ?.message ||
+      'Kayıt kaldırılmış veya bu taraf bilgisine erişim yetkiniz bulunmuyor.';
 
-        <Users className="mx-auto h-12 w-12 text-gray-300" />
+    return (
+      <div className="mx-auto max-w-xl py-16 text-center">
+
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-400 dark:bg-white/[0.04] dark:text-slate-500">
+
+          <Users className="h-7 w-7" />
+
+        </div>
 
         <h2 className="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
-          Taraf bulunamadı
+          Taraf bilgisi görüntülenemedi
         </h2>
 
-        <p className="mt-2 text-sm text-gray-500">
-          Kayıt kaldırılmış veya erişilemiyor olabilir.
+        <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-slate-400">
+          {message}
         </p>
 
-        <Link
-          to={`/cases/${caseId}`}
-          className="mt-5 inline-block"
-        >
-          <Button variant="outline">
-            <ArrowLeft className="mr-2 h-4 w-4" />
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
 
-            Davaya Dön
+          {caseId && (
+            <Link
+              to={`/cases/${caseId}`}
+            >
+              <Button
+                variant="secondary"
+              >
+                <ArrowLeft className="h-4 w-4" />
+
+                Davaya Dön
+              </Button>
+            </Link>
+          )}
+
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() =>
+              refetch()
+            }
+            loading={
+              isFetching
+            }
+          >
+            Tekrar Dene
           </Button>
-        </Link>
+
+        </div>
 
       </div>
     );
@@ -215,6 +409,12 @@ const CasePartyDetail = () => {
   // ====================================================
   // DERIVED
   // ====================================================
+
+  const resolvedCaseId =
+    normalizeCaseId(
+      party,
+      caseId
+    );
 
   const isCompany =
     party.entity_type ===
@@ -226,15 +426,29 @@ const CasePartyDetail = () => {
     null;
 
   const hasContact =
-    party.phone ||
-    party.email ||
-    party.address;
+    Boolean(
+      party.phone ||
+      party.email ||
+      party.address
+    );
 
   const hasLawyer =
-    party.lawyer_name ||
-    party.lawyer_phone ||
-    party.lawyer_email ||
-    party.lawyer_registry_number;
+    Boolean(
+      party.lawyer_name ||
+      party.lawyer_phone ||
+      party.lawyer_email ||
+      party.lawyer_registry_number
+    );
+
+  const editUrl =
+    resolvedCaseId
+      ? `/cases/${resolvedCaseId}/parties/${party.id}/edit`
+      : null;
+
+  const backUrl =
+    resolvedCaseId
+      ? `/cases/${resolvedCaseId}`
+      : '/cases';
 
   // ====================================================
   // RENDER
@@ -249,33 +463,36 @@ const CasePartyDetail = () => {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 
-        <div>
+        <div className="min-w-0">
 
           <Link
-            to={`/cases/${caseId}`}
-            className="inline-flex items-center gap-1 text-sm text-gray-500 transition-colors hover:text-blue-600"
+            to={
+              backUrl
+            }
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 transition hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-3.5 w-3.5" />
 
             Davaya Dön
           </Link>
 
           <div className="mt-4 flex items-start gap-3">
 
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/20">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
 
               {isCompany ? (
-                <Building2 className="h-6 w-6 text-blue-600" />
+                <Building2 className="h-6 w-6" />
               ) : (
-                <UserRound className="h-6 w-6 text-blue-600" />
+                <UserRound className="h-6 w-6" />
               )}
 
             </div>
 
-            <div>
+            <div className="min-w-0">
 
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {party.name}
+              <h1 className="break-words text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
+                {party.name ||
+                  'İsimsiz Taraf'}
               </h1>
 
               <div className="mt-2 flex flex-wrap gap-2">
@@ -286,13 +503,16 @@ const CasePartyDetail = () => {
                       party.party_type
                     )
                   }
+                  dot
                 >
                   {getPartyTypeLabel(
                     party.party_type
                   )}
                 </Badge>
 
-                <Badge variant="default">
+                <Badge
+                  variant="default"
+                >
                   {getEntityTypeLabel(
                     party.entity_type
                   )}
@@ -306,33 +526,52 @@ const CasePartyDetail = () => {
 
         </div>
 
-        <Link
-          to={`/cases/${caseId}/parties/${party.id}/edit`}
-        >
-          <Button variant="outline">
-            <Edit2 className="mr-2 h-4 w-4" />
+        {canEdit &&
+          editUrl && (
+          <Link
+            to={
+              editUrl
+            }
+          >
+            <Button
+              variant="secondary"
+            >
+              <Edit2 className="h-4 w-4" />
 
-            Düzenle
-          </Button>
-        </Link>
+              Düzenle
+            </Button>
+          </Link>
+        )}
 
       </div>
 
       {/* ==================================================
-          IDENTITY SUMMARY
+          IDENTITY
       ================================================== */}
 
       <Card>
 
         <Card.Header>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
 
-            <Scale className="h-5 w-5 text-blue-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
 
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              Taraf ve Kimlik Bilgileri
-            </h2>
+              <Scale size={17} />
+
+            </div>
+
+            <div>
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Taraf ve Kimlik Bilgileri
+              </h2>
+
+              <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                Tarafın dosyadaki sıfatı ve kimlik bilgileri
+              </p>
+
+            </div>
 
           </div>
 
@@ -340,29 +579,43 @@ const CasePartyDetail = () => {
 
         <Card.Body>
 
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+
+            {/* PARTY TYPE */}
 
             <div>
 
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
                 Taraf Sıfatı
               </p>
 
-              <p className="mt-1 font-medium text-gray-900 dark:text-white">
-                {getPartyTypeLabel(
-                  party.party_type
-                )}
-              </p>
+              <div className="mt-2">
+
+                <Badge
+                  variant={
+                    getPartyTypeVariant(
+                      party.party_type
+                    )
+                  }
+                >
+                  {getPartyTypeLabel(
+                    party.party_type
+                  )}
+                </Badge>
+
+              </div>
 
             </div>
 
+            {/* ENTITY */}
+
             <div>
 
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
                 Kişi Türü
               </p>
 
-              <p className="mt-1 font-medium text-gray-900 dark:text-white">
+              <p className="mt-2 font-medium text-gray-900 dark:text-white">
                 {getEntityTypeLabel(
                   party.entity_type
                 )}
@@ -370,37 +623,95 @@ const CasePartyDetail = () => {
 
             </div>
 
+            {/* IDENTITY */}
+
             <div>
 
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
                 {isCompany
                   ? 'Vergi Kimlik No'
                   : 'T.C. Kimlik No'}
               </p>
 
-              <p className="mt-1 font-medium text-gray-900 dark:text-white">
-                {identityNumber ||
-                  '-'}
-              </p>
+              {identityNumber ? (
+                <div className="mt-2 flex items-center gap-2">
+
+                  <span className="font-mono text-sm font-semibold tracking-wide text-gray-900 dark:text-white">
+                    {showIdentity
+                      ? identityNumber
+                      : maskIdentityNumber(
+                          identityNumber
+                        )}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowIdentity(
+                        (
+                          current
+                        ) =>
+                          !current
+                      )
+                    }
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                    title={
+                      showIdentity
+                        ? 'Kimlik numarasını gizle'
+                        : 'Kimlik numarasını göster'
+                    }
+                    aria-label={
+                      showIdentity
+                        ? 'Kimlik numarasını gizle'
+                        : 'Kimlik numarasını göster'
+                    }
+                  >
+                    {showIdentity ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-gray-400 dark:text-slate-600">
+                  Belirtilmedi
+                </p>
+              )}
 
             </div>
+
+            {/* TAX OFFICE */}
 
             {isCompany && (
               <div>
 
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
                   Vergi Dairesi
                 </p>
 
-                <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                <p className="mt-2 font-medium text-gray-900 dark:text-white">
                   {party.tax_office ||
-                    '-'}
+                    'Belirtilmedi'}
                 </p>
 
               </div>
             )}
 
           </div>
+
+          {identityNumber && (
+            <div className="mt-5 flex items-start gap-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-white/[0.025] dark:text-slate-500">
+
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+
+              <p>
+                Kimlik ve vergi numaraları gizlilik amacıyla varsayılan olarak maskelenir.
+              </p>
+
+            </div>
+          )}
 
         </Card.Body>
 
@@ -414,13 +725,25 @@ const CasePartyDetail = () => {
 
         <Card.Header>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
 
-            <Phone className="h-5 w-5 text-emerald-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400">
 
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              İletişim Bilgileri
-            </h2>
+              <Phone size={17} />
+
+            </div>
+
+            <div>
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                İletişim Bilgileri
+              </h2>
+
+              <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                Tarafın telefon, e-posta ve adres bilgileri
+              </p>
+
+            </div>
 
           </div>
 
@@ -429,9 +752,38 @@ const CasePartyDetail = () => {
         <Card.Body>
 
           {!hasContact ? (
-            <p className="text-sm text-gray-400">
-              İletişim bilgisi girilmemiş.
-            </p>
+            <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center dark:border-white/[0.07]">
+
+              <Phone className="mx-auto h-6 w-6 text-gray-300 dark:text-slate-600" />
+
+              <p className="mt-2 text-sm font-medium text-gray-600 dark:text-slate-400">
+                İletişim bilgisi bulunmuyor
+              </p>
+
+              <p className="mt-1 text-xs text-gray-400 dark:text-slate-600">
+                Bu taraf için telefon, e-posta veya adres bilgisi girilmemiş.
+              </p>
+
+              {canEdit &&
+                editUrl && (
+                <Link
+                  to={
+                    editUrl
+                  }
+                  className="mt-3 inline-block"
+                >
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+
+                    Bilgi Ekle
+                  </Button>
+                </Link>
+              )}
+
+            </div>
           ) : (
             <div className="space-y-5">
 
@@ -440,7 +792,7 @@ const CasePartyDetail = () => {
                 {party.phone && (
                   <a
                     href={`tel:${party.phone}`}
-                    className="inline-flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-blue-500/20 dark:hover:bg-blue-500/[0.05] dark:hover:text-blue-400"
                   >
                     <Phone className="h-4 w-4" />
 
@@ -451,7 +803,7 @@ const CasePartyDetail = () => {
                 {party.email && (
                   <a
                     href={`mailto:${party.email}`}
-                    className="inline-flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-blue-500/20 dark:hover:bg-blue-500/[0.05] dark:hover:text-blue-400"
                   >
                     <Mail className="h-4 w-4" />
 
@@ -462,17 +814,17 @@ const CasePartyDetail = () => {
               </div>
 
               {party.address && (
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 rounded-xl border border-gray-100 p-4 dark:border-white/[0.06]">
 
-                  <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-gray-400" />
+                  <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-gray-400 dark:text-slate-500" />
 
-                  <div>
+                  <div className="min-w-0">
 
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
                       Adres
                     </p>
 
-                    <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-gray-700 dark:text-gray-300">
+                    <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-gray-700 dark:text-slate-300">
                       {party.address}
                     </p>
 
@@ -496,13 +848,25 @@ const CasePartyDetail = () => {
 
         <Card.Header>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
 
-            <Scale className="h-5 w-5 text-purple-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400">
 
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              Vekil Bilgileri
-            </h2>
+              <Scale size={17} />
+
+            </div>
+
+            <div>
+
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Vekil Bilgileri
+              </h2>
+
+              <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                Tarafı temsil eden avukatın kayıtlı bilgileri
+              </p>
+
+            </div>
 
           </div>
 
@@ -511,11 +875,36 @@ const CasePartyDetail = () => {
         <Card.Body>
 
           {!hasLawyer ? (
-            <div className="rounded-xl border border-dashed border-gray-200 p-5 text-center dark:border-gray-700">
+            <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center dark:border-white/[0.07]">
 
-              <p className="text-sm text-gray-400">
-                Bu taraf için vekil bilgisi girilmemiş.
+              <Scale className="mx-auto h-6 w-6 text-gray-300 dark:text-slate-600" />
+
+              <p className="mt-2 text-sm font-medium text-gray-600 dark:text-slate-400">
+                Vekil bilgisi bulunmuyor
               </p>
+
+              <p className="mt-1 text-xs text-gray-400 dark:text-slate-600">
+                Bu taraf için henüz avukat veya baro sicil bilgisi kaydedilmemiş.
+              </p>
+
+              {canEdit &&
+                editUrl && (
+                <Link
+                  to={
+                    editUrl
+                  }
+                  className="mt-3 inline-block"
+                >
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+
+                    Vekil Bilgisi Ekle
+                  </Button>
+                </Link>
+              )}
 
             </div>
           ) : (
@@ -525,33 +914,33 @@ const CasePartyDetail = () => {
 
                 <div>
 
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
                     Avukat
                   </p>
 
-                  <p className="mt-1 font-semibold text-gray-900 dark:text-white">
+                  <p className="mt-2 font-semibold text-gray-900 dark:text-white">
                     {party.lawyer_name ||
-                      '-'}
+                      'Belirtilmedi'}
                   </p>
 
                 </div>
 
                 <div>
 
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
                     Baro Sicil No
                   </p>
 
-                  <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                  <p className="mt-2 font-medium text-gray-900 dark:text-white">
                     {party.lawyer_registry_number ||
-                      '-'}
+                      'Belirtilmedi'}
                   </p>
 
                 </div>
 
                 <div>
 
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
                     İletişim
                   </p>
 
@@ -560,23 +949,30 @@ const CasePartyDetail = () => {
                     {party.lawyer_phone && (
                       <a
                         href={`tel:${party.lawyer_phone}`}
-                        className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline dark:text-blue-400"
+                        className="inline-flex items-center gap-1.5 rounded-md bg-gray-50 px-2.5 py-1.5 text-sm font-medium text-blue-600 transition hover:bg-blue-50 dark:bg-white/[0.03] dark:text-blue-400 dark:hover:bg-blue-500/[0.06]"
                       >
                         <Phone className="h-4 w-4" />
 
-                        Telefon
+                        {party.lawyer_phone}
                       </a>
                     )}
 
                     {party.lawyer_email && (
                       <a
                         href={`mailto:${party.lawyer_email}`}
-                        className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline dark:text-blue-400"
+                        className="inline-flex items-center gap-1.5 rounded-md bg-gray-50 px-2.5 py-1.5 text-sm font-medium text-blue-600 transition hover:bg-blue-50 dark:bg-white/[0.03] dark:text-blue-400 dark:hover:bg-blue-500/[0.06]"
                       >
                         <Mail className="h-4 w-4" />
 
-                        E-posta
+                        {party.lawyer_email}
                       </a>
+                    )}
+
+                    {!party.lawyer_phone &&
+                      !party.lawyer_email && (
+                      <span className="text-sm text-gray-400 dark:text-slate-600">
+                        Belirtilmedi
+                      </span>
                     )}
 
                   </div>
@@ -601,13 +997,25 @@ const CasePartyDetail = () => {
 
           <Card.Header>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
 
-              <FileText className="h-5 w-5 text-amber-500" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
 
-              <h2 className="font-semibold text-gray-900 dark:text-white">
-                İç Not
-              </h2>
+                <FileText size={17} />
+
+              </div>
+
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  İç Not
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Büro içi kullanım için kaydedilen taraf notu
+                </p>
+
+              </div>
 
             </div>
 
@@ -615,9 +1023,13 @@ const CasePartyDetail = () => {
 
           <Card.Body>
 
-            <p className="whitespace-pre-wrap text-sm leading-6 text-gray-700 dark:text-gray-300">
-              {party.notes}
-            </p>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
+
+              <p className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-700 dark:text-slate-300">
+                {party.notes}
+              </p>
+
+            </div>
 
           </Card.Body>
 
@@ -632,18 +1044,24 @@ const CasePartyDetail = () => {
 
         <Card.Body>
 
-          <div className="flex flex-col gap-2 text-xs text-gray-400 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 text-xs text-gray-400 dark:text-slate-500 sm:flex-row sm:items-center sm:justify-between">
 
             <span>
-              Kayıt oluşturulma: {formatDateTime(
-                party.created_at
-              )}
+              Kayıt oluşturulma:{' '}
+              <strong className="font-medium text-gray-600 dark:text-slate-400">
+                {formatDateTime(
+                  party.created_at
+                )}
+              </strong>
             </span>
 
             <span>
-              Son güncelleme: {formatDateTime(
-                party.updated_at
-              )}
+              Son güncelleme:{' '}
+              <strong className="font-medium text-gray-600 dark:text-slate-400">
+                {formatDateTime(
+                  party.updated_at
+                )}
+              </strong>
             </span>
 
           </div>
