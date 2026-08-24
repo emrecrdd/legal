@@ -92,10 +92,6 @@ const buildCaseAccessWhere = (
       actor
     );
 
-  /*
-   * FAIL CLOSED:
-   * authenticated actor yoksa unrestricted sorgu yok.
-   */
   if (
     !actorId
   ) {
@@ -112,12 +108,6 @@ const buildCaseAccessWhere = (
     return {};
   }
 
-  /*
-   * Referans case.service.js ile aynı record-level scope:
-   *
-   * - kullanıcının oluşturduğu dava
-   * - kullanıcıya atanmış dava
-   */
   return {
     [Op.or]: [
       {
@@ -255,10 +245,6 @@ const assertPartyAccess =
         options
       );
     } catch {
-      /*
-       * Party gerçekten var olsa bile yetkisiz kullanıcıya
-       * kaynak varlığı bilgisi sızdırma.
-       */
       throw new Error(
         'Taraf bulunamadı'
       );
@@ -275,19 +261,56 @@ const normalizeNullable = (
   value
 ) => {
   if (
-    value === undefined
+    value ===
+    undefined
   ) {
     return undefined;
   }
 
   if (
-    value === null
+    value ===
+    null
   ) {
     return null;
   }
 
   const normalized =
-    String(value).trim();
+    String(
+      value
+    ).trim();
+
+  return (
+    normalized ||
+    null
+  );
+};
+
+const normalizeIdentificationNumber = (
+  value
+) => {
+  if (
+    value ===
+    undefined
+  ) {
+    return undefined;
+  }
+
+  if (
+    value ===
+    null
+  ) {
+    return null;
+  }
+
+  const normalized =
+    String(
+      value
+    )
+      .replace(
+        /\s+/g,
+        ''
+      )
+      .trim();
 
   return (
     normalized ||
@@ -296,7 +319,7 @@ const normalizeNullable = (
 };
 
 const normalizePartyData = (
-  data
+  data = {}
 ) => {
   const normalized = {
     ...data,
@@ -304,7 +327,6 @@ const normalizePartyData = (
 
   [
     'name',
-    'identification_number',
     'tax_office',
     'phone',
     'email',
@@ -335,6 +357,20 @@ const normalizePartyData = (
   );
 
   if (
+    Object.prototype
+      .hasOwnProperty
+      .call(
+        normalized,
+        'identification_number'
+      )
+  ) {
+    normalized.identification_number =
+      normalizeIdentificationNumber(
+        normalized.identification_number
+      );
+  }
+
+  if (
     normalized.email
   ) {
     normalized.email =
@@ -351,12 +387,128 @@ const normalizePartyData = (
   return normalized;
 };
 
+// ======================================================
+// TCKN
+// ======================================================
+
+const isValidTCKN = (
+  value
+) => {
+  const tckn =
+    String(
+      value || ''
+    ).trim();
+
+  if (
+    !/^[1-9]\d{10}$/.test(
+      tckn
+    )
+  ) {
+    return false;
+  }
+
+  const digits =
+    tckn
+      .split('')
+      .map(Number);
+
+  if (
+    digits[10] % 2 !==
+    0
+  ) {
+    return false;
+  }
+
+  const oddSum =
+    digits[0] +
+    digits[2] +
+    digits[4] +
+    digits[6] +
+    digits[8];
+
+  const evenSum =
+    digits[1] +
+    digits[3] +
+    digits[5] +
+    digits[7];
+
+  const digit10 =
+    (
+      (
+        oddSum * 7
+      ) -
+      evenSum
+    ) % 10;
+
+  if (
+    digit10 !==
+    digits[9]
+  ) {
+    return false;
+  }
+
+  const digit11 =
+    digits
+      .slice(
+        0,
+        10
+      )
+      .reduce(
+        (
+          sum,
+          digit
+        ) =>
+          sum + digit,
+        0
+      ) % 10;
+
+  return (
+    digit11 ===
+    digits[10]
+  );
+};
+
+const validatePhoneValue = (
+  value,
+  message
+) => {
+  if (
+    !value
+  ) {
+    return;
+  }
+
+  const digits =
+    String(
+      value
+    ).replace(
+      /\D/g,
+      ''
+    );
+
+  if (
+    digits.length <
+      10 ||
+    digits.length >
+      15
+  ) {
+    throw new Error(
+      message
+    );
+  }
+};
+
 const validatePartyData = (
   data,
   {
     partial = false,
+    currentEntityType = null,
   } = {}
 ) => {
+  // ====================================================
+  // PARTY TYPE
+  // ====================================================
+
   if (
     !partial ||
     data.party_type !==
@@ -373,6 +525,15 @@ const validatePartyData = (
     }
   }
 
+  // ====================================================
+  // ENTITY TYPE
+  // ====================================================
+
+  const entityType =
+    data.entity_type ??
+    currentEntityType ??
+    'person';
+
   if (
     !partial ||
     data.entity_type !==
@@ -380,8 +541,7 @@ const validatePartyData = (
   ) {
     if (
       !ENTITY_TYPES.has(
-        data.entity_type ||
-        'person'
+        entityType
       )
     ) {
       throw new Error(
@@ -389,6 +549,10 @@ const validatePartyData = (
       );
     }
   }
+
+  // ====================================================
+  // NAME
+  // ====================================================
 
   if (
     !partial ||
@@ -401,13 +565,222 @@ const validatePartyData = (
       ).trim();
 
     if (
+      !name
+    ) {
+      throw new Error(
+        entityType ===
+          'company'
+          ? 'Kurum / şirket unvanı gereklidir'
+          : 'Taraf adı soyadı gereklidir'
+      );
+    }
+
+    if (
       name.length <
       2
     ) {
       throw new Error(
-        'Taraf adı gereklidir'
+        'Ad / unvan en az 2 karakter olmalıdır'
       );
     }
+
+    if (
+      name.length >
+      255
+    ) {
+      throw new Error(
+        'Ad / unvan en fazla 255 karakter olabilir'
+      );
+    }
+  }
+
+  // ====================================================
+  // IDENTIFICATION NUMBER
+  // ====================================================
+
+  if (
+    data.identification_number
+  ) {
+    const identity =
+      String(
+        data.identification_number
+      ).trim();
+
+    if (
+      !/^\d+$/.test(
+        identity
+      )
+    ) {
+      throw new Error(
+        'Kimlik / vergi numarası yalnızca rakamlardan oluşmalıdır'
+      );
+    }
+
+    if (
+      entityType ===
+      'company'
+    ) {
+      if (
+        identity.length !==
+        10
+      ) {
+        throw new Error(
+          'Vergi Kimlik Numarası 10 haneli olmalıdır'
+        );
+      }
+    } else {
+      if (
+        identity.length !==
+        11
+      ) {
+        throw new Error(
+          'T.C. Kimlik Numarası 11 haneli olmalıdır'
+        );
+      }
+
+      if (
+        identity.startsWith(
+          '0'
+        )
+      ) {
+        throw new Error(
+          'T.C. Kimlik Numarası 0 ile başlayamaz'
+        );
+      }
+
+      if (
+        Number(
+          identity[10]
+        ) %
+          2 !==
+        0
+      ) {
+        throw new Error(
+          'T.C. Kimlik Numarasının son hanesi çift olmalıdır'
+        );
+      }
+
+      if (
+        !isValidTCKN(
+          identity
+        )
+      ) {
+        throw new Error(
+          'Geçerli bir T.C. Kimlik Numarası giriniz'
+        );
+      }
+    }
+  }
+
+  // ====================================================
+  // TAX OFFICE
+  // ====================================================
+
+  if (
+    data.tax_office &&
+    String(
+      data.tax_office
+    ).length >
+    150
+  ) {
+    throw new Error(
+      'Vergi dairesi en fazla 150 karakter olabilir'
+    );
+  }
+
+  // ====================================================
+  // PHONE
+  // ====================================================
+
+  validatePhoneValue(
+    data.phone,
+    'Geçerli bir telefon numarası giriniz'
+  );
+
+  validatePhoneValue(
+    data.lawyer_phone,
+    'Geçerli bir avukat telefon numarası giriniz'
+  );
+
+  // ====================================================
+  // EMAIL
+  // ====================================================
+
+  const emailRegex =
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (
+    data.email &&
+    !emailRegex.test(
+      data.email
+    )
+  ) {
+    throw new Error(
+      'Geçerli bir e-posta adresi giriniz'
+    );
+  }
+
+  if (
+    data.lawyer_email &&
+    !emailRegex.test(
+      data.lawyer_email
+    )
+  ) {
+    throw new Error(
+      'Geçerli bir avukat e-posta adresi giriniz'
+    );
+  }
+
+  // ====================================================
+  // LENGTH LIMITS
+  // ====================================================
+
+  if (
+    data.address &&
+    String(
+      data.address
+    ).length >
+    1000
+  ) {
+    throw new Error(
+      'Adres en fazla 1000 karakter olabilir'
+    );
+  }
+
+  if (
+    data.lawyer_name &&
+    String(
+      data.lawyer_name
+    ).length >
+    255
+  ) {
+    throw new Error(
+      'Avukat adı en fazla 255 karakter olabilir'
+    );
+  }
+
+  if (
+    data.lawyer_registry_number &&
+    String(
+      data.lawyer_registry_number
+    ).length >
+    100
+  ) {
+    throw new Error(
+      'Baro sicil numarası en fazla 100 karakter olabilir'
+    );
+  }
+
+  if (
+    data.notes &&
+    String(
+      data.notes
+    ).length >
+    3000
+  ) {
+    throw new Error(
+      'İç not en fazla 3000 karakter olabilir'
+    );
   }
 };
 
@@ -441,11 +814,6 @@ export const casePartyService = {
       );
     }
 
-    /*
-     * BOLA:
-     * Verilen case_id'nin actor tarafından erişilebilir
-     * olduğu doğrulanmadan taraf oluşturulamaz.
-     */
     await assertCaseAccess(
       normalized.case_id,
       actor
@@ -535,9 +903,6 @@ export const casePartyService = {
     data,
     actor
   ) {
-    /*
-     * Party alınmadan önce parent case ownership doğrulanır.
-     */
     const party =
       await assertPartyAccess(
         id,
@@ -560,6 +925,9 @@ export const casePartyService = {
       {
         partial:
           true,
+
+        currentEntityType:
+          party.entity_type,
       }
     );
 
@@ -631,9 +999,6 @@ export const casePartyService = {
     search,
     actor,
   }) {
-    /*
-     * actor yoksa burada da fail-closed.
-     */
     buildCaseAccessWhere(
       actor
     );
@@ -664,9 +1029,6 @@ export const casePartyService = {
     if (
       case_id
     ) {
-      /*
-       * Belirli dava filtresinde doğrudan parent access check.
-       */
       await assertCaseAccess(
         case_id,
         actor
@@ -679,13 +1041,6 @@ export const casePartyService = {
         actor
       )
     ) {
-      /*
-       * Global party listesinde normal kullanıcı sadece
-       * erişebildiği davaların party kayıtlarını görür.
-       *
-       * Association alias'ına bağımlı JOIN yerine önce
-       * erişilebilir case id'leri çıkarılıyor.
-       */
       const accessibleCases =
         await Case.findAll({
           where:

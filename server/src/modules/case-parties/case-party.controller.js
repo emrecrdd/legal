@@ -26,30 +26,73 @@ const getHttpStatusFromError = (
 ) => {
   const message =
     String(
-      error?.message || ''
+      error?.message ||
+      ''
     ).toLowerCase();
 
+  /*
+   * BOLA:
+   * Yetkisiz kayıt erişimi service tarafında
+   * "Taraf bulunamadı" / "Dava bulunamadı"
+   * şeklinde maskelenir.
+   */
   if (
-    message.includes('bulunamadı') ||
-    message.includes('not found')
+    message.includes(
+      'bulunamadı'
+    ) ||
+    message.includes(
+      'not found'
+    )
   ) {
     return 404;
   }
 
   if (
-    message.includes('yetki') ||
-    message.includes('forbidden')
+    message.includes(
+      'yetki'
+    ) ||
+    message.includes(
+      'forbidden'
+    )
   ) {
     return 403;
   }
 
   if (
-    message.includes('unauthorized')
+    message.includes(
+      'unauthorized'
+    )
   ) {
     return 401;
   }
 
   return fallback;
+};
+
+const getAuditIp = (
+  req
+) => {
+  return (
+    req.realClientIp ||
+    req.ip ||
+    null
+  );
+};
+
+const getErrorMessage = (
+  error,
+  fallback
+) => {
+  const message =
+    String(
+      error?.message ||
+      ''
+    ).trim();
+
+  return (
+    message ||
+    fallback
+  );
 };
 
 const createAuditLog = async ({
@@ -74,14 +117,23 @@ const createAuditLog = async ({
       description,
 
       ip_address:
-        req.ip,
+        getAuditIp(
+          req
+        ),
 
       user_agent:
         req.headers[
           'user-agent'
-        ],
+        ] ||
+        null,
     });
-  } catch (auditError) {
+  } catch (
+    auditError
+  ) {
+    /*
+     * Audit hatası ana business işlemini
+     * başarısız göstermesin.
+     */
     logger.error(
       'Case party audit log error:',
       auditError
@@ -112,7 +164,9 @@ export const casePartyController = {
         ...req.body,
 
         /*
-         * case_id body'den değil route'tan gelir.
+         * Güvenlik:
+         * case_id client body'den alınmaz.
+         * Route parametresi authoritative kaynaktır.
          */
         case_id:
           caseId,
@@ -143,7 +197,9 @@ export const casePartyController = {
         'Taraf başarıyla oluşturuldu',
         201
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Create case party error:',
         error
@@ -151,9 +207,13 @@ export const casePartyController = {
 
       return errorResponse(
         res,
-        error.message,
+        getErrorMessage(
+          error,
+          'Taraf oluşturulamadı'
+        ),
         getHttpStatusFromError(
-          error
+          error,
+          400
         )
       );
     }
@@ -185,7 +245,9 @@ export const casePartyController = {
         parties,
         'Taraflar başarıyla getirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get case parties error:',
         error
@@ -193,9 +255,13 @@ export const casePartyController = {
 
       return errorResponse(
         res,
-        error.message,
+        getErrorMessage(
+          error,
+          'Taraflar getirilemedi'
+        ),
         getHttpStatusFromError(
-          error
+          error,
+          400
         )
       );
     }
@@ -228,7 +294,8 @@ export const casePartyController = {
           search,
 
           /*
-           * Record-level access scope service'te uygulanır.
+           * Record-level access scope service katmanında
+           * fail-closed şekilde uygulanır.
            */
           actor:
             req.user,
@@ -240,7 +307,9 @@ export const casePartyController = {
         result.pagination,
         'Taraflar başarıyla getirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get all case parties error:',
         error
@@ -248,9 +317,13 @@ export const casePartyController = {
 
       return errorResponse(
         res,
-        error.message,
+        getErrorMessage(
+          error,
+          'Taraflar getirilemedi'
+        ),
         getHttpStatusFromError(
-          error
+          error,
+          400
         )
       );
     }
@@ -276,7 +349,9 @@ export const casePartyController = {
         party,
         'Taraf başarıyla getirildi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Get case party error:',
         error
@@ -284,7 +359,10 @@ export const casePartyController = {
 
       return errorResponse(
         res,
-        error.message,
+        getErrorMessage(
+          error,
+          'Taraf bulunamadı'
+        ),
         getHttpStatusFromError(
           error,
           404
@@ -327,7 +405,9 @@ export const casePartyController = {
         party,
         'Taraf başarıyla güncellendi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Update case party error:',
         error
@@ -335,9 +415,13 @@ export const casePartyController = {
 
       return errorResponse(
         res,
-        error.message,
+        getErrorMessage(
+          error,
+          'Taraf güncellenemedi'
+        ),
         getHttpStatusFromError(
-          error
+          error,
+          400
         )
       );
     }
@@ -376,7 +460,9 @@ export const casePartyController = {
         null,
         'Taraf başarıyla silindi'
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       logger.error(
         'Delete case party error:',
         error
@@ -384,9 +470,13 @@ export const casePartyController = {
 
       return errorResponse(
         res,
-        error.message,
+        getErrorMessage(
+          error,
+          'Taraf silinemedi'
+        ),
         getHttpStatusFromError(
-          error
+          error,
+          400
         )
       );
     }

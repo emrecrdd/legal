@@ -234,6 +234,86 @@ const validatePhone = (
     digits.length <= 15
   );
 };
+const isValidTCKN = (
+  value
+) => {
+  const tckn =
+    String(
+      value || ''
+    ).trim();
+
+  // 11 hane ve ilk rakam 0 olamaz
+  if (
+    !/^[1-9]\d{10}$/.test(
+      tckn
+    )
+  ) {
+    return false;
+  }
+
+  const digits =
+    tckn
+      .split('')
+      .map(Number);
+
+  // Son rakam çift olmalı
+  if (
+    digits[10] % 2 !==
+    0
+  ) {
+    return false;
+  }
+
+  const oddSum =
+    digits[0] +
+    digits[2] +
+    digits[4] +
+    digits[6] +
+    digits[8];
+
+  const evenSum =
+    digits[1] +
+    digits[3] +
+    digits[5] +
+    digits[7];
+
+  // 10. basamak
+  const digit10 =
+    (
+      (
+        oddSum * 7
+      ) -
+      evenSum
+    ) % 10;
+
+  if (
+    digit10 !==
+    digits[9]
+  ) {
+    return false;
+  }
+
+  // 11. basamak
+  const digit11 =
+    digits
+      .slice(
+        0,
+        10
+      )
+      .reduce(
+        (
+          sum,
+          digit
+        ) =>
+          sum + digit,
+        0
+      ) % 10;
+
+  return (
+    digit11 ===
+    digits[10]
+  );
+};
 
 const normalizeFormForComparison = (
   form
@@ -894,27 +974,53 @@ const CasePartyCreate = () => {
       // IDENTIFICATION
       // ==================================================
 
-      if (
+     if (
+  identity
+) {
+  if (
+    !isCompany
+  ) {
+    if (
+      identity.length !==
+      11
+    ) {
+      nextErrors.identification_number =
+        'T.C. Kimlik No 11 haneli olmalıdır';
+    } else if (
+      identity.startsWith(
+        '0'
+      )
+    ) {
+      nextErrors.identification_number =
+        'T.C. Kimlik No 0 ile başlayamaz';
+    } else if (
+      Number(
+        identity[10]
+      ) %
+        2 !==
+      0
+    ) {
+      nextErrors.identification_number =
+        'T.C. Kimlik No son hanesi çift olmalıdır';
+    } else if (
+      !isValidTCKN(
         identity
-      ) {
-        if (
-          !isCompany &&
-          identity.length !==
-          11
-        ) {
-          nextErrors.identification_number =
-            'T.C. Kimlik No 11 haneli olmalıdır';
-        }
+      )
+    ) {
+      nextErrors.identification_number =
+        'Geçerli bir T.C. Kimlik No giriniz';
+    }
+  }
 
-        if (
-          isCompany &&
-          identity.length !==
-          10
-        ) {
-          nextErrors.identification_number =
-            'Vergi Kimlik No 10 haneli olmalıdır';
-        }
-      }
+  if (
+    isCompany &&
+    identity.length !==
+      10
+  ) {
+    nextErrors.identification_number =
+      'Vergi Kimlik No 10 haneli olmalıdır';
+  }
+}
 
       // ==================================================
       // TAX OFFICE
@@ -1567,10 +1673,10 @@ const CasePartyCreate = () => {
             </div>
 
             <p className="text-xs text-gray-400 dark:text-slate-600">
-              {isCompany
-                ? 'VKN girilecekse 10 haneli olmalıdır.'
-                : 'TCKN girilecekse 11 haneli olmalıdır.'}
-            </p>
+  {isCompany
+    ? 'VKN girilecekse 10 haneli olmalıdır.'
+    : 'TCKN 11 haneli olmalı, 0 ile başlamamalı ve geçerli TCKN algoritmasından geçmelidir.'}
+</p>
 
           </section>
 

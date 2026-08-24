@@ -10,6 +10,15 @@ import {
 } from '../../middlewares/auth.middleware.js';
 
 import {
+  validate,
+} from '../../middlewares/validate.middleware.js';
+
+import {
+  createCasePartyValidation,
+  updateCasePartyValidation,
+} from './case-party.validation.js';
+
+import {
   ROLES,
 } from '../../constants/roles.js';
 
@@ -30,11 +39,17 @@ router.use(
 
 router.post(
   '/case/:caseId',
+
   authorize(
     ROLES.ADMIN,
     ROLES.LAWYER,
     ROLES.SECRETARY
   ),
+
+  validate(
+    createCasePartyValidation
+  ),
+
   casePartyController.create
 );
 
@@ -44,12 +59,14 @@ router.post(
 
 router.get(
   '/case/:caseId',
+
   authorize(
     ROLES.ADMIN,
     ROLES.LAWYER,
     ROLES.INTERN,
     ROLES.SECRETARY
   ),
+
   casePartyController.getByCase
 );
 
@@ -59,12 +76,14 @@ router.get(
 
 router.get(
   '/',
+
   authorize(
     ROLES.ADMIN,
     ROLES.LAWYER,
     ROLES.INTERN,
     ROLES.SECRETARY
   ),
+
   casePartyController.findAll
 );
 
@@ -74,12 +93,14 @@ router.get(
 
 router.get(
   '/:id',
+
   authorize(
     ROLES.ADMIN,
     ROLES.LAWYER,
     ROLES.INTERN,
     ROLES.SECRETARY
   ),
+
   casePartyController.findOne
 );
 
@@ -89,11 +110,17 @@ router.get(
 
 router.patch(
   '/:id',
+
   authorize(
     ROLES.ADMIN,
     ROLES.LAWYER,
     ROLES.SECRETARY
   ),
+
+  validate(
+    updateCasePartyValidation
+  ),
+
   casePartyController.update
 );
 
@@ -103,10 +130,12 @@ router.patch(
 
 router.delete(
   '/:id',
+
   authorize(
     ROLES.ADMIN,
     ROLES.LAWYER
   ),
+
   casePartyController.remove
 );
 
