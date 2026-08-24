@@ -112,11 +112,8 @@ const getApiData = (
   response
 ) => {
   return (
-    response
-      ?.data
-      ?.data ??
-    response
-      ?.data ??
+    response?.data?.data ??
+    response?.data ??
     null
   );
 };
@@ -172,41 +169,9 @@ const validatePasswordStrength = (
 ) => {
   if (
     value.length <
-    8
+    12
   ) {
-    return 'Yeni şifre en az 8 karakter olmalıdır';
-  }
-
-  if (
-    !/[a-z]/.test(
-      value
-    )
-  ) {
-    return 'Yeni şifre en az bir küçük harf içermelidir';
-  }
-
-  if (
-    !/[A-Z]/.test(
-      value
-    )
-  ) {
-    return 'Yeni şifre en az bir büyük harf içermelidir';
-  }
-
-  if (
-    !/\d/.test(
-      value
-    )
-  ) {
-    return 'Yeni şifre en az bir rakam içermelidir';
-  }
-
-  if (
-    !/[^A-Za-z0-9]/.test(
-      value
-    )
-  ) {
-    return 'Yeni şifre en az bir özel karakter içermelidir';
+    return 'Yeni şifre en az 12 karakter olmalıdır';
   }
 
   return '';
@@ -664,12 +629,115 @@ const Settings = () => {
       onError: (
         error
       ) => {
+        const backendErrors =
+          error?.response
+            ?.data?.errors;
+
+        const message =
+          error?.response
+            ?.data?.message ||
+          error?.message ||
+          'Şifre değiştirilemedi';
+
+        const nextErrors =
+          {};
+
+        if (
+          Array.isArray(
+            backendErrors
+          )
+        ) {
+          backendErrors.forEach(
+            (
+              item
+            ) => {
+              const field =
+                item?.path ||
+                item?.param;
+
+              const fieldMessage =
+                item?.msg ||
+                'Geçersiz değer';
+
+              if (
+                field ===
+                'currentPassword'
+              ) {
+                nextErrors.currentPassword =
+                  fieldMessage;
+              }
+
+              if (
+                field ===
+                'newPassword'
+              ) {
+                nextErrors.newPassword =
+                  fieldMessage;
+              }
+            }
+          );
+        }
+
+        if (
+          /mevcut şifre yanlış/i.test(
+            message
+          )
+        ) {
+          nextErrors.currentPassword =
+            'Mevcut şifreniz yanlış';
+        }
+
+        if (
+          /mevcut şifre gereklidir/i.test(
+            message
+          )
+        ) {
+          nextErrors.currentPassword =
+            'Mevcut şifre gereklidir';
+        }
+
+        if (
+          /aynı olamaz/i.test(
+            message
+          )
+        ) {
+          nextErrors.newPassword =
+            'Yeni şifre mevcut şifrenizle aynı olamaz';
+        }
+
+        if (
+          /en az 12 karakter/i.test(
+            message
+          )
+        ) {
+          nextErrors.newPassword =
+            'Yeni şifre en az 12 karakter olmalıdır';
+        }
+
+        if (
+          Object.keys(
+            nextErrors
+          ).length >
+          0
+        ) {
+          setErrors(
+            (
+              current
+            ) => ({
+              ...current,
+              ...nextErrors,
+            })
+          );
+
+          toast.error(
+            'Şifre bilgilerinizi kontrol edin'
+          );
+
+          return;
+        }
+
         toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
-            'Şifre değiştirilemedi'
+          message
         );
       },
     });
@@ -1161,6 +1229,10 @@ const Settings = () => {
           newErrors
         );
 
+        toast.error(
+          'Şifre bilgilerinizi kontrol edin'
+        );
+
         return;
       }
 
@@ -1222,8 +1294,6 @@ const Settings = () => {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
 
-      {/* HEADER */}
-
       <div className="flex items-start gap-3">
 
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-white/[0.05] dark:text-slate-300">
@@ -1243,8 +1313,6 @@ const Settings = () => {
         </div>
 
       </div>
-
-      {/* TABS */}
 
       <Card>
 
@@ -1297,13 +1365,7 @@ const Settings = () => {
                         {tab.label}
                       </p>
 
-                      <p
-                        className={`mt-0.5 truncate text-[10px] ${
-                          isActive
-                            ? 'text-blue-500/70 dark:text-blue-400/60'
-                            : 'text-gray-400 dark:text-slate-600'
-                        }`}
-                      >
+                      <p className="mt-0.5 truncate text-[10px]">
                         {tab.description}
                       </p>
 
@@ -1320,8 +1382,6 @@ const Settings = () => {
 
       </Card>
 
-      {/* PROFILE */}
-
       {activeTab ===
         'profile' && (
         <Card>
@@ -1330,13 +1390,11 @@ const Settings = () => {
 
             <div className="flex items-center gap-3">
 
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
-                <UserRound size={17} />
-              </div>
+              <UserRound size={18} />
 
               <div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2">
 
                   <h2 className="font-semibold text-gray-900 dark:text-white">
                     Profil Bilgileri
@@ -1351,10 +1409,6 @@ const Settings = () => {
                   )}
 
                 </div>
-
-                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Sistem içerisinde görüntülenen kişisel bilgileriniz
-                </p>
 
               </div>
 
@@ -1371,58 +1425,6 @@ const Settings = () => {
               className="space-y-5"
             >
 
-              <div className="flex flex-col gap-4 rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/[0.05] dark:bg-white/[0.025] sm:flex-row sm:items-center sm:justify-between">
-
-                <div className="flex items-center gap-3">
-
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                    {user?.first_name?.[0] || ''}
-                    {user?.last_name?.[0] || ''}
-                  </div>
-
-                  <div>
-
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      {user?.first_name}{' '}
-                      {user?.last_name}
-                    </p>
-
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-500">
-                      {user?.email || '-'}
-                    </p>
-
-                  </div>
-
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-
-                  <Badge
-                    variant="primary"
-                    dot
-                  >
-                    {getRoleLabel(
-                      user?.role
-                    )}
-                  </Badge>
-
-                  <Badge
-                    variant={
-                      user?.is_active
-                        ? 'success'
-                        : 'danger'
-                    }
-                    dot
-                  >
-                    {user?.is_active
-                      ? 'Aktif Hesap'
-                      : 'Pasif Hesap'}
-                  </Badge>
-
-                </div>
-
-              </div>
-
               <div className="grid gap-4 md:grid-cols-2">
 
                 <Input
@@ -1438,9 +1440,6 @@ const Settings = () => {
                     errors.first_name
                   }
                   maxLength={100}
-                  disabled={
-                    updateProfile.isPending
-                  }
                 />
 
                 <Input
@@ -1456,9 +1455,6 @@ const Settings = () => {
                     errors.last_name
                   }
                   maxLength={100}
-                  disabled={
-                    updateProfile.isPending
-                  }
                 />
 
               </div>
@@ -1478,9 +1474,6 @@ const Settings = () => {
                   error={
                     errors.phone
                   }
-                  disabled={
-                    updateProfile.isPending
-                  }
                   placeholder="05XX XXX XX XX"
                 />
 
@@ -1497,9 +1490,6 @@ const Settings = () => {
                     errors.title
                   }
                   maxLength={150}
-                  disabled={
-                    updateProfile.isPending
-                  }
                   placeholder="Örn: Avukat"
                 />
 
@@ -1507,7 +1497,7 @@ const Settings = () => {
 
               <div>
 
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                <label className="mb-1.5 block text-sm font-medium">
                   Biyografi
                 </label>
 
@@ -1519,34 +1509,18 @@ const Settings = () => {
                   onChange={
                     handleProfileChange
                   }
-                  disabled={
-                    updateProfile.isPending
-                  }
                   rows={5}
                   maxLength={1000}
-                  placeholder="Mesleki uzmanlık alanlarınız veya kısa profil bilginiz..."
-                  className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm leading-6 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white dark:placeholder:text-slate-500"
+                  className="w-full rounded-lg border px-3 py-2"
                 />
 
-                <div className="mt-1 flex justify-between gap-3">
-
-                  {errors.bio ? (
-                    <p className="text-xs text-red-600">
-                      {errors.bio}
-                    </p>
-                  ) : (
-                    <span />
-                  )}
-
-                  <p className="text-[10px] text-gray-400 dark:text-slate-600">
-                    {profileForm.bio.length} / 1000
-                  </p>
-
-                </div>
+                <p className="mt-1 text-right text-xs text-gray-400">
+                  {profileForm.bio.length}/1000
+                </p>
 
               </div>
 
-              <div className="flex justify-end border-t border-gray-100 pt-4 dark:border-white/[0.06]">
+              <div className="flex justify-end">
 
                 <Button
                   type="submit"
@@ -1559,7 +1533,6 @@ const Settings = () => {
                   }
                 >
                   <Save className="h-4 w-4" />
-
                   Değişiklikleri Kaydet
                 </Button>
 
@@ -1572,8 +1545,6 @@ const Settings = () => {
         </Card>
       )}
 
-      {/* SECURITY */}
-
       {activeTab ===
         'security' && (
         <Card>
@@ -1582,21 +1553,11 @@ const Settings = () => {
 
             <div className="flex items-center gap-3">
 
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400">
-                <KeyRound size={17} />
-              </div>
+              <KeyRound size={18} />
 
-              <div>
-
-                <h2 className="font-semibold text-gray-900 dark:text-white">
-                  Şifre ve Güvenlik
-                </h2>
-
-                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Hesabınıza erişim için kullanılan şifrenizi yönetin
-                </p>
-
-              </div>
+              <h2 className="font-semibold">
+                Şifre ve Güvenlik
+              </h2>
 
             </div>
 
@@ -1623,7 +1584,6 @@ const Settings = () => {
                         ? 'text'
                         : 'password'
                     }
-                    autoComplete="current-password"
                     value={
                       passwordForm.currentPassword
                     }
@@ -1633,33 +1593,21 @@ const Settings = () => {
                     error={
                       errors.currentPassword
                     }
-                    disabled={
-                      changePassword.isPending
-                    }
                   />
 
                   <button
                     type="button"
                     onClick={() =>
                       setShowCurrentPassword(
-                        (
-                          current
-                        ) =>
-                          !current
+                        (value) =>
+                          !value
                       )
                     }
-                    className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-700 dark:hover:text-white"
-                    aria-label={
-                      showCurrentPassword
-                        ? 'Şifreyi gizle'
-                        : 'Şifreyi göster'
-                    }
+                    className="absolute right-3 top-[38px]"
                   >
-                    {showCurrentPassword ? (
-                      <EyeOff size={17} />
-                    ) : (
-                      <Eye size={17} />
-                    )}
+                    {showCurrentPassword
+                      ? <EyeOff size={17} />
+                      : <Eye size={17} />}
                   </button>
 
                 </div>
@@ -1674,7 +1622,6 @@ const Settings = () => {
                         ? 'text'
                         : 'password'
                     }
-                    autoComplete="new-password"
                     value={
                       passwordForm.newPassword
                     }
@@ -1684,33 +1631,21 @@ const Settings = () => {
                     error={
                       errors.newPassword
                     }
-                    disabled={
-                      changePassword.isPending
-                    }
                   />
 
                   <button
                     type="button"
                     onClick={() =>
                       setShowNewPassword(
-                        (
-                          current
-                        ) =>
-                          !current
+                        (value) =>
+                          !value
                       )
                     }
-                    className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-700 dark:hover:text-white"
-                    aria-label={
-                      showNewPassword
-                        ? 'Şifreyi gizle'
-                        : 'Şifreyi göster'
-                    }
+                    className="absolute right-3 top-[38px]"
                   >
-                    {showNewPassword ? (
-                      <EyeOff size={17} />
-                    ) : (
-                      <Eye size={17} />
-                    )}
+                    {showNewPassword
+                      ? <EyeOff size={17} />
+                      : <Eye size={17} />}
                   </button>
 
                 </div>
@@ -1725,7 +1660,7 @@ const Settings = () => {
                     }`}
                   >
                     {passwordStrengthError ||
-                      'Şifre güvenlik kriterlerini karşılıyor'}
+                      'Şifre uzunluğu uygun'}
                   </p>
                 )}
 
@@ -1739,7 +1674,6 @@ const Settings = () => {
                         ? 'text'
                         : 'password'
                     }
-                    autoComplete="new-password"
                     value={
                       passwordForm.confirmPassword
                     }
@@ -1749,50 +1683,34 @@ const Settings = () => {
                     error={
                       errors.confirmPassword
                     }
-                    disabled={
-                      changePassword.isPending
-                    }
                   />
 
                   <button
                     type="button"
                     onClick={() =>
                       setShowConfirmPassword(
-                        (
-                          current
-                        ) =>
-                          !current
+                        (value) =>
+                          !value
                       )
                     }
-                    className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-700 dark:hover:text-white"
-                    aria-label={
-                      showConfirmPassword
-                        ? 'Şifreyi gizle'
-                        : 'Şifreyi göster'
-                    }
+                    className="absolute right-3 top-[38px]"
                   >
-                    {showConfirmPassword ? (
-                      <EyeOff size={17} />
-                    ) : (
-                      <Eye size={17} />
-                    )}
+                    {showConfirmPassword
+                      ? <EyeOff size={17} />
+                      : <Eye size={17} />}
                   </button>
 
                 </div>
 
-                <div className="flex justify-end pt-2">
+                <div className="flex justify-end">
 
                   <Button
                     type="submit"
                     loading={
                       changePassword.isPending
                     }
-                    disabled={
-                      changePassword.isPending
-                    }
                   >
                     <KeyRound className="h-4 w-4" />
-
                     Şifreyi Değiştir
                   </Button>
 
@@ -1800,25 +1718,17 @@ const Settings = () => {
 
               </form>
 
-              <div className="h-fit rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 dark:border-emerald-500/10 dark:bg-emerald-500/[0.025]">
+              <div className="rounded-xl border p-4">
 
-                <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
 
-                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <p className="mt-2 text-sm font-semibold">
+                  Güvenli şifre
+                </p>
 
-                  <div>
-
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                      Güvenli şifre
-                    </p>
-
-                    <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-slate-400">
-                      En az 8 karakter, büyük ve küçük harf, rakam ve özel karakter kullanın.
-                    </p>
-
-                  </div>
-
-                </div>
+                <p className="mt-2 text-xs leading-5 text-gray-500">
+                  Şifreniz en az 12 karakter olmalıdır. Güvenlik için büyük/küçük harf, rakam ve özel karakter kullanmanız önerilir.
+                </p>
 
               </div>
 
@@ -1829,8 +1739,6 @@ const Settings = () => {
         </Card>
       )}
 
-      {/* PREFERENCES */}
-
       {activeTab ===
         'preferences' && (
         <div className="space-y-4">
@@ -1838,42 +1746,26 @@ const Settings = () => {
           <Card>
 
             <Card.Header>
-              <h2 className="font-semibold text-gray-900 dark:text-white">
+              <h2 className="font-semibold">
                 Görünüm
               </h2>
             </Card.Header>
 
             <Card.Body>
 
-              <div className="flex flex-col gap-4 rounded-xl border border-gray-100 p-4 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex justify-between gap-4">
 
-                <div className="flex items-center gap-3">
+                <div>
 
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-white/[0.05] dark:text-slate-300">
-                    {theme ===
-                    'dark' ? (
-                      <Moon size={18} />
-                    ) : (
-                      <Sun size={18} />
-                    )}
-                  </div>
+                  <p className="font-medium">
+                    Tema
+                  </p>
 
-                  <div>
-
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                      Tema
-                    </p>
-
-                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
-                      Şu anda{' '}
-                      {theme ===
-                      'dark'
-                        ? 'koyu tema'
-                        : 'açık tema'}{' '}
-                      kullanılıyor.
-                    </p>
-
-                  </div>
+                  <p className="text-xs text-gray-500">
+                    {theme === 'dark'
+                      ? 'Koyu tema kullanılıyor'
+                      : 'Açık tema kullanılıyor'}
+                  </p>
 
                 </div>
 
@@ -1883,17 +1775,10 @@ const Settings = () => {
                     toggleTheme
                   }
                 >
-                  {theme ===
-                  'dark' ? (
-                    <Sun className="h-4 w-4" />
-                  ) : (
-                    <Moon className="h-4 w-4" />
-                  )}
-
-                  {theme ===
-                  'dark'
-                    ? 'Açık Temaya Geç'
-                    : 'Koyu Temaya Geç'}
+                  {theme === 'dark'
+                    ? <Sun />
+                    : <Moon />}
+                  Temayı Değiştir
                 </Button>
 
               </div>
@@ -1905,60 +1790,14 @@ const Settings = () => {
           <Card>
 
             <Card.Header>
-              <h2 className="font-semibold text-gray-900 dark:text-white">
+              <h2 className="font-semibold">
                 Hesap
               </h2>
             </Card.Header>
 
             <Card.Body>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-
-                <div className="rounded-xl border border-gray-100 p-4 dark:border-white/[0.06]">
-
-                  <p className="text-xs font-medium text-gray-400 dark:text-slate-500">
-                    Kullanıcı Rolü
-                  </p>
-
-                  <div className="mt-2">
-                    <Badge
-                      variant="primary"
-                      dot
-                    >
-                      {getRoleLabel(
-                        user?.role
-                      )}
-                    </Badge>
-                  </div>
-
-                </div>
-
-                <div className="rounded-xl border border-gray-100 p-4 dark:border-white/[0.06]">
-
-                  <p className="text-xs font-medium text-gray-400 dark:text-slate-500">
-                    Hesap Durumu
-                  </p>
-
-                  <div className="mt-2">
-                    <Badge
-                      variant={
-                        user?.is_active
-                          ? 'success'
-                          : 'danger'
-                      }
-                      dot
-                    >
-                      {user?.is_active
-                        ? 'Aktif'
-                        : 'Pasif'}
-                    </Badge>
-                  </div>
-
-                </div>
-
-              </div>
-
-              <div className="mt-4 flex justify-end">
+              <div className="flex justify-end">
 
                 <Button
                   variant="danger"
@@ -1966,7 +1805,7 @@ const Settings = () => {
                     handleLogout
                   }
                 >
-                  <LogOut className="h-4 w-4" />
+                  <LogOut />
                   Çıkış Yap
                 </Button>
 
@@ -1979,245 +1818,120 @@ const Settings = () => {
         </div>
       )}
 
-      {/* CALENDAR */}
-
       {activeTab ===
         'calendar' && (
-        <div className="space-y-4">
+        <Card>
 
-          <Card>
+          <Card.Header>
 
-            <Card.Header>
+            <div className="flex items-center gap-3">
 
-              <div className="flex items-center gap-3">
+              <CalendarDays />
 
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
-                  <CalendarDays size={17} />
-                </div>
+              <h2 className="font-semibold">
+                Google Calendar
+              </h2>
 
-                <div>
+            </div>
 
-                  <h2 className="font-semibold text-gray-900 dark:text-white">
-                    Google Calendar
-                  </h2>
+          </Card.Header>
 
-                  <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                    Görev, toplantı ve duruşmalarınızı Google Takvim ile senkronize edin
+          <Card.Body>
+
+            {googleCalendarStatus
+              .isLoading ? (
+              <p>
+                Bağlantı kontrol ediliyor...
+              </p>
+            ) : googleCalendarStatus
+                .isError ? (
+              <Button
+                onClick={() =>
+                  googleCalendarStatus
+                    .refetch()
+                }
+              >
+                <RefreshCw />
+                Tekrar Dene
+              </Button>
+            ) : googleConnected ? (
+              <div className="space-y-4">
+
+                <div className="rounded-xl border border-emerald-200 p-4">
+
+                  <div className="flex items-center gap-2">
+
+                    <CheckCircle2 className="text-emerald-600" />
+
+                    <strong>
+                      Google Calendar bağlı
+                    </strong>
+
+                    <Badge
+                      variant="success"
+                    >
+                      Senkronizasyon Aktif
+                    </Badge>
+
+                  </div>
+
+                  <p className="mt-2 text-sm text-gray-500">
+                    Görev, toplantı ve duruşmalarınız Google Calendar ile otomatik senkronize edilir.
                   </p>
 
+                  {googleIntegration
+                    ?.last_synced_at && (
+                    <p className="mt-2 text-xs text-gray-400">
+                      Son senkronizasyon:{' '}
+                      {new Date(
+                        googleIntegration
+                          .last_synced_at
+                      ).toLocaleString(
+                        'tr-TR'
+                      )}
+                    </p>
+                  )}
+
                 </div>
+
+                <Button
+                  variant="danger"
+                  onClick={
+                    handleGoogleDisconnect
+                  }
+                  loading={
+                    disconnectGoogle
+                      .isPending
+                  }
+                >
+                  <Unlink2 />
+                  Bağlantıyı Kes
+                </Button>
 
               </div>
+            ) : (
+              <Button
+                onClick={() =>
+                  connectGoogle
+                    .mutate()
+                }
+                loading={
+                  connectGoogle
+                    .isPending ||
+                  isGoogleConnecting
+                }
+              >
+                <Link2 />
 
-            </Card.Header>
+                {isGoogleConnecting
+                  ? 'Google hesabınızda onaylayın...'
+                  : 'Google Takvimimi Bağla'}
+              </Button>
+            )}
 
-            <Card.Body>
+          </Card.Body>
 
-              {googleCalendarStatus
-                .isLoading ? (
-                <div className="flex items-center gap-3 rounded-xl border border-gray-100 p-4 dark:border-white/[0.06]">
-
-                  <RefreshCw className="h-5 w-5 animate-spin text-gray-400" />
-
-                  <p className="text-sm text-gray-500 dark:text-slate-400">
-                    Google Calendar bağlantısı kontrol ediliyor...
-                  </p>
-
-                </div>
-              ) : googleCalendarStatus
-                  .isError ? (
-                <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 dark:border-red-500/10 dark:bg-red-500/[0.025]">
-
-                  <p className="text-sm font-semibold text-red-600 dark:text-red-400">
-                    Bağlantı durumu alınamadı
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">
-                    Google Calendar servisine şu anda erişilemiyor.
-                  </p>
-
-                  <div className="mt-3">
-
-                    <Button
-                      variant="secondary"
-                      onClick={() =>
-                        googleCalendarStatus
-                          .refetch()
-                      }
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                      Tekrar Dene
-                    </Button>
-
-                  </div>
-
-                </div>
-              ) : googleConnected ? (
-                <div className="space-y-4">
-
-                  <div className="flex flex-col gap-4 rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 dark:border-emerald-500/10 dark:bg-emerald-500/[0.025] sm:flex-row sm:items-center sm:justify-between">
-
-                    <div className="flex items-start gap-3">
-
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-500/[0.10] dark:text-emerald-400">
-                        <CheckCircle2 size={19} />
-                      </div>
-
-                      <div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                            Google Calendar bağlı
-                          </p>
-
-                          <Badge
-                            variant="success"
-                            dot
-                          >
-                            Senkronizasyon Aktif
-                          </Badge>
-
-                        </div>
-
-                        <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">
-                          Derkenar'daki görev, toplantı ve duruşmalar Google Takvim hesabınızla senkronize edilir.
-                        </p>
-
-                        {googleIntegration
-                          ?.account_email && (
-                          <p className="mt-1 text-xs font-medium text-gray-600 dark:text-slate-300">
-                            {
-                              googleIntegration
-                                .account_email
-                            }
-                          </p>
-                        )}
-
-                      </div>
-
-                    </div>
-
-                    <Button
-                      variant="danger"
-                      onClick={
-                        handleGoogleDisconnect
-                      }
-                      loading={
-                        disconnectGoogle
-                          .isPending
-                      }
-                      disabled={
-                        disconnectGoogle
-                          .isPending
-                      }
-                    >
-                      <Unlink2 className="h-4 w-4" />
-                      Bağlantıyı Kes
-                    </Button>
-
-                  </div>
-
-                  <div className="rounded-xl border border-gray-100 p-4 dark:border-white/[0.06]">
-
-                    <div className="flex items-start gap-3">
-
-                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
-
-                      <div>
-
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                          Takvim senkronizasyonu çalışıyor
-                        </p>
-
-                        <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">
-                          Görevleriniz, toplantılarınız ve duruşmalarınız Google Calendar hesabınıza otomatik olarak aktarılır ve takvim bağlantınız aktif kaldığı sürece senkronize edilir.
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                    {googleIntegration
-                      ?.last_synced_at && (
-                      <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
-                        Son senkronizasyon:{' '}
-                        {new Date(
-                          googleIntegration
-                            .last_synced_at
-                        ).toLocaleString(
-                          'tr-TR'
-                        )}
-                      </p>
-                    )}
-
-                    {googleIntegration
-                      ?.last_error && (
-                      <div className="mt-3 rounded-lg border border-red-100 bg-red-50 p-3 text-xs text-red-600 dark:border-red-500/10 dark:bg-red-500/[0.04] dark:text-red-400">
-                        {
-                          googleIntegration
-                            .last_error
-                        }
-                      </div>
-                    )}
-
-                  </div>
-
-                </div>
-              ) : (
-                <div className="flex flex-col gap-5 rounded-xl border border-gray-100 p-5 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between">
-
-                  <div className="flex items-start gap-3">
-
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
-                      <CalendarDays size={20} />
-                    </div>
-
-                    <div>
-
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                        Google Takviminizi bağlayın
-                      </p>
-
-                      <p className="mt-1 max-w-xl text-xs leading-5 text-gray-500 dark:text-slate-400">
-                        Google hesabınızı bağlayarak görev, toplantı ve duruşmalarınızı otomatik olarak Google Calendar ile senkronize edebilirsiniz.
-                      </p>
-
-                    </div>
-
-                  </div>
-
-                  <Button
-                    onClick={() =>
-                      connectGoogle
-                        .mutate()
-                    }
-                    loading={
-                      connectGoogle
-                        .isPending ||
-                      isGoogleConnecting
-                    }
-                    disabled={
-                      connectGoogle
-                        .isPending ||
-                      isGoogleConnecting
-                    }
-                  >
-                    <Link2 className="h-4 w-4" />
-
-                    {isGoogleConnecting
-                      ? 'Google hesabınızda onaylayın...'
-                      : 'Google Takvimimi Bağla'}
-                  </Button>
-
-                </div>
-              )}
-
-            </Card.Body>
-
-          </Card>
-
-        </div>
+        </Card>
       )}
 
     </div>
