@@ -1,186 +1,575 @@
-import { financeService } from './finance.service.js';
-import { successResponse, errorResponse, paginatedResponse } from '../../utils/response.js';
-import { logger } from '../../config/logger.js';
-import { AuditLog } from '../../models/AuditLog.js';
+import {
+  financeService,
+} from './finance.service.js';
+
+import {
+  successResponse,
+  errorResponse,
+  paginatedResponse,
+} from '../../utils/response.js';
+
+import {
+  logger,
+} from '../../config/logger.js';
+
+import {
+  AuditLog,
+} from '../../models/AuditLog.js';
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const getAuditIp = (
+  req
+) => {
+  return (
+    req.realClientIp ||
+    req.ip ||
+    null
+  );
+};
+
+const createAuditLogSafely =
+  async ({
+    req,
+    action,
+    entityId,
+    description,
+  }) => {
+    try {
+      await AuditLog.create({
+        action,
+
+        entity_type:
+          'payment',
+
+        entity_id:
+          entityId,
+
+        user_id:
+          req.user.id,
+
+        description,
+
+        ip_address:
+          getAuditIp(
+            req
+          ),
+
+        user_agent:
+          req.headers[
+            'user-agent'
+          ] ||
+          null,
+      });
+    } catch (
+      auditError
+    ) {
+      /*
+       * Audit log hatası ana ödeme işlemini
+       * başarısız göstermesin.
+       */
+      logger.error(
+        'Finance audit log error:',
+        auditError
+      );
+    }
+  };
+
+// ======================================================
+// CONTROLLER
+// ======================================================
 
 export const financeController = {
-  async createPayment(req, res) {
-    try {
-      const paymentData = { ...req.body, created_by: req.user.id };
-      const payment = await financeService.createPayment(paymentData);
+  // ====================================================
+  // CREATE PAYMENT
+  // ====================================================
 
-      await AuditLog.create({
-        action: 'create',
-        entity_type: 'payment',
-        entity_id: payment.id,
-        user_id: req.user.id,
-        description: `Payment of ${payment.amount} created for client ${payment.client_id}`,
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
+  async createPayment(
+    req,
+    res
+  ) {
+    try {
+      const paymentData = {
+        ...req.body,
+
+        created_by:
+          req.user.id,
+      };
+
+      const payment =
+        await financeService.createPayment(
+          paymentData
+        );
+
+      await createAuditLogSafely({
+        req,
+
+        action:
+          'create',
+
+        entityId:
+          payment.id,
+
+        description:
+          `Payment of ${payment.amount} created for client ${payment.client_id}`,
       });
 
-      return successResponse(res, payment, 'Payment created successfully', 201);
-    } catch (error) {
-      logger.error('Create payment error:', error);
-      return errorResponse(res, error.message, 400);
+      return successResponse(
+        res,
+        payment,
+        'Payment created successfully',
+        201
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Create payment error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  // ✅ BURASI GÜNCELLENDİ - search parametresi eklendi
-  async findAllPayments(req, res) {
+  // ====================================================
+  // LIST PAYMENTS
+  // ====================================================
+
+  async findAllPayments(
+    req,
+    res
+  ) {
     try {
-      const { 
-        page = 1, 
-        limit = 10, 
-        search,        // ✅ SEARCH EKLENDİ
-        client_id, 
-        case_id, 
-        status, 
-        start_date, 
-        end_date 
-      } = req.query;
-      
-      console.log('📄 findAllPayments çağrıldı:', { page, limit, search, client_id, case_id, status, start_date, end_date });
-      
-      const result = await financeService.findAllPayments({
-        page,
-        limit,
-        search,        // ✅ SEARCH EKLENDİ
+      const {
+        page = 1,
+        limit = 10,
+        search,
         client_id,
         case_id,
         status,
         start_date,
         end_date,
+      } =
+        req.query;
+
+      const result =
+        await financeService.findAllPayments({
+          page,
+          limit,
+          search,
+          client_id,
+          case_id,
+          status,
+          start_date,
+          end_date,
+        });
+
+      return paginatedResponse(
+        res,
+        result.data,
+        result.pagination,
+        'Payments fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get payments error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
+    }
+  },
+
+  // ====================================================
+  // FIND ONE PAYMENT
+  // ====================================================
+
+  async findOnePayment(
+    req,
+    res
+  ) {
+    try {
+      const payment =
+        await financeService.findOnePayment(
+          req.params.id
+        );
+
+      return successResponse(
+        res,
+        payment,
+        'Payment fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get payment error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        404
+      );
+    }
+  },
+
+  // ====================================================
+  // UPDATE PAYMENT
+  // ====================================================
+
+  async updatePayment(
+    req,
+    res
+  ) {
+    try {
+      const payment =
+        await financeService.updatePayment(
+          req.params.id,
+          req.body
+        );
+
+      await createAuditLogSafely({
+        req,
+
+        action:
+          'update',
+
+        entityId:
+          payment.id,
+
+        description:
+          `Payment ${payment.id} updated`,
       });
-      
-      return paginatedResponse(res, result.data, result.pagination, 'Payments fetched successfully');
-    } catch (error) {
-      logger.error('Get payments error:', error);
-      return errorResponse(res, error.message, 400);
+
+      return successResponse(
+        res,
+        payment,
+        'Payment updated successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Update payment error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  async findOnePayment(req, res) {
-    try {
-      const payment = await financeService.findOnePayment(req.params.id);
-      return successResponse(res, payment, 'Payment fetched successfully');
-    } catch (error) {
-      logger.error('Get payment error:', error);
-      return errorResponse(res, error.message, 404);
-    }
-  },
+  // ====================================================
+  // REMOVE PAYMENT
+  // ====================================================
 
-  async updatePayment(req, res) {
+  async removePayment(
+    req,
+    res
+  ) {
     try {
-      const payment = await financeService.updatePayment(req.params.id, req.body);
+      const payment =
+        await financeService.findOnePayment(
+          req.params.id
+        );
 
-      await AuditLog.create({
-        action: 'update',
-        entity_type: 'payment',
-        entity_id: payment.id,
-        user_id: req.user.id,
-        description: `Payment ${payment.id} updated`,
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
+      await financeService.removePayment(
+        req.params.id
+      );
+
+      await createAuditLogSafely({
+        req,
+
+        action:
+          'delete',
+
+        entityId:
+          payment.id,
+
+        description:
+          `Payment ${payment.id} deleted`,
       });
 
-      return successResponse(res, payment, 'Payment updated successfully');
-    } catch (error) {
-      logger.error('Update payment error:', error);
-      return errorResponse(res, error.message, 400);
+      return successResponse(
+        res,
+        null,
+        'Payment deleted successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Delete payment error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  async removePayment(req, res) {
+  // ====================================================
+  // CLIENT PAYMENTS
+  // ====================================================
+
+  async getClientPayments(
+    req,
+    res
+  ) {
     try {
-      const payment = await financeService.findOnePayment(req.params.id);
-      await financeService.removePayment(req.params.id);
+      const payments =
+        await financeService.getClientPayments(
+          req.params.clientId
+        );
 
-      await AuditLog.create({
-        action: 'delete',
-        entity_type: 'payment',
-        entity_id: req.params.id,
-        user_id: req.user.id,
-        description: `Payment ${payment.id} deleted`,
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
-      });
+      return successResponse(
+        res,
+        payments,
+        'Client payments fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get client payments error:',
+        error
+      );
 
-      return successResponse(res, null, 'Payment deleted successfully');
-    } catch (error) {
-      logger.error('Delete payment error:', error);
-      return errorResponse(res, error.message, 400);
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  async getClientPayments(req, res) {
+  // ====================================================
+  // CASE PAYMENTS
+  // ====================================================
+
+  async getCasePayments(
+    req,
+    res
+  ) {
     try {
-      const payments = await financeService.getClientPayments(req.params.clientId);
-      return successResponse(res, payments, 'Client payments fetched successfully');
-    } catch (error) {
-      logger.error('Get client payments error:', error);
-      return errorResponse(res, error.message, 400);
+      const payments =
+        await financeService.getCasePayments(
+          req.params.caseId
+        );
+
+      return successResponse(
+        res,
+        payments,
+        'Case payments fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get case payments error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  async getCasePayments(req, res) {
+  // ====================================================
+  // FINANCIAL SUMMARY
+  // ====================================================
+
+  async getFinancialSummary(
+    req,
+    res
+  ) {
     try {
-      const payments = await financeService.getCasePayments(req.params.caseId);
-      return successResponse(res, payments, 'Case payments fetched successfully');
-    } catch (error) {
-      logger.error('Get case payments error:', error);
-      return errorResponse(res, error.message, 400);
+      const summary =
+        await financeService.getFinancialSummary();
+
+      return successResponse(
+        res,
+        summary,
+        'Financial summary fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get financial summary error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  async getFinancialSummary(req, res) {
+  // ====================================================
+  // MONTHLY REVENUE
+  // ====================================================
+
+  async getMonthlyRevenue(
+    req,
+    res
+  ) {
     try {
-      const summary = await financeService.getFinancialSummary();
-      return successResponse(res, summary, 'Financial summary fetched successfully');
-    } catch (error) {
-      logger.error('Get financial summary error:', error);
-      return errorResponse(res, error.message, 400);
+      const {
+        year,
+      } =
+        req.query;
+
+      const revenue =
+        await financeService.getMonthlyRevenue(
+          year
+        );
+
+      return successResponse(
+        res,
+        revenue,
+        'Monthly revenue fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get monthly revenue error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  async getMonthlyRevenue(req, res) {
+  // ====================================================
+  // CLIENT FINANCIAL SUMMARY
+  // ====================================================
+
+  async getClientFinancialSummary(
+    req,
+    res
+  ) {
     try {
-      const { year } = req.query;
-      const revenue = await financeService.getMonthlyRevenue(year);
-      return successResponse(res, revenue, 'Monthly revenue fetched successfully');
-    } catch (error) {
-      logger.error('Get monthly revenue error:', error);
-      return errorResponse(res, error.message, 400);
+      const summary =
+        await financeService.getClientFinancialSummary(
+          req.params.clientId
+        );
+
+      return successResponse(
+        res,
+        summary,
+        'Client financial summary fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get client financial summary error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  async getClientFinancialSummary(req, res) {
+  // ====================================================
+  // OUTSTANDING PAYMENTS
+  // ====================================================
+
+  async getOutstandingPayments(
+    req,
+    res
+  ) {
     try {
-      const summary = await financeService.getClientFinancialSummary(req.params.clientId);
-      return successResponse(res, summary, 'Client financial summary fetched successfully');
-    } catch (error) {
-      logger.error('Get client financial summary error:', error);
-      return errorResponse(res, error.message, 400);
+      const payments =
+        await financeService.getOutstandingPayments();
+
+      return successResponse(
+        res,
+        payments,
+        'Outstanding payments fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get outstanding payments error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  async getOutstandingPayments(req, res) {
-    try {
-      const payments = await financeService.getOutstandingPayments();
-      return successResponse(res, payments, 'Outstanding payments fetched successfully');
-    } catch (error) {
-      logger.error('Get outstanding payments error:', error);
-      return errorResponse(res, error.message, 400);
-    }
-  },
+  // ====================================================
+  // PAYMENT STATISTICS
+  // ====================================================
 
-  async getPaymentStatistics(req, res) {
+  async getPaymentStatistics(
+    req,
+    res
+  ) {
     try {
-      const stats = await financeService.getPaymentStatistics();
-      return successResponse(res, stats, 'Payment statistics fetched successfully');
-    } catch (error) {
-      logger.error('Get payment statistics error:', error);
-      return errorResponse(res, error.message, 400);
+      const stats =
+        await financeService.getPaymentStatistics();
+
+      return successResponse(
+        res,
+        stats,
+        'Payment statistics fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get payment statistics error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 };

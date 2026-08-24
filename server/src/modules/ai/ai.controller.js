@@ -31,11 +31,23 @@ const parseBoolean = (
   );
 };
 
-const getRequestContext = (req) => ({
-  userId: req.user?.id || null,
-  ipAddress: req.ip || null,
+const getRequestContext = (
+  req
+) => ({
+  userId:
+    req.user?.id ||
+    null,
+
+  ipAddress:
+    req.realClientIp ||
+    req.ip ||
+    null,
+
   userAgent:
-    req.get('user-agent') || null,
+    req.get(
+      'user-agent'
+    ) ||
+    null,
 });
 
 const createAuditLogSafely = async ({

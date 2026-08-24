@@ -30,6 +30,10 @@ import {
   getPaginationData,
 } from '../../utils/paginate.js';
 
+import {
+  logger,
+} from '../../config/logger.js';
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -106,7 +110,8 @@ const sanitizePermissionOverrides = (
     return {};
   }
 
-  const sanitized = {};
+  const sanitized =
+    {};
 
   for (
     const [
@@ -133,7 +138,8 @@ const sanitizePermissionOverrides = (
 
     sanitized[
       permission
-    ] = enabled;
+    ] =
+      enabled;
   }
 
   return sanitized;
@@ -184,6 +190,16 @@ const buildPermissionPayload = (
   };
 };
 
+const getAuditIp = (
+  req
+) => {
+  return (
+    req.realClientIp ||
+    req.ip ||
+    null
+  );
+};
+
 const createAuditLog =
   async ({
     req,
@@ -207,16 +223,21 @@ const createAuditLog =
         description,
 
         ip_address:
-          req.ip,
+          getAuditIp(
+            req
+          ),
 
         user_agent:
           req.headers[
             'user-agent'
-          ],
+          ] ||
+          null,
       });
-    } catch (error) {
-      console.error(
-        '❌ Audit log error:',
+    } catch (
+      error
+    ) {
+      logger.error(
+        'User audit log error:',
         error
       );
     }
@@ -242,11 +263,15 @@ export const userController = {
         role,
         search,
         is_active,
-      } = req.query;
+      } =
+        req.query;
 
-      const where = {};
+      const where =
+        {};
 
-      if (role) {
+      if (
+        role
+      ) {
         if (
           !VALID_ROLES.has(
             role
@@ -270,7 +295,8 @@ export const userController = {
         where.is_active =
           String(
             is_active
-          ) === 'true';
+          ) ===
+          'true';
       }
 
       if (
@@ -288,12 +314,14 @@ export const userController = {
                 `%${value}%`,
             },
           },
+
           {
             last_name: {
               [Op.iLike]:
                 `%${value}%`,
             },
           },
+
           {
             email: {
               [Op.iLike]:
@@ -350,9 +378,11 @@ export const userController = {
         pagination,
         'Kullanıcılar getirildi'
       );
-    } catch (error) {
-      console.error(
-        '❌ User findAll error:',
+    } catch (
+      error
+    ) {
+      logger.error(
+        'User findAll error:',
         error
       );
 
@@ -389,7 +419,9 @@ export const userController = {
           }
         );
 
-      if (!user) {
+      if (
+        !user
+      ) {
         return errorResponse(
           res,
           'Kullanıcı bulunamadı',
@@ -402,9 +434,11 @@ export const userController = {
         user,
         'Kullanıcı getirildi'
       );
-    } catch (error) {
-      console.error(
-        '❌ User findOne error:',
+    } catch (
+      error
+    ) {
+      logger.error(
+        'User findOne error:',
         error
       );
 
@@ -436,7 +470,8 @@ export const userController = {
         bio,
         is_active = true,
         permissions = {},
-      } = req.body;
+      } =
+        req.body;
 
       const cleanFirstName =
         String(
@@ -497,7 +532,8 @@ export const userController = {
 
       if (
         !password ||
-        password.length < 8
+        password.length <
+          8
       ) {
         return errorResponse(
           res,
@@ -598,9 +634,11 @@ export const userController = {
         'Kullanıcı başarıyla oluşturuldu',
         201
       );
-    } catch (error) {
-      console.error(
-        '❌ User create error:',
+    } catch (
+      error
+    ) {
+      logger.error(
+        'User create error:',
         error
       );
 
@@ -637,7 +675,9 @@ export const userController = {
           req.params.id
         );
 
-      if (!user) {
+      if (
+        !user
+      ) {
         return errorResponse(
           res,
           'Kullanıcı bulunamadı',
@@ -652,7 +692,8 @@ export const userController = {
         phone,
         title,
         bio,
-      } = req.body;
+      } =
+        req.body;
 
       const updateData =
         {};
@@ -666,7 +707,9 @@ export const userController = {
             first_name
           ).trim();
 
-        if (!value) {
+        if (
+          !value
+        ) {
           return errorResponse(
             res,
             'Ad boş olamaz',
@@ -687,7 +730,9 @@ export const userController = {
             last_name
           ).trim();
 
-        if (!value) {
+        if (
+          !value
+        ) {
           return errorResponse(
             res,
             'Soyad boş olamaz',
@@ -798,9 +843,11 @@ export const userController = {
         ),
         'Kullanıcı başarıyla güncellendi'
       );
-    } catch (error) {
-      console.error(
-        '❌ User update error:',
+    } catch (
+      error
+    ) {
+      logger.error(
+        'User update error:',
         error
       );
 
@@ -837,7 +884,9 @@ export const userController = {
           req.params.id
         );
 
-      if (!user) {
+      if (
+        !user
+      ) {
         return errorResponse(
           res,
           'Kullanıcı bulunamadı',
@@ -872,7 +921,8 @@ export const userController = {
           });
 
         if (
-          adminCount <= 1
+          adminCount <=
+          1
         ) {
           return errorResponse(
             res,
@@ -908,9 +958,11 @@ export const userController = {
         null,
         'Kullanıcı başarıyla silindi'
       );
-    } catch (error) {
-      console.error(
-        '❌ User delete error:',
+    } catch (
+      error
+    ) {
+      logger.error(
+        'User delete error:',
         error
       );
 
@@ -936,7 +988,9 @@ export const userController = {
           req.params.id
         );
 
-      if (!user) {
+      if (
+        !user
+      ) {
         return errorResponse(
           res,
           'Kullanıcı bulunamadı',
@@ -976,7 +1030,8 @@ export const userController = {
           });
 
         if (
-          adminCount <= 1
+          adminCount <=
+          1
         ) {
           return errorResponse(
             res,
@@ -1024,9 +1079,11 @@ export const userController = {
             : 'pasif'
         } yapıldı`
       );
-    } catch (error) {
-      console.error(
-        '❌ User toggleActive error:',
+    } catch (
+      error
+    ) {
+      logger.error(
+        'User toggleActive error:',
         error
       );
 
@@ -1049,14 +1106,17 @@ export const userController = {
     try {
       const {
         role,
-      } = req.body;
+      } =
+        req.body;
 
       const user =
         await User.findByPk(
           req.params.id
         );
 
-      if (!user) {
+      if (
+        !user
+      ) {
         return errorResponse(
           res,
           'Kullanıcı bulunamadı',
@@ -1119,7 +1179,8 @@ export const userController = {
           });
 
         if (
-          adminCount <= 1
+          adminCount <=
+          1
         ) {
           return errorResponse(
             res,
@@ -1159,9 +1220,11 @@ export const userController = {
         ),
         'Kullanıcı rolü başarıyla değiştirildi'
       );
-    } catch (error) {
-      console.error(
-        '❌ User changeRole error:',
+    } catch (
+      error
+    ) {
+      logger.error(
+        'User changeRole error:',
         error
       );
 
@@ -1187,7 +1250,9 @@ export const userController = {
           req.params.id
         );
 
-      if (!user) {
+      if (
+        !user
+      ) {
         return errorResponse(
           res,
           'Kullanıcı bulunamadı',
@@ -1202,9 +1267,11 @@ export const userController = {
         ),
         'Kullanıcı yetkileri getirildi'
       );
-    } catch (error) {
-      console.error(
-        '❌ User getPermissions error:',
+    } catch (
+      error
+    ) {
+      logger.error(
+        'User getPermissions error:',
         error
       );
 
@@ -1218,14 +1285,6 @@ export const userController = {
 
   // ====================================================
   // UPDATE PERMISSIONS
-  //
-  // Body:
-  // {
-  //   permissions: {
-  //     delete_documents: true,
-  //     edit_payments: false
-  //   }
-  // }
   // ====================================================
 
   async updatePermissions(
@@ -1238,7 +1297,9 @@ export const userController = {
           req.params.id
         );
 
-      if (!user) {
+      if (
+        !user
+      ) {
         return errorResponse(
           res,
           'Kullanıcı bulunamadı',
@@ -1259,7 +1320,8 @@ export const userController = {
 
       const {
         permissions,
-      } = req.body;
+      } =
+        req.body;
 
       if (
         !permissions ||
@@ -1280,7 +1342,9 @@ export const userController = {
         Object.keys(
           permissions
         ).filter(
-          (permission) =>
+          (
+            permission
+          ) =>
             !isValidPermission(
               permission
             )
@@ -1303,7 +1367,12 @@ export const userController = {
         Object.entries(
           permissions
         ).filter(
-          ([, value]) =>
+          (
+            [
+              ,
+              value,
+            ]
+          ) =>
             typeof value !==
             'boolean'
         );
@@ -1328,10 +1397,6 @@ export const userController = {
         permissions:
           safePermissions,
 
-        /*
-         * Yetki değiştiğinde refresh oturumunu iptal ediyoruz.
-         * Kullanıcı bir sonraki login'de temiz oturum alır.
-         */
         refresh_token:
           null,
       });
@@ -1356,9 +1421,11 @@ export const userController = {
         ),
         'Kullanıcı yetkileri başarıyla güncellendi'
       );
-    } catch (error) {
-      console.error(
-        '❌ User updatePermissions error:',
+    } catch (
+      error
+    ) {
+      logger.error(
+        'User updatePermissions error:',
         error
       );
 
@@ -1372,8 +1439,6 @@ export const userController = {
 
   // ====================================================
   // RESET PERMISSIONS
-  //
-  // Kullanıcı tekrar rol varsayılanlarına döner.
   // ====================================================
 
   async resetPermissions(
@@ -1386,7 +1451,9 @@ export const userController = {
           req.params.id
         );
 
-      if (!user) {
+      if (
+        !user
+      ) {
         return errorResponse(
           res,
           'Kullanıcı bulunamadı',
@@ -1433,9 +1500,11 @@ export const userController = {
         ),
         'Kullanıcı rol varsayılanlarına döndürüldü'
       );
-    } catch (error) {
-      console.error(
-        '❌ User resetPermissions error:',
+    } catch (
+      error
+    ) {
+      logger.error(
+        'User resetPermissions error:',
         error
       );
 
@@ -1449,11 +1518,6 @@ export const userController = {
 
   // ====================================================
   // APPLY PERMISSION PRESET
-  //
-  // Body:
-  // {
-  //   preset: "SENIOR_LAWYER"
-  // }
   // ====================================================
 
   async applyPermissionPreset(
@@ -1466,7 +1530,9 @@ export const userController = {
           req.params.id
         );
 
-      if (!user) {
+      if (
+        !user
+      ) {
         return errorResponse(
           res,
           'Kullanıcı bulunamadı',
@@ -1487,7 +1553,8 @@ export const userController = {
 
       const {
         preset,
-      } = req.body;
+      } =
+        req.body;
 
       const presetData =
         PERMISSION_PRESETS[
@@ -1560,9 +1627,11 @@ export const userController = {
         },
         'Yetki şablonu başarıyla uygulandı'
       );
-    } catch (error) {
-      console.error(
-        '❌ User applyPermissionPreset error:',
+    } catch (
+      error
+    ) {
+      logger.error(
+        'User applyPermissionPreset error:',
         error
       );
 

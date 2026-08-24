@@ -142,6 +142,21 @@ app.disable(
 // TRUST PROXY
 // ======================================================
 
+/*
+ * Production mimarisinde uygulamanın önünde
+ * tek güvenilir reverse proxy bulunduğu varsayılır.
+ *
+ * Örnek:
+ *
+ * Client
+ *   ->
+ * Reverse Proxy
+ *   ->
+ * Express
+ *
+ * Express bu ayar sayesinde req.ip değerini
+ * proxy zincirini dikkate alarak çözer.
+ */
 app.set(
   'trust proxy',
   1
@@ -162,11 +177,36 @@ const normalizeIp = (
     return null;
   }
 
-  const candidate =
+  let candidate =
     value.trim();
 
   if (
-    !candidate ||
+    !candidate
+  ) {
+    return null;
+  }
+
+  /*
+   * Node bazı IPv4 adreslerini şu formatta
+   * döndürebilir:
+   *
+   * ::ffff:82.222.98.50
+   *
+   * Audit logda daha temiz görünmesi için
+   * IPv4 kısmını ayırıyoruz.
+   */
+  if (
+    candidate.startsWith(
+      '::ffff:'
+    )
+  ) {
+    candidate =
+      candidate.slice(
+        7
+      );
+  }
+
+  if (
     !isIP(
       candidate
     )
@@ -177,68 +217,16 @@ const normalizeIp = (
   return candidate;
 };
 
-const getForwardedClientIp = (
-  req
-) => {
-  const forwardedFor =
-    req.headers[
-      'x-forwarded-for'
-    ];
-
-  if (
-    typeof forwardedFor ===
-    'string'
-  ) {
-    const firstIp =
-      forwardedFor
-        .split(',')[0]
-        ?.trim();
-
-    return normalizeIp(
-      firstIp
-    );
-  }
-
-  if (
-    Array.isArray(
-      forwardedFor
-    ) &&
-    forwardedFor.length >
-      0
-  ) {
-    const firstIp =
-      String(
-        forwardedFor[0]
-      )
-        .split(',')[0]
-        ?.trim();
-
-    return normalizeIp(
-      firstIp
-    );
-  }
-
-  return null;
-};
-
 const getRealClientIp = (
   req
 ) => {
-  if (
-    isProduction
-  ) {
-    const forwardedIp =
-      getForwardedClientIp(
-        req
-      );
-
-    if (
-      forwardedIp
-    ) {
-      return forwardedIp;
-    }
-  }
-
+  /*
+   * Ana kaynak req.ip.
+   *
+   * X-Forwarded-For header'ını manuel okumuyoruz.
+   * Express, trust proxy ayarına göre güvenilir
+   * istemci IP'sini kendisi hesaplar.
+   */
   const expressIp =
     normalizeIp(
       req.ip
@@ -250,6 +238,9 @@ const getRealClientIp = (
     return expressIp;
   }
 
+  /*
+   * Proxy olmayan/local ortamlar için fallback.
+   */
   const socketIp =
     normalizeIp(
       req.socket
@@ -324,7 +315,9 @@ const corsOptions = {
     origin,
     callback
   ) {
-    if (!origin) {
+    if (
+      !origin
+    ) {
       return callback(
         null,
         true
@@ -417,10 +410,8 @@ app.use(
  * olarak tutulduğu için browser cross-site
  * cookie gönderebilir.
  *
- * Bu nedenle kritik auth endpointlerinde ayrıca
- * exact Origin allowlist kontrolü yapıyoruz.
- *
- * CORS bunun yerine geçmez; ikisi birlikte çalışır.
+ * Kritik auth endpointlerinde exact Origin
+ * allowlist kontrolü uygulanır.
  */
 
 // Login-CSRF koruması

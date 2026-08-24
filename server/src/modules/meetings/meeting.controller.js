@@ -129,8 +129,9 @@ const createAuditLog = async ({
       description,
 
       ip_address:
-        req.realClientIp ||
-        req.ip,
+  req.realClientIp ||
+  req.ip ||
+  null,
 
       user_agent:
         req.headers[
