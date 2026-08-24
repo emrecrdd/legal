@@ -99,12 +99,6 @@ const requireActor = (
       actor
     );
 
-  /*
-   * FAIL CLOSED
-   *
-   * Actor olmadan unrestricted client query
-   * çalıştırılmaz.
-   */
   if (
     !actorId
   ) {
@@ -257,28 +251,11 @@ const buildClientAccessWhere = (
     return {};
   }
 
-  /*
-   * Actor ID authentication'dan geliyor.
-   *
-   * Yine de SQL literal içine doğrudan yazmıyoruz;
-   * sequelize.escape kullanıyoruz.
-   */
   const escapedActorId =
     sequelize.escape(
       actorId
     );
 
-  /*
-   * VIEW_ALL_CASES sahibi:
-   *
-   * - herhangi bir aktif davaya bağlı client
-   * - kendi oluşturduğu bağımsız client
-   *
-   * Normal kullanıcı:
-   *
-   * - kendi oluşturduğu client
-   * - oluşturduğu/atandığı davaya bağlı client
-   */
   const caseAccessPredicate =
     canViewAllCases(
       actor
@@ -355,10 +332,6 @@ const assertClientAccess =
           options.transaction,
       });
 
-    /*
-     * Yetkisiz kayıt ile gerçekten olmayan kayıt
-     * arasında ayrım yapılmaz.
-     */
     if (
       !client
     ) {
@@ -444,11 +417,6 @@ const buildClientChildWhere = ({
       actor
     );
 
-  /*
-   * Admin veya VIEW_ALL_CASES sahibi actor,
-   * erişebildiği client'ın tüm child kayıtlarını
-   * görebilir.
-   */
   if (
     canViewAllCases(
       actor
@@ -463,10 +431,6 @@ const buildClientChildWhere = ({
   const scopes =
     [];
 
-  /*
-   * Case-linked payment/note yalnız erişilebilir
-   * case'lere aitse görünür.
-   */
   if (
     accessibleCaseIds.length >
     0
@@ -479,10 +443,6 @@ const buildClientChildWhere = ({
     });
   }
 
-  /*
-   * Case'e bağlı olmayan payment/note kayıtlarını
-   * yalnız client'ı oluşturan kişi görebilir.
-   */
   if (
     client.created_by ===
     actorId
@@ -497,10 +457,6 @@ const buildClientChildWhere = ({
     scopes.length ===
     0
   ) {
-    /*
-     * SQL seviyesinde hiçbir kayıt döndürmeyecek
-     * fail-closed condition.
-     */
     return {
       client_id:
         client.id,
@@ -713,18 +669,10 @@ const prepareClientData = (
     ...data,
   };
 
-  // ====================================================
-  // SERVER CONTROLLED / IMMUTABLE
-  // ====================================================
-
   delete prepared.id;
   delete prepared.created_at;
   delete prepared.updated_at;
   delete prepared.deleted_at;
-
-  // ====================================================
-  // NAME
-  // ====================================================
 
   if (
     Object.prototype.hasOwnProperty.call(
@@ -739,10 +687,6 @@ const prepareClientData = (
       ).trim();
   }
 
-  // ====================================================
-  // IDENTIFICATION
-  // ====================================================
-
   if (
     Object.prototype.hasOwnProperty.call(
       prepared,
@@ -754,10 +698,6 @@ const prepareClientData = (
         prepared.identification_number
       );
   }
-
-  // ====================================================
-  // EMAIL
-  // ====================================================
 
   if (
     Object.prototype.hasOwnProperty.call(
@@ -776,10 +716,6 @@ const prepareClientData = (
         : null;
   }
 
-  // ====================================================
-  // PHONE
-  // ====================================================
-
   if (
     Object.prototype.hasOwnProperty.call(
       prepared,
@@ -791,10 +727,6 @@ const prepareClientData = (
         prepared.phone
       );
   }
-
-  // ====================================================
-  // ADDRESS
-  // ====================================================
 
   if (
     Object.prototype.hasOwnProperty.call(
@@ -844,10 +776,6 @@ const prepareClientData = (
       );
   }
 
-  // ====================================================
-  // NOTES
-  // ====================================================
-
   if (
     Object.prototype.hasOwnProperty.call(
       prepared,
@@ -859,10 +787,6 @@ const prepareClientData = (
         prepared.notes
       );
   }
-
-  // ====================================================
-  // TAGS
-  // ====================================================
 
   if (
     Object.prototype.hasOwnProperty.call(
@@ -877,6 +801,87 @@ const prepareClientData = (
   }
 
   return prepared;
+};
+
+// ======================================================
+// TCKN VALIDATION
+// ======================================================
+
+const isValidTCKN = (
+  value
+) => {
+  const tckn =
+    String(
+      value || ''
+    ).trim();
+
+  if (
+    !/^[1-9]\d{10}$/.test(
+      tckn
+    )
+  ) {
+    return false;
+  }
+
+  const digits =
+    tckn
+      .split('')
+      .map(Number);
+
+  if (
+    digits[10] % 2 !==
+    0
+  ) {
+    return false;
+  }
+
+  const oddSum =
+    digits[0] +
+    digits[2] +
+    digits[4] +
+    digits[6] +
+    digits[8];
+
+  const evenSum =
+    digits[1] +
+    digits[3] +
+    digits[5] +
+    digits[7];
+
+  const digit10 =
+    (
+      (
+        oddSum * 7
+      ) -
+      evenSum
+    ) % 10;
+
+  if (
+    digit10 !==
+    digits[9]
+  ) {
+    return false;
+  }
+
+  const digit11 =
+    digits
+      .slice(
+        0,
+        10
+      )
+      .reduce(
+        (
+          sum,
+          digit
+        ) =>
+          sum + digit,
+        0
+      ) % 10;
+
+  return (
+    digit11 ===
+    digits[10]
+  );
 };
 
 // ======================================================
@@ -975,7 +980,7 @@ const validateClientData = (
     const identificationNumber =
       String(
         data.identification_number
-      );
+      ).trim();
 
     if (
       !/^\d+$/.test(
@@ -990,26 +995,71 @@ const validateClientData = (
     const clientType =
       data.client_type;
 
-    if (
-      clientType ===
-        'corporate' &&
-      identificationNumber.length !==
-        10
-    ) {
-      throw new Error(
-        'VKN 10 haneli olmalıdır'
-      );
-    }
+    // ==================================================
+    // VKN
+    // ==================================================
 
     if (
       clientType ===
-        'individual' &&
-      identificationNumber.length !==
-        11
+      'corporate'
     ) {
-      throw new Error(
-        'TCKNO 11 haneli olmalıdır'
-      );
+      if (
+        identificationNumber.length !==
+        10
+      ) {
+        throw new Error(
+          'VKN 10 haneli olmalıdır'
+        );
+      }
+    }
+
+    // ==================================================
+    // TCKN
+    // ==================================================
+
+    if (
+      clientType ===
+      'individual'
+    ) {
+      if (
+        identificationNumber.length !==
+        11
+      ) {
+        throw new Error(
+          'TCKNO 11 haneli olmalıdır'
+        );
+      }
+
+      if (
+        identificationNumber.startsWith(
+          '0'
+        )
+      ) {
+        throw new Error(
+          'TCKNO 0 ile başlayamaz'
+        );
+      }
+
+      if (
+        Number(
+          identificationNumber[10]
+        ) % 2 !==
+        0
+      ) {
+        throw new Error(
+          'Geçersiz T.C. Kimlik Numarası'
+        );
+      }
+
+      if (
+        !isValidTCKN(
+          identificationNumber
+        )
+      ) {
+        throw new Error(
+          'Geçerli bir T.C. Kimlik Numarası giriniz'
+        );
+      }
     }
 
     if (
@@ -1034,16 +1084,182 @@ const validateClientData = (
   if (
     data.email
   ) {
+    const email =
+      String(
+        data.email
+      ).trim();
+
     const emailRegex =
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (
       !emailRegex.test(
-        data.email
+        email
       )
     ) {
       throw new Error(
         'Geçerli bir e-posta adresi girilmelidir'
+      );
+    }
+
+    if (
+      email.length >
+      254
+    ) {
+      throw new Error(
+        'E-posta adresi çok uzun'
+      );
+    }
+  }
+
+  // ====================================================
+  // PHONE
+  // ====================================================
+
+  if (
+    data.phone
+  ) {
+    const phoneDigits =
+      String(
+        data.phone
+      ).replace(
+        /\D/g,
+        ''
+      );
+
+    if (
+      phoneDigits.length <
+        10 ||
+      phoneDigits.length >
+        15
+    ) {
+      throw new Error(
+        'Geçerli bir telefon numarası giriniz'
+      );
+    }
+  }
+
+  // ====================================================
+  // POSTAL CODE
+  // ====================================================
+
+  if (
+    data.postal_code
+  ) {
+    const postalCode =
+      String(
+        data.postal_code
+      ).trim();
+
+    if (
+      !/^\d{5}$/.test(
+        postalCode
+      )
+    ) {
+      throw new Error(
+        'Posta kodu 5 haneli olmalıdır'
+      );
+    }
+  }
+
+  // ====================================================
+  // CITY
+  // ====================================================
+
+  if (
+    data.city &&
+    String(
+      data.city
+    ).length >
+      100
+  ) {
+    throw new Error(
+      'Şehir bilgisi en fazla 100 karakter olabilir'
+    );
+  }
+
+  // ====================================================
+  // DISTRICT
+  // ====================================================
+
+  if (
+    data.district &&
+    String(
+      data.district
+    ).length >
+      100
+  ) {
+    throw new Error(
+      'İlçe bilgisi en fazla 100 karakter olabilir'
+    );
+  }
+
+  // ====================================================
+  // ADDRESS
+  // ====================================================
+
+  if (
+    data.address &&
+    String(
+      data.address
+    ).length >
+      1000
+  ) {
+    throw new Error(
+      'Adres en fazla 1000 karakter olabilir'
+    );
+  }
+
+  // ====================================================
+  // NOTES
+  // ====================================================
+
+  if (
+    data.notes &&
+    String(
+      data.notes
+    ).length >
+      5000
+  ) {
+    throw new Error(
+      'Genel not en fazla 5000 karakter olabilir'
+    );
+  }
+
+  // ====================================================
+  // TAGS
+  // ====================================================
+
+  if (
+    Array.isArray(
+      data.tags
+    )
+  ) {
+    if (
+      data.tags.length >
+      30
+    ) {
+      throw new Error(
+        'En fazla 30 etiket eklenebilir'
+      );
+    }
+
+    const invalidTag =
+      data.tags.find(
+        (
+          tag
+        ) =>
+          String(
+            tag
+          ).length >
+          50
+      );
+
+    if (
+      invalidTag
+    ) {
+      throw new Error(
+        'Etiketler en fazla 50 karakter olabilir'
       );
     }
   }
@@ -1108,11 +1324,6 @@ export const clientService = {
           data
         );
 
-      /*
-       * Mass-assignment engeli.
-       *
-       * created_by body'den belirlenemez.
-       */
       preparedData.created_by =
         actorId;
 
@@ -1157,10 +1368,6 @@ export const clientService = {
 
     const filters = {};
 
-    // ==================================================
-    // SEARCH
-    // ==================================================
-
     const normalizedSearch =
       normalizeSearch(
         search
@@ -1200,10 +1407,6 @@ export const clientService = {
       ];
     }
 
-    // ==================================================
-    // STATUS
-    // ==================================================
-
     if (
       status &&
       CLIENT_STATUSES.has(
@@ -1214,10 +1417,6 @@ export const clientService = {
         status;
     }
 
-    // ==================================================
-    // CLIENT TYPE
-    // ==================================================
-
     if (
       client_type &&
       CLIENT_TYPES.has(
@@ -1227,10 +1426,6 @@ export const clientService = {
       filters.client_type =
         client_type;
     }
-
-    // ==================================================
-    // CITY
-    // ==================================================
 
     const normalizedCity =
       normalizeSearch(
@@ -1245,10 +1440,6 @@ export const clientService = {
           `%${normalizedCity}%`,
       };
     }
-
-    // ==================================================
-    // TAGS
-    // ==================================================
 
     const normalizedTags =
       normalizeTags(
@@ -1265,10 +1456,6 @@ export const clientService = {
       };
     }
 
-    // ==================================================
-    // BOLA ACCESS SCOPE
-    // ==================================================
-
     const where =
       combineWhere(
         filters,
@@ -1276,10 +1463,6 @@ export const clientService = {
           actor
         )
       );
-
-    // ==================================================
-    // PAGINATED CLIENT QUERY
-    // ==================================================
 
     const query =
       paginate(
@@ -1329,10 +1512,6 @@ export const clientService = {
         ],
       });
 
-    // ==================================================
-    // ACCESSIBLE CASE COUNTS
-    // ==================================================
-
     const clientIds =
       rows.map(
         (
@@ -1358,13 +1537,6 @@ export const clientService = {
           actor
         );
 
-      /*
-       * Eskiden burada client'a bağlı TÜM davalar
-       * sayılıyordu.
-       *
-       * Artık normal kullanıcı yalnız erişebildiği
-       * davaların sayısını görür.
-       */
       const caseCounts =
         await sequelize.query(
           `
@@ -1417,10 +1589,6 @@ export const clientService = {
         }
       );
     }
-
-    // ==================================================
-    // RESPONSE
-    // ==================================================
 
     const resultRows =
       rows.map(
@@ -1533,10 +1701,6 @@ export const clientService = {
       notes,
     ] =
       await Promise.all([
-        // ================================================
-        // CASES
-        // ================================================
-
         Case.findAll({
           where:
             caseWhere,
@@ -1602,10 +1766,6 @@ export const clientService = {
           ],
         }),
 
-        // ================================================
-        // PAYMENTS
-        // ================================================
-
         Payment.findAll({
           where:
             childWhere,
@@ -1622,10 +1782,6 @@ export const clientService = {
             ],
           ],
         }),
-
-        // ================================================
-        // NOTES
-        // ================================================
 
         Note.findAll({
           where:
@@ -1703,9 +1859,6 @@ export const clientService = {
           data
         );
 
-      /*
-       * Server controlled.
-       */
       delete preparedData.created_by;
 
       const validationData = {
@@ -1728,10 +1881,6 @@ export const clientService = {
         preparedData
       );
 
-      /*
-       * Response da yeniden authorization üzerinden
-       * geçer.
-       */
       return this.findOne(
         id,
         actor
@@ -1759,9 +1908,6 @@ export const clientService = {
         actor
       );
 
-    /*
-     * paranoid:true
-     */
     await client.destroy();
 
     return client;
@@ -1854,10 +2000,6 @@ export const clientService = {
         }),
       ]);
 
-    // ==================================================
-    // ACCESSIBLE CASE IDS
-    // ==================================================
-
     const accessibleCases =
       await Case.findAll({
         where:
@@ -1883,10 +2025,6 @@ export const clientService = {
 
     const totalCases =
       accessibleCaseIds.length;
-
-    // ==================================================
-    // ACCESSIBLE CLIENT IDS
-    // ==================================================
 
     const accessibleClients =
       await Client.findAll({
@@ -1948,10 +2086,6 @@ export const clientService = {
         });
       }
 
-      /*
-       * Case'siz payment yalnız actor'ın kendi
-       * oluşturduğu client için sayılır.
-       */
       if (
         ownClientIds.length >
         0

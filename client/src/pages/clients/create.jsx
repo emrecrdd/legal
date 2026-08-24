@@ -101,6 +101,70 @@ const validateEmail = (
   );
 };
 
+const validateTCKN = (
+  value
+) => {
+  if (!/^[1-9]\d{10}$/.test(value)) {
+    return false;
+  }
+
+  const digits =
+    value
+      .split('')
+      .map(Number);
+
+  const oddSum =
+    digits[0] +
+    digits[2] +
+    digits[4] +
+    digits[6] +
+    digits[8];
+
+  const evenSum =
+    digits[1] +
+    digits[3] +
+    digits[5] +
+    digits[7];
+
+  const tenthDigit =
+    (((oddSum * 7) - evenSum) % 10 + 10) % 10;
+
+  if (tenthDigit !== digits[9]) {
+    return false;
+  }
+
+  const eleventhDigit =
+    digits
+      .slice(0, 10)
+      .reduce(
+        (sum, digit) => sum + digit,
+        0
+      ) % 10;
+
+  return eleventhDigit === digits[10];
+};
+
+const sanitizeDigits = (
+  value,
+  maxLength
+) => {
+  return String(value ?? '')
+    .replace(/\D/g, '')
+    .slice(0, maxLength);
+};
+
+const sanitizePhoneInput = (
+  value
+) => {
+  const raw = String(value ?? '');
+  const hasLeadingPlus = raw.trim().startsWith('+');
+  const digits = raw.replace(/\D/g, '').slice(0, 12);
+
+  return hasLeadingPlus
+    ? `+${digits}`
+    : digits;
+};
+
 const buildPayload = (
   formData
 ) => {
@@ -227,11 +291,39 @@ const ClientCreate = () => {
     } =
       event.target;
 
+    let nextValue = value;
+
+    if (
+      name ===
+      'identification_number'
+    ) {
+      nextValue = sanitizeDigits(
+        value,
+        isCorporate
+          ? 10
+          : 11
+      );
+    }
+
+    if (name === 'postal_code') {
+      nextValue = sanitizeDigits(
+        value,
+        5
+      );
+    }
+
+    if (name === 'phone') {
+      nextValue =
+        sanitizePhoneInput(
+          value
+        );
+    }
+
     setFormData(
       (current) => ({
         ...current,
         [name]:
-          value,
+          nextValue,
       })
     );
 
@@ -265,6 +357,8 @@ const ClientCreate = () => {
           ...current,
           client_type:
             type,
+          identification_number:
+            '',
         })
       );
 
@@ -337,27 +431,42 @@ const ClientCreate = () => {
       if (
         identificationNumber
       ) {
-        if (
-          !/^\d+$/.test(
+        if (isCorporate) {
+          if (
+            !/^\d{10}$/.test(
+              identificationNumber
+            )
+          ) {
+            nextErrors.identification_number =
+              'Vergi Kimlik Numarası 10 haneli olmalıdır';
+          }
+        } else if (
+          identificationNumber.length !==
+          11
+        ) {
+          nextErrors.identification_number =
+            'T.C. Kimlik Numarası 11 haneli olmalıdır';
+        } else if (
+          identificationNumber[0] ===
+          '0'
+        ) {
+          nextErrors.identification_number =
+            'T.C. Kimlik Numarası 0 ile başlayamaz';
+        } else if (
+          Number(
+            identificationNumber[10]
+          ) % 2 !==
+          0
+        ) {
+          nextErrors.identification_number =
+            'T.C. Kimlik Numarasının son hanesi çift olmalıdır';
+        } else if (
+          !validateTCKN(
             identificationNumber
           )
         ) {
           nextErrors.identification_number =
-            'Kimlik / vergi numarası yalnızca rakamlardan oluşmalıdır';
-        } else if (
-          isCorporate &&
-          identificationNumber.length !==
-            10
-        ) {
-          nextErrors.identification_number =
-            'VKN 10 haneli olmalıdır';
-        } else if (
-          !isCorporate &&
-          identificationNumber.length !==
-            11
-        ) {
-          nextErrors.identification_number =
-            'TCKNO 11 haneli olmalıdır';
+            'Geçerli bir T.C. Kimlik Numarası giriniz';
         }
       }
 
@@ -391,11 +500,12 @@ const ClientCreate = () => {
 
       if (
         formData.postal_code &&
-        formData.postal_code.trim().length >
-          20
+        !/^\d{5}$/.test(
+          formData.postal_code
+        )
       ) {
         nextErrors.postal_code =
-          'Posta kodu en fazla 20 karakter olabilir';
+          'Posta kodu 5 haneli olmalıdır';
       }
 
       setErrors(
@@ -755,7 +865,9 @@ const ClientCreate = () => {
                 createMutation.isPending
               }
               type="tel"
-              placeholder="+90 5XX XXX XX XX"
+              inputMode="tel"
+              maxLength={13}
+              placeholder="+905XXXXXXXXX"
             />
 
             <Input
@@ -852,7 +964,9 @@ const ClientCreate = () => {
               disabled={
                 createMutation.isPending
               }
-              maxLength={20}
+              inputMode="numeric"
+              maxLength={5}
+              placeholder="5 haneli posta kodu"
             />
 
           </div>

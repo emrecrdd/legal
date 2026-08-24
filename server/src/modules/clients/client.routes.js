@@ -13,6 +13,13 @@ import {
   PERMISSION_KEYS,
 } from '../../constants/roles.js';
 
+import validate from '../../middlewares/validate.middleware.js';
+
+import {
+  createClientValidation,
+  updateClientValidation,
+} from './client.validation.js';
+
 const router =
   express.Router();
 
@@ -29,15 +36,20 @@ router.use(
 // ======================================================
 
 // Müvekkil oluştur
+
 router.post(
   '/',
   authorizePermission(
     PERMISSION_KEYS.CREATE_CLIENTS
   ),
+  validate(
+    createClientValidation
+  ),
   clientController.create
 );
 
 // Müvekkilleri listele
+
 router.get(
   '/',
   authorizePermission(
@@ -47,6 +59,7 @@ router.get(
 );
 
 // İstatistikler
+
 router.get(
   '/statistics',
   authorizePermission(
@@ -60,6 +73,7 @@ router.get(
 // ======================================================
 
 // Müvekkilin dava geçmişi
+
 router.get(
   '/:id/cases',
   authorizePermission(
@@ -69,6 +83,7 @@ router.get(
 );
 
 // Müvekkilin ödeme kayıtları
+
 router.get(
   '/:id/payments',
   authorizePermission(
@@ -78,6 +93,7 @@ router.get(
 );
 
 // Müvekkilin notları
+
 router.get(
   '/:id/notes',
   authorizePermission(
@@ -91,6 +107,7 @@ router.get(
 // ======================================================
 
 // Müvekkil detayı
+
 router.get(
   '/:id',
   authorizePermission(
@@ -100,15 +117,20 @@ router.get(
 );
 
 // Müvekkil güncelle
+
 router.patch(
   '/:id',
   authorizePermission(
     PERMISSION_KEYS.EDIT_CLIENTS
   ),
+  validate(
+    updateClientValidation
+  ),
   clientController.update
 );
 
 // Müvekkil sil
+
 router.delete(
   '/:id',
   authorizePermission(

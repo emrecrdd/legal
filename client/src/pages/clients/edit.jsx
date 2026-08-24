@@ -64,14 +64,16 @@ const INITIAL_FORM = {
 // HELPERS
 // ======================================================
 
-const normalizeTags = (value) => {
+const normalizeTags = (
+  value
+) => {
   if (!value) {
     return [];
   }
 
   return [
     ...new Set(
-      value
+      String(value)
         .split(',')
         .map((tag) =>
           tag.trim()
@@ -81,7 +83,9 @@ const normalizeTags = (value) => {
   ];
 };
 
-const normalizePhone = (value) => {
+const normalizePhone = (
+  value
+) => {
   return String(
     value || ''
   )
@@ -89,7 +93,9 @@ const normalizePhone = (value) => {
     .trim();
 };
 
-const normalizeNullable = (value) => {
+const normalizeNullable = (
+  value
+) => {
   const normalized =
     String(
       value ?? ''
@@ -98,7 +104,9 @@ const normalizeNullable = (value) => {
   return normalized || null;
 };
 
-const validateEmail = (value) => {
+const validateEmail = (
+  value
+) => {
   if (!value) {
     return true;
   }
@@ -108,7 +116,86 @@ const validateEmail = (value) => {
   );
 };
 
-const formFromClient = (client) => ({
+const isValidTCKN = (
+  value
+) => {
+  const tckn =
+    String(
+      value || ''
+    ).trim();
+
+  if (
+    !/^[1-9]\d{10}$/.test(
+      tckn
+    )
+  ) {
+    return false;
+  }
+
+  const digits =
+    tckn
+      .split('')
+      .map(Number);
+
+  if (
+    digits[10] % 2 !==
+    0
+  ) {
+    return false;
+  }
+
+  const oddSum =
+    digits[0] +
+    digits[2] +
+    digits[4] +
+    digits[6] +
+    digits[8];
+
+  const evenSum =
+    digits[1] +
+    digits[3] +
+    digits[5] +
+    digits[7];
+
+  const digit10 =
+    (
+      (
+        oddSum * 7
+      ) -
+      evenSum
+    ) % 10;
+
+  if (
+    digit10 !==
+    digits[9]
+  ) {
+    return false;
+  }
+
+  const digit11 =
+    digits
+      .slice(
+        0,
+        10
+      )
+      .reduce(
+        (
+          sum,
+          digit
+        ) =>
+          sum + digit,
+        0
+      ) % 10;
+
+  return (
+    digit11 ===
+    digits[10]
+  );
+};
+
+const formFromClient = (
+  client
+) => ({
   name:
     client?.name || '',
 
@@ -166,7 +253,7 @@ const normalizeFormForComparison = (
         form.identification_number ||
         ''
       ).replace(
-        /\s+/g,
+        /\D/g,
         ''
       )
     ),
@@ -205,7 +292,13 @@ const normalizeFormForComparison = (
 
   postal_code:
     normalizeNullable(
-      form.postal_code
+      String(
+        form.postal_code ||
+        ''
+      ).replace(
+        /\D/g,
+        ''
+      )
     ),
 
   notes:
@@ -404,11 +497,68 @@ const ClientEdit = () => {
     } =
       event.target;
 
+    let nextValue =
+      value;
+
+    if (
+      name ===
+      'identification_number'
+    ) {
+      nextValue =
+        value.replace(
+          /\D/g,
+          ''
+        );
+
+      nextValue =
+        isCorporate
+          ? nextValue.slice(
+              0,
+              10
+            )
+          : nextValue.slice(
+              0,
+              11
+            );
+    }
+
+    if (
+      name ===
+      'postal_code'
+    ) {
+      nextValue =
+        value
+          .replace(
+            /\D/g,
+            ''
+          )
+          .slice(
+            0,
+            5
+          );
+    }
+
+    if (
+      name ===
+      'phone'
+    ) {
+      nextValue =
+        value
+          .replace(
+            /[^\d+\s()-]/g,
+            ''
+          )
+          .slice(
+            0,
+            25
+          );
+    }
+
     setFormData(
       (current) => ({
         ...current,
         [name]:
-          value,
+          nextValue,
       })
     );
 
@@ -438,19 +588,36 @@ const ClientEdit = () => {
         return;
       }
 
+      if (
+        formData.client_type ===
+        type
+      ) {
+        return;
+      }
+
       setFormData(
         (current) => ({
           ...current,
+
           client_type:
             type,
+
+          /*
+           * TCKN ve VKN farklı veri tipleridir.
+           * Tür değişince eski değer tutulmaz.
+           */
+          identification_number:
+            '',
         })
       );
 
       setErrors(
         (current) => ({
           ...current,
+
           client_type:
             '',
+
           identification_number:
             '',
         })
@@ -475,7 +642,7 @@ const ClientEdit = () => {
           ''
         )
           .replace(
-            /\s+/g,
+            /\D/g,
             ''
           )
           .trim();
@@ -493,7 +660,24 @@ const ClientEdit = () => {
           formData.phone
         );
 
-      if (!name) {
+      const postalCode =
+        String(
+          formData.postal_code ||
+          ''
+        )
+          .replace(
+            /\D/g,
+            ''
+          )
+          .trim();
+
+      // ==================================================
+      // NAME
+      // ==================================================
+
+      if (
+        !name
+      ) {
         nextErrors.name =
           isCorporate
             ? 'Şirket / kurum unvanı gereklidir'
@@ -512,34 +696,63 @@ const ClientEdit = () => {
           'Müvekkil adı en fazla 255 karakter olabilir';
       }
 
+      // ==================================================
+      // IDENTIFICATION
+      // ==================================================
+
       if (
         identificationNumber
       ) {
         if (
-          !/^\d+$/.test(
-            identificationNumber
-          )
+          isCorporate
         ) {
-          nextErrors.identification_number =
-            'Kimlik / vergi numarası yalnızca rakamlardan oluşmalıdır';
-        } else if (
-          isCorporate &&
-          identificationNumber.length !==
+          if (
+            identificationNumber.length !==
             10
-        ) {
-          nextErrors.identification_number =
-            'VKN 10 haneli olmalıdır';
-        } else if (
-          !isCorporate &&
-          identificationNumber.length !==
+          ) {
+            nextErrors.identification_number =
+              'Vergi Kimlik Numarası 10 haneli olmalıdır';
+          }
+        } else {
+          if (
+            identificationNumber.length !==
             11
-        ) {
-          nextErrors.identification_number =
-            'TCKNO 11 haneli olmalıdır';
+          ) {
+            nextErrors.identification_number =
+              'T.C. Kimlik Numarası 11 haneli olmalıdır';
+          } else if (
+            identificationNumber.startsWith(
+              '0'
+            )
+          ) {
+            nextErrors.identification_number =
+              'T.C. Kimlik Numarası 0 ile başlayamaz';
+          } else if (
+            Number(
+              identificationNumber[10]
+            ) % 2 !==
+            0
+          ) {
+            nextErrors.identification_number =
+              'T.C. Kimlik Numarasının son hanesi çift olmalıdır';
+          } else if (
+            !isValidTCKN(
+              identificationNumber
+            )
+          ) {
+            nextErrors.identification_number =
+              'Geçerli bir T.C. Kimlik Numarası giriniz';
+          }
         }
       }
 
-      if (phone) {
+      // ==================================================
+      // PHONE
+      // ==================================================
+
+      if (
+        phone
+      ) {
         const digits =
           phone.replace(
             /\D/g,
@@ -557,6 +770,10 @@ const ClientEdit = () => {
         }
       }
 
+      // ==================================================
+      // EMAIL
+      // ==================================================
+
       if (
         email &&
         !validateEmail(
@@ -568,12 +785,100 @@ const ClientEdit = () => {
       }
 
       if (
-        formData.postal_code &&
-        formData.postal_code.trim().length >
-          20
+        email.length >
+        254
+      ) {
+        nextErrors.email =
+          'E-posta adresi çok uzun';
+      }
+
+      // ==================================================
+      // POSTAL CODE
+      // ==================================================
+
+      if (
+        postalCode &&
+        postalCode.length !==
+        5
       ) {
         nextErrors.postal_code =
-          'Posta kodu en fazla 20 karakter olabilir';
+          'Posta kodu 5 haneli olmalıdır';
+      }
+
+      // ==================================================
+      // ADDRESS
+      // ==================================================
+
+      if (
+        formData.address.length >
+        1000
+      ) {
+        nextErrors.address =
+          'Adres en fazla 1000 karakter olabilir';
+      }
+
+      // ==================================================
+      // CITY
+      // ==================================================
+
+      if (
+        formData.city.length >
+        100
+      ) {
+        nextErrors.city =
+          'Şehir en fazla 100 karakter olabilir';
+      }
+
+      // ==================================================
+      // DISTRICT
+      // ==================================================
+
+      if (
+        formData.district.length >
+        100
+      ) {
+        nextErrors.district =
+          'İlçe en fazla 100 karakter olabilir';
+      }
+
+      // ==================================================
+      // NOTES
+      // ==================================================
+
+      if (
+        formData.notes.length >
+        5000
+      ) {
+        nextErrors.notes =
+          'Genel not en fazla 5000 karakter olabilir';
+      }
+
+      // ==================================================
+      // TAGS
+      // ==================================================
+
+      const tags =
+        normalizeTags(
+          formData.tags
+        );
+
+      if (
+        tags.length >
+        30
+      ) {
+        nextErrors.tags =
+          'En fazla 30 etiket eklenebilir';
+      }
+
+      if (
+        tags.some(
+          (tag) =>
+            tag.length >
+            50
+        )
+      ) {
+        nextErrors.tags =
+          'Etiketler en fazla 50 karakter olabilir';
       }
 
       setErrors(
@@ -583,7 +888,8 @@ const ClientEdit = () => {
       return (
         Object.keys(
           nextErrors
-        ).length === 0
+        ).length ===
+        0
       );
     };
 
@@ -592,7 +898,13 @@ const ClientEdit = () => {
   // ======================================================
 
   const mapBackendError =
-    (mutationError) => {
+    (
+      mutationError
+    ) => {
+      const responseErrors =
+        mutationError?.response
+          ?.data?.errors;
+
       const message =
         mutationError?.response
           ?.data?.message ||
@@ -602,8 +914,38 @@ const ClientEdit = () => {
       const nextErrors =
         {};
 
+      /*
+       * express-validator errors
+       */
       if (
-        /TCKNO|VKN|identification_number/i.test(
+        Array.isArray(
+          responseErrors
+        )
+      ) {
+        responseErrors.forEach(
+          (
+            item
+          ) => {
+            const field =
+              item?.path ||
+              item?.param;
+
+            if (
+              field
+            ) {
+              nextErrors[field] =
+                item?.msg ||
+                'Geçersiz değer';
+            }
+          }
+        );
+      }
+
+      /*
+       * Service / Sequelize error
+       */
+      if (
+        /TCKNO|T\.C\.|VKN|kimlik|identification_number/i.test(
           message
         )
       ) {
@@ -630,11 +972,20 @@ const ClientEdit = () => {
       }
 
       if (
-        /name|ad soyad|unvan/i.test(
+        /name|ad soyad|unvan|müvekkil adı/i.test(
           message
         )
       ) {
         nextErrors.name =
+          message;
+      }
+
+      if (
+        /posta kodu|postal/i.test(
+          message
+        )
+      ) {
+        nextErrors.postal_code =
           message;
       }
 
@@ -647,7 +998,18 @@ const ClientEdit = () => {
         setErrors(
           nextErrors
         );
+
+        toast.error(
+          'Formdaki hatalı alanları kontrol edin'
+        );
+
+        return;
       }
+
+      toast.error(
+        message ||
+        'Müvekkil güncellenemedi'
+      );
     };
 
   // ======================================================
@@ -698,11 +1060,16 @@ const ClientEdit = () => {
     updateMutation.mutate(
       {
         id,
+
         data:
           normalizedPayload,
       },
       {
         onSuccess: () => {
+          toast.success(
+            'Müvekkil bilgileri güncellendi'
+          );
+
           navigate(
             `/clients/${id}`
           );
@@ -775,7 +1142,7 @@ const ClientEdit = () => {
 
       const confirmed =
         window.confirm(
-          `"${client?.name}" müvekkil kaydını kaldırmak istediğinize emin misiniz?\n\nKayıt soft-delete olarak kaldırılacaktır. İlişkili kayıtlar ayrıca silinmez.`
+          `"${client?.name}" müvekkil kaydını kaldırmak istediğinize emin misiniz?\n\nKayıt sistemden kaldırılacak ancak ilişkili kayıtlar ayrıca silinmeyecektir.`
         );
 
       if (
@@ -789,8 +1156,24 @@ const ClientEdit = () => {
         {
           onSuccess:
             () => {
+              toast.success(
+                'Müvekkil kaydı kaldırıldı'
+              );
+
               navigate(
                 '/clients'
+              );
+            },
+
+          onError:
+            (
+              mutationError
+            ) => {
+              toast.error(
+                mutationError?.response
+                  ?.data?.message ||
+                mutationError?.message ||
+                'Müvekkil kaydı kaldırılamadı'
               );
             },
         }
@@ -841,10 +1224,7 @@ const ClientEdit = () => {
         </h2>
 
         <p className="mt-2 text-sm text-gray-500">
-          {error?.response
-            ?.data?.message ||
-            error?.message ||
-            'Müvekkil bilgileri yüklenemedi'}
+          Bu kayıt silinmiş olabilir veya görüntüleme yetkiniz bulunmayabilir.
         </p>
 
         <Link
@@ -1083,8 +1463,6 @@ const ClientEdit = () => {
             }
           />
 
-          {/* CONTACT */}
-
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
             <Input
@@ -1122,12 +1500,11 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
+              maxLength={254}
               placeholder="ornek@domain.com"
             />
 
           </div>
-
-          {/* ADDRESS */}
 
           <div>
 
@@ -1146,14 +1523,19 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
+              maxLength={1000}
               rows="3"
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               placeholder="Açık adres..."
             />
 
-          </div>
+            {errors.address && (
+              <p className="mt-1 text-xs text-red-600">
+                {errors.address}
+              </p>
+            )}
 
-          {/* LOCATION */}
+          </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
@@ -1166,9 +1548,13 @@ const ClientEdit = () => {
               onChange={
                 handleChange
               }
+              error={
+                errors.city
+              }
               disabled={
                 isPending
               }
+              maxLength={100}
             />
 
             <Input
@@ -1180,9 +1566,13 @@ const ClientEdit = () => {
               onChange={
                 handleChange
               }
+              error={
+                errors.district
+              }
               disabled={
                 isPending
               }
+              maxLength={100}
             />
 
             <Input
@@ -1200,12 +1590,12 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
-              maxLength={20}
+              inputMode="numeric"
+              maxLength={5}
+              placeholder="34000"
             />
 
           </div>
-
-          {/* STATUS */}
 
           <div>
 
@@ -1246,15 +1636,13 @@ const ClientEdit = () => {
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
 
                 <p>
-                  Arşiv durumu müvekkili silmez. Kayıt sistemde kalır ve ilişkili dava, belge, görev ve diğer kayıtlarla bağlantısını korur.
+                  Arşiv durumu müvekkili silmez. Kayıt sistemde kalır ve ilişkili kayıtlarla bağlantısını korur.
                 </p>
 
               </div>
             )}
 
           </div>
-
-          {/* TAGS */}
 
           <div>
 
@@ -1267,6 +1655,9 @@ const ClientEdit = () => {
               onChange={
                 handleChange
               }
+              error={
+                errors.tags
+              }
               disabled={
                 isPending
               }
@@ -1274,7 +1665,7 @@ const ClientEdit = () => {
             />
 
             <p className="mt-1 text-xs text-gray-500">
-              Birden fazla etiketi virgülle ayırın.
+              Birden fazla etiketi virgülle ayırın. En fazla 30 etiket eklenebilir.
             </p>
 
             {tagsPreview.length >
@@ -1301,8 +1692,6 @@ const ClientEdit = () => {
 
           </div>
 
-          {/* NOTES */}
-
           <div>
 
             <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -1320,14 +1709,27 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
+              maxLength={5000}
               rows="5"
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               placeholder="Müvekkille ilgili önemli genel bilgiler..."
             />
 
-          </div>
+            <div className="mt-1 flex justify-between gap-3">
+              {errors.notes ? (
+                <p className="text-xs text-red-600">
+                  {errors.notes}
+                </p>
+              ) : (
+                <span />
+              )}
 
-          {/* ACTIONS */}
+              <p className="text-xs text-gray-400">
+                {formData.notes.length}/5000
+              </p>
+            </div>
+
+          </div>
 
           <div className="flex flex-wrap items-center gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
 
