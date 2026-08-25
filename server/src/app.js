@@ -142,29 +142,10 @@ app.disable(
 // TRUST PROXY
 // ======================================================
 
-/*
- * Production mimarisinde uygulamanın önünde
- * tek güvenilir reverse proxy bulunduğu varsayılır.
- *
- * Örnek:
- *
- * Client
- *   ->
- * Reverse Proxy
- *   ->
- * Express
- *
- * Express bu ayar sayesinde req.ip değerini
- * proxy zincirini dikkate alarak çözer.
- */
 app.set(
   'trust proxy',
   1
 );
-
-// ======================================================
-// REAL CLIENT IP
-// ======================================================
 
 // ======================================================
 // REAL CLIENT IP
@@ -190,15 +171,6 @@ const normalizeIp = (
     return null;
   }
 
-  /*
-   * IPv4-mapped IPv6:
-   *
-   * ::ffff:82.222.98.50
-   *
-   * ->
-   *
-   * 82.222.98.50
-   */
   if (
     candidate.startsWith(
       '::ffff:'
@@ -233,19 +205,6 @@ const getForwardedClientIp = (
     typeof forwardedFor ===
       'string'
   ) {
-    /*
-     * Render gerçek istemci IP'sini
-     * X-Forwarded-For listesinin
-     * ilk elemanına koyar.
-     *
-     * Örnek:
-     *
-     * 82.222.98.50, 10.24.207.3
-     *
-     * ->
-     *
-     * 82.222.98.50
-     */
     const firstIp =
       forwardedFor
         .split(',')[0]
@@ -281,10 +240,6 @@ const getForwardedClientIp = (
 const getRealClientIp = (
   req
 ) => {
-  /*
-   * Render production ortamında gerçek client IP
-   * X-Forwarded-For üzerinden gelir.
-   */
   if (
     isProduction
   ) {
@@ -300,10 +255,6 @@ const getRealClientIp = (
     }
   }
 
-  /*
-   * Fallback:
-   * Express tarafından çözülen IP.
-   */
   const expressIp =
     normalizeIp(
       req.ip
@@ -315,64 +266,6 @@ const getRealClientIp = (
     return expressIp;
   }
 
-  /*
-   * Son fallback:
-   * doğrudan socket adresi.
-   */
-  const socketIp =
-    normalizeIp(
-      req.socket
-        ?.remoteAddress
-    );
-
-  if (
-    socketIp
-  ) {
-    return socketIp;
-  }
-
-  return null;
-};
-
-app.use(
-  (
-    req,
-    res,
-    next
-  ) => {
-    req.realClientIp =
-      getRealClientIp(
-        req
-      );
-
-    return next();
-  }
-);
-
-const getRealClientIp = (
-  req
-) => {
-  /*
-   * Ana kaynak req.ip.
-   *
-   * X-Forwarded-For header'ını manuel okumuyoruz.
-   * Express, trust proxy ayarına göre güvenilir
-   * istemci IP'sini kendisi hesaplar.
-   */
-  const expressIp =
-    normalizeIp(
-      req.ip
-    );
-
-  if (
-    expressIp
-  ) {
-    return expressIp;
-  }
-
-  /*
-   * Proxy olmayan/local ortamlar için fallback.
-   */
   const socketIp =
     normalizeIp(
       req.socket
@@ -532,33 +425,16 @@ app.use(
 // CSRF / TRUSTED ORIGIN PROTECTION
 // ======================================================
 
-/*
- * Refresh token production'da:
- *
- * SameSite=None
- * Secure
- * HttpOnly
- *
- * olarak tutulduğu için browser cross-site
- * cookie gönderebilir.
- *
- * Kritik auth endpointlerinde exact Origin
- * allowlist kontrolü uygulanır.
- */
-
-// Login-CSRF koruması
 app.use(
   '/api/auth/login',
   requireTrustedOrigin
 );
 
-// HttpOnly refresh cookie kullanan endpoint
 app.use(
   '/api/auth/refresh-token',
   requireTrustedOrigin
 );
 
-// HttpOnly refresh cookie kullanan endpoint
 app.use(
   '/api/auth/logout',
   requireTrustedOrigin
@@ -1161,20 +1037,11 @@ app.use(
   taskRoutes
 );
 
-/*
- * Eski finance modülü.
- *
- * Yeni payments sistemi tamamen doğrulanana kadar
- * kaldırmıyoruz.
- */
 app.use(
   '/api/finance',
   financeRoutes
 );
 
-/*
- * Yeni profesyonel ödeme / finans altyapısı.
- */
 app.use(
   '/api/payments',
   paymentRoutes
@@ -1214,10 +1081,6 @@ app.use(
   '/api/meetings',
   meetingRoutes
 );
-
-// ======================================================
-// CALENDAR INTEGRATIONS
-// ======================================================
 
 app.use(
   '/api/calendar-integrations',
