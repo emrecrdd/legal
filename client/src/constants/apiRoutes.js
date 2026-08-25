@@ -115,8 +115,8 @@ export const API_ROUTES = {
     UPLOAD:
       '/documents/upload',
 
-    BULK_UPLOAD:
-      '/documents/upload/bulk',
+   UPLOAD_MULTIPLE:
+  '/documents/upload-multiple',
 
     BULK_DELETE:
       '/documents/bulk-delete',
