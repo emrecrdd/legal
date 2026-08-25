@@ -4,7 +4,9 @@ import {
 } from 'sequelize';
 
 class Client extends Sequelize.Model {
-  static initModel(sequelize) {
+  static initModel(
+    sequelize
+  ) {
     Client.init(
       {
         id: {
@@ -44,7 +46,7 @@ class Client extends Sequelize.Model {
           set(value) {
             const normalized =
               typeof value ===
-              'string'
+                'string'
                 ? value.trim()
                 : value;
 
@@ -70,44 +72,57 @@ class Client extends Sequelize.Model {
         },
 
         identification_number: {
-  type:
-    DataTypes.STRING(
-      32
-    ),
+          type:
+            DataTypes.STRING(
+              32
+            ),
 
-  allowNull:
-    true,
+          allowNull:
+            true,
 
-  set(value) {
-    if (
-      value ===
-        undefined ||
-      value ===
-        null
-    ) {
-      this.setDataValue(
-        'identification_number',
-        null
-      );
+          /*
+           * unique:true KULLANMIYORUZ.
+           *
+           * Model paranoid:true olduğu için benzersizlik
+           * migration tarafındaki partial unique index ile:
+           *
+           * WHERE deleted_at IS NULL
+           *
+           * koşulunda sağlanır.
+           */
 
-      return;
-    }
+          set(value) {
+            if (
+              value ===
+                undefined ||
+              value ===
+                null
+            ) {
+              this.setDataValue(
+                'identification_number',
+                null
+              );
 
-    const normalized =
-      String(value)
-        .replace(
-          /\s+/g,
-          ''
-        )
-        .trim();
+              return;
+            }
 
-    this.setDataValue(
-      'identification_number',
-      normalized ||
-        null
-    );
-  },
-},
+            const normalized =
+              String(
+                value
+              )
+                .replace(
+                  /\s+/g,
+                  ''
+                )
+                .trim();
+
+            this.setDataValue(
+              'identification_number',
+              normalized ||
+                null
+            );
+          },
+        },
 
         // ==================================================
         // İLETİŞİM
@@ -122,20 +137,36 @@ class Client extends Sequelize.Model {
           allowNull:
             true,
 
+          /*
+           * unique:true burada da kullanılmaz.
+           *
+           * Aktif müvekkiller arasında benzersizlik
+           * partial unique index ile sağlanacaktır.
+           */
+
           validate: {
             isEmailOrEmpty(
               value
             ) {
-              if (!value) {
+              if (
+                !value
+              ) {
                 return;
               }
+
+              const normalized =
+                String(
+                  value
+                )
+                  .trim()
+                  .toLowerCase();
 
               const regex =
                 /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
               if (
                 !regex.test(
-                  value
+                  normalized
                 )
               ) {
                 throw new Error(
@@ -146,7 +177,9 @@ class Client extends Sequelize.Model {
           },
 
           set(value) {
-            if (!value) {
+            if (
+              !value
+            ) {
               this.setDataValue(
                 'email',
                 null
@@ -155,11 +188,17 @@ class Client extends Sequelize.Model {
               return;
             }
 
+            const normalized =
+              String(
+                value
+              )
+                .trim()
+                .toLowerCase();
+
             this.setDataValue(
               'email',
-              String(value)
-                .trim()
-                .toLowerCase()
+              normalized ||
+                null
             );
           },
         },
@@ -173,8 +212,18 @@ class Client extends Sequelize.Model {
           allowNull:
             true,
 
+          /*
+           * unique:true burada kullanılmaz.
+           *
+           * Aktif müvekkiller arasında benzersizlik
+           * migration tarafındaki partial unique index
+           * üzerinden uygulanacaktır.
+           */
+
           set(value) {
-            if (!value) {
+            if (
+              !value
+            ) {
               this.setDataValue(
                 'phone',
                 null
@@ -184,7 +233,9 @@ class Client extends Sequelize.Model {
             }
 
             const normalized =
-              String(value)
+              String(
+                value
+              )
                 .trim()
                 .replace(
                   /\s+/g,
@@ -368,6 +419,8 @@ class Client extends Sequelize.Model {
         ],
       }
     );
+
+    return Client;
   }
 
   // ======================================================
@@ -394,117 +447,6 @@ class Client extends Sequelize.Model {
       this.fullName;
 
     return values;
-  }
-
-  // ======================================================
-  // ASSOCIATIONS
-  // ======================================================
-
-  static associate(
-    models
-  ) {
-    Client.belongsTo(
-      models.User,
-      {
-        foreignKey:
-          'created_by',
-
-        as:
-          'creator',
-      }
-    );
-
-    // ====================================================
-    // CLIENT ↔ CASE
-    // N-N
-    // ====================================================
-
-    Client.belongsToMany(
-      models.Case,
-      {
-        through:
-          'case_clients',
-
-        foreignKey:
-          'client_id',
-
-        otherKey:
-          'case_id',
-
-        as:
-          'cases',
-      }
-    );
-
-    // ====================================================
-    // DIRECT 1-N RELATIONS
-    // ====================================================
-
-    Client.hasMany(
-      models.Meeting,
-      {
-        foreignKey:
-          'client_id',
-
-        as:
-          'meetings',
-      }
-    );
-
-    Client.hasMany(
-      models.Task,
-      {
-        foreignKey:
-          'client_id',
-
-        as:
-          'tasks',
-      }
-    );
-
-    Client.hasMany(
-      models.Document,
-      {
-        foreignKey:
-          'client_id',
-
-        as:
-          'documents',
-      }
-    );
-
-    Client.hasMany(
-      models.PowerOfAttorney,
-      {
-        foreignKey:
-          'client_id',
-
-        as:
-          'powerOfAttorneys',
-      }
-    );
-
-    Client.hasMany(
-      models.Payment,
-      {
-        foreignKey:
-          'client_id',
-
-        as:
-          'payments',
-      }
-    );
-
-    Client.hasMany(
-      models.Note,
-      {
-        foreignKey:
-          'client_id',
-
-        as:
-          'clientNotes',
-      }
-    );
   }
 }
 

@@ -4,9 +4,9 @@ import {
 } from 'sequelize';
 
 class Document extends Sequelize.Model {
-
-  static initModel(sequelize) {
-
+  static initModel(
+    sequelize
+  ) {
     Document.init(
       {
         id: {
@@ -50,6 +50,11 @@ class Document extends Sequelize.Model {
 
           allowNull:
             false,
+
+          validate: {
+            min:
+              0,
+          },
         },
 
         mime_type: {
@@ -71,6 +76,9 @@ class Document extends Sequelize.Model {
               'other'
             ),
 
+          allowNull:
+            false,
+
           defaultValue:
             'other',
         },
@@ -89,6 +97,9 @@ class Document extends Sequelize.Model {
               DataTypes.STRING
             ),
 
+          allowNull:
+            false,
+
           defaultValue:
             [],
         },
@@ -105,8 +116,16 @@ class Document extends Sequelize.Model {
           type:
             DataTypes.INTEGER,
 
+          allowNull:
+            false,
+
           defaultValue:
             1,
+
+          validate: {
+            min:
+              1,
+          },
         },
 
         parent_id: {
@@ -157,8 +176,6 @@ class Document extends Sequelize.Model {
           },
         },
 
-        // ✅ VEKALETNAME İLİŞKİSİ
-
         power_of_attorney_id: {
           type:
             DataTypes.UUID,
@@ -195,6 +212,9 @@ class Document extends Sequelize.Model {
           type:
             DataTypes.BOOLEAN,
 
+          allowNull:
+            false,
+
           defaultValue:
             false,
         },
@@ -203,6 +223,9 @@ class Document extends Sequelize.Model {
           type:
             DataTypes.BOOLEAN,
 
+          allowNull:
+            false,
+
           defaultValue:
             false,
         },
@@ -210,6 +233,9 @@ class Document extends Sequelize.Model {
         metadata: {
           type:
             DataTypes.JSONB,
+
+          allowNull:
+            false,
 
           defaultValue:
             {},
@@ -226,83 +252,75 @@ class Document extends Sequelize.Model {
 
         timestamps:
           true,
+
+        indexes: [
+          {
+            fields: [
+              'case_id',
+            ],
+          },
+
+          {
+            fields: [
+              'client_id',
+            ],
+          },
+
+          {
+            fields: [
+              'uploaded_by',
+            ],
+          },
+
+          {
+            fields: [
+              'parent_id',
+            ],
+          },
+
+          {
+            fields: [
+              'power_of_attorney_id',
+            ],
+          },
+
+          {
+            fields: [
+              'category',
+            ],
+          },
+
+          {
+            fields: [
+              'is_archived',
+            ],
+          },
+
+          {
+            fields: [
+              'created_at',
+            ],
+          },
+
+          {
+            fields: [
+              'case_id',
+              'created_at',
+            ],
+          },
+
+          {
+            fields: [
+              'client_id',
+              'created_at',
+            ],
+          },
+        ],
       }
     );
 
+    return Document;
   }
-
-  // ✅ İLİŞKİLER
-
-  static associate(models) {
-
-    Document.belongsTo(
-      models.User,
-      {
-        foreignKey:
-          'uploaded_by',
-
-        as:
-          'uploader',
-      }
-    );
-
-    Document.belongsTo(
-      models.Case,
-      {
-        foreignKey:
-          'case_id',
-
-        as:
-          'case',
-      }
-    );
-
-    Document.belongsTo(
-      models.Client,
-      {
-        foreignKey:
-          'client_id',
-
-        as:
-          'client',
-      }
-    );
-
-    Document.belongsTo(
-      models.PowerOfAttorney,
-      {
-        foreignKey:
-          'power_of_attorney_id',
-
-        as:
-          'powerOfAttorney',
-      }
-    );
-
-    Document.belongsTo(
-      Document,
-      {
-        foreignKey:
-          'parent_id',
-
-        as:
-          'parent',
-      }
-    );
-
-    Document.hasMany(
-      Document,
-      {
-        foreignKey:
-          'parent_id',
-
-        as:
-          'versions',
-      }
-    );
-
-  }
-
 }
 
 export {

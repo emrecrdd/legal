@@ -4,13 +4,20 @@ import {
 } from 'sequelize';
 
 class PaymentPlan extends Sequelize.Model {
-  static initModel(sequelize) {
+  static initModel(
+    sequelize
+  ) {
     PaymentPlan.init(
       {
         id: {
-          type: DataTypes.UUID,
-          defaultValue: DataTypes.UUIDV4,
-          primaryKey: true,
+          type:
+            DataTypes.UUID,
+
+          defaultValue:
+            DataTypes.UUIDV4,
+
+          primaryKey:
+            true,
         },
 
         // ==================================================
@@ -18,18 +25,32 @@ class PaymentPlan extends Sequelize.Model {
         // ==================================================
 
         title: {
-          type: DataTypes.STRING(255),
-          allowNull: false,
+          type:
+            DataTypes.STRING(
+              255
+            ),
+
+          allowNull:
+            false,
 
           validate: {
-            notEmpty: true,
-            len: [2, 255],
+            notEmpty:
+              true,
+
+            len: [
+              2,
+              255,
+            ],
           },
 
-          set(value) {
+          set(
+            value
+          ) {
             this.setDataValue(
               'title',
-              typeof value === 'string'
+
+              typeof value ===
+                'string'
                 ? value.trim()
                 : value
             );
@@ -37,13 +58,20 @@ class PaymentPlan extends Sequelize.Model {
         },
 
         description: {
-          type: DataTypes.TEXT,
-          allowNull: true,
+          type:
+            DataTypes.TEXT,
 
-          set(value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
             if (
-              value === undefined ||
-              value === null
+              value ===
+                undefined ||
+              value ===
+                null
             ) {
               this.setDataValue(
                 'description',
@@ -54,11 +82,14 @@ class PaymentPlan extends Sequelize.Model {
             }
 
             const normalized =
-              String(value).trim();
+              String(
+                value
+              ).trim();
 
             this.setDataValue(
               'description',
-              normalized || null
+              normalized ||
+                null
             );
           },
         },
@@ -68,41 +99,71 @@ class PaymentPlan extends Sequelize.Model {
         // ==================================================
 
         total_amount: {
-          type: DataTypes.DECIMAL(15, 2),
-          allowNull: false,
+          type:
+            DataTypes.DECIMAL(
+              15,
+              2
+            ),
+
+          allowNull:
+            false,
 
           validate: {
-            min: 0,
+            min:
+              0,
           },
         },
 
         down_payment_amount: {
-          type: DataTypes.DECIMAL(15, 2),
-          allowNull: false,
-          defaultValue: 0,
+          type:
+            DataTypes.DECIMAL(
+              15,
+              2
+            ),
+
+          allowNull:
+            false,
+
+          defaultValue:
+            0,
 
           validate: {
-            min: 0,
+            min:
+              0,
           },
         },
 
         currency: {
-          type: DataTypes.STRING(3),
-          allowNull: false,
-          defaultValue: 'TRY',
+          type:
+            DataTypes.STRING(
+              3
+            ),
 
-          set(value) {
+          allowNull:
+            false,
+
+          defaultValue:
+            'TRY',
+
+          set(
+            value
+          ) {
             const normalized =
               String(
-                value || 'TRY'
+                value ||
+                  'TRY'
               )
                 .trim()
                 .toUpperCase()
-                .slice(0, 3);
+                .slice(
+                  0,
+                  3
+                );
 
             this.setDataValue(
               'currency',
-              normalized || 'TRY'
+              normalized ||
+                'TRY'
             );
           },
         },
@@ -112,14 +173,18 @@ class PaymentPlan extends Sequelize.Model {
         // ==================================================
 
         plan_type: {
-          type: DataTypes.ENUM(
-            'one_time',
-            'installment',
-            'custom'
-          ),
+          type:
+            DataTypes.ENUM(
+              'one_time',
+              'installment',
+              'custom'
+            ),
 
-          allowNull: false,
-          defaultValue: 'installment',
+          allowNull:
+            false,
+
+          defaultValue:
+            'installment',
         },
 
         // ==================================================
@@ -127,16 +192,20 @@ class PaymentPlan extends Sequelize.Model {
         // ==================================================
 
         status: {
-          type: DataTypes.ENUM(
-            'draft',
-            'active',
-            'completed',
-            'cancelled',
-            'defaulted'
-          ),
+          type:
+            DataTypes.ENUM(
+              'draft',
+              'active',
+              'completed',
+              'cancelled',
+              'defaulted'
+            ),
 
-          allowNull: false,
-          defaultValue: 'draft',
+          allowNull:
+            false,
+
+          defaultValue:
+            'draft',
         },
 
         // ==================================================
@@ -144,28 +213,43 @@ class PaymentPlan extends Sequelize.Model {
         // ==================================================
 
         start_date: {
-          type: DataTypes.DATEONLY,
-          allowNull: true,
+          type:
+            DataTypes.DATEONLY,
+
+          allowNull:
+            true,
         },
 
         end_date: {
-          type: DataTypes.DATEONLY,
-          allowNull: true,
+          type:
+            DataTypes.DATEONLY,
+
+          allowNull:
+            true,
         },
 
         activated_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
         completed_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
         cancelled_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
         // ==================================================
@@ -173,50 +257,88 @@ class PaymentPlan extends Sequelize.Model {
         // ==================================================
 
         auto_reminders_enabled: {
-          type: DataTypes.BOOLEAN,
-          allowNull: false,
-          defaultValue: true,
+          type:
+            DataTypes.BOOLEAN,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            true,
         },
 
         remind_days_before: {
-          type: DataTypes.INTEGER,
-          allowNull: false,
-          defaultValue: 3,
+          type:
+            DataTypes.INTEGER,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            3,
 
           validate: {
-            min: 0,
-            max: 365,
+            min:
+              0,
+
+            max:
+              365,
           },
         },
 
         notify_on_due_date: {
-          type: DataTypes.BOOLEAN,
-          allowNull: false,
-          defaultValue: true,
+          type:
+            DataTypes.BOOLEAN,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            true,
         },
 
         notify_on_overdue: {
-          type: DataTypes.BOOLEAN,
-          allowNull: false,
-          defaultValue: true,
+          type:
+            DataTypes.BOOLEAN,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            true,
         },
 
         notify_by_email: {
-          type: DataTypes.BOOLEAN,
-          allowNull: false,
-          defaultValue: true,
+          type:
+            DataTypes.BOOLEAN,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            true,
         },
 
         notify_by_sms: {
-          type: DataTypes.BOOLEAN,
-          allowNull: false,
-          defaultValue: false,
+          type:
+            DataTypes.BOOLEAN,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            false,
         },
 
         notify_in_app: {
-          type: DataTypes.BOOLEAN,
-          allowNull: false,
-          defaultValue: true,
+          type:
+            DataTypes.BOOLEAN,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            true,
         },
 
         // ==================================================
@@ -224,42 +346,66 @@ class PaymentPlan extends Sequelize.Model {
         // ==================================================
 
         client_id: {
-          type: DataTypes.UUID,
-          allowNull: false,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            false,
 
           references: {
-            model: 'clients',
-            key: 'id',
+            model:
+              'clients',
+
+            key:
+              'id',
           },
         },
 
         case_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'cases',
-            key: 'id',
+            model:
+              'cases',
+
+            key:
+              'id',
           },
         },
 
         created_by: {
-          type: DataTypes.UUID,
-          allowNull: false,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            false,
 
           references: {
-            model: 'users',
-            key: 'id',
+            model:
+              'users',
+
+            key:
+              'id',
           },
         },
 
         updated_by: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'users',
-            key: 'id',
+            model:
+              'users',
+
+            key:
+              'id',
           },
         },
 
@@ -268,11 +414,20 @@ class PaymentPlan extends Sequelize.Model {
         // ==================================================
 
         reference_number: {
-          type: DataTypes.STRING(100),
-          allowNull: true,
+          type:
+            DataTypes.STRING(
+              100
+            ),
 
-          set(value) {
-            if (!value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
+            if (
+              !value
+            ) {
               this.setDataValue(
                 'reference_number',
                 null
@@ -283,17 +438,26 @@ class PaymentPlan extends Sequelize.Model {
 
             this.setDataValue(
               'reference_number',
-              String(value).trim()
+              String(
+                value
+              ).trim()
             );
           },
         },
 
         notes: {
-          type: DataTypes.TEXT,
-          allowNull: true,
+          type:
+            DataTypes.TEXT,
 
-          set(value) {
-            if (!value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
+            if (
+              !value
+            ) {
               this.setDataValue(
                 'notes',
                 null
@@ -304,7 +468,9 @@ class PaymentPlan extends Sequelize.Model {
 
             this.setDataValue(
               'notes',
-              String(value).trim()
+              String(
+                value
+              ).trim()
             );
           },
         },
@@ -312,11 +478,14 @@ class PaymentPlan extends Sequelize.Model {
       {
         sequelize,
 
-        tableName: 'payment_plans',
+        tableName:
+          'payment_plans',
 
-        timestamps: true,
+        timestamps:
+          true,
 
-        paranoid: true,
+        paranoid:
+          true,
 
         indexes: [
           {
@@ -382,8 +551,65 @@ class PaymentPlan extends Sequelize.Model {
             ],
           },
         ],
+
+        validate: {
+          // ==================================================
+          // DATE RANGE
+          // ==================================================
+
+          endDateAfterStartDate() {
+            if (
+              !this.start_date ||
+              !this.end_date
+            ) {
+              return;
+            }
+
+            if (
+              this.end_date <
+              this.start_date
+            ) {
+              throw new Error(
+                'Ödeme planı bitiş tarihi başlangıç tarihinden önce olamaz'
+              );
+            }
+          },
+
+          // ==================================================
+          // DOWN PAYMENT
+          // ==================================================
+
+          downPaymentCannotExceedTotal() {
+            const total =
+              Number(
+                this.total_amount
+              );
+
+            const downPayment =
+              Number(
+                this.down_payment_amount
+              );
+
+            if (
+              Number.isFinite(
+                total
+              ) &&
+              Number.isFinite(
+                downPayment
+              ) &&
+              downPayment >
+                total
+            ) {
+              throw new Error(
+                'Peşinat tutarı toplam ödeme planı tutarını aşamaz'
+              );
+            }
+          },
+        },
       }
     );
+
+    return PaymentPlan;
   }
 
   // ======================================================
@@ -394,15 +620,18 @@ class PaymentPlan extends Sequelize.Model {
     const total =
       Number(
         this.total_amount
-      ) || 0;
+      ) ||
+      0;
 
     const downPayment =
       Number(
         this.down_payment_amount
-      ) || 0;
+      ) ||
+      0;
 
     return Math.max(
-      total - downPayment,
+      total -
+        downPayment,
       0
     );
   }
@@ -420,67 +649,6 @@ class PaymentPlan extends Sequelize.Model {
       this.remainingPrincipal;
 
     return values;
-  }
-
-  // ======================================================
-  // ASSOCIATIONS
-  // ======================================================
-
-  static associate(models) {
-    PaymentPlan.belongsTo(
-      models.Client,
-      {
-        foreignKey:
-          'client_id',
-
-        as:
-          'client',
-      }
-    );
-
-    PaymentPlan.belongsTo(
-      models.Case,
-      {
-        foreignKey:
-          'case_id',
-
-        as:
-          'case',
-      }
-    );
-
-    PaymentPlan.belongsTo(
-      models.User,
-      {
-        foreignKey:
-          'created_by',
-
-        as:
-          'creator',
-      }
-    );
-
-    PaymentPlan.belongsTo(
-      models.User,
-      {
-        foreignKey:
-          'updated_by',
-
-        as:
-          'updater',
-      }
-    );
-
-    PaymentPlan.hasMany(
-      models.PaymentInstallment,
-      {
-        foreignKey:
-          'payment_plan_id',
-
-        as:
-          'installments',
-      }
-    );
   }
 }
 

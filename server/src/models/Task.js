@@ -4,130 +4,199 @@ import {
 } from 'sequelize';
 
 class Task extends Sequelize.Model {
-  static initModel(sequelize) {
+  static initModel(
+    sequelize
+  ) {
     Task.init(
       {
         id: {
-          type: DataTypes.UUID,
+          type:
+            DataTypes.UUID,
+
           defaultValue:
             DataTypes.UUIDV4,
-          primaryKey: true,
+
+          primaryKey:
+            true,
         },
 
         title: {
-          type: DataTypes.STRING,
-          allowNull: false,
+          type:
+            DataTypes.STRING,
+
+          allowNull:
+            false,
         },
 
         description: {
-          type: DataTypes.TEXT,
-          allowNull: true,
+          type:
+            DataTypes.TEXT,
+
+          allowNull:
+            true,
         },
 
         status: {
-          type: DataTypes.ENUM(
-            'pending',
-            'in_progress',
-            'completed',
-            'cancelled'
-          ),
+          type:
+            DataTypes.ENUM(
+              'pending',
+              'in_progress',
+              'completed',
+              'cancelled'
+            ),
+
+          allowNull:
+            false,
+
           defaultValue:
             'pending',
         },
 
         priority: {
-          type: DataTypes.ENUM(
-            'low',
-            'normal',
-            'high',
-            'critical'
-          ),
+          type:
+            DataTypes.ENUM(
+              'low',
+              'normal',
+              'high',
+              'critical'
+            ),
+
+          allowNull:
+            false,
+
           defaultValue:
             'normal',
         },
 
         due_date: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
         completed_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
-        /*
-         * Görevi oluşturan kullanıcı.
-         *
-         * Görevin bir veya birden fazla kişiye atanması
-         * artık task_assignees ara tablosu üzerinden
-         * yapılacak.
-         */
         created_by: {
-          type: DataTypes.UUID,
-          allowNull: false,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            false,
 
           references: {
-            model: 'users',
-            key: 'id',
+            model:
+              'users',
+
+            key:
+              'id',
           },
         },
 
         case_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'cases',
-            key: 'id',
+            model:
+              'cases',
+
+            key:
+              'id',
           },
         },
 
         client_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'clients',
-            key: 'id',
+            model:
+              'clients',
+
+            key:
+              'id',
           },
         },
 
         parent_task_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'tasks',
-            key: 'id',
+            model:
+              'tasks',
+
+            key:
+              'id',
           },
         },
 
         reminder_date: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
         reminder_sent: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
+          type:
+            DataTypes.BOOLEAN,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            false,
         },
 
         progress: {
-          type: DataTypes.INTEGER,
-          defaultValue: 0,
+          type:
+            DataTypes.INTEGER,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            0,
 
           validate: {
-            min: 0,
-            max: 100,
+            min:
+              0,
+
+            max:
+              100,
           },
         },
 
         tags: {
-          type: DataTypes.ARRAY(
-            DataTypes.STRING
-          ),
-          defaultValue: [],
+          type:
+            DataTypes.ARRAY(
+              DataTypes.STRING
+            ),
+
+          allowNull:
+            false,
+
+          defaultValue:
+            [],
         },
 
         // ==================================================
@@ -135,25 +204,36 @@ class Task extends Sequelize.Model {
         // ==================================================
 
         started_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
         estimated_hours: {
-          type: DataTypes.FLOAT,
-          allowNull: true,
+          type:
+            DataTypes.FLOAT,
+
+          allowNull:
+            true,
 
           validate: {
-            min: 0,
+            min:
+              0,
           },
         },
 
         actual_hours: {
-          type: DataTypes.FLOAT,
-          allowNull: true,
+          type:
+            DataTypes.FLOAT,
+
+          allowNull:
+            true,
 
           validate: {
-            min: 0,
+            min:
+              0,
           },
         },
 
@@ -162,18 +242,27 @@ class Task extends Sequelize.Model {
         // ==================================================
 
         approved_by: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'users',
-            key: 'id',
+            model:
+              'users',
+
+            key:
+              'id',
           },
         },
 
         approved_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
         // ==================================================
@@ -181,8 +270,11 @@ class Task extends Sequelize.Model {
         // ==================================================
 
         attachment_url: {
-          type: DataTypes.STRING,
-          allowNull: true,
+          type:
+            DataTypes.STRING,
+
+          allowNull:
+            true,
         },
       },
       {
@@ -196,149 +288,73 @@ class Task extends Sequelize.Model {
 
         timestamps:
           true,
-      }
-    );
-  }
 
-  static associate(models) {
-    // ====================================================
-    // MULTIPLE ASSIGNEES
-    // ====================================================
+        indexes: [
+          {
+            fields: [
+              'created_by',
+            ],
+          },
 
-    /*
-     * Bir görev birden fazla kullanıcıya atanabilir.
-     *
-     * Task
-     *   ├── User 1
-     *   ├── User 2
-     *   └── User 3
-     *
-     * İlişki task_assignees ara tablosunda tutulur.
-     */
-    Task.belongsToMany(
-      models.User,
-      {
-        through:
-          'task_assignees',
+          {
+            fields: [
+              'case_id',
+            ],
+          },
 
-        foreignKey:
-          'task_id',
+          {
+            fields: [
+              'client_id',
+            ],
+          },
 
-        otherKey:
-          'user_id',
+          {
+            fields: [
+              'parent_task_id',
+            ],
+          },
 
-        as:
-          'assignees',
+          {
+            fields: [
+              'approved_by',
+            ],
+          },
 
-        timestamps:
-          false,
-      }
-    );
+          {
+            fields: [
+              'status',
+            ],
+          },
 
-    // ====================================================
-    // CREATOR
-    // ====================================================
+          {
+            fields: [
+              'priority',
+            ],
+          },
 
-    Task.belongsTo(
-      models.User,
-      {
-        foreignKey:
-          'created_by',
+          {
+            fields: [
+              'due_date',
+            ],
+          },
 
-        as:
-          'creator',
-      }
-    );
+          {
+            fields: [
+              'status',
+              'due_date',
+            ],
+          },
 
-    // ====================================================
-    // CASE
-    // ====================================================
-
-    Task.belongsTo(
-      models.Case,
-      {
-        foreignKey:
-          'case_id',
-
-        as:
-          'case',
+          {
+            fields: [
+              'created_at',
+            ],
+          },
+        ],
       }
     );
 
-    // ====================================================
-    // CLIENT
-    // ====================================================
-
-    Task.belongsTo(
-      models.Client,
-      {
-        foreignKey:
-          'client_id',
-
-        as:
-          'client',
-      }
-    );
-
-    // ====================================================
-    // PARENT TASK
-    // ====================================================
-
-    Task.belongsTo(
-      Task,
-      {
-        foreignKey:
-          'parent_task_id',
-
-        as:
-          'parentTask',
-      }
-    );
-
-    // ====================================================
-    // SUBTASKS
-    // ====================================================
-
-    Task.hasMany(
-      Task,
-      {
-        foreignKey:
-          'parent_task_id',
-
-        as:
-          'subtasks',
-      }
-    );
-
-    // ====================================================
-    // APPROVER
-    // ====================================================
-
-    Task.belongsTo(
-      models.User,
-      {
-        foreignKey:
-          'approved_by',
-
-        as:
-          'approver',
-      }
-    );
-
-    // ====================================================
-    // NOTES
-    // ====================================================
-
-    Task.hasMany(
-      models.Note,
-      {
-        foreignKey:
-          'task_id',
-
-        as:
-          'taskNotes',
-      }
-    );
+    return Task;
   }
 }
 

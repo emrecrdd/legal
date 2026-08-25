@@ -1,106 +1,261 @@
-import { Sequelize, DataTypes } from 'sequelize';
+import {
+  Sequelize,
+  DataTypes,
+} from 'sequelize';
 
 class Note extends Sequelize.Model {
-  static initModel(sequelize) {
+  static initModel(
+    sequelize
+  ) {
     Note.init(
       {
         id: {
-          type: DataTypes.UUID,
-          defaultValue: DataTypes.UUIDV4,
-          primaryKey: true,
+          type:
+            DataTypes.UUID,
+
+          defaultValue:
+            DataTypes.UUIDV4,
+
+          primaryKey:
+            true,
         },
+
         content: {
-          type: DataTypes.TEXT,
-          allowNull: false,
+          type:
+            DataTypes.TEXT,
+
+          allowNull:
+            false,
+
+          validate: {
+            notEmpty:
+              true,
+          },
+
+          set(
+            value
+          ) {
+            this.setDataValue(
+              'content',
+              typeof value ===
+                'string'
+                ? value.trim()
+                : value
+            );
+          },
         },
+
         note_type: {
-          type: DataTypes.ENUM('general', 'meeting', 'phone', 'email', 'reminder', 'task'),
-          defaultValue: 'general',
+          type:
+            DataTypes.ENUM(
+              'general',
+              'meeting',
+              'phone',
+              'email',
+              'reminder',
+              'task'
+            ),
+
+          allowNull:
+            false,
+
+          defaultValue:
+            'general',
         },
+
         is_private: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
+          type:
+            DataTypes.BOOLEAN,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            false,
         },
+
         is_pinned: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
+          type:
+            DataTypes.BOOLEAN,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            false,
         },
+
         client_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
+
           references: {
-            model: 'clients',
-            key: 'id',
+            model:
+              'clients',
+
+            key:
+              'id',
           },
         },
+
         case_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
+
           references: {
-            model: 'cases',
-            key: 'id',
+            model:
+              'cases',
+
+            key:
+              'id',
           },
         },
-        // ✅ YENİ: Task ile ilişki
+
         task_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
+
           references: {
-            model: 'tasks',
-            key: 'id',
+            model:
+              'tasks',
+
+            key:
+              'id',
           },
         },
+
         created_by: {
-          type: DataTypes.UUID,
-          allowNull: false,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            false,
+
           references: {
-            model: 'users',
-            key: 'id',
+            model:
+              'users',
+
+            key:
+              'id',
           },
         },
+
         tags: {
-          type: DataTypes.ARRAY(DataTypes.STRING),
-          defaultValue: [],
+          type:
+            DataTypes.ARRAY(
+              DataTypes.STRING
+            ),
+
+          allowNull:
+            false,
+
+          defaultValue:
+            [],
         },
+
         metadata: {
-          type: DataTypes.JSONB,
-          defaultValue: {},
+          type:
+            DataTypes.JSONB,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            {},
         },
       },
       {
-  sequelize,
-  tableName: 'notes',
+        sequelize,
 
-  timestamps: true,
+        tableName:
+          'notes',
 
-  paranoid: true,
+        timestamps:
+          true,
 
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
-  deletedAt: 'deleted_at',
-}
+        paranoid:
+          true,
+
+        indexes: [
+          {
+            fields: [
+              'client_id',
+            ],
+          },
+
+          {
+            fields: [
+              'case_id',
+            ],
+          },
+
+          {
+            fields: [
+              'task_id',
+            ],
+          },
+
+          {
+            fields: [
+              'created_by',
+            ],
+          },
+
+          {
+            fields: [
+              'note_type',
+            ],
+          },
+
+          {
+            fields: [
+              'is_pinned',
+            ],
+          },
+
+          {
+            fields: [
+              'created_at',
+            ],
+          },
+
+          {
+            fields: [
+              'client_id',
+              'created_at',
+            ],
+          },
+
+          {
+            fields: [
+              'case_id',
+              'created_at',
+            ],
+          },
+
+          {
+            fields: [
+              'task_id',
+              'created_at',
+            ],
+          },
+        ],
+      }
     );
-  }
 
-  static associate(models) {
-    Note.belongsTo(models.User, {
-      foreignKey: 'created_by',
-      as: 'creator',
-    });
-    Note.belongsTo(models.Client, {
-      foreignKey: 'client_id',
-      as: 'client',
-    });
-    Note.belongsTo(models.Case, {
-      foreignKey: 'case_id',
-      as: 'case',
-    });
-    // ✅ YENİ: Task ile ilişki
-    Note.belongsTo(models.Task, {
-      foreignKey: 'task_id',
-      as: 'task',
-    });
+    return Note;
   }
 }
 
-export { Note };
+export {
+  Note,
+};

@@ -1,171 +1,374 @@
-import { Sequelize, DataTypes } from 'sequelize';
+import {
+  Sequelize,
+  DataTypes,
+} from 'sequelize';
 
 class AIAnalysis extends Sequelize.Model {
-  static initModel(sequelize) {
+  static initModel(
+    sequelize
+  ) {
     AIAnalysis.init(
       {
         id: {
-          type: DataTypes.UUID,
-          defaultValue: DataTypes.UUIDV4,
-          primaryKey: true,
+          type:
+            DataTypes.UUID,
+
+          defaultValue:
+            DataTypes.UUIDV4,
+
+          primaryKey:
+            true,
         },
 
+        // ==================================================
+        // RELATIONS
+        // ==================================================
+
         document_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
+
           references: {
-            model: 'documents',
-            key: 'id',
+            model:
+              'documents',
+
+            key:
+              'id',
           },
         },
 
         case_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
+
           references: {
-            model: 'cases',
-            key: 'id',
+            model:
+              'cases',
+
+            key:
+              'id',
           },
         },
 
         user_id: {
-          type: DataTypes.UUID,
-          allowNull: false,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            false,
+
           references: {
-            model: 'users',
-            key: 'id',
+            model:
+              'users',
+
+            key:
+              'id',
           },
         },
 
+        // ==================================================
+        // ANALYSIS
+        // ==================================================
+
         analysis_type: {
-          type: DataTypes.ENUM(
-            'document_analysis',
-            'document_classification',
-            'entity_extraction',
-            'case_summary',
-            'case_completion',
-            'legal_research',
-            'draft_generation',
-            'sentiment_analysis'
-          ),
-          allowNull: false,
+          type:
+            DataTypes.ENUM(
+              'document_analysis',
+              'document_classification',
+              'entity_extraction',
+              'case_summary',
+              'case_completion',
+              'legal_research',
+              'draft_generation',
+              'sentiment_analysis'
+            ),
+
+          allowNull:
+            false,
         },
 
         provider: {
-          type: DataTypes.STRING,
-          defaultValue: 'openai',
+          type:
+            DataTypes.STRING(
+              100
+            ),
+
+          allowNull:
+            false,
+
+          defaultValue:
+            'openai',
         },
 
         model: {
-          type: DataTypes.STRING,
-          allowNull: false,
+          type:
+            DataTypes.STRING(
+              255
+            ),
+
+          allowNull:
+            false,
         },
 
         openai_response_id: {
-          type: DataTypes.STRING,
+          type:
+            DataTypes.STRING(
+              255
+            ),
+
+          allowNull:
+            true,
         },
 
         status: {
-          type: DataTypes.ENUM(
+          type:
+            DataTypes.ENUM(
+              'pending',
+              'completed',
+              'failed'
+            ),
+
+          allowNull:
+            false,
+
+          defaultValue:
             'pending',
-            'completed',
-            'failed'
-          ),
-          defaultValue: 'pending',
         },
 
+        // ==================================================
+        // CACHE / VERSIONING
+        // ==================================================
+
         input_hash: {
-          type: DataTypes.STRING,
+          type:
+            DataTypes.STRING(
+              255
+            ),
+
+          allowNull:
+            true,
         },
 
         prompt_version: {
-          type: DataTypes.STRING,
-          defaultValue: 'v1',
+          type:
+            DataTypes.STRING(
+              100
+            ),
+
+          allowNull:
+            false,
+
+          defaultValue:
+            'v1',
         },
 
+        // ==================================================
+        // QUALITY / PERFORMANCE
+        // ==================================================
+
         confidence: {
-          type: DataTypes.FLOAT,
+          type:
+            DataTypes.FLOAT,
+
+          allowNull:
+            true,
+
+          validate: {
+            min:
+              0,
+
+            max:
+              1,
+          },
         },
 
         duration_ms: {
-          type: DataTypes.INTEGER,
+          type:
+            DataTypes.INTEGER,
+
+          allowNull:
+            true,
+
+          validate: {
+            min:
+              0,
+          },
         },
 
+        // ==================================================
+        // TOKEN USAGE
+        // ==================================================
+
         input_tokens: {
-          type: DataTypes.INTEGER,
-          defaultValue: 0,
+          type:
+            DataTypes.INTEGER,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            0,
+
+          validate: {
+            min:
+              0,
+          },
         },
 
         output_tokens: {
-          type: DataTypes.INTEGER,
-          defaultValue: 0,
+          type:
+            DataTypes.INTEGER,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            0,
+
+          validate: {
+            min:
+              0,
+          },
         },
 
         total_tokens: {
-          type: DataTypes.INTEGER,
-          defaultValue: 0,
+          type:
+            DataTypes.INTEGER,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            0,
+
+          validate: {
+            min:
+              0,
+          },
         },
 
+        // ==================================================
+        // RESULT
+        // ==================================================
+
         result: {
-          type: DataTypes.JSONB,
-          allowNull: true,
+          type:
+            DataTypes.JSONB,
+
+          allowNull:
+            true,
         },
 
         error_message: {
-          type: DataTypes.TEXT,
+          type:
+            DataTypes.TEXT,
+
+          allowNull:
+            true,
         },
 
         metadata: {
-          type: DataTypes.JSONB,
-          defaultValue: {},
+          type:
+            DataTypes.JSONB,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            {},
         },
       },
       {
         sequelize,
-        tableName: 'ai_analyses',
-        paranoid: true,
-        timestamps: true,
+
+        tableName:
+          'ai_analyses',
+
+        paranoid:
+          true,
+
+        timestamps:
+          true,
 
         indexes: [
           {
-            fields: ['document_id'],
+            fields: [
+              'document_id',
+            ],
           },
+
           {
-            fields: ['case_id'],
+            fields: [
+              'case_id',
+            ],
           },
+
           {
-            fields: ['user_id'],
+            fields: [
+              'user_id',
+            ],
           },
+
           {
-            fields: ['analysis_type'],
+            fields: [
+              'analysis_type',
+            ],
           },
+
           {
-            fields: ['status'],
+            fields: [
+              'status',
+            ],
           },
+
           {
-            fields: ['input_hash'],
+            fields: [
+              'input_hash',
+            ],
+          },
+
+          {
+            fields: [
+              'created_at',
+            ],
+          },
+
+          {
+            fields: [
+              'user_id',
+              'created_at',
+            ],
+          },
+
+          {
+            fields: [
+              'document_id',
+              'analysis_type',
+              'created_at',
+            ],
+          },
+
+          {
+            fields: [
+              'case_id',
+              'analysis_type',
+              'created_at',
+            ],
           },
         ],
       }
     );
-  }
 
-  static associate(models) {
-    AIAnalysis.belongsTo(models.Document, {
-      foreignKey: 'document_id',
-      as: 'document',
-    });
-
-    AIAnalysis.belongsTo(models.Case, {
-      foreignKey: 'case_id',
-      as: 'case',
-    });
-
-    AIAnalysis.belongsTo(models.User, {
-      foreignKey: 'user_id',
-      as: 'user',
-    });
+    return AIAnalysis;
   }
 }
 
-export { AIAnalysis };
+export {
+  AIAnalysis,
+};

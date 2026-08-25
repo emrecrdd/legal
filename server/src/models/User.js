@@ -7,7 +7,8 @@ import {
   ROLES,
 } from '../constants/roles.js';
 
-import bcrypt from 'bcryptjs';
+import bcrypt
+  from 'bcryptjs';
 
 class User extends Sequelize.Model {
   static initModel(
@@ -33,8 +34,18 @@ class User extends Sequelize.Model {
           allowNull:
             false,
 
-          unique:
-            true,
+          /*
+           * unique:true KULLANMIYORUZ.
+           *
+           * Uygulama global paranoid:true kullandığı için
+           * kullanıcı silindiğinde kayıt DB'de kalır.
+           *
+           * E-posta benzersizliği migration tarafında:
+           *
+           * WHERE deleted_at IS NULL
+           *
+           * koşullu partial unique index ile sağlanır.
+           */
 
           validate: {
             isEmail:
@@ -99,15 +110,6 @@ class User extends Sequelize.Model {
 
         // ====================================================
         // USER-SPECIFIC PERMISSION OVERRIDES
-        //
-        // Örnek:
-        // {
-        //   delete_documents: true,
-        //   edit_payments: false
-        // }
-        //
-        // Rol izinleri temel alınır.
-        // Buradaki değerler kullanıcı bazlı override'dır.
         // ====================================================
 
         permissions: {
@@ -134,21 +136,6 @@ class User extends Sequelize.Model {
 
         // ====================================================
         // TOKEN VERSION
-        //
-        // Access tokenların gerektiğinde topluca
-        // geçersiz hale getirilebilmesini sağlar.
-        //
-        // Örnek:
-        //
-        // DB token_version = 5
-        // JWT tokenVersion = 5
-        // → geçerli
-        //
-        // Şifre değişikliği:
-        // DB token_version = 6
-        //
-        // Eski JWT tokenVersion = 5
-        // → artık geçersiz
         // ====================================================
 
         token_version: {
@@ -322,60 +309,6 @@ class User extends Sequelize.Model {
   }
 
   // ======================================================
-  // ASSOCIATIONS
-  // ======================================================
-
-  static associate(
-    models
-  ) {
-    // ====================================================
-    // MULTIPLE TASK ASSIGNMENTS
-    // ====================================================
-
-    /*
-     * Bir kullanıcı birden fazla göreve atanabilir.
-     *
-     * User
-     *   ├── Task 1
-     *   ├── Task 2
-     *   └── Task 3
-     *
-     * Task tarafındaki:
-     *
-     * Task.belongsToMany(
-     *   models.User,
-     *   {
-     *     through: 'task_assignees',
-     *     foreignKey: 'task_id',
-     *     otherKey: 'user_id',
-     *     as: 'assignees'
-     *   }
-     * )
-     *
-     * ilişkisinin karşılığıdır.
-     */
-    User.belongsToMany(
-      models.Task,
-      {
-        through:
-          'task_assignees',
-
-        foreignKey:
-          'user_id',
-
-        otherKey:
-          'task_id',
-
-        as:
-          'assignedTasks',
-
-        timestamps:
-          false,
-      }
-    );
-  }
-
-  // ======================================================
   // PASSWORD CHECK
   // ======================================================
 
@@ -416,11 +349,6 @@ class User extends Sequelize.Model {
     delete values.email_verification_token;
     delete values.password_reset_token;
     delete values.password_reset_expires;
-
-    /*
-     * İç session güvenlik değerini de
-     * API response'larında göstermiyoruz.
-     */
     delete values.token_version;
 
     return values;

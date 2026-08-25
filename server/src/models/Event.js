@@ -4,319 +4,430 @@ import {
 } from 'sequelize';
 
 class Event extends Sequelize.Model {
-  static initModel(sequelize) {
+  static initModel(
+    sequelize
+  ) {
     Event.init(
       {
         id: {
-          type: DataTypes.UUID,
-          defaultValue: DataTypes.UUIDV4,
-          primaryKey: true,
+          type:
+            DataTypes.UUID,
+
+          defaultValue:
+            DataTypes.UUIDV4,
+
+          primaryKey:
+            true,
         },
 
-        // ==================================================
-        // GENERAL
-        // ==================================================
-
         title: {
-          type: DataTypes.STRING(255),
-          allowNull: false,
+          type:
+            DataTypes.STRING(
+              255
+            ),
+
+          allowNull:
+            false,
 
           validate: {
             notEmpty: {
-              msg: 'Duruşma / etkinlik başlığı gereklidir',
+              msg:
+                'Duruşma / etkinlik başlığı gereklidir',
             },
 
             len: {
-              args: [2, 255],
-              msg: 'Başlık 2-255 karakter arasında olmalıdır',
+              args: [
+                2,
+                255,
+              ],
+
+              msg:
+                'Başlık 2-255 karakter arasında olmalıdır',
             },
           },
 
-          set(value) {
+          set(
+            value
+          ) {
             this.setDataValue(
               'title',
               String(
-                value || ''
+                value ||
+                  ''
               ).trim()
             );
           },
         },
 
         description: {
-          type: DataTypes.TEXT,
-          allowNull: true,
+          type:
+            DataTypes.TEXT,
 
-          set(value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
             const normalized =
               value
-                ? String(value).trim()
+                ? String(
+                    value
+                  ).trim()
                 : null;
 
             this.setDataValue(
               'description',
               normalized ||
-              null
+                null
             );
           },
         },
 
-        // ==================================================
-        // EVENT TYPE
-        // ==================================================
-
         event_type: {
-          type: DataTypes.ENUM(
-            'hearing',
-            'meeting',
-            'deadline',
-            'reminder',
-            'other'
-          ),
+          type:
+            DataTypes.ENUM(
+              'hearing',
+              'meeting',
+              'deadline',
+              'reminder',
+              'other'
+            ),
 
-          allowNull: false,
-          defaultValue: 'other',
+          allowNull:
+            false,
+
+          defaultValue:
+            'other',
         },
 
         hearing_type: {
-          type: DataTypes.ENUM(
-            'preliminary',
-            'investigation',
-            'expert_examination',
-            'witness_hearing',
-            'final_decision',
-            'other'
-          ),
+          type:
+            DataTypes.ENUM(
+              'preliminary',
+              'investigation',
+              'expert_examination',
+              'witness_hearing',
+              'final_decision',
+              'other'
+            ),
 
-          allowNull: true,
-          defaultValue: null,
+          allowNull:
+            true,
+
+          defaultValue:
+            null,
         },
 
         status: {
-          type: DataTypes.ENUM(
-            'scheduled',
-            'ongoing',
-            'completed',
-            'cancelled'
-          ),
+          type:
+            DataTypes.ENUM(
+              'scheduled',
+              'ongoing',
+              'completed',
+              'cancelled'
+            ),
 
-          allowNull: false,
-          defaultValue: 'scheduled',
+          allowNull:
+            false,
+
+          defaultValue:
+            'scheduled',
         },
 
-        // ==================================================
-        // HEARING DETAILS
-        // ==================================================
-
         last_hearing_result: {
-          type: DataTypes.TEXT,
-          allowNull: true,
+          type:
+            DataTypes.TEXT,
 
-          set(value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
             const normalized =
               value
-                ? String(value).trim()
+                ? String(
+                    value
+                  ).trim()
                 : null;
 
             this.setDataValue(
               'last_hearing_result',
               normalized ||
-              null
+                null
             );
           },
         },
 
         opposing_counsel: {
-          type: DataTypes.STRING(255),
-          allowNull: true,
+          type:
+            DataTypes.STRING(
+              255
+            ),
 
-          set(value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
             const normalized =
               value
-                ? String(value).trim()
+                ? String(
+                    value
+                  ).trim()
                 : null;
 
             this.setDataValue(
               'opposing_counsel',
               normalized ||
-              null
+                null
             );
           },
         },
 
         expense_status: {
-          type: DataTypes.ENUM(
-            'paid',
-            'pending',
-            'not_applicable'
-          ),
+          type:
+            DataTypes.ENUM(
+              'paid',
+              'pending',
+              'not_applicable'
+            ),
 
-          allowNull: false,
-          defaultValue: 'pending',
+          allowNull:
+            false,
+
+          defaultValue:
+            'pending',
         },
 
-        // ==================================================
-        // DATE / TIME
-        // ==================================================
-
         start_date: {
-          type: DataTypes.DATE,
-          allowNull: false,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            false,
 
           validate: {
             isDate: {
-              msg: 'Başlangıç tarihi geçersiz',
+              msg:
+                'Başlangıç tarihi geçersiz',
             },
           },
         },
 
         end_date: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
 
           validate: {
             isDate: {
-              msg: 'Bitiş tarihi geçersiz',
+              msg:
+                'Bitiş tarihi geçersiz',
             },
           },
         },
 
         is_all_day: {
-          type: DataTypes.BOOLEAN,
-          allowNull: false,
-          defaultValue: false,
+          type:
+            DataTypes.BOOLEAN,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            false,
         },
 
-        // ==================================================
-        // LOCATION
-        // ==================================================
-
         location: {
-          type: DataTypes.STRING(255),
-          allowNull: true,
+          type:
+            DataTypes.STRING(
+              255
+            ),
 
-          set(value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
             const normalized =
               value
-                ? String(value).trim()
+                ? String(
+                    value
+                  ).trim()
                 : null;
 
             this.setDataValue(
               'location',
               normalized ||
-              null
+                null
             );
           },
         },
 
         court_room: {
-          type: DataTypes.STRING(100),
-          allowNull: true,
+          type:
+            DataTypes.STRING(
+              100
+            ),
 
-          set(value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
             const normalized =
               value
-                ? String(value).trim()
+                ? String(
+                    value
+                  ).trim()
                 : null;
 
             this.setDataValue(
               'court_room',
               normalized ||
-              null
+                null
             );
           },
         },
 
         judge_name: {
-          type: DataTypes.STRING(255),
-          allowNull: true,
+          type:
+            DataTypes.STRING(
+              255
+            ),
 
-          set(value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
             const normalized =
               value
-                ? String(value).trim()
+                ? String(
+                    value
+                  ).trim()
                 : null;
 
             this.setDataValue(
               'judge_name',
               normalized ||
-              null
+                null
             );
           },
         },
 
-        // ==================================================
-        // CASE / USERS
-        // ==================================================
-
         case_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'cases',
-            key: 'id',
+            model:
+              'cases',
+
+            key:
+              'id',
           },
         },
 
         created_by: {
-          type: DataTypes.UUID,
-          allowNull: false,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            false,
 
           references: {
-            model: 'users',
-            key: 'id',
+            model:
+              'users',
+
+            key:
+              'id',
           },
         },
 
         assigned_to: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'users',
-            key: 'id',
+            model:
+              'users',
+
+            key:
+              'id',
           },
         },
 
-        // ==================================================
-        // REMINDER
-        // ==================================================
-
         reminder_minutes: {
-          type: DataTypes.INTEGER,
-          allowNull: true,
-          defaultValue: 30,
+          type:
+            DataTypes.INTEGER,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            30,
 
           validate: {
             min: {
-              args: [0],
-              msg: 'Hatırlatma süresi negatif olamaz',
+              args: [
+                0,
+              ],
+
+              msg:
+                'Hatırlatma süresi negatif olamaz',
             },
 
             max: {
-              args: [525600],
-              msg: 'Hatırlatma süresi geçersiz',
+              args: [
+                525600,
+              ],
+
+              msg:
+                'Hatırlatma süresi geçersiz',
             },
           },
         },
 
         reminder_sent: {
-          type: DataTypes.BOOLEAN,
-          allowNull: false,
-          defaultValue: false,
+          type:
+            DataTypes.BOOLEAN,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            false,
         },
 
-        // ==================================================
-        // STRUCTURED DATA
-        // ==================================================
-
         attendees: {
-          type: DataTypes.JSONB,
-          allowNull: false,
-          defaultValue: [],
+          type:
+            DataTypes.JSONB,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            [],
 
           validate: {
-            isArray(value) {
+            isArray(
+              value
+            ) {
               if (
                 !Array.isArray(
                   value
@@ -331,31 +442,40 @@ class Event extends Sequelize.Model {
         },
 
         todo_items: {
-          type: DataTypes.ARRAY(
-            DataTypes.JSONB
-          ),
+          type:
+            DataTypes.ARRAY(
+              DataTypes.JSONB
+            ),
 
-          allowNull: false,
-          defaultValue: [],
+          allowNull:
+            false,
+
+          defaultValue:
+            [],
         },
 
         metadata: {
-          type: DataTypes.JSONB,
-          allowNull: false,
-          defaultValue: {},
+          type:
+            DataTypes.JSONB,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            {},
         },
       },
       {
         sequelize,
 
-        tableName: 'events',
+        tableName:
+          'events',
 
-        timestamps: true,
-        paranoid: true,
+        timestamps:
+          true,
 
-        // ==================================================
-        // INDEXES
-        // ==================================================
+        paranoid:
+          true,
 
         indexes: [
           {
@@ -416,9 +536,20 @@ class Event extends Sequelize.Model {
           },
         ],
 
-        // ==================================================
-        // MODEL VALIDATION
-        // ==================================================
+        hooks: {
+          beforeValidate(
+            event
+          ) {
+            if (
+              event.event_type ===
+                'hearing' &&
+              !event.hearing_type
+            ) {
+              event.hearing_type =
+                'other';
+            }
+          },
+        },
 
         validate: {
           endDateAfterStartDate() {
@@ -446,26 +577,6 @@ class Event extends Sequelize.Model {
               throw new Error(
                 'Bitiş tarihi başlangıç tarihinden önce olamaz'
               );
-            }
-          },
-
-          hearingFields() {
-            /*
-             * Duruşma olmayan eventlerde hearing_type
-             * zorunlu değildir.
-             */
-            if (
-              this.event_type !==
-              'hearing'
-            ) {
-              return;
-            }
-
-            if (
-              !this.hearing_type
-            ) {
-              this.hearing_type =
-                'other';
             }
           },
         },

@@ -4,13 +4,20 @@ import {
 } from 'sequelize';
 
 class PaymentInstallment extends Sequelize.Model {
-  static initModel(sequelize) {
+  static initModel(
+    sequelize
+  ) {
     PaymentInstallment.init(
       {
         id: {
-          type: DataTypes.UUID,
-          defaultValue: DataTypes.UUIDV4,
-          primaryKey: true,
+          type:
+            DataTypes.UUID,
+
+          defaultValue:
+            DataTypes.UUIDV4,
+
+          primaryKey:
+            true,
         },
 
         // ==================================================
@@ -18,12 +25,18 @@ class PaymentInstallment extends Sequelize.Model {
         // ==================================================
 
         payment_plan_id: {
-          type: DataTypes.UUID,
-          allowNull: false,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            false,
 
           references: {
-            model: 'payment_plans',
-            key: 'id',
+            model:
+              'payment_plans',
+
+            key:
+              'id',
           },
         },
 
@@ -32,20 +45,33 @@ class PaymentInstallment extends Sequelize.Model {
         // ==================================================
 
         installment_number: {
-          type: DataTypes.INTEGER,
-          allowNull: false,
+          type:
+            DataTypes.INTEGER,
+
+          allowNull:
+            false,
 
           validate: {
-            min: 1,
+            min:
+              1,
           },
         },
 
         title: {
-          type: DataTypes.STRING(255),
-          allowNull: true,
+          type:
+            DataTypes.STRING(
+              255
+            ),
 
-          set(value) {
-            if (!value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
+            if (
+              !value
+            ) {
               this.setDataValue(
                 'title',
                 null
@@ -56,7 +82,9 @@ class PaymentInstallment extends Sequelize.Model {
 
             this.setDataValue(
               'title',
-              String(value).trim()
+              String(
+                value
+              ).trim()
             );
           },
         },
@@ -66,41 +94,37 @@ class PaymentInstallment extends Sequelize.Model {
         // ==================================================
 
         amount: {
-          type: DataTypes.DECIMAL(
-            15,
-            2
-          ),
+          type:
+            DataTypes.DECIMAL(
+              15,
+              2
+            ),
 
-          allowNull: false,
+          allowNull:
+            false,
 
           validate: {
-            min: 0,
+            min:
+              0,
           },
         },
 
-        /*
-         * Bu alan gerçekleşmiş tahsilatların
-         * hızlı okunabilmesi için tutulabilir.
-         *
-         * Ancak bunun tek gerçek kaynağı Payment
-         * kayıtları olmalıdır.
-         *
-         * Service katmanı Payment oluştururken /
-         * iptal ederken transaction içinde bu alanı
-         * senkronize edecek.
-         */
         paid_amount: {
-          type: DataTypes.DECIMAL(
-            15,
-            2
-          ),
+          type:
+            DataTypes.DECIMAL(
+              15,
+              2
+            ),
 
-          allowNull: false,
+          allowNull:
+            false,
 
-          defaultValue: 0,
+          defaultValue:
+            0,
 
           validate: {
-            min: 0,
+            min:
+              0,
           },
         },
 
@@ -109,13 +133,19 @@ class PaymentInstallment extends Sequelize.Model {
         // ==================================================
 
         due_date: {
-          type: DataTypes.DATEONLY,
-          allowNull: false,
+          type:
+            DataTypes.DATEONLY,
+
+          allowNull:
+            false,
         },
 
         paid_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
         // ==================================================
@@ -123,15 +153,17 @@ class PaymentInstallment extends Sequelize.Model {
         // ==================================================
 
         status: {
-          type: DataTypes.ENUM(
-            'pending',
-            'partial',
-            'paid',
-            'overdue',
-            'cancelled'
-          ),
+          type:
+            DataTypes.ENUM(
+              'pending',
+              'partial',
+              'paid',
+              'overdue',
+              'cancelled'
+            ),
 
-          allowNull: false,
+          allowNull:
+            false,
 
           defaultValue:
             'pending',
@@ -141,36 +173,36 @@ class PaymentInstallment extends Sequelize.Model {
         // REMINDER STATE
         // ==================================================
 
-        /*
-         * Reminder gönderildi bilgilerini ayrı
-         * kolonlarda tutuyoruz.
-         *
-         * Böylece worker aynı reminder'ı tekrar
-         * tekrar göndermesin.
-         */
-
         reminder_before_sent_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
         due_date_reminder_sent_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
         overdue_reminder_sent_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
-        /*
-         * Son bildirimin ne zaman gönderildiğini
-         * genel olarak görmek için.
-         */
         last_reminder_sent_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
         // ==================================================
@@ -178,11 +210,18 @@ class PaymentInstallment extends Sequelize.Model {
         // ==================================================
 
         notes: {
-          type: DataTypes.TEXT,
-          allowNull: true,
+          type:
+            DataTypes.TEXT,
 
-          set(value) {
-            if (!value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
+            if (
+              !value
+            ) {
               this.setDataValue(
                 'notes',
                 null
@@ -192,11 +231,14 @@ class PaymentInstallment extends Sequelize.Model {
             }
 
             const normalized =
-              String(value).trim();
+              String(
+                value
+              ).trim();
 
             this.setDataValue(
               'notes',
-              normalized || null
+              normalized ||
+                null
             );
           },
         },
@@ -214,10 +256,6 @@ class PaymentInstallment extends Sequelize.Model {
           true,
 
         indexes: [
-          // ================================================
-          // BASIC
-          // ================================================
-
           {
             fields: [
               'payment_plan_id',
@@ -236,10 +274,6 @@ class PaymentInstallment extends Sequelize.Model {
             ],
           },
 
-          // ================================================
-          // PLAN LOOKUPS
-          // ================================================
-
           {
             fields: [
               'payment_plan_id',
@@ -254,10 +288,6 @@ class PaymentInstallment extends Sequelize.Model {
             ],
           },
 
-          // ================================================
-          // REMINDER / OVERDUE WORKER
-          // ================================================
-
           {
             fields: [
               'status',
@@ -265,22 +295,52 @@ class PaymentInstallment extends Sequelize.Model {
             ],
           },
 
-          // ================================================
-          // UNIQUE INSTALLMENT NUMBER PER PLAN
-          // ================================================
-
-          {
-            unique:
-              true,
-
-            fields: [
-              'payment_plan_id',
-              'installment_number',
-            ],
-          },
+          /*
+           * Burada unique:true YOK.
+           *
+           * Aktif taksitler için:
+           *
+           * payment_plan_id + installment_number
+           *
+           * benzersizliği PostgreSQL partial unique
+           * index ile migration tarafında sağlanacak:
+           *
+           * WHERE deleted_at IS NULL
+           */
         ],
+
+        validate: {
+          paidAmountCannotExceedAmount() {
+            const amount =
+              Number(
+                this.amount
+              );
+
+            const paid =
+              Number(
+                this.paid_amount
+              );
+
+            if (
+              Number.isFinite(
+                amount
+              ) &&
+              Number.isFinite(
+                paid
+              ) &&
+              paid >
+                amount
+            ) {
+              throw new Error(
+                'Ödenen tutar taksit tutarını aşamaz'
+              );
+            }
+          },
+        },
       }
     );
+
+    return PaymentInstallment;
   }
 
   // ======================================================
@@ -291,15 +351,18 @@ class PaymentInstallment extends Sequelize.Model {
     const amount =
       Number(
         this.amount
-      ) || 0;
+      ) ||
+      0;
 
     const paid =
       Number(
         this.paid_amount
-      ) || 0;
+      ) ||
+      0;
 
     return Math.max(
-      amount - paid,
+      amount -
+        paid,
       0
     );
   }
@@ -308,15 +371,18 @@ class PaymentInstallment extends Sequelize.Model {
     const amount =
       Number(
         this.amount
-      ) || 0;
+      ) ||
+      0;
 
     const paid =
       Number(
         this.paid_amount
-      ) || 0;
+      ) ||
+      0;
 
     if (
-      amount <= 0
+      amount <=
+      0
     ) {
       return 0;
     }
@@ -327,10 +393,14 @@ class PaymentInstallment extends Sequelize.Model {
         0,
         Number(
           (
-            (paid /
-              amount) *
+            (
+              paid /
+              amount
+            ) *
             100
-          ).toFixed(2)
+          ).toFixed(
+            2
+          )
         )
       )
     );
@@ -352,14 +422,21 @@ class PaymentInstallment extends Sequelize.Model {
       return false;
     }
 
-    const dueDate =
-      new Date(
-        `${this.due_date}T23:59:59.999Z`
-      );
+    /*
+     * DATEONLY için saat dilimi kaynaklı kaymaları
+     * azaltmak amacıyla tarih bazlı karşılaştırma.
+     */
+    const today =
+      new Date()
+        .toISOString()
+        .slice(
+          0,
+          10
+        );
 
     return (
-      dueDate.getTime() <
-      Date.now()
+      this.due_date <
+      today
     );
   }
 
@@ -382,34 +459,6 @@ class PaymentInstallment extends Sequelize.Model {
       this.isOverdue;
 
     return values;
-  }
-
-  // ======================================================
-  // ASSOCIATIONS
-  // ======================================================
-
-  static associate(models) {
-    PaymentInstallment.belongsTo(
-      models.PaymentPlan,
-      {
-        foreignKey:
-          'payment_plan_id',
-
-        as:
-          'paymentPlan',
-      }
-    );
-
-    PaymentInstallment.hasMany(
-      models.Payment,
-      {
-        foreignKey:
-          'installment_id',
-
-        as:
-          'payments',
-      }
-    );
   }
 }
 

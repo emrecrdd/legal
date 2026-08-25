@@ -4,13 +4,20 @@ import {
 } from 'sequelize';
 
 class Payment extends Sequelize.Model {
-  static initModel(sequelize) {
+  static initModel(
+    sequelize
+  ) {
     Payment.init(
       {
         id: {
-          type: DataTypes.UUID,
-          defaultValue: DataTypes.UUIDV4,
-          primaryKey: true,
+          type:
+            DataTypes.UUID,
+
+          defaultValue:
+            DataTypes.UUIDV4,
+
+          primaryKey:
+            true,
         },
 
         // ==================================================
@@ -18,62 +25,91 @@ class Payment extends Sequelize.Model {
         // ==================================================
 
         amount: {
-          type: DataTypes.DECIMAL(15, 2),
-          allowNull: false,
+          type:
+            DataTypes.DECIMAL(
+              15,
+              2
+            ),
+
+          allowNull:
+            false,
 
           validate: {
-            min: 0.01,
+            min:
+              0.01,
           },
         },
 
         description: {
-          type: DataTypes.STRING(500),
-          allowNull: true,
+          type:
+            DataTypes.STRING(
+              500
+            ),
 
-          set(value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
             this.setDataValue(
               'description',
+
               value
-                ? String(value).trim()
+                ? String(
+                    value
+                  ).trim()
                 : null
             );
           },
         },
 
         payment_type: {
-          type: DataTypes.ENUM(
-            'received',
-            'refund',
-            'expense',
-            'adjustment'
-          ),
+          type:
+            DataTypes.ENUM(
+              'received',
+              'refund',
+              'expense',
+              'adjustment'
+            ),
 
-          allowNull: false,
-          defaultValue: 'received',
+          allowNull:
+            false,
+
+          defaultValue:
+            'received',
         },
 
         payment_method: {
-          type: DataTypes.ENUM(
-            'cash',
-            'bank_transfer',
-            'credit_card',
-            'check',
-            'other'
-          ),
+          type:
+            DataTypes.ENUM(
+              'cash',
+              'bank_transfer',
+              'credit_card',
+              'check',
+              'other'
+            ),
 
-          allowNull: false,
-          defaultValue: 'cash',
+          allowNull:
+            false,
+
+          defaultValue:
+            'cash',
         },
 
         status: {
-          type: DataTypes.ENUM(
-            'pending',
-            'completed',
-            'cancelled'
-          ),
+          type:
+            DataTypes.ENUM(
+              'pending',
+              'completed',
+              'cancelled'
+            ),
 
-          allowNull: false,
-          defaultValue: 'completed',
+          allowNull:
+            false,
+
+          defaultValue:
+            'completed',
         },
 
         // ==================================================
@@ -81,9 +117,14 @@ class Payment extends Sequelize.Model {
         // ==================================================
 
         payment_date: {
-          type: DataTypes.DATE,
-          allowNull: false,
-          defaultValue: DataTypes.NOW,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            false,
+
+          defaultValue:
+            DataTypes.NOW,
         },
 
         // ==================================================
@@ -91,28 +132,48 @@ class Payment extends Sequelize.Model {
         // ==================================================
 
         transaction_id: {
-          type: DataTypes.STRING(255),
-          allowNull: true,
+          type:
+            DataTypes.STRING(
+              255
+            ),
 
-          set(value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
             this.setDataValue(
               'transaction_id',
+
               value
-                ? String(value).trim()
+                ? String(
+                    value
+                  ).trim()
                 : null
             );
           },
         },
 
         receipt_number: {
-          type: DataTypes.STRING(100),
-          allowNull: true,
+          type:
+            DataTypes.STRING(
+              100
+            ),
 
-          set(value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
             this.setDataValue(
               'receipt_number',
+
               value
-                ? String(value).trim()
+                ? String(
+                    value
+                  ).trim()
                 : null
             );
           },
@@ -123,52 +184,82 @@ class Payment extends Sequelize.Model {
         // ==================================================
 
         client_id: {
-          type: DataTypes.UUID,
-          allowNull: false,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            false,
 
           references: {
-            model: 'clients',
-            key: 'id',
+            model:
+              'clients',
+
+            key:
+              'id',
           },
         },
 
         case_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'cases',
-            key: 'id',
+            model:
+              'cases',
+
+            key:
+              'id',
           },
         },
 
         payment_plan_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'payment_plans',
-            key: 'id',
+            model:
+              'payment_plans',
+
+            key:
+              'id',
           },
         },
 
         installment_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'payment_installments',
-            key: 'id',
+            model:
+              'payment_installments',
+
+            key:
+              'id',
           },
         },
 
         created_by: {
-          type: DataTypes.UUID,
-          allowNull: false,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            false,
 
           references: {
-            model: 'users',
-            key: 'id',
+            model:
+              'users',
+
+            key:
+              'id',
           },
         },
 
@@ -177,41 +268,66 @@ class Payment extends Sequelize.Model {
         // ==================================================
 
         reversed_payment_id: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'payments',
-            key: 'id',
+            model:
+              'payments',
+
+            key:
+              'id',
           },
         },
 
         reversal_reason: {
-          type: DataTypes.STRING(500),
-          allowNull: true,
+          type:
+            DataTypes.STRING(
+              500
+            ),
 
-          set(value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
             this.setDataValue(
               'reversal_reason',
+
               value
-                ? String(value).trim()
+                ? String(
+                    value
+                  ).trim()
                 : null
             );
           },
         },
 
         reversed_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
+          type:
+            DataTypes.DATE,
+
+          allowNull:
+            true,
         },
 
         reversed_by: {
-          type: DataTypes.UUID,
-          allowNull: true,
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
 
           references: {
-            model: 'users',
-            key: 'id',
+            model:
+              'users',
+
+            key:
+              'id',
           },
         },
 
@@ -220,14 +336,22 @@ class Payment extends Sequelize.Model {
         // ==================================================
 
         notes: {
-          type: DataTypes.TEXT,
-          allowNull: true,
+          type:
+            DataTypes.TEXT,
 
-          set(value) {
+          allowNull:
+            true,
+
+          set(
+            value
+          ) {
             this.setDataValue(
               'notes',
+
               value
-                ? String(value).trim()
+                ? String(
+                    value
+                  ).trim()
                 : null
             );
           },
@@ -236,43 +360,62 @@ class Payment extends Sequelize.Model {
       {
         sequelize,
 
-        tableName: 'payments',
+        tableName:
+          'payments',
 
-        timestamps: true,
+        timestamps:
+          true,
 
-        paranoid: true,
+        paranoid:
+          true,
 
         indexes: [
           {
-            fields: ['client_id'],
+            fields: [
+              'client_id',
+            ],
           },
 
           {
-            fields: ['case_id'],
+            fields: [
+              'case_id',
+            ],
           },
 
           {
-            fields: ['payment_plan_id'],
+            fields: [
+              'payment_plan_id',
+            ],
           },
 
           {
-            fields: ['installment_id'],
+            fields: [
+              'installment_id',
+            ],
           },
 
           {
-            fields: ['created_by'],
+            fields: [
+              'created_by',
+            ],
           },
 
           {
-            fields: ['status'],
+            fields: [
+              'status',
+            ],
           },
 
           {
-            fields: ['payment_type'],
+            fields: [
+              'payment_type',
+            ],
           },
 
           {
-            fields: ['payment_date'],
+            fields: [
+              'payment_date',
+            ],
           },
 
           {
@@ -323,103 +466,21 @@ class Payment extends Sequelize.Model {
               'reversed_payment_id',
             ],
           },
+
+          /*
+           * Ters kayıtları kullanıcıya göre
+           * incelemek istersen faydalı olur.
+           */
+          {
+            fields: [
+              'reversed_by',
+            ],
+          },
         ],
       }
     );
-  }
 
-  // ======================================================
-  // ASSOCIATIONS
-  // ======================================================
-
-  static associate(models) {
-    Payment.belongsTo(
-      models.Client,
-      {
-        foreignKey:
-          'client_id',
-
-        as:
-          'client',
-      }
-    );
-
-    Payment.belongsTo(
-      models.Case,
-      {
-        foreignKey:
-          'case_id',
-
-        as:
-          'case',
-      }
-    );
-
-    Payment.belongsTo(
-      models.PaymentPlan,
-      {
-        foreignKey:
-          'payment_plan_id',
-
-        as:
-          'paymentPlan',
-      }
-    );
-
-    Payment.belongsTo(
-      models.PaymentInstallment,
-      {
-        foreignKey:
-          'installment_id',
-
-        as:
-          'installment',
-      }
-    );
-
-    Payment.belongsTo(
-      models.User,
-      {
-        foreignKey:
-          'created_by',
-
-        as:
-          'creator',
-      }
-    );
-
-    Payment.belongsTo(
-      models.User,
-      {
-        foreignKey:
-          'reversed_by',
-
-        as:
-          'reverser',
-      }
-    );
-
-    Payment.belongsTo(
-      models.Payment,
-      {
-        foreignKey:
-          'reversed_payment_id',
-
-        as:
-          'reversedPayment',
-      }
-    );
-
-    Payment.hasMany(
-      models.Payment,
-      {
-        foreignKey:
-          'reversed_payment_id',
-
-        as:
-          'reversals',
-      }
-    );
+    return Payment;
   }
 }
 

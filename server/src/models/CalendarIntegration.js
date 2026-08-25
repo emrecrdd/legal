@@ -3,20 +3,12 @@ import {
   DataTypes,
 } from 'sequelize';
 
-// ======================================================
-// CALENDAR INTEGRATION MODEL
-// ======================================================
-
 class CalendarIntegration extends Sequelize.Model {
   static initModel(
     sequelize
   ) {
     CalendarIntegration.init(
       {
-        // ==================================================
-        // ID
-        // ==================================================
-
         id: {
           type:
             DataTypes.UUID,
@@ -57,8 +49,9 @@ class CalendarIntegration extends Sequelize.Model {
 
         provider: {
           type:
-            DataTypes.STRING(
-              32
+            DataTypes.ENUM(
+              'google',
+              'microsoft'
             ),
 
           allowNull:
@@ -66,11 +59,6 @@ class CalendarIntegration extends Sequelize.Model {
 
           defaultValue:
             'google',
-
-          validate: {
-            notEmpty:
-              true,
-          },
         },
 
         // ==================================================
@@ -87,8 +75,51 @@ class CalendarIntegration extends Sequelize.Model {
             true,
 
           validate: {
-            isEmail:
-              true,
+            isEmailOrEmpty(
+              value
+            ) {
+              if (
+                !value
+              ) {
+                return;
+              }
+
+              const normalized =
+                String(
+                  value
+                )
+                  .trim()
+                  .toLowerCase();
+
+              const emailPattern =
+                /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+              if (
+                !emailPattern.test(
+                  normalized
+                )
+              ) {
+                throw new Error(
+                  'Geçerli bir hesap e-posta adresi girilmelidir'
+                );
+              }
+            },
+          },
+
+          set(
+            value
+          ) {
+            this.setDataValue(
+              'account_email',
+
+              value
+                ? String(
+                    value
+                  )
+                    .trim()
+                    .toLowerCase()
+                : null
+            );
           },
         },
 
@@ -103,18 +134,28 @@ class CalendarIntegration extends Sequelize.Model {
 
           defaultValue:
             'primary',
+
+          set(
+            value
+          ) {
+            const normalized =
+              String(
+                value ||
+                  'primary'
+              ).trim();
+
+            this.setDataValue(
+              'calendar_id',
+
+              normalized ||
+                'primary'
+            );
+          },
         },
 
         // ==================================================
         // TOKENS
         // ==================================================
-
-        /*
-         * Bu alanlar sadece ŞİFRELİ değer taşır.
-         *
-         * Düz access_token / refresh_token hiçbir zaman
-         * modele kaydedilmemeli.
-         */
 
         access_token_encrypted: {
           type:
@@ -201,19 +242,6 @@ class CalendarIntegration extends Sequelize.Model {
         timestamps:
           true,
 
-        createdAt:
-          'created_at',
-
-        updatedAt:
-          'updated_at',
-
-        /*
-         * Projedeki global Sequelize ayarlarında
-         * paranoid=true olsa bile bu modelde
-         * deleted_at kolonu bulunmuyor.
-         *
-         * Bu nedenle soft delete kapatılıyor.
-         */
         paranoid:
           false,
 
@@ -247,10 +275,6 @@ class CalendarIntegration extends Sequelize.Model {
     return CalendarIntegration;
   }
 }
-
-// ======================================================
-// EXPORT
-// ======================================================
 
 export {
   CalendarIntegration,

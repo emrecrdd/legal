@@ -47,10 +47,6 @@ class TaskAssignee extends Sequelize.Model {
           },
         },
 
-        // ==================================================
-        // KULLANICI BAZLI GÖREV DURUMU
-        // ==================================================
-
         status: {
           type:
             DataTypes.ENUM(
@@ -65,10 +61,6 @@ class TaskAssignee extends Sequelize.Model {
           defaultValue:
             'pending',
         },
-
-        // ==================================================
-        // KULLANICI BAZLI İLERLEME
-        // ==================================================
 
         progress: {
           type:
@@ -88,10 +80,6 @@ class TaskAssignee extends Sequelize.Model {
               100,
           },
         },
-
-        // ==================================================
-        // KULLANICI BAZLI SÜRE TAKİBİ
-        // ==================================================
 
         started_at: {
           type:
@@ -130,6 +118,14 @@ class TaskAssignee extends Sequelize.Model {
 
         timestamps:
           false,
+
+        indexes: [
+          {
+            fields: [
+              'user_id',
+            ],
+          },
+        ],
       }
     );
 
