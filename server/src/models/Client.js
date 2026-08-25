@@ -69,49 +69,45 @@ class Client extends Sequelize.Model {
             'individual',
         },
 
-        identification_number:
-          {
-            type:
-              DataTypes.STRING(
-                32
-              ),
+        identification_number: {
+  type:
+    DataTypes.STRING(
+      32
+    ),
 
-            allowNull:
-              true,
+  allowNull:
+    true,
 
-            unique:
-              true,
+  set(value) {
+    if (
+      value ===
+        undefined ||
+      value ===
+        null
+    ) {
+      this.setDataValue(
+        'identification_number',
+        null
+      );
 
-            set(value) {
-              if (
-                value ===
-                  undefined ||
-                value ===
-                  null
-              ) {
-                this.setDataValue(
-                  'identification_number',
-                  null
-                );
+      return;
+    }
 
-                return;
-              }
+    const normalized =
+      String(value)
+        .replace(
+          /\s+/g,
+          ''
+        )
+        .trim();
 
-              const normalized =
-                String(value)
-                  .replace(
-                    /\s+/g,
-                    ''
-                  )
-                  .trim();
-
-              this.setDataValue(
-                'identification_number',
-                normalized ||
-                  null
-              );
-            },
-          },
+    this.setDataValue(
+      'identification_number',
+      normalized ||
+        null
+    );
+  },
+},
 
         // ==================================================
         // İLETİŞİM
