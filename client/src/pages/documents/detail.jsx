@@ -1086,32 +1086,32 @@ const handlePreview = async (
        * Backend margin göndermediyse güvenli
        * varsayılan değerleri kullan.
        */
-      const normalizedUdf = {
-        content:
-          udf.content,
+     const normalizedUdf = {
+  content:
+    udf.content,
 
-        margins: {
-          top:
-            Number(
-              udf.margins?.top
-            ) || 15,
+  margins: {
+    top:
+      Number(
+        udf.page?.margins?.top
+      ) || 15,
 
-          right:
-            Number(
-              udf.margins?.right
-            ) || 15,
+    right:
+      Number(
+        udf.page?.margins?.right
+      ) || 15,
 
-          bottom:
-            Number(
-              udf.margins?.bottom
-            ) || 15,
+    bottom:
+      Number(
+        udf.page?.margins?.bottom
+      ) || 15,
 
-          left:
-            Number(
-              udf.margins?.left
-            ) || 15,
-        },
-      };
+    left:
+      Number(
+        udf.page?.margins?.left
+      ) || 15,
+  },
+};
 
       renderUdfPreview({
         previewWindow,
