@@ -117,7 +117,40 @@ router.get(
   documentController.download
 );
 
-// Belge önizleme
+// ======================================================
+// UDF PREVIEW
+// ======================================================
+
+/*
+ * UYAP UDF dosyaları browser tarafından doğrudan
+ * render edilemez.
+ *
+ * Bu endpoint UDF container içerisindeki content.xml
+ * verisini service üzerinden güvenli şekilde çıkarır
+ * ve frontend UDF viewer için JSON döndürür.
+ *
+ * Orijinal UDF dosyası değiştirilmez.
+ */
+router.get(
+  '/:id/udf-preview',
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_DOCUMENTS
+  ),
+
+  documentController.previewUdf
+);
+
+// ======================================================
+// NORMAL DOCUMENT PREVIEW
+// ======================================================
+
+/*
+ * PDF, image vb. browser'ın doğrudan gösterebildiği
+ * dosyalar için mevcut binary preview endpoint'i.
+ *
+ * UDF burada render edilmez; /udf-preview kullanılır.
+ */
 router.get(
   '/:id/preview',
 

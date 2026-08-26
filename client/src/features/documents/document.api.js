@@ -1,16 +1,22 @@
 import axios from '../../app/config/axios.js';
-import { API_ROUTES } from '../../constants/apiRoutes.js';
+
+import {
+  API_ROUTES,
+} from '../../constants/apiRoutes.js';
 
 const {
   DOCUMENTS,
 } = API_ROUTES;
 
 const documentApi = {
+
   // ======================================================
   // DOCUMENTS
   // ======================================================
 
-  getAll: (params = {}) => {
+  getAll: (
+    params = {}
+  ) => {
     return axios.get(
       DOCUMENTS.GET_ALL,
       {
@@ -19,9 +25,13 @@ const documentApi = {
     );
   },
 
-  getOne: (id) => {
+  getOne: (
+    id
+  ) => {
     return axios.get(
-      DOCUMENTS.GET_ONE(id)
+      DOCUMENTS.GET_ONE(
+        id
+      )
     );
   },
 
@@ -29,42 +39,40 @@ const documentApi = {
   // UPLOAD
   // ======================================================
 
-  upload: (data) => {
+  /*
+   * FormData gönderirken Content-Type header'ını
+   * elle vermiyoruz.
+   *
+   * Browser/Axios multipart boundary değerini
+   * otomatik üretir.
+   */
+  upload: (
+    data
+  ) => {
     return axios.post(
       DOCUMENTS.UPLOAD,
-      data,
-      {
-        headers: {
-          'Content-Type':
-            'multipart/form-data',
-        },
-      }
+      data
     );
   },
 
-  uploadMultiple: (data) => {
+  uploadMultiple: (
+    data
+  ) => {
     return axios.post(
       DOCUMENTS.UPLOAD_MULTIPLE,
-      data,
-      {
-        headers: {
-          'Content-Type':
-            'multipart/form-data',
-        },
-      }
+      data
     );
   },
 
-  uploadVersion: (id, data) => {
+  uploadVersion: (
+    id,
+    data
+  ) => {
     return axios.post(
-      DOCUMENTS.UPLOAD_VERSION(id),
-      data,
-      {
-        headers: {
-          'Content-Type':
-            'multipart/form-data',
-        },
-      }
+      DOCUMENTS.UPLOAD_VERSION(
+        id
+      ),
+      data
     );
   },
 
@@ -72,16 +80,25 @@ const documentApi = {
   // UPDATE / DELETE
   // ======================================================
 
-  update: (id, data) => {
+  update: (
+    id,
+    data
+  ) => {
     return axios.patch(
-      DOCUMENTS.UPDATE(id),
+      DOCUMENTS.UPDATE(
+        id
+      ),
       data
     );
   },
 
-  delete: (id) => {
+  delete: (
+    id
+  ) => {
     return axios.delete(
-      DOCUMENTS.DELETE(id)
+      DOCUMENTS.DELETE(
+        id
+      )
     );
   },
 
@@ -89,9 +106,18 @@ const documentApi = {
   // FILE ACCESS
   // ======================================================
 
-  download: (id) => {
+  /*
+   * Orijinal dosyayı indirme.
+   *
+   * UDF dahil tüm dosyalarda blob döner.
+   */
+  download: (
+    id
+  ) => {
     return axios.get(
-      DOCUMENTS.DOWNLOAD(id),
+      DOCUMENTS.DOWNLOAD(
+        id
+      ),
       {
         responseType:
           'blob',
@@ -99,13 +125,44 @@ const documentApi = {
     );
   },
 
-  preview: (id) => {
+  /*
+   * PDF / image vb. browser tarafından
+   * gösterilebilen dosyaların binary preview'ı.
+   *
+   * UDF burada kullanılmaz.
+   */
+  preview: (
+    id
+  ) => {
     return axios.get(
-      DOCUMENTS.PREVIEW(id),
+      DOCUMENTS.PREVIEW(
+        id
+      ),
       {
         responseType:
           'blob',
       }
+    );
+  },
+
+  // ======================================================
+  // UDF PREVIEW
+  // ======================================================
+
+  /*
+   * UYAP UDF dosyasını binary olarak browser'a
+   * göndermek yerine backend'de parse edilmiş
+   * preview JSON'unu alır.
+   *
+   * responseType blob değildir.
+   */
+  udfPreview: (
+    id
+  ) => {
+    return axios.get(
+      DOCUMENTS.UDF_PREVIEW(
+        id
+      )
     );
   },
 
@@ -113,9 +170,13 @@ const documentApi = {
   // VERSIONS
   // ======================================================
 
-  getVersions: (id) => {
+  getVersions: (
+    id
+  ) => {
     return axios.get(
-      DOCUMENTS.VERSIONS(id)
+      DOCUMENTS.VERSIONS(
+        id
+      )
     );
   },
 
@@ -123,17 +184,19 @@ const documentApi = {
   // META
   // ======================================================
 
-  getCategories: () => {
-    return axios.get(
-      DOCUMENTS.CATEGORIES
-    );
-  },
+  getCategories:
+    () => {
+      return axios.get(
+        DOCUMENTS.CATEGORIES
+      );
+    },
 
-  getStatistics: () => {
-    return axios.get(
-      DOCUMENTS.STATISTICS
-    );
-  },
+  getStatistics:
+    () => {
+      return axios.get(
+        DOCUMENTS.STATISTICS
+      );
+    },
 };
 
 export default documentApi;

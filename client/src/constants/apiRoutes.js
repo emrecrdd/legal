@@ -109,40 +109,46 @@ export const API_ROUTES = {
   // DOCUMENTS
   // ====================================================
 
-  DOCUMENTS: {
-    ...createCrudRoutes('/documents'),
+DOCUMENTS: {
+  ...createCrudRoutes(
+    '/documents'
+  ),
 
-    UPLOAD:
-      '/documents/upload',
+  UPLOAD:
+    '/documents/upload',
 
-   UPLOAD_MULTIPLE:
-  '/documents/upload-multiple',
+  UPLOAD_MULTIPLE:
+    '/documents/upload-multiple',
 
-    BULK_DELETE:
-      '/documents/bulk-delete',
+  BULK_DELETE:
+    '/documents/bulk-delete',
 
-    DOWNLOAD:
-      (id) =>
-        `/documents/${id}/download`,
+  DOWNLOAD:
+    (id) =>
+      `/documents/${id}/download`,
 
-    PREVIEW:
-      (id) =>
-        `/documents/${id}/preview`,
+  PREVIEW:
+    (id) =>
+      `/documents/${id}/preview`,
 
-    VERSIONS:
-      (id) =>
-        `/documents/${id}/versions`,
+  UDF_PREVIEW:
+    (id) =>
+      `/documents/${id}/udf-preview`,
 
-    UPLOAD_VERSION:
-      (id) =>
-        `/documents/${id}/versions`,
+  VERSIONS:
+    (id) =>
+      `/documents/${id}/versions`,
 
-    CATEGORIES:
-      '/documents/categories',
+  UPLOAD_VERSION:
+    (id) =>
+      `/documents/${id}/versions`,
 
-    STATISTICS:
-      '/documents/statistics',
-  },
+  CATEGORIES:
+    '/documents/categories',
+
+  STATISTICS:
+    '/documents/statistics',
+},
 
   // ====================================================
   // TASKS

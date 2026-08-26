@@ -12,6 +12,12 @@ import {
   fileURLToPath,
 } from 'url';
 
+import AdmZip from 'adm-zip';
+
+import {
+  XMLParser,
+} from 'fast-xml-parser';
+
 import {
   Document,
 } from '../../models/Document.js';
@@ -70,8 +76,7 @@ const UPLOAD_DIR =
 await fsPromises.mkdir(
   UPLOAD_DIR,
   {
-    recursive:
-      true,
+    recursive: true,
   }
 );
 
@@ -343,6 +348,30 @@ const detectFileType = (
   }
 
   return 'other';
+};
+
+const isUdfDocument = (
+  document
+) => {
+  if (
+    document?.file_type ===
+    'udf'
+  ) {
+    return true;
+  }
+
+  const extension =
+    path
+      .extname(
+        document?.original_name ||
+        document?.name ||
+        ''
+      )
+      .toLowerCase();
+
+  return (
+    extension === '.udf'
+  );
 };
 
 // ======================================================
@@ -737,10 +766,6 @@ const buildDocumentAccessWhere = (
     return {};
   }
 
-  // ====================================================
-  // CASE-LINKED DOCUMENTS
-  // ====================================================
-
   const caseLinkedScope =
     canViewAllCases(
       actor
@@ -775,10 +800,6 @@ const buildDocumentAccessWhere = (
             },
           ],
         };
-
-  // ====================================================
-  // CLIENT-LINKED, NO CASE
-  // ====================================================
 
   const clientCasePredicate =
     canViewAllCases(
@@ -815,9 +836,6 @@ const buildDocumentAccessWhere = (
 
   const clientLinkedScope = {
     [Op.and]: [
-      /*
-       * Case bağlıysa her zaman CASE scope üstün.
-       */
       {
         case_id:
           null,
@@ -832,17 +850,11 @@ const buildDocumentAccessWhere = (
 
       {
         [Op.or]: [
-          /*
-           * Kullanıcının kendi oluşturduğu müvekkil.
-           */
           {
             '$client.created_by$':
               actorId,
           },
 
-          /*
-           * Veya erişebildiği bir davaya bağlı müvekkil.
-           */
           Sequelize.where(
             Sequelize.literal(
               clientCasePredicate
@@ -853,10 +865,6 @@ const buildDocumentAccessWhere = (
       },
     ],
   };
-
-  // ====================================================
-  // PURE STANDALONE / POA-ONLY
-  // ====================================================
 
   const standaloneScope = {
     [Op.and]: [
@@ -870,11 +878,6 @@ const buildDocumentAccessWhere = (
           null,
       },
 
-      /*
-       * POA-only veya tamamen bağımsız belgelerde
-       * PowerOfAttorney BOLA kurulana kadar uploader
-       * ownership korunur.
-       */
       {
         uploaded_by:
           actorId,
@@ -890,18 +893,11 @@ const buildDocumentAccessWhere = (
     ],
   };
 };
+
 // ======================================================
 // DOCUMENT READ ACCESS
 // ======================================================
 
-/*
- * is_public burada "internete açık" değildir.
- * Büro içi genel erişim anlamına gelir.
- *
- * Bu scope yalnız OKUMA işlemlerinde kullanılır.
- * Yazma işlemleri mevcut BOLA kurallarını kullanmaya
- * devam eder.
- */
 const buildDocumentReadAccessWhere = (
   actor
 ) => {
@@ -1005,10 +1001,6 @@ const assertDocumentAccess =
       return document;
     }
 
-    // ==================================================
-    // CASE HAS PRIORITY
-    // ==================================================
-
     if (
       document.case_id
     ) {
@@ -1026,10 +1018,6 @@ const assertDocumentAccess =
         );
       }
     }
-
-    // ==================================================
-    // CLIENT-LINKED DOCUMENT
-    // ==================================================
 
     if (
       document.client_id
@@ -1049,10 +1037,6 @@ const assertDocumentAccess =
       }
     }
 
-    // ==================================================
-    // STANDALONE / POA-ONLY
-    // ==================================================
-
     if (
       document.uploaded_by ===
       actorId
@@ -1064,17 +1048,11 @@ const assertDocumentAccess =
       'Document not found'
     );
   };
-  // ======================================================
+
+// ======================================================
 // ASSERT DOCUMENT READ ACCESS
 // ======================================================
 
-/*
- * Büro içi genel erişime açılan belgeyi diğer
- * VIEW_DOCUMENTS yetkili kullanıcılar okuyabilir.
- *
- * Bu helper update/delete/version upload işlemlerinde
- * KULLANILMAZ.
- */
 const assertDocumentReadAccess =
   async (
     documentId,
@@ -1181,6 +1159,9 @@ const documentIncludes = [
       'id',
       'title',
     ],
+
+    required:
+      false,
   },
 ];
 
@@ -1189,6 +1170,7 @@ const documentIncludes = [
 // ======================================================
 
 export const documentService = {
+
   // ====================================================
   // UPLOAD
   // ====================================================
@@ -1215,12 +1197,6 @@ export const documentService = {
       );
     }
 
-    /*
-     * İlişki alanları ayrıca authorize edilir.
-     *
-     * Böylece kullanıcı erişemediği case/client ID'sini
-     * body'ye yazarak belge bağlayamaz.
-     */
     if (
       documentData.case_id
     ) {
@@ -1813,33 +1789,33 @@ export const documentService = {
   // ====================================================
 
   async findOne(
-  id,
-  actor
-) {
-  await assertDocumentReadAccess(
     id,
     actor
-  );
-
-  const document =
-    await Document.findByPk(
-      id,
-      {
-        include:
-          documentIncludes,
-      }
-    );
-
-  if (
-    !document
   ) {
-    throw new Error(
-      'Document not found'
+    await assertDocumentReadAccess(
+      id,
+      actor
     );
-  }
 
-  return document;
-},
+    const document =
+      await Document.findByPk(
+        id,
+        {
+          include:
+            documentIncludes,
+        }
+      );
+
+    if (
+      !document
+    ) {
+      throw new Error(
+        'Document not found'
+      );
+    }
+
+    return document;
+  },
 
   // ====================================================
   // UPDATE
@@ -2053,7 +2029,7 @@ export const documentService = {
   },
 
   // ====================================================
-  // DOWNLOAD / PREVIEW
+  // FILE PATH
   // ====================================================
 
   async getFilePath(
@@ -2075,10 +2051,10 @@ export const documentService = {
     }
 
     const document =
-  await assertDocumentReadAccess(
-    documentId,
-    actor
-  );
+      await assertDocumentReadAccess(
+        documentId,
+        actor
+      );
 
     const filePath =
       resolveStoredFilePath(
@@ -2098,6 +2074,10 @@ export const documentService = {
     return filePath;
   },
 
+  // ====================================================
+  // DOWNLOAD
+  // ====================================================
+
   async download(
     documentOrId,
     actor
@@ -2114,48 +2094,540 @@ export const documentService = {
   },
 
   // ====================================================
+  // UDF PREVIEW
+  // ====================================================
+
+  async getUdfPreview(
+    documentOrId,
+    actor
+  ) {
+    const documentId =
+      typeof documentOrId ===
+      'object'
+        ? documentOrId?.id
+        : documentOrId;
+
+    if (
+      !documentId
+    ) {
+      throw new Error(
+        'Document not found'
+      );
+    }
+
+    const document =
+      await assertDocumentReadAccess(
+        documentId,
+        actor
+      );
+
+    if (
+      !isUdfDocument(
+        document
+      )
+    ) {
+      throw new Error(
+        'Document is not a UDF file'
+      );
+    }
+
+    const filePath =
+      resolveStoredFilePath(
+        document.file_path
+      );
+
+    try {
+      await fsPromises.access(
+        filePath
+      );
+    } catch {
+      throw new Error(
+        'File not found'
+      );
+    }
+
+    let zip;
+
+    try {
+      zip =
+        new AdmZip(
+          filePath
+        );
+    } catch {
+      throw new Error(
+        'UDF container could not be opened'
+      );
+    }
+
+    // ==================================================
+    // ZIP ENTRY LIMIT / BASIC VALIDATION
+    // ==================================================
+
+    const entries =
+      zip.getEntries();
+
+    if (
+      !Array.isArray(
+        entries
+      ) ||
+      entries.length ===
+        0
+    ) {
+      throw new Error(
+        'UDF container is empty'
+      );
+    }
+
+    if (
+      entries.length >
+      100
+    ) {
+      throw new Error(
+        'UDF container contains too many files'
+      );
+    }
+
+    const contentEntry =
+      entries.find(
+        (
+          entry
+        ) =>
+          entry.entryName
+            ?.toLowerCase() ===
+          'content.xml'
+      );
+
+    if (
+      !contentEntry
+    ) {
+      throw new Error(
+        'UDF content.xml not found'
+      );
+    }
+
+    /*
+     * XML boyutunu sınırlıyoruz.
+     *
+     * Böylece ZIP bomb / aşırı büyük XML gibi
+     * durumlarda gereksiz memory tüketimini azaltıyoruz.
+     */
+    const MAX_UDF_XML_SIZE =
+      5 * 1024 * 1024;
+
+    if (
+      Number(
+        contentEntry.header
+          ?.size
+      ) >
+      MAX_UDF_XML_SIZE
+    ) {
+      throw new Error(
+        'UDF document content is too large'
+      );
+    }
+
+    let contentBuffer;
+
+    try {
+      contentBuffer =
+        contentEntry.getData();
+    } catch {
+      throw new Error(
+        'UDF content.xml could not be extracted'
+      );
+    }
+
+    if (
+      !contentBuffer?.length
+    ) {
+      throw new Error(
+        'UDF content is empty'
+      );
+    }
+
+    if (
+      contentBuffer.length >
+      MAX_UDF_XML_SIZE
+    ) {
+      throw new Error(
+        'UDF document content is too large'
+      );
+    }
+
+    const xml =
+      contentBuffer.toString(
+        'utf8'
+      );
+
+    if (
+      !xml.trim()
+    ) {
+      throw new Error(
+        'UDF content is empty'
+      );
+    }
+
+    // ==================================================
+    // XML PARSER
+    // ==================================================
+
+    const parser =
+      new XMLParser({
+        ignoreAttributes:
+          false,
+
+        attributeNamePrefix:
+          '',
+
+        trimValues:
+          false,
+
+        parseTagValue:
+          false,
+
+        parseAttributeValue:
+          false,
+
+        cdataPropName:
+          '__cdata',
+      });
+
+    let parsed;
+
+    try {
+      parsed =
+        parser.parse(
+          xml
+        );
+    } catch {
+      throw new Error(
+        'UDF XML could not be parsed'
+      );
+    }
+
+    const template =
+      parsed?.template;
+
+    if (
+      !template
+    ) {
+      throw new Error(
+        'UDF template not found'
+      );
+    }
+
+    // ==================================================
+    // CONTENT
+    // ==================================================
+
+    let rawContent =
+      null;
+
+    if (
+      typeof template.content ===
+      'string'
+    ) {
+      rawContent =
+        template.content;
+    } else if (
+      template.content &&
+      typeof template.content ===
+        'object'
+    ) {
+      rawContent =
+        template.content
+          .__cdata ??
+        template.content
+          ['#text'] ??
+        '';
+    }
+
+    const content =
+      String(
+        rawContent ||
+        ''
+      );
+
+    if (
+      !content.trim()
+    ) {
+      throw new Error(
+        'UDF document content is empty'
+      );
+    }
+
+    // ==================================================
+    // PAGE FORMAT
+    // ==================================================
+
+    const pageFormat =
+      template.properties
+        ?.pageFormat ||
+      {};
+
+    const toNumber = (
+      value,
+      fallback = null
+    ) => {
+      const number =
+        Number(
+          value
+        );
+
+      return Number.isFinite(
+        number
+      )
+        ? number
+        : fallback;
+    };
+
+    /*
+     * UYAP sayfa ayarlarında ölçüler point benzeri
+     * değerler taşır.
+     *
+     * 1 pt ≈ 0.352778 mm
+     */
+    const pointToMm = (
+      value,
+      fallback
+    ) => {
+      const number =
+        toNumber(
+          value
+        );
+
+      if (
+        number === null ||
+        number < 0
+      ) {
+        return fallback;
+      }
+
+      return Number(
+        (
+          number *
+          0.352778
+        ).toFixed(
+          2
+        )
+      );
+    };
+
+    // ==================================================
+    // DOCUMENT PROPERTIES
+    // ==================================================
+
+    let documentProperties =
+      null;
+
+    const propertiesEntry =
+      entries.find(
+        (
+          entry
+        ) =>
+          entry.entryName
+            ?.toLowerCase() ===
+          'documentproperties.xml'
+      );
+
+    if (
+      propertiesEntry
+    ) {
+      try {
+        const propertiesBuffer =
+          propertiesEntry.getData();
+
+        if (
+          propertiesBuffer
+            ?.length &&
+          propertiesBuffer.length <=
+            1024 * 1024
+        ) {
+          const propertiesXml =
+            propertiesBuffer.toString(
+              'utf8'
+            );
+
+          documentProperties =
+            parser.parse(
+              propertiesXml
+            );
+        }
+      } catch {
+        /*
+         * documentproperties.xml preview için
+         * zorunlu değildir.
+         *
+         * Bozuksa asıl belge önizlemesini
+         * engellemiyoruz.
+         */
+        documentProperties =
+          null;
+      }
+    }
+
+    // ==================================================
+    // SIGNATURE PRESENCE
+    // ==================================================
+
+    const signatureEntry =
+      entries.find(
+        (
+          entry
+        ) =>
+          entry.entryName
+            ?.toLowerCase() ===
+          'sign.sgn'
+      );
+
+    /*
+     * DİKKAT:
+     *
+     * sign.sgn'nin bulunması yalnızca UDF içinde
+     * imza verisi bulunduğunu gösterir.
+     *
+     * Bu alan "imza geçerli" anlamına GELMEZ.
+     * Kriptografik imza doğrulaması ayrı özelliktir.
+     */
+    const hasSignature =
+      Boolean(
+        signatureEntry
+      );
+
+    // ==================================================
+    // RESPONSE
+    // ==================================================
+
+    return {
+      id:
+        document.id,
+
+      name:
+        document.name,
+
+      original_name:
+        document.original_name,
+
+      file_type:
+        'udf',
+
+      mime_type:
+        document.mime_type,
+
+      version:
+        document.version,
+
+      format_version:
+        template.format_id ||
+        null,
+
+      content,
+
+      page: {
+        width_mm:
+          210,
+
+        height_mm:
+          297,
+
+        orientation:
+          String(
+            pageFormat.paperOrientation ||
+            '1'
+          ),
+
+        margins: {
+          left:
+            pointToMm(
+              pageFormat.leftMargin,
+              15
+            ),
+
+          right:
+            pointToMm(
+              pageFormat.rightMargin,
+              15
+            ),
+
+          top:
+            pointToMm(
+              pageFormat.topMargin,
+              15
+            ),
+
+          bottom:
+            pointToMm(
+              pageFormat.bottomMargin,
+              15
+            ),
+        },
+      },
+
+      /*
+       * UYAP'ın paragraph / content / table / field
+       * yapısını sonraki renderer aşamasında
+       * kullanacağız.
+       */
+      elements:
+        template.elements ||
+        null,
+
+      document_properties:
+        documentProperties,
+
+      signature: {
+        present:
+          hasSignature,
+
+        verified:
+          false,
+      },
+    };
+  },
+
+  // ====================================================
   // VERSIONS
   // ====================================================
 
   async getVersions(
-  documentId,
-  actor
-) {
-  const document =
+    documentId,
+    actor
+  ) {
+    const document =
+      await assertDocumentReadAccess(
+        documentId,
+        actor
+      );
+
+    const rootId =
+      document.parent_id ||
+      document.id;
+
     await assertDocumentReadAccess(
-      documentId,
+      rootId,
       actor
     );
 
-  const rootId =
-    document.parent_id ||
-    document.id;
+    const where =
+      combineWhere(
+        {
+          [Op.or]: [
+            {
+              id:
+                rootId,
+            },
 
-  await assertDocumentReadAccess(
-    rootId,
-    actor
-  );
+            {
+              parent_id:
+                rootId,
+            },
+          ],
+        },
 
-  const where =
-    combineWhere(
-      {
-        [Op.or]: [
-          {
-            id:
-              rootId,
-          },
-
-          {
-            parent_id:
-              rootId,
-          },
-        ],
-      },
-
-      buildDocumentReadAccessWhere(
-        actor
-      )
-    );
+        buildDocumentReadAccessWhere(
+          actor
+        )
+      );
 
     return Document.findAll({
       where,
@@ -2201,7 +2673,7 @@ export const documentService = {
             false,
         },
 
-         buildDocumentReadAccessWhere(
+        buildDocumentReadAccessWhere(
           actor
         )
       );

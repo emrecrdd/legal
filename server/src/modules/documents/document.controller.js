@@ -57,10 +57,6 @@ const auditMetadata = (
   user_id:
     req.user.id,
 
-  /*
-   * Reverse proxy arkasında doğruladığımız
-   * gerçek client IP tercih edilir.
-   */
   ip_address:
     req.realClientIp ||
     req.ip ||
@@ -131,6 +127,7 @@ const isUdfFilename = (
 // ======================================================
 
 export const documentController = {
+
   // ====================================================
   // UPLOAD SINGLE
   // ====================================================
@@ -150,12 +147,6 @@ export const documentController = {
         );
       }
 
-      /*
-       * uploaded_by artık body üzerinden gönderilmiyor.
-       *
-       * Service authenticated actor ID'sini doğrudan
-       * kullanıyor.
-       */
       const document =
         await documentService.upload(
           {
@@ -249,10 +240,6 @@ export const documentController = {
 
                 file,
 
-                /*
-                 * Çoklu yüklemede bütün belgelere aynı
-                 * özel isim verilmesini engelle.
-                 */
                 name:
                   req.files.length >
                   1
@@ -445,9 +432,6 @@ export const documentController = {
           power_of_attorney_id,
           include_archived,
 
-          /*
-           * Query-level BOLA scope.
-           */
           actor:
             req.user,
         });
@@ -502,10 +486,6 @@ export const documentController = {
         error
       );
 
-      /*
-       * Yetkisiz ID ile gerçekten olmayan ID arasında
-       * ayrım yapılmaz.
-       */
       return errorResponse(
         res,
         error.message,
@@ -578,22 +558,12 @@ export const documentController = {
     res
   ) {
     try {
-      /*
-       * findOne hem audit açıklaması için belgeyi getirir
-       * hem de ilk authorization kontrolünü yapar.
-       */
       const document =
         await documentService.findOne(
           req.params.id,
           req.user
         );
 
-      /*
-       * remove kendi içinde authorization kontrolünü
-       * tekrar yapar.
-       *
-       * Defense-in-depth korunur.
-       */
       await documentService.remove(
         req.params.id,
         req.user
@@ -647,20 +617,12 @@ export const documentController = {
     res
   ) {
     try {
-      /*
-       * Belge metadata'sı ancak authorization sonrası
-       * alınabilir.
-       */
       const document =
         await documentService.findOne(
           req.params.id,
           req.user
         );
 
-      /*
-       * download/getFilePath kendi içinde belgeyi
-       * DB'den tekrar authorization ile doğrular.
-       */
       const fileStream =
         await documentService.download(
           document,
@@ -687,19 +649,11 @@ export const documentController = {
           originalFilename
         );
 
-      /*
-       * Hassas hukuk belgelerinin browser/proxy cache
-       * katmanlarında tutulmasını istemiyoruz.
-       */
       res.setHeader(
         'Cache-Control',
         'private, no-store'
       );
 
-      /*
-       * UDF XML tabanlı görünse bile browser tarafından
-       * XML olarak yorumlanmaz.
-       */
       res.setHeader(
         'Content-Type',
         isUdf
@@ -786,7 +740,7 @@ export const documentController = {
   },
 
   // ====================================================
-  // PREVIEW
+  // NORMAL PREVIEW
   // ====================================================
 
   async preview(
@@ -799,6 +753,27 @@ export const documentController = {
           req.params.id,
           req.user
         );
+
+      /*
+       * UDF normal binary preview endpointinden
+       * render edilmez.
+       *
+       * Frontend UDF için /udf-preview kullanmalıdır.
+       */
+      if (
+        document.file_type ===
+          'udf' ||
+        isUdfFilename(
+          document.original_name ||
+          document.name
+        )
+      ) {
+        return errorResponse(
+          res,
+          'UDF preview requires the UDF preview endpoint',
+          415
+        );
+      }
 
       const fileStream =
         await documentService.download(
@@ -816,21 +791,11 @@ export const documentController = {
           originalFilename
         );
 
-      /*
-       * Preview edilen hassas belge proxy/browser
-       * cache'inde tutulmaz.
-       */
       res.setHeader(
         'Cache-Control',
         'private, no-store'
       );
 
-      /*
-       * Mevcut preview davranışını koruyoruz.
-       *
-       * UDF zaten service tarafında octet-stream
-       * olarak normalize edilmiş durumda.
-       */
       res.setHeader(
         'Content-Type',
         document.mime_type ||
@@ -897,6 +862,80 @@ export const documentController = {
   },
 
   // ====================================================
+  // UDF PREVIEW
+  // ====================================================
+
+  async previewUdf(
+    req,
+    res
+  ) {
+    try {
+      const preview =
+        await documentService.getUdfPreview(
+          req.params.id,
+          req.user
+        );
+
+      /*
+       * Hukuk belgesi preview JSON'u da browser/proxy
+       * cache katmanında tutulmasın.
+       */
+      res.setHeader(
+        'Cache-Control',
+        'private, no-store'
+      );
+
+      res.setHeader(
+        'X-Content-Type-Options',
+        'nosniff'
+      );
+
+      /*
+       * UDF görüntüleme işlemini ayrıca auditliyoruz.
+       *
+       * Buradaki "view", dosyanın orijinal UDF olarak
+       * indirilmesinden farklı bir işlemdir.
+       */
+      await createAuditLogSafely({
+        action:
+          'view',
+
+        entity_type:
+          'document',
+
+        entity_id:
+          preview.id,
+
+        description:
+          `"${preview.name}" UDF belgesi önizlendi`,
+
+        ...auditMetadata(
+          req
+        ),
+      });
+
+      return successResponse(
+        res,
+        preview,
+        'UDF preview fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Preview UDF document error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        404
+      );
+    }
+  },
+
+  // ====================================================
   // VERSIONS
   // ====================================================
 
@@ -941,11 +980,6 @@ export const documentController = {
     res
   ) {
     try {
-      /*
-       * Kategoriler artık sistemdeki tüm belgelerden
-       * değil yalnız kullanıcının erişebildiği
-       * belgelerden türetilir.
-       */
       const categories =
         await documentService.getCategories(
           req.user
@@ -981,10 +1015,6 @@ export const documentController = {
     res
   ) {
     try {
-      /*
-       * Belge sayısı, boyutu ve kategori istatistikleri
-       * actor scope'una göre hesaplanır.
-       */
       const stats =
         await documentService.getStatistics(
           req.user

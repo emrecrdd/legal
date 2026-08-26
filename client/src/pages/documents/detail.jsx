@@ -371,170 +371,7 @@ const getFilenameFromContentDisposition = (
 // UDF PARSER
 // ======================================================
 
-const parseUdfDocument = async (
-  blob
-) => {
-  if (!blob) {
-    throw new Error(
-      'UDF dosyası alınamadı'
-    );
-  }
 
-  const xmlText =
-    await blob.text();
-
-  if (
-    !xmlText?.trim()
-  ) {
-    throw new Error(
-      'UDF dosyası boş'
-    );
-  }
-
-  const parser =
-    new DOMParser();
-
-  const xmlDocument =
-    parser.parseFromString(
-      xmlText,
-      'application/xml'
-    );
-
-  const parserError =
-    xmlDocument.querySelector(
-      'parsererror'
-    );
-
-  if (parserError) {
-    throw new Error(
-      'UDF dosya yapısı okunamadı'
-    );
-  }
-
-  /*
-   * UYAP UDF yapısında asıl belge metni:
-   *
-   * <template>
-   *   <content><![CDATA[
-   *     belge metni
-   *   ]]></content>
-   * </template>
-   */
-  const contentNode =
-    xmlDocument.querySelector(
-      'template > content'
-    ) ||
-    xmlDocument.querySelector(
-      'content'
-    );
-
-  if (!contentNode) {
-    throw new Error(
-      'UDF belge içeriği bulunamadı'
-    );
-  }
-
-  const content =
-    contentNode.textContent ||
-    '';
-
-  if (
-    !content.trim()
-  ) {
-    throw new Error(
-      'UDF belge içeriği boş'
-    );
-  }
-
-  /*
-   * Sayfa ayarlarını da okuyabiliriz.
-   * Şimdilik margin değerleri yoksa A4 için
-   * varsayılan 15 mm kullanıyoruz.
-   */
-  const pageFormat =
-    xmlDocument.querySelector(
-      'pageFormat'
-    );
-
-  const leftMargin =
-    Number(
-      pageFormat?.getAttribute(
-        'leftMargin'
-      )
-    );
-
-  const rightMargin =
-    Number(
-      pageFormat?.getAttribute(
-        'rightMargin'
-      )
-    );
-
-  const topMargin =
-    Number(
-      pageFormat?.getAttribute(
-        'topMargin'
-      )
-    );
-
-  const bottomMargin =
-    Number(
-      pageFormat?.getAttribute(
-        'bottomMargin'
-      )
-    );
-
-  /*
-   * UYAP değerleri point benzeri ölçüler taşıyor.
-   * 1 pt ≈ 0.352778 mm
-   */
-  const pointToMm = (
-    value,
-    fallback = 15
-  ) => {
-    if (
-      !Number.isFinite(
-        value
-      ) ||
-      value <= 0
-    ) {
-      return fallback;
-    }
-
-    return Number(
-      (
-        value *
-        0.352778
-      ).toFixed(2)
-    );
-  };
-
-  return {
-    content,
-
-    margins: {
-      left:
-        pointToMm(
-          leftMargin
-        ),
-
-      right:
-        pointToMm(
-          rightMargin
-        ),
-
-      top:
-        pointToMm(
-          topMargin
-        ),
-
-      bottom:
-        pointToMm(
-          bottomMargin
-        ),
-    },
-  };
-};
 
 // ======================================================
 // UDF PREVIEW WINDOW
@@ -1126,170 +963,257 @@ const DocumentDetail = () => {
   // PREVIEW
   // ======================================================
 
-  const handlePreview = async (
-    targetDocument =
-      currentDocument
-  ) => {
-    if (!targetDocument?.id) {
-      toast.error(
-        'Önizlenecek belge bulunamadı'
-      );
+ // ======================================================
+// PREVIEW
+// ======================================================
 
-      return;
-    }
+const handlePreview = async (
+  targetDocument =
+    currentDocument
+) => {
+  if (
+    !targetDocument?.id
+  ) {
+    toast.error(
+      'Önizlenecek belge bulunamadı'
+    );
 
-    /*
-     * Pencereyi kullanıcı tıklaması anında açıyoruz.
-     * Böylece popup blocker ihtimali azalır.
-     */
-    const previewWindow =
-      window.open(
-        '',
-        '_blank'
-      );
+    return;
+  }
 
-    if (!previewWindow) {
-      toast.error(
-        'Önizleme penceresi açılamadı. Tarayıcı açılır pencere iznini kontrol edin.'
-      );
+  /*
+   * Popup kullanıcı tıklaması sırasında açılır.
+   *
+   * API cevabından sonra window.open yapılırsa
+   * browser popup blocker tarafından engellenebilir.
+   */
+  const previewWindow =
+    window.open(
+      '',
+      '_blank'
+    );
 
-      return;
-    }
+  if (
+    !previewWindow
+  ) {
+    toast.error(
+      'Önizleme penceresi açılamadı. Tarayıcı açılır pencere iznini kontrol edin.'
+    );
 
-    try {
+    return;
+  }
+
+  try {
+    // ==================================================
+    // UDF
+    // ==================================================
+
+    if (
+      isUdfDocument(
+        targetDocument
+      )
+    ) {
+      previewWindow.document.title =
+        'UDF yükleniyor...';
+
       /*
-       * UDF ise XML kodunu browser'a doğrudan vermiyoruz.
-       * XML içindeki belge metnini okuyup kendimiz render ediyoruz.
+       * Loading ekranını DOM API ile oluşturuyoruz.
        */
-      if (
-        isUdfDocument(
-          targetDocument
-        )
-      ) {
-        previewWindow.document.title =
-          'UDF yükleniyor...';
+      previewWindow.document.body.textContent =
+        '';
 
-        previewWindow.document.body.innerHTML =
-          '';
-
-        const loading =
-          previewWindow.document.createElement(
-            'div'
-          );
-
-        loading.textContent =
-          'UDF belgesi hazırlanıyor...';
-
-        loading.style.cssText = `
-          padding: 40px;
-          font-family: Arial, sans-serif;
-          color: #475569;
-          text-align: center;
-        `;
-
-        previewWindow.document.body.appendChild(
-          loading
+      const loading =
+        previewWindow.document.createElement(
+          'div'
         );
 
-        const response =
-          await documentApi.preview(
-            targetDocument.id
-          );
+      loading.textContent =
+        'UDF belgesi hazırlanıyor...';
 
-        const blob =
-          response.data instanceof Blob
-            ? response.data
-            : new Blob(
-                [response.data],
-                {
-                  type:
-                    response.headers?.[
-                      'content-type'
-                    ] ||
-                    'application/octet-stream',
-                }
-              );
+      loading.style.cssText = `
+        padding: 40px;
+        font-family: Arial, sans-serif;
+        color: #475569;
+        text-align: center;
+      `;
 
-        const udf =
-          await parseUdfDocument(
-            blob
-          );
-
-        renderUdfPreview({
-          previewWindow,
-          document:
-            targetDocument,
-          udf,
-        });
-
-        return;
-      }
+      previewWindow.document.body.appendChild(
+        loading
+      );
 
       /*
-       * PDF / görsel / browser'ın desteklediği diğer
-       * dosyalarda mevcut preview sistemi devam ediyor.
+       * UDF artık frontend'de parse edilmez.
+       *
+       * Backend:
+       *
+       * - dosyayı okur
+       * - UDF/XML yapısını parse eder
+       * - güvenli preview JSON'u döndürür
        */
       const response =
-        await documentApi.preview(
+        await documentApi.udfPreview(
           targetDocument.id
         );
 
-      const contentType =
-        response.headers?.[
-          'content-type'
-        ] ||
-        targetDocument.mime_type ||
-        'application/octet-stream';
-
-      const blob =
-        new Blob(
-          [response.data],
-          {
-            type:
-              contentType,
-          }
-        );
-
-      const url =
-        window.URL.createObjectURL(
-          blob
-        );
-
-      previewWindow.opener =
-        null;
-
-      previewWindow.location.href =
-        url;
-
-      window.setTimeout(
-        () => {
-          window.URL.revokeObjectURL(
-            url
-          );
-        },
-        60_000
-      );
-    } catch (previewError) {
-      console.error(
-        'Document preview error:',
-        previewError
-      );
+      /*
+       * successResponse yapısına göre:
+       *
+       * {
+       *   success: true,
+       *   data: {
+       *     content: "...",
+       *     margins: {...}
+       *   }
+       * }
+       *
+       * Axios nedeniyle response.data HTTP body'dir.
+       */
+      const udf =
+        response?.data?.data ??
+        response?.data;
 
       if (
-        previewWindow &&
-        !previewWindow.closed
+        !udf ||
+        typeof udf.content !==
+          'string'
       ) {
-        previewWindow.close();
+        throw new Error(
+          'UDF önizleme verisi geçersiz'
+        );
       }
 
-      toast.error(
-        previewError?.message ||
-        previewError?.response
-          ?.data?.message ||
-        'Belge önizlenemedi'
-      );
+      /*
+       * Backend margin göndermediyse güvenli
+       * varsayılan değerleri kullan.
+       */
+      const normalizedUdf = {
+        content:
+          udf.content,
+
+        margins: {
+          top:
+            Number(
+              udf.margins?.top
+            ) || 15,
+
+          right:
+            Number(
+              udf.margins?.right
+            ) || 15,
+
+          bottom:
+            Number(
+              udf.margins?.bottom
+            ) || 15,
+
+          left:
+            Number(
+              udf.margins?.left
+            ) || 15,
+        },
+      };
+
+      renderUdfPreview({
+        previewWindow,
+
+        document:
+          targetDocument,
+
+        udf:
+          normalizedUdf,
+      });
+
+      return;
     }
-  };
+
+    // ==================================================
+    // NORMAL FILE PREVIEW
+    // ==================================================
+
+    /*
+     * PDF / image / browser'ın desteklediği diğer
+     * dosyalarda binary preview sistemi devam eder.
+     */
+    const response =
+      await documentApi.preview(
+        targetDocument.id
+      );
+
+    const contentType =
+      response.headers?.[
+        'content-type'
+      ] ||
+      targetDocument.mime_type ||
+      'application/octet-stream';
+
+    const blob =
+      response.data instanceof Blob
+        ? response.data
+        : new Blob(
+            [
+              response.data,
+            ],
+            {
+              type:
+                contentType,
+            }
+          );
+
+    const url =
+      window.URL.createObjectURL(
+        blob
+      );
+
+    /*
+     * Yeni pencerenin opener üzerinden ana uygulamaya
+     * erişmesini engelle.
+     */
+    previewWindow.opener =
+      null;
+
+    previewWindow.location.href =
+      url;
+
+    /*
+     * Blob URL sonsuza kadar memory'de tutulmaz.
+     *
+     * Browser'ın dosyayı yüklemesi için yeterli süre
+     * bırakıyoruz.
+     */
+    window.setTimeout(
+      () => {
+        window.URL.revokeObjectURL(
+          url
+        );
+      },
+      60_000
+    );
+  } catch (
+    previewError
+  ) {
+    console.error(
+      'Document preview error:',
+      previewError
+    );
+
+    if (
+      previewWindow &&
+      !previewWindow.closed
+    ) {
+      previewWindow.close();
+    }
+
+    /*
+     * Axios JSON hata cevabı öncelikli.
+     */
+    toast.error(
+      previewError?.response
+        ?.data?.message ||
+      previewError?.message ||
+      'Belge önizlenemedi'
+    );
+  }
+};
 
   // ======================================================
   // VERSION FILE
