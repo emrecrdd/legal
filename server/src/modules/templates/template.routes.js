@@ -32,11 +32,8 @@ router.use(
 
 // ======================================================
 // LIST / META
-//
-// Özel route'lar /:id'den önce tutulmalı.
 // ======================================================
 
-// Şablon listesi
 router.get(
   '/',
 
@@ -47,7 +44,6 @@ router.get(
   templateController.findAll
 );
 
-// Kategoriler
 router.get(
   '/categories',
 
@@ -58,7 +54,6 @@ router.get(
   templateController.getCategories
 );
 
-// Hukuk alanları
 router.get(
   '/law-areas',
 
@@ -89,9 +84,6 @@ router.post(
 
 // ======================================================
 // DOWNLOAD
-//
-// Ayrı download permission tanımlamadığımız için
-// şimdilik VIEW_TEMPLATES ile korunuyor.
 // ======================================================
 
 router.get(
@@ -102,6 +94,34 @@ router.get(
   ),
 
   templateController.download
+);
+
+// ======================================================
+// UDF PREVIEW
+// ======================================================
+
+router.get(
+  '/:id/udf-preview',
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TEMPLATES
+  ),
+
+  templateController.previewUdf
+);
+
+// ======================================================
+// NORMAL PREVIEW
+// ======================================================
+
+router.get(
+  '/:id/preview',
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TEMPLATES
+  ),
+
+  templateController.preview
 );
 
 // ======================================================

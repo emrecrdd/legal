@@ -1,187 +1,647 @@
-import { templateService } from './template.service.js';
-import { successResponse, errorResponse, paginatedResponse } from '../../utils/response.js';
-import { logger } from '../../config/logger.js';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import {
+  templateService,
+} from './template.service.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import {
+  successResponse,
+  errorResponse,
+  paginatedResponse,
+} from '../../utils/response.js';
+
+import {
+  logger,
+} from '../../config/logger.js';
+
+import fs from 'fs';
+import fsPromises from 'fs/promises';
+import path from 'path';
+
+import {
+  fileURLToPath,
+} from 'url';
+
+const __filename =
+  fileURLToPath(
+    import.meta.url
+  );
+
+const __dirname =
+  path.dirname(
+    __filename
+  );
+
+const UPLOAD_DIR =
+  path.resolve(
+    __dirname,
+    '../../../uploads'
+  );
+
+const isUdfFilename = (
+  filename
+) => {
+  return (
+    typeof filename ===
+      'string' &&
+    filename
+      .toLowerCase()
+      .endsWith(
+        '.udf'
+      )
+  );
+};
+
+const createUniqueFilename = (
+  originalName
+) => {
+  const extension =
+    path.extname(
+      originalName ||
+      ''
+    );
+
+  return (
+    `${Date.now()}-${Math.round(
+      Math.random() *
+      1e9
+    )}${extension}`
+  );
+};
+
+const saveUploadedFile =
+  async (
+    file
+  ) => {
+    await fsPromises.mkdir(
+      UPLOAD_DIR,
+      {
+        recursive:
+          true,
+      }
+    );
+
+    const filename =
+      createUniqueFilename(
+        file.originalname
+      );
+
+    const filePath =
+      path.join(
+        UPLOAD_DIR,
+        filename
+      );
+
+    await fsPromises.writeFile(
+      filePath,
+      file.buffer
+    );
+
+    return {
+      filename,
+      filePath,
+    };
+  };
 
 export const templateController = {
-  async create(req, res) {
-    try {
-      console.log('📥 REQ.BODY:', req.body);
-      console.log('📁 REQ.FILE:', req.file);
+  // ====================================================
+  // CREATE
+  // ====================================================
 
+  async create(
+    req,
+    res
+  ) {
+    try {
       const data = {
         ...req.body,
-        created_by: req.user.id,
+
+        created_by:
+          req.user.id,
       };
 
-      // ✅ DOSYA KAYDETME - DÜZELTİLDİ
-      if (req.file) {
-        // Uploads klasörünü kontrol et
-        const uploadDir = path.join(__dirname, '../../../uploads');
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
+      if (
+        req.file
+      ) {
+        const {
+          filename,
+        } =
+          await saveUploadedFile(
+            req.file
+          );
+
+        data.file_url =
+          `/uploads/${filename}`;
+
+        data.file_name =
+          req.file.originalname;
+
+        data.file_size =
+          req.file.size;
+
+        data.file_type =
+          req.file.mimetype;
+      }
+
+      const template =
+        await templateService.create(
+          data
+        );
+
+      return successResponse(
+        res,
+        template,
+        'Template created successfully',
+        201
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Create template error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
+    }
+  },
+
+  // ====================================================
+  // FIND ALL
+  // ====================================================
+
+  async findAll(
+    req,
+    res
+  ) {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        category,
+        law_area,
+        search,
+      } = req.query;
+
+      const result =
+        await templateService.findAll({
+          page,
+          limit,
+          category,
+          law_area,
+          search,
+        });
+
+      return paginatedResponse(
+        res,
+        result.data,
+        result.pagination,
+        'Templates fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get templates error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
+    }
+  },
+
+  // ====================================================
+  // FIND ONE
+  // ====================================================
+
+  async findOne(
+    req,
+    res
+  ) {
+    try {
+      const template =
+        await templateService.findOne(
+          req.params.id
+        );
+
+      return successResponse(
+        res,
+        template,
+        'Template fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get template error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        404
+      );
+    }
+  },
+
+  // ====================================================
+  // UPDATE
+  // ====================================================
+
+  async update(
+    req,
+    res
+  ) {
+    try {
+      const data = {
+        ...req.body,
+
+        updated_by:
+          req.user.id,
+      };
+
+      if (
+        req.file
+      ) {
+        const existing =
+          await templateService.findOne(
+            req.params.id
+          );
+
+        const {
+          filename,
+        } =
+          await saveUploadedFile(
+            req.file
+          );
+
+        data.file_url =
+          `/uploads/${filename}`;
+
+        data.file_name =
+          req.file.originalname;
+
+        data.file_size =
+          req.file.size;
+
+        data.file_type =
+          req.file.mimetype;
+
+        /*
+         * Yeni dosya başarıyla yazıldıktan sonra
+         * eski dosyayı temizle.
+         */
+        if (
+          existing.file_url
+        ) {
+          const oldPath =
+            path.join(
+              UPLOAD_DIR,
+              path.basename(
+                existing.file_url
+              )
+            );
+
+          await fsPromises
+            .unlink(
+              oldPath
+            )
+            .catch(
+              () => {}
+            );
         }
-
-        // Benzersiz dosya adı oluştur
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(req.file.originalname);
-        const filename = uniqueSuffix + ext;
-        const filePath = path.join(uploadDir, filename);
-
-        // Dosyayı diske yaz (memoryStorage kullanıldığı için buffer'dan oku)
-        fs.writeFileSync(filePath, req.file.buffer);
-
-        // Veritabanına kaydet
-        data.file_url = `/uploads/${filename}`;
-        data.file_name = req.file.originalname;
-        data.file_size = req.file.size;
-        data.file_type = req.file.mimetype;
-        
-        console.log('✅ Dosya kaydedildi:', filePath);
-        console.log('✅ file_url:', data.file_url);
-      } else {
-        console.warn('⚠️ Dosya yok! req.file undefined');
       }
 
-      const template = await templateService.create(data);
-      console.log('✅ Template oluşturuldu:', template.id);
-      
-      return successResponse(res, template, 'Template created successfully', 201);
-    } catch (error) {
-      logger.error('Create template error:', error);
-      return errorResponse(res, error.message, 400);
+      const template =
+        await templateService.update(
+          req.params.id,
+          data
+        );
+
+      return successResponse(
+        res,
+        template,
+        'Template updated successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Update template error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  async findAll(req, res) {
+  // ====================================================
+  // REMOVE
+  // ====================================================
+
+  async remove(
+    req,
+    res
+  ) {
     try {
-      const { page = 1, limit = 10, category, law_area, search } = req.query;
-      const result = await templateService.findAll({ page, limit, category, law_area, search });
-      return paginatedResponse(res, result.data, result.pagination, 'Templates fetched successfully');
-    } catch (error) {
-      logger.error('Get templates error:', error);
-      return errorResponse(res, error.message, 400);
+      const template =
+        await templateService.findOne(
+          req.params.id
+        );
+
+      await templateService.remove(
+        req.params.id
+      );
+
+      if (
+        template.file_url
+      ) {
+        const filePath =
+          path.join(
+            UPLOAD_DIR,
+            path.basename(
+              template.file_url
+            )
+          );
+
+        await fsPromises
+          .unlink(
+            filePath
+          )
+          .catch(
+            () => {}
+          );
+      }
+
+      return successResponse(
+        res,
+        null,
+        'Template deleted successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Delete template error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  async findOne(req, res) {
+  // ====================================================
+  // DOWNLOAD
+  // ====================================================
+
+  async download(
+    req,
+    res
+  ) {
     try {
-      const template = await templateService.findOne(req.params.id);
-      return successResponse(res, template, 'Template fetched successfully');
-    } catch (error) {
-      logger.error('Get template error:', error);
-      return errorResponse(res, error.message, 404);
+      const {
+        template,
+        filePath,
+      } =
+        await templateService.getFilePath(
+          req.params.id
+        );
+
+      await templateService.incrementDownload(
+        req.params.id
+      );
+
+      return res.download(
+        filePath,
+        template.file_name
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Download template error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        404
+      );
     }
   },
 
-  async update(req, res) {
+  // ====================================================
+  // NORMAL PREVIEW
+  // ====================================================
+
+  async preview(
+    req,
+    res
+  ) {
     try {
-      const data = { ...req.body, updated_by: req.user.id };
-      
-      // ✅ UPDATE - DOSYA KAYDETME
-      if (req.file) {
-        const uploadDir = path.join(__dirname, '../../../uploads');
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
+      const {
+        template,
+        filePath,
+      } =
+        await templateService.getFilePath(
+          req.params.id
+        );
+
+      if (
+        isUdfFilename(
+          template.file_name
+        )
+      ) {
+        return errorResponse(
+          res,
+          'UDF preview must use the UDF preview endpoint',
+          400
+        );
+      }
+
+      res.setHeader(
+        'Cache-Control',
+        'private, no-store'
+      );
+
+      res.setHeader(
+        'Content-Type',
+        template.file_type ||
+        'application/octet-stream'
+      );
+
+      res.setHeader(
+        'Content-Disposition',
+        'inline'
+      );
+
+      res.setHeader(
+        'X-Content-Type-Options',
+        'nosniff'
+      );
+
+      const stream =
+        fs.createReadStream(
+          filePath
+        );
+
+      stream.on(
+        'error',
+        (
+          error
+        ) => {
+          logger.error(
+            'Template preview stream error:',
+            error
+          );
+
+          if (
+            !res.headersSent
+          ) {
+            res
+              .status(
+                500
+              )
+              .end();
+          } else {
+            res.destroy();
+          }
         }
+      );
 
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(req.file.originalname);
-        const filename = uniqueSuffix + ext;
-        const filePath = path.join(uploadDir, filename);
+      stream.pipe(
+        res
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Preview template error:',
+        error
+      );
 
-        fs.writeFileSync(filePath, req.file.buffer);
-
-        data.file_url = `/uploads/${filename}`;
-        data.file_name = req.file.originalname;
-        data.file_size = req.file.size;
-        data.file_type = req.file.mimetype;
-        
-        console.log('✅ Dosya güncellendi:', filePath);
-      }
-
-      const template = await templateService.update(req.params.id, data);
-      return successResponse(res, template, 'Template updated successfully');
-    } catch (error) {
-      logger.error('Update template error:', error);
-      return errorResponse(res, error.message, 400);
+      return errorResponse(
+        res,
+        error.message,
+        404
+      );
     }
   },
 
-  async remove(req, res) {
+  // ====================================================
+  // UDF PREVIEW
+  // ====================================================
+
+  async previewUdf(
+    req,
+    res
+  ) {
     try {
-      // ✅ Önce dosyayı sil
-      const template = await templateService.findOne(req.params.id);
-      if (template.file_url) {
-        const filePath = path.join(__dirname, '../../../uploads', path.basename(template.file_url));
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-          console.log('✅ Dosya silindi:', filePath);
-        }
-      }
-      
-      await templateService.remove(req.params.id);
-      return successResponse(res, null, 'Template deleted successfully');
-    } catch (error) {
-      logger.error('Delete template error:', error);
-      return errorResponse(res, error.message, 400);
+      const preview =
+        await templateService.getUdfPreview(
+          req.params.id
+        );
+
+      return successResponse(
+        res,
+        preview,
+        'UDF template preview fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Preview UDF template error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  async getCategories(req, res) {
+  // ====================================================
+  // CATEGORIES
+  // ====================================================
+
+  async getCategories(
+    req,
+    res
+  ) {
     try {
-      const categories = await templateService.getCategories();
-      return successResponse(res, categories, 'Categories fetched successfully');
-    } catch (error) {
-      logger.error('Get categories error:', error);
-      return errorResponse(res, error.message, 400);
+      const categories =
+        await templateService.getCategories();
+
+      return successResponse(
+        res,
+        categories,
+        'Categories fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get categories error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 
-  async download(req, res) {
+  // ====================================================
+  // LAW AREAS
+  // ====================================================
+
+  async getLawAreas(
+    req,
+    res
+  ) {
     try {
-      console.log('📥 Download isteği, ID:', req.params.id);
-      
-      const template = await templateService.findOne(req.params.id);
-      
-      if (!template.file_url) {
-        console.error('❌ file_url boş!');
-        return errorResponse(res, 'Dosya bulunamadı', 404);
-      }
+      const lawAreas =
+        await templateService.getLawAreas();
 
-      const filePath = path.join(__dirname, '../../../uploads', path.basename(template.file_url));
-      console.log('📁 Dosya yolu:', filePath);
-      
-      if (!fs.existsSync(filePath)) {
-        console.error('❌ Dosya bulunamadı:', filePath);
-        return errorResponse(res, 'Dosya bulunamadı', 404);
-      }
+      return successResponse(
+        res,
+        lawAreas,
+        'Law areas fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Get law areas error:',
+        error
+      );
 
-      await templateService.incrementDownload(req.params.id);
-      res.download(filePath, template.file_name, (err) => {
-        if (err) {
-          logger.error('Download error:', err);
-          return errorResponse(res, 'Dosya indirilemedi', 500);
-        }
-      });
-    } catch (error) {
-      logger.error('Download template error:', error);
-      return errorResponse(res, error.message, 404);
-    }
-  },
-
-  async getLawAreas(req, res) {
-    try {
-      const lawAreas = await templateService.getLawAreas();
-      return successResponse(res, lawAreas, 'Law areas fetched successfully');
-    } catch (error) {
-      logger.error('Get law areas error:', error);
-      return errorResponse(res, error.message, 400);
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
     }
   },
 };

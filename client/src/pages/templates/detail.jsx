@@ -31,6 +31,7 @@ import {
   CalendarDays,
   Download,
   Edit2,
+  Eye,
   FileText,
   FolderOpen,
   Scale,
@@ -149,6 +150,31 @@ const formatFileSize = (bytes) => {
   return `${Number(
     value.toFixed(2)
   )} ${units[index]}`;
+};
+
+const getFileExtension = (
+  fileName = ''
+) => {
+  const index =
+    fileName.lastIndexOf('.');
+
+  if (index === -1) {
+    return '';
+  }
+
+  return fileName
+    .slice(index)
+    .toLowerCase();
+};
+
+const isUdfTemplate = (
+  template
+) => {
+  return (
+    getFileExtension(
+      template?.file_name || ''
+    ) === '.udf'
+  );
 };
 
 // ======================================================
@@ -323,6 +349,312 @@ const TemplateDetail = () => {
         toast.error(
           error?.response?.data?.message ||
             'İndirilemedi'
+        );
+      }
+    };
+
+  // ======================================================
+  // PREVIEW
+  // ======================================================
+
+  const handlePreview =
+    async () => {
+      try {
+        if (
+          isUdfTemplate(
+            template
+          )
+        ) {
+          /*
+           * UDF binary olarak browser'a verilmez.
+           * Backend parse edilmiş preview JSON döndürür.
+           */
+          const response =
+            await templateApi.udfPreview(
+              id
+            );
+
+          const previewData =
+            response?.data?.data ??
+            response?.data;
+
+          const content =
+            previewData?.content ??
+            previewData?.text ??
+            previewData?.plainText ??
+            previewData?.html ??
+            '';
+
+          if (
+            !content
+          ) {
+            toast.error(
+              'UDF önizleme içeriği alınamadı'
+            );
+
+            return;
+          }
+
+          const previewWindow =
+            window.open(
+              '',
+              '_blank'
+            );
+
+          if (
+            !previewWindow
+          ) {
+            toast.error(
+              'Önizleme penceresi açılamadı. Tarayıcı pop-up engelini kontrol edin.'
+            );
+
+            return;
+          }
+
+          const escapeHtml = (
+            value
+          ) => {
+            return String(
+              value
+            )
+              .replace(
+                /&/g,
+                '&amp;'
+              )
+              .replace(
+                /</g,
+                '&lt;'
+              )
+              .replace(
+                />/g,
+                '&gt;'
+              )
+              .replace(
+                /"/g,
+                '&quot;'
+              )
+              .replace(
+                /'/g,
+                '&#039;'
+              );
+          };
+
+          const safeTitle =
+            escapeHtml(
+              template?.file_name ||
+              template?.title ||
+              'UDF Önizleme'
+            );
+
+          /*
+           * Backend HTML döndürüyorsa onu doğrudan
+           * çalıştırmıyoruz. Hukuki belge içeriğini
+           * güvenli biçimde metin olarak gösteriyoruz.
+           */
+          const safeContent =
+            escapeHtml(
+              content
+            );
+
+          previewWindow.document.open();
+
+          previewWindow.document.write(
+            `<!doctype html>
+            <html lang="tr">
+              <head>
+                <meta charset="utf-8" />
+                <meta
+                  name="viewport"
+                  content="width=device-width, initial-scale=1"
+                />
+                <title>${safeTitle}</title>
+
+                <style>
+                  * {
+                    box-sizing: border-box;
+                  }
+
+                  body {
+                    margin: 0;
+                    background: #f3f4f6;
+                    color: #111827;
+                    font-family:
+                      Arial,
+                      Helvetica,
+                      sans-serif;
+                  }
+
+                  .toolbar {
+                    position: sticky;
+                    top: 0;
+                    z-index: 10;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 16px;
+                    padding: 12px 20px;
+                    border-bottom: 1px solid #e5e7eb;
+                    background: rgba(255, 255, 255, 0.96);
+                    backdrop-filter: blur(10px);
+                  }
+
+                  .title {
+                    min-width: 0;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    font-size: 14px;
+                    font-weight: 600;
+                  }
+
+                  .badge {
+                    flex: none;
+                    border-radius: 999px;
+                    background: #eff6ff;
+                    padding: 5px 9px;
+                    color: #2563eb;
+                    font-size: 11px;
+                    font-weight: 700;
+                  }
+
+                  .page-wrap {
+                    padding: 32px 16px 56px;
+                  }
+
+                  .page {
+                    width: min(100%, 900px);
+                    min-height: 1120px;
+                    margin: 0 auto;
+                    padding: 72px 76px;
+                    background: #ffffff;
+                    box-shadow:
+                      0 1px 2px rgba(0, 0, 0, 0.04),
+                      0 12px 32px rgba(0, 0, 0, 0.08);
+                  }
+
+                  .content {
+                    margin: 0;
+                    white-space: pre-wrap;
+                    overflow-wrap: anywhere;
+                    font-family:
+                      "Times New Roman",
+                      Times,
+                      serif;
+                    font-size: 16px;
+                    line-height: 1.65;
+                  }
+
+                  @media (max-width: 700px) {
+                    .page-wrap {
+                      padding: 0;
+                    }
+
+                    .page {
+                      min-height: 100vh;
+                      padding: 32px 22px;
+                      box-shadow: none;
+                    }
+                  }
+
+                  @media print {
+                    body {
+                      background: #ffffff;
+                    }
+
+                    .toolbar {
+                      display: none;
+                    }
+
+                    .page-wrap {
+                      padding: 0;
+                    }
+
+                    .page {
+                      width: 100%;
+                      min-height: auto;
+                      padding: 0;
+                      box-shadow: none;
+                    }
+                  }
+                </style>
+              </head>
+
+              <body>
+                <div class="toolbar">
+                  <div class="title">
+                    ${safeTitle}
+                  </div>
+
+                  <div class="badge">
+                    UDF ÖNİZLEME
+                  </div>
+                </div>
+
+                <main class="page-wrap">
+                  <article class="page">
+                    <pre class="content">${safeContent}</pre>
+                  </article>
+                </main>
+              </body>
+            </html>`
+          );
+
+          previewWindow.document.close();
+
+          return;
+        }
+
+        /*
+         * PDF, Word, Excel, görsel ve TXT için
+         * preview endpoint'inden blob alınır.
+         */
+        const response =
+          await templateApi.preview(
+            id
+          );
+
+        if (
+          !(response?.data instanceof Blob)
+        ) {
+          toast.error(
+            'Önizleme dosyası alınamadı'
+          );
+
+          return;
+        }
+
+        const url =
+          window.URL.createObjectURL(
+            response.data
+          );
+
+        window.open(
+          url,
+          '_blank',
+          'noopener,noreferrer'
+        );
+
+        /*
+         * Yeni sekmenin blob'u okuyabilmesi için
+         * URL'yi hemen revoke etmiyoruz.
+         */
+        window.setTimeout(
+          () => {
+            window.URL.revokeObjectURL(
+              url
+            );
+          },
+          60_000
+        );
+      } catch (error) {
+        console.error(
+          'Template preview error:',
+          error
+        );
+
+        toast.error(
+          error?.response?.data?.message ||
+            'Önizleme açılamadı'
         );
       }
     };
@@ -534,6 +866,18 @@ const TemplateDetail = () => {
           {/* ACTIONS */}
 
           <div className="flex flex-wrap items-center gap-2">
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={
+                handlePreview
+              }
+            >
+              <Eye className="mr-2 h-4 w-4" />
+
+              Önizle
+            </Button>
 
             <Button
               type="button"
@@ -1076,18 +1420,35 @@ const TemplateDetail = () => {
 
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={
-                handleDownload
-              }
-            >
-              <Download className="mr-2 h-4 w-4" />
+            <div className="flex items-center gap-2">
 
-              İndir
-            </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={
+                  handlePreview
+                }
+              >
+                <Eye className="mr-2 h-4 w-4" />
+
+                Önizle
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={
+                  handleDownload
+                }
+              >
+                <Download className="mr-2 h-4 w-4" />
+
+                İndir
+              </Button>
+
+            </div>
 
           </div>
 

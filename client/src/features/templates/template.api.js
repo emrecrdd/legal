@@ -1,37 +1,171 @@
 import axios from '../../app/config/axios.js';
 
+// ======================================================
+// TEMPLATE API
+// ======================================================
+
 export const templateApi = {
-  // ✅ Tüm şablonları getir
-  getAll: (params) => axios.get('/templates', { params }),
+  // ====================================================
+  // LIST / DETAIL
+  // ====================================================
 
-  // ✅ Tek şablon getir
-  getOne: (id) => axios.get(`/templates/${id}`),
+  getAll: (
+    params = {}
+  ) => {
+    return axios.get(
+      '/templates',
+      {
+        params,
+      }
+    );
+  },
 
-  // ✅ Kategorileri getir
-  getCategories: () => axios.get('/templates/categories'),
+  getOne: (
+    id
+  ) => {
+    return axios.get(
+      `/templates/${id}`
+    );
+  },
 
-  // ✅ Hukuk alanlarını getir
-  getLawAreas: () => axios.get('/templates/law-areas'),
+  // ====================================================
+  // META
+  // ====================================================
 
-  // ✅ Yeni şablon oluştur
-  create: (data) => axios.post('/templates', data, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
+  getCategories:
+    () => {
+      return axios.get(
+        '/templates/categories'
+      );
+    },
 
-  // ✅ Şablon güncelle
-  update: (id, data) => axios.put(`/templates/${id}`, data, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
+  getLawAreas:
+    () => {
+      return axios.get(
+        '/templates/law-areas'
+      );
+    },
 
-  // ✅ Şablon sil
-  delete: (id) => axios.delete(`/templates/${id}`),
+  // ====================================================
+  // CREATE
+  // ====================================================
 
-  // ✅ Şablon indir
-  download: (id) => {
-    console.log('📤 Download çağrısı, ID:', id);
-    return axios.get(`/templates/${id}/download`, {
-      responseType: 'blob',
-    });
+  /*
+   * data = FormData
+   *
+   * Content-Type'ı elle vermiyoruz.
+   * Browser/Axios multipart boundary değerini
+   * otomatik oluşturur.
+   */
+  create: (
+    data
+  ) => {
+    return axios.post(
+      '/templates',
+      data
+    );
+  },
+
+  // ====================================================
+  // UPDATE
+  // ====================================================
+
+  /*
+   * data = FormData
+   *
+   * Burada da multipart/form-data header'ını
+   * elle vermiyoruz.
+   */
+  update: (
+    id,
+    data
+  ) => {
+    return axios.put(
+      `/templates/${id}`,
+      data
+    );
+  },
+
+  // ====================================================
+  // DELETE
+  // ====================================================
+
+  delete: (
+    id
+  ) => {
+    return axios.delete(
+      `/templates/${id}`
+    );
+  },
+
+  // ====================================================
+  // DOWNLOAD
+  // ====================================================
+
+  /*
+   * Orijinal şablon dosyasını indirir.
+   *
+   * PDF, Word, Excel, image, UDF vb.
+   * tamamı blob olarak alınır.
+   */
+  download: (
+    id
+  ) => {
+    return axios.get(
+      `/templates/${id}/download`,
+      {
+        responseType:
+          'blob',
+      }
+    );
+  },
+
+  // ====================================================
+  // PREVIEW
+  // ====================================================
+
+  /*
+   * Browser'ın doğrudan gösterebildiği dosyalar için:
+   *
+   * - PDF
+   * - JPG / JPEG
+   * - PNG
+   * - GIF
+   * - WEBP
+   *
+   * Backend binary response döndürür.
+   */
+  preview: (
+    id
+  ) => {
+    return axios.get(
+      `/templates/${id}/preview`,
+      {
+        responseType:
+          'blob',
+      }
+    );
+  },
+
+  // ====================================================
+  // UDF PREVIEW
+  // ====================================================
+
+  /*
+   * UYAP .udf dosyasını binary olarak açmaya
+   * çalışmıyoruz.
+   *
+   * Backend UDF'yi parse ederek preview için
+   * JSON response döndürür.
+   *
+   * Bu nedenle responseType: 'blob' YOK.
+   */
+  udfPreview: (
+    id
+  ) => {
+    return axios.get(
+      `/templates/${id}/udf-preview`
+    );
   },
 };
 

@@ -44,8 +44,35 @@ const MAX_FILE_SIZE =
 const ALLOWED_MIME_TYPES =
   new Set([
     'application/pdf',
+
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+
+    'text/plain',
+  ]);
+
+const ALLOWED_EXTENSIONS =
+  new Set([
+    '.pdf',
+    '.doc',
+    '.docx',
+    '.xls',
+    '.xlsx',
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.gif',
+    '.webp',
+    '.txt',
+    '.udf',
   ]);
 
 const CATEGORY_OPTIONS = [
@@ -123,6 +150,23 @@ const formatFileSize = (
   )} ${units[index]}`;
 };
 
+const getFileExtension = (
+  fileName = ''
+) => {
+  const lastDot =
+    fileName.lastIndexOf('.');
+
+  if (
+    lastDot === -1
+  ) {
+    return '';
+  }
+
+  return fileName
+    .slice(lastDot)
+    .toLowerCase();
+};
+
 const getFileTypeLabel = (
   file
 ) => {
@@ -130,25 +174,61 @@ const getFileTypeLabel = (
     return '-';
   }
 
+  const extension =
+    getFileExtension(
+      file.name
+    );
+
+  if (
+    extension === '.udf'
+  ) {
+    return 'UYAP UDF';
+  }
+
   if (
     file.type ===
-    'application/pdf'
+      'application/pdf' ||
+    extension === '.pdf'
   ) {
     return 'PDF';
   }
 
   if (
     file.type ===
-    'application/msword'
+      'application/msword' ||
+    file.type ===
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    extension === '.doc' ||
+    extension === '.docx'
   ) {
     return 'Word';
   }
 
   if (
     file.type ===
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      'application/vnd.ms-excel' ||
+    file.type ===
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    extension === '.xls' ||
+    extension === '.xlsx'
   ) {
-    return 'Word';
+    return 'Excel';
+  }
+
+  if (
+    file.type?.startsWith(
+      'image/'
+    )
+  ) {
+    return 'Görsel';
+  }
+
+  if (
+    file.type ===
+      'text/plain' ||
+    extension === '.txt'
+  ) {
+    return 'Metin';
   }
 
   return 'Dosya';
@@ -320,9 +400,29 @@ const TemplateCreate = () => {
         return;
       }
 
-      if (
-        !ALLOWED_MIME_TYPES.has(
+      const extension =
+        getFileExtension(
+          selectedFile.name
+        );
+
+      const isAllowedMime =
+        ALLOWED_MIME_TYPES.has(
           selectedFile.type
+        );
+
+      const isUdf =
+        extension === '.udf';
+
+      const isAllowedExtension =
+        ALLOWED_EXTENSIONS.has(
+          extension
+        );
+
+      if (
+        !isAllowedExtension ||
+        (
+          !isAllowedMime &&
+          !isUdf
         )
       ) {
         setFile(
@@ -330,7 +430,7 @@ const TemplateCreate = () => {
         );
 
         setFileError(
-          'Yalnızca PDF, DOC veya DOCX dosyaları yüklenebilir.'
+          'PDF, Word, Excel, görsel, TXT veya UYAP UDF dosyası yükleyebilirsiniz.'
         );
 
         return;
@@ -1041,11 +1141,23 @@ const TemplateCreate = () => {
                     </Badge>
 
                     <Badge variant="default">
-                      DOC
+                      Word
                     </Badge>
 
                     <Badge variant="default">
-                      DOCX
+                      Excel
+                    </Badge>
+
+                    <Badge variant="default">
+                      Görsel
+                    </Badge>
+
+                    <Badge variant="default">
+                      UYAP UDF
+                    </Badge>
+
+                    <Badge variant="default">
+                      TXT
                     </Badge>
 
                     <Badge variant="default">
@@ -1066,7 +1178,7 @@ const TemplateCreate = () => {
                 onChange={
                   handleFileChange
                 }
-                accept=".pdf,.doc,.docx"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt,.udf"
               />
 
             </div>
