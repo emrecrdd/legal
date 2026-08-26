@@ -368,10 +368,822 @@ const getFilenameFromContentDisposition = (
 };
 
 // ======================================================
-// UDF PARSER
+// UDF RENDER HELPERS
 // ======================================================
 
+const getUdfNumber = (
+  value,
+  fallback = null
+) => {
+  const number =
+    Number(value);
 
+  return Number.isFinite(
+    number
+  )
+    ? number
+    : fallback;
+};
+
+const parseUdfBoolean = (
+  value
+) => {
+  return (
+    value === true ||
+    value === 'true' ||
+    value === 1 ||
+    value === '1'
+  );
+};
+
+const normalizeUdfColor = (
+  value
+) => {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ''
+  ) {
+    return null;
+  }
+
+  const stringValue =
+    String(value).trim();
+
+  if (
+    /^#[0-9a-f]{3,8}$/i.test(
+      stringValue
+    )
+  ) {
+    return stringValue;
+  }
+
+  if (
+    /^[0-9a-f]{6}$/i.test(
+      stringValue
+    )
+  ) {
+    return `#${stringValue}`;
+  }
+
+  const numeric =
+    Number(stringValue);
+
+  if (
+    Number.isFinite(
+      numeric
+    )
+  ) {
+    const rgb =
+      numeric &
+      0xffffff;
+
+    return `#${rgb
+      .toString(16)
+      .padStart(
+        6,
+        '0'
+      )}`;
+  }
+
+  return null;
+};
+
+const collectUdfRanges = (
+  node,
+  ranges = [],
+  parentKey = ''
+) => {
+  if (
+    node === null ||
+    node === undefined
+  ) {
+    return ranges;
+  }
+
+  if (
+    Array.isArray(
+      node
+    )
+  ) {
+    node.forEach(
+      (item) => {
+        collectUdfRanges(
+          item,
+          ranges,
+          parentKey
+        );
+      }
+    );
+
+    return ranges;
+  }
+
+  if (
+    typeof node !==
+    'object'
+  ) {
+    return ranges;
+  }
+
+  const start =
+    getUdfNumber(
+      node.startOffset ??
+      node.startoffset ??
+      node.start_offset ??
+      node.start
+    );
+
+  const length =
+    getUdfNumber(
+      node.length ??
+      node.textLength ??
+      node.text_length
+    );
+
+  if (
+    start !== null &&
+    length !== null &&
+    length > 0
+  ) {
+    ranges.push({
+      type:
+        parentKey,
+
+      start,
+
+      end:
+        start +
+        length,
+
+      node,
+    });
+  }
+
+  Object.entries(
+    node
+  ).forEach(
+    ([
+      key,
+      value,
+    ]) => {
+      if (
+        value &&
+        typeof value ===
+          'object'
+      ) {
+        collectUdfRanges(
+          value,
+          ranges,
+          key
+        );
+      }
+    }
+  );
+
+  return ranges;
+};
+
+const getUdfTextStyle = (
+  node = {}
+) => {
+  const style = {};
+
+  if (
+    parseUdfBoolean(
+      node.bold
+    )
+  ) {
+    style.fontWeight =
+      '700';
+  }
+
+  if (
+    parseUdfBoolean(
+      node.italic
+    )
+  ) {
+    style.fontStyle =
+      'italic';
+  }
+
+  const decorations = [];
+
+  if (
+    parseUdfBoolean(
+      node.underline
+    ) ||
+    parseUdfBoolean(
+      node.underlined
+    )
+  ) {
+    decorations.push(
+      'underline'
+    );
+  }
+
+  if (
+    parseUdfBoolean(
+      node.strikeThrough
+    ) ||
+    parseUdfBoolean(
+      node.strikethrough
+    )
+  ) {
+    decorations.push(
+      'line-through'
+    );
+  }
+
+  if (
+    decorations.length > 0
+  ) {
+    style.textDecoration =
+      decorations.join(' ');
+  }
+
+  const fontFamily =
+    node.fontFamily ||
+    node.fontName ||
+    node.font_family ||
+    node.font_name ||
+    node.font ||
+    node.family;
+
+  if (fontFamily) {
+    style.fontFamily =
+      String(fontFamily);
+  }
+
+  const fontSize =
+    getUdfNumber(
+      node.fontSize ??
+      node.font_size ??
+      node.size
+    );
+
+  if (
+    fontSize !== null &&
+    fontSize >= 6 &&
+    fontSize <= 96
+  ) {
+    style.fontSize =
+      `${fontSize}pt`;
+  }
+
+  const foreground =
+    normalizeUdfColor(
+      node.foreground ??
+      node.foregroundColor ??
+      node.foreground_color ??
+      node.color
+    );
+
+  if (foreground) {
+    style.color =
+      foreground;
+  }
+
+  return style;
+};
+
+const getUdfParagraphStyle = (
+  node = {}
+) => {
+  const style = {};
+
+  const alignment =
+    String(
+      node.alignment ??
+      node.align ??
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+  if (
+    alignment === 'center' ||
+    alignment === '1'
+  ) {
+    style.textAlign =
+      'center';
+  } else if (
+    alignment === 'right' ||
+    alignment === '2'
+  ) {
+    style.textAlign =
+      'right';
+  } else if (
+    alignment === 'justify' ||
+    alignment === '3'
+  ) {
+    style.textAlign =
+      'justify';
+  } else {
+    style.textAlign =
+      'left';
+  }
+
+  const firstLineIndent =
+    getUdfNumber(
+      node.firstLineIndent ??
+      node.first_line_indent
+    );
+
+  if (
+    firstLineIndent !== null
+  ) {
+    style.textIndent =
+      `${Math.max(
+        firstLineIndent,
+        0
+      )}pt`;
+  }
+
+  const leftIndent =
+    getUdfNumber(
+      node.leftIndent ??
+      node.left_indent
+    );
+
+  if (
+    leftIndent !== null
+  ) {
+    style.marginLeft =
+      `${Math.max(
+        leftIndent,
+        0
+      )}pt`;
+  }
+
+  const rightIndent =
+    getUdfNumber(
+      node.rightIndent ??
+      node.right_indent
+    );
+
+  if (
+    rightIndent !== null
+  ) {
+    style.marginRight =
+      `${Math.max(
+        rightIndent,
+        0
+      )}pt`;
+  }
+
+  const spaceAbove =
+    getUdfNumber(
+      node.spaceAbove ??
+      node.space_above
+    );
+
+  if (
+    spaceAbove !== null
+  ) {
+    style.marginTop =
+      `${Math.max(
+        spaceAbove,
+        0
+      )}pt`;
+  }
+
+  const spaceBelow =
+    getUdfNumber(
+      node.spaceBelow ??
+      node.space_below
+    );
+
+  if (
+    spaceBelow !== null
+  ) {
+    style.marginBottom =
+      `${Math.max(
+        spaceBelow,
+        0
+      )}pt`;
+  }
+
+  return style;
+};
+
+const applyUdfStyles = (
+  element,
+  styles
+) => {
+  Object.entries(
+    styles
+  ).forEach(
+    ([
+      property,
+      value,
+    ]) => {
+      try {
+        element.style[
+          property
+        ] = value;
+      } catch {
+        // Geçersiz UDF stilini yok say.
+      }
+    }
+  );
+};
+
+const renderUdfStyledText = ({
+  previewDocument,
+  container,
+  text,
+  absoluteStart,
+  ranges,
+}) => {
+  if (!text) {
+    return;
+  }
+
+  const absoluteEnd =
+    absoluteStart +
+    text.length;
+
+  const relevantRanges =
+    ranges.filter(
+      (range) =>
+        range.end >
+          absoluteStart &&
+        range.start <
+          absoluteEnd
+    );
+
+  if (
+    relevantRanges.length === 0
+  ) {
+    container.appendChild(
+      previewDocument.createTextNode(
+        text
+      )
+    );
+
+    return;
+  }
+
+  const boundaries =
+    new Set([
+      absoluteStart,
+      absoluteEnd,
+    ]);
+
+  relevantRanges.forEach(
+    (range) => {
+      boundaries.add(
+        Math.max(
+          absoluteStart,
+          range.start
+        )
+      );
+
+      boundaries.add(
+        Math.min(
+          absoluteEnd,
+          range.end
+        )
+      );
+    }
+  );
+
+  const sortedBoundaries =
+    [
+      ...boundaries,
+    ].sort(
+      (a, b) =>
+        a - b
+    );
+
+  for (
+    let index = 0;
+    index <
+      sortedBoundaries.length - 1;
+    index += 1
+  ) {
+    const segmentStart =
+      sortedBoundaries[
+        index
+      ];
+
+    const segmentEnd =
+      sortedBoundaries[
+        index + 1
+      ];
+
+    if (
+      segmentEnd <=
+      segmentStart
+    ) {
+      continue;
+    }
+
+    const segmentText =
+      text.slice(
+        segmentStart -
+          absoluteStart,
+        segmentEnd -
+          absoluteStart
+      );
+
+    const activeRanges =
+      relevantRanges.filter(
+        (range) =>
+          range.start <=
+            segmentStart &&
+          range.end >=
+            segmentEnd
+      );
+
+    if (
+      activeRanges.length === 0
+    ) {
+      container.appendChild(
+        previewDocument.createTextNode(
+          segmentText
+        )
+      );
+
+      continue;
+    }
+
+    const span =
+      previewDocument.createElement(
+        'span'
+      );
+
+    span.textContent =
+      segmentText;
+
+    activeRanges.forEach(
+      (range) => {
+        applyUdfStyles(
+          span,
+          getUdfTextStyle(
+            range.node
+          )
+        );
+      }
+    );
+
+    container.appendChild(
+      span
+    );
+  }
+};
+
+const buildUdfDocumentBody = ({
+  previewDocument,
+  content,
+  elements,
+}) => {
+  const wrapper =
+    previewDocument.createElement(
+      'div'
+    );
+
+  wrapper.className =
+    'udf-document-body';
+
+  const ranges =
+    collectUdfRanges(
+      elements
+    );
+
+  const paragraphRanges =
+    ranges
+      .filter(
+        (range) => {
+          const type =
+            String(
+              range.type ||
+              ''
+            )
+              .toLowerCase();
+
+          return (
+            type.includes(
+              'paragraph'
+            ) ||
+            type === 'p'
+          );
+        }
+      )
+      .sort(
+        (a, b) =>
+          a.start -
+          b.start
+      );
+
+  if (
+    paragraphRanges.length === 0
+  ) {
+    let currentOffset = 0;
+
+    const lines =
+      String(content)
+        .replace(
+          /\r\n/g,
+          '\n'
+        )
+        .split('\n');
+
+    lines.forEach(
+      (line, index) => {
+        const paragraph =
+          previewDocument.createElement(
+            'div'
+          );
+
+        paragraph.className =
+          'udf-paragraph';
+
+        renderUdfStyledText({
+          previewDocument,
+          container:
+            paragraph,
+          text:
+            line,
+          absoluteStart:
+            currentOffset,
+          ranges,
+        });
+
+        if (
+          line.length === 0
+        ) {
+          paragraph.appendChild(
+            previewDocument.createElement(
+              'br'
+            )
+          );
+        }
+
+        wrapper.appendChild(
+          paragraph
+        );
+
+        currentOffset +=
+          line.length;
+
+        if (
+          index <
+          lines.length - 1
+        ) {
+          currentOffset += 1;
+        }
+      }
+    );
+
+    return wrapper;
+  }
+
+  let cursor = 0;
+
+  paragraphRanges.forEach(
+    (range) => {
+      const safeStart =
+        Math.max(
+          0,
+          Math.min(
+            content.length,
+            range.start
+          )
+        );
+
+      const safeEnd =
+        Math.max(
+          safeStart,
+          Math.min(
+            content.length,
+            range.end
+          )
+        );
+
+      if (
+        safeStart >
+        cursor
+      ) {
+        const loose =
+          previewDocument.createElement(
+            'div'
+          );
+
+        loose.className =
+          'udf-paragraph';
+
+        renderUdfStyledText({
+          previewDocument,
+          container:
+            loose,
+          text:
+            content.slice(
+              cursor,
+              safeStart
+            ),
+          absoluteStart:
+            cursor,
+          ranges,
+        });
+
+        wrapper.appendChild(
+          loose
+        );
+      }
+
+      const paragraph =
+        previewDocument.createElement(
+          'div'
+        );
+
+      paragraph.className =
+        'udf-paragraph';
+
+      applyUdfStyles(
+        paragraph,
+        getUdfParagraphStyle(
+          range.node
+        )
+      );
+
+      const paragraphText =
+        content
+          .slice(
+            safeStart,
+            safeEnd
+          )
+          .replace(
+            /\r?\n$/,
+            ''
+          );
+
+      renderUdfStyledText({
+        previewDocument,
+        container:
+          paragraph,
+        text:
+          paragraphText,
+        absoluteStart:
+          safeStart,
+        ranges,
+      });
+
+      if (
+        !paragraph.textContent
+      ) {
+        paragraph.appendChild(
+          previewDocument.createElement(
+            'br'
+          )
+        );
+      }
+
+      wrapper.appendChild(
+        paragraph
+      );
+
+      cursor =
+        Math.max(
+          cursor,
+          safeEnd
+        );
+    }
+  );
+
+  if (
+    cursor <
+    content.length
+  ) {
+    const remaining =
+      previewDocument.createElement(
+        'div'
+      );
+
+    remaining.className =
+      'udf-paragraph';
+
+    renderUdfStyledText({
+      previewDocument,
+      container:
+        remaining,
+      text:
+        content.slice(
+          cursor
+        ),
+      absoluteStart:
+        cursor,
+      ranges,
+    });
+
+    wrapper.appendChild(
+      remaining
+    );
+  }
+
+  return wrapper;
+};
 
 // ======================================================
 // UDF PREVIEW WINDOW
@@ -393,12 +1205,42 @@ const renderUdfPreview = ({
   const previewDocument =
     previewWindow.document;
 
-  /*
-   * Kullanıcıdan gelen hiçbir belge içeriğini
-   * innerHTML ile basmıyoruz.
-   *
-   * Belge metni aşağıda textContent ile ekleniyor.
-   */
+  const pageWidth =
+    getUdfNumber(
+      udf?.page?.width,
+      210
+    );
+
+  const pageHeight =
+    getUdfNumber(
+      udf?.page?.height,
+      297
+    );
+
+  const marginTop =
+    getUdfNumber(
+      udf?.margins?.top,
+      15
+    );
+
+  const marginRight =
+    getUdfNumber(
+      udf?.margins?.right,
+      15
+    );
+
+  const marginBottom =
+    getUdfNumber(
+      udf?.margins?.bottom,
+      15
+    );
+
+  const marginLeft =
+    getUdfNumber(
+      udf?.margins?.left,
+      15
+    );
+
   previewDocument.open();
 
   previewDocument.write(`
@@ -406,12 +1248,10 @@ const renderUdfPreview = ({
     <html lang="tr">
       <head>
         <meta charset="UTF-8" />
-
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1.0"
         />
-
         <title>UDF Önizleme</title>
       </head>
 
@@ -422,17 +1262,41 @@ const renderUdfPreview = ({
             <span id="udf-filename"></span>
           </div>
 
-          <button
-            id="udf-print"
-            type="button"
-          >
-            Yazdır
-          </button>
+          <div id="udf-toolbar-right">
+            <button
+              id="udf-zoom-out"
+              type="button"
+              title="Uzaklaştır"
+            >
+              −
+            </button>
+
+            <span id="udf-zoom-value">
+              100%
+            </span>
+
+            <button
+              id="udf-zoom-in"
+              type="button"
+              title="Yakınlaştır"
+            >
+              +
+            </button>
+
+            <button
+              id="udf-print"
+              type="button"
+            >
+              Yazdır
+            </button>
+          </div>
         </div>
 
-        <main id="udf-page">
-          <pre id="udf-content"></pre>
-        </main>
+        <div id="udf-workspace">
+          <main id="udf-page">
+            <div id="udf-content"></div>
+          </main>
+        </div>
       </body>
     </html>
   `);
@@ -462,128 +1326,117 @@ const renderUdfPreview = ({
     }
 
     body {
-      background: #eef2f7;
+      background: #e9edf2;
       color: #111827;
-      font-family:
-        Arial,
-        Helvetica,
-        sans-serif;
+      font-family: Arial, Helvetica, sans-serif;
     }
 
     #udf-toolbar {
       position: sticky;
       top: 0;
-      z-index: 10;
-
+      z-index: 100;
       min-height: 58px;
-
       display: flex;
       align-items: center;
       justify-content: space-between;
-
       gap: 20px;
-
       padding: 10px 18px;
-
       background: #ffffff;
-
-      border-bottom:
-        1px solid #dbe2ea;
-
-      box-shadow:
-        0 1px 3px
-        rgba(15, 23, 42, 0.08);
+      border-bottom: 1px solid #d8dee7;
+      box-shadow: 0 1px 5px rgba(15, 23, 42, 0.08);
     }
 
     #udf-toolbar-left {
       min-width: 0;
-
       display: flex;
       flex-direction: column;
-
       gap: 3px;
     }
 
-    #udf-toolbar strong {
+    #udf-toolbar-left strong {
       font-size: 14px;
       color: #0f172a;
     }
 
     #udf-filename {
-      max-width: 70vw;
-
+      max-width: 60vw;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-
-      font-size: 12px;
       color: #64748b;
+      font-size: 12px;
     }
 
-    #udf-print {
-      flex-shrink: 0;
+    #udf-toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
 
+    #udf-toolbar button {
+      height: 34px;
+      min-width: 34px;
+      padding: 0 11px;
       border: 1px solid #cbd5e1;
-
-      border-radius: 8px;
-
-      padding: 8px 14px;
-
+      border-radius: 7px;
       background: #ffffff;
-
       color: #334155;
-
       cursor: pointer;
-
       font-size: 13px;
       font-weight: 600;
     }
 
-    #udf-print:hover {
+    #udf-toolbar button:hover {
       background: #f8fafc;
     }
 
+    #udf-zoom-value {
+      min-width: 48px;
+      text-align: center;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    #udf-workspace {
+      min-height: calc(100vh - 58px);
+      padding: 32px 16px 60px;
+      overflow: auto;
+    }
+
     #udf-page {
-      width: min(
-        210mm,
-        calc(100vw - 32px)
-      );
-
-      min-height: 297mm;
-
-      margin:
-        28px
-        auto
-        60px;
-
+      width: ${pageWidth}mm;
+      min-height: ${pageHeight}mm;
+      margin: 0 auto;
       padding:
-        ${udf.margins.top}mm
-        ${udf.margins.right}mm
-        ${udf.margins.bottom}mm
-        ${udf.margins.left}mm;
-
+        ${marginTop}mm
+        ${marginRight}mm
+        ${marginBottom}mm
+        ${marginLeft}mm;
       background: #ffffff;
-
-      box-shadow:
-        0 10px 35px
-        rgba(15, 23, 42, 0.12);
+      box-shadow: 0 5px 25px rgba(15, 23, 42, 0.16);
+      transform-origin: top center;
     }
 
     #udf-content {
-      margin: 0;
-
-      white-space: pre-wrap;
-      overflow-wrap: break-word;
-
-      font-family:
-        "Times New Roman",
-        Times,
-        serif;
-
+      width: 100%;
+      color: #111827;
+      font-family: "Times New Roman", Times, serif;
       font-size: 12pt;
-      line-height: 1.5;
+      line-height: 1.35;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }
 
-      color: #111111;
+    .udf-document-body {
+      width: 100%;
+    }
+
+    .udf-paragraph {
+      min-height: 1.35em;
+      margin: 0;
+      white-space: pre-wrap;
     }
 
     @media print {
@@ -592,41 +1445,40 @@ const renderUdfPreview = ({
       }
 
       #udf-toolbar {
-        display: none;
+        display: none !important;
+      }
+
+      #udf-workspace {
+        padding: 0;
       }
 
       #udf-page {
-        width: auto;
-        min-height: auto;
-
+        width: ${pageWidth}mm;
+        min-height: ${pageHeight}mm;
         margin: 0;
-
         box-shadow: none;
+        transform: none !important;
       }
 
       @page {
-        size: A4;
+        size: ${pageWidth}mm ${pageHeight}mm;
         margin: 0;
       }
     }
 
     @media (max-width: 720px) {
-      #udf-page {
-        width:
-          calc(100vw - 16px);
-
-        margin:
-          8px
-          auto
-          30px;
-
-        padding:
-          20px
-          16px;
+      #udf-workspace {
+        padding: 8px 8px 30px;
       }
 
-      #udf-content {
-        font-size: 11pt;
+      #udf-page {
+        width: calc(100vw - 16px);
+        min-height: auto;
+        padding: 20px 16px;
+      }
+
+      #udf-filename {
+        max-width: 42vw;
       }
     }
   `;
@@ -640,16 +1492,6 @@ const renderUdfPreview = ({
       'udf-filename'
     );
 
-  const contentElement =
-    previewDocument.getElementById(
-      'udf-content'
-    );
-
-  const printButton =
-    previewDocument.getElementById(
-      'udf-print'
-    );
-
   if (filenameElement) {
     filenameElement.textContent =
       document?.original_name ||
@@ -657,29 +1499,117 @@ const renderUdfPreview = ({
       'document.udf';
   }
 
-  if (contentElement) {
-    /*
-     * ÇOK ÖNEMLİ:
-     * innerHTML değil textContent.
-     *
-     * Böylece UDF içindeki metin HTML/JS olarak
-     * çalıştırılamaz.
-     */
-    contentElement.textContent =
-      udf.content;
+  const contentElement =
+    previewDocument.getElementById(
+      'udf-content'
+    );
+
+  if (!contentElement) {
+    throw new Error(
+      'UDF içerik alanı oluşturulamadı'
+    );
   }
 
-  if (printButton) {
-    printButton.addEventListener(
+  /*
+   * Güvenlik:
+   * UDF içeriği innerHTML ile çalıştırılmaz.
+   * Metin text node'ları ve güvenli DOM elementleriyle
+   * oluşturulur.
+   */
+  const documentBody =
+    buildUdfDocumentBody({
+      previewDocument,
+      content:
+        String(
+          udf?.content ||
+          ''
+        ),
+      elements:
+        udf?.elements ||
+        null,
+    });
+
+  contentElement.appendChild(
+    documentBody
+  );
+
+  let zoom = 1;
+
+  const pageElement =
+    previewDocument.getElementById(
+      'udf-page'
+    );
+
+  const zoomValue =
+    previewDocument.getElementById(
+      'udf-zoom-value'
+    );
+
+  const updateZoom = () => {
+    if (!pageElement) {
+      return;
+    }
+
+    pageElement.style.transform =
+      `scale(${zoom})`;
+
+    if (zoomValue) {
+      zoomValue.textContent =
+        `${Math.round(
+          zoom * 100
+        )}%`;
+    }
+  };
+
+  previewDocument
+    .getElementById(
+      'udf-zoom-in'
+    )
+    ?.addEventListener(
+      'click',
+      () => {
+        zoom =
+          Math.min(
+            zoom + 0.1,
+            2
+          );
+
+        updateZoom();
+      }
+    );
+
+  previewDocument
+    .getElementById(
+      'udf-zoom-out'
+    )
+    ?.addEventListener(
+      'click',
+      () => {
+        zoom =
+          Math.max(
+            zoom - 0.1,
+            0.5
+          );
+
+        updateZoom();
+      }
+    );
+
+  previewDocument
+    .getElementById(
+      'udf-print'
+    )
+    ?.addEventListener(
       'click',
       () => {
         previewWindow.print();
       }
     );
-  }
 
   previewWindow.opener =
     null;
+
+  previewWindow.focus();
 };
 
 // ======================================================
@@ -1062,7 +1992,12 @@ const handlePreview = async (
        *   success: true,
        *   data: {
        *     content: "...",
-       *     margins: {...}
+       *     elements: {...},
+       *     page: {
+       *       width_mm: 210,
+       *       height_mm: 297,
+       *       margins: {...}
+       *     }
        *   }
        * }
        *
@@ -1086,32 +2021,80 @@ const handlePreview = async (
        * Backend margin göndermediyse güvenli
        * varsayılan değerleri kullan.
        */
-     const normalizedUdf = {
-  content:
-    udf.content,
+      const getNumericValue = (
+        value,
+        fallback
+      ) => {
+        const number =
+          Number(value);
 
-  margins: {
-    top:
-      Number(
-        udf.page?.margins?.top
-      ) || 15,
+        return Number.isFinite(
+          number
+        )
+          ? number
+          : fallback;
+      };
 
-    right:
-      Number(
-        udf.page?.margins?.right
-      ) || 15,
+      const normalizedUdf = {
+        content:
+          udf.content,
 
-    bottom:
-      Number(
-        udf.page?.margins?.bottom
-      ) || 15,
+        elements:
+          udf.elements ||
+          null,
 
-    left:
-      Number(
-        udf.page?.margins?.left
-      ) || 15,
-  },
-};
+        page: {
+          width:
+            getNumericValue(
+              udf.page?.width_mm,
+              210
+            ),
+
+          height:
+            getNumericValue(
+              udf.page?.height_mm,
+              297
+            ),
+
+          orientation:
+            udf.page?.orientation ||
+            '1',
+        },
+
+        margins: {
+          top:
+            getNumericValue(
+              udf.page?.margins?.top,
+              15
+            ),
+
+          right:
+            getNumericValue(
+              udf.page?.margins?.right,
+              15
+            ),
+
+          bottom:
+            getNumericValue(
+              udf.page?.margins?.bottom,
+              15
+            ),
+
+          left:
+            getNumericValue(
+              udf.page?.margins?.left,
+              15
+            ),
+        },
+
+        signature:
+          udf.signature ||
+          null,
+
+        formatVersion:
+          udf.format_version ||
+          null,
+      };
 
       renderUdfPreview({
         previewWindow,
