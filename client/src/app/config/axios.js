@@ -21,11 +21,6 @@ const axiosInstance =
      */
     withCredentials:
       true,
-
-    headers: {
-      'Content-Type':
-        'application/json',
-    },
   });
 
 // ======================================================
@@ -43,6 +38,11 @@ const refreshClient =
     withCredentials:
       true,
 
+    /*
+     * Refresh isteği JSON tabanlıdır.
+     * Bu instance upload için kullanılmadığı için
+     * burada application/json kalabilir.
+     */
     headers: {
       'Content-Type':
         'application/json',
@@ -291,15 +291,42 @@ axiosInstance.interceptors.request.use(
     const accessToken =
       getAccessToken();
 
+    requestConfig.headers =
+      requestConfig.headers ||
+      {};
+
     if (
       accessToken
     ) {
-      requestConfig.headers =
-        requestConfig.headers ||
-        {};
-
       requestConfig.headers.Authorization =
         `Bearer ${accessToken}`;
+    }
+
+    /*
+     * KRİTİK:
+     *
+     * FormData gönderiliyorsa Content-Type'ı
+     * manuel belirlemiyoruz.
+     *
+     * Browser/Axios:
+     *
+     * multipart/form-data;
+     * boundary=...
+     *
+     * değerini otomatik oluşturur.
+     *
+     * Multer'ın req.file / req.files üretebilmesi
+     * için boundary gereklidir.
+     */
+    if (
+      typeof FormData !==
+        'undefined' &&
+      requestConfig.data instanceof
+        FormData
+    ) {
+      delete requestConfig.headers[
+        'Content-Type'
+      ];
     }
 
     return requestConfig;
@@ -404,6 +431,22 @@ axiosInstance.interceptors.response.use(
             originalRequest.headers.Authorization =
               `Bearer ${accessToken}`;
 
+            /*
+             * Retry edilen istek FormData ise
+             * multipart Content-Type yine browser
+             * tarafından oluşturulmalıdır.
+             */
+            if (
+              typeof FormData !==
+                'undefined' &&
+              originalRequest.data instanceof
+                FormData
+            ) {
+              delete originalRequest.headers[
+                'Content-Type'
+              ];
+            }
+
             return axiosInstance(
               originalRequest
             );
@@ -423,8 +466,6 @@ axiosInstance.interceptors.response.use(
 
       try {
         /*
-         * KRİTİK:
-         *
          * Refresh token body'ye gönderilmiyor.
          *
          * Browser HttpOnly refreshToken cookie'sini
@@ -458,9 +499,6 @@ axiosInstance.interceptors.response.use(
         // TOKEN STORAGE
         // ==============================================
 
-        /*
-         * Yalnızca access token saklanıyor.
-         */
         setAccessToken(
           accessToken
         );
@@ -486,6 +524,21 @@ axiosInstance.interceptors.response.use(
 
         originalRequest.headers.Authorization =
           `Bearer ${accessToken}`;
+
+        /*
+         * Retry edilen upload isteğinde eski JSON
+         * Content-Type kalmışsa temizlenir.
+         */
+        if (
+          typeof FormData !==
+            'undefined' &&
+          originalRequest.data instanceof
+            FormData
+        ) {
+          delete originalRequest.headers[
+            'Content-Type'
+          ];
+        }
 
         // ==============================================
         // WAITING REQUESTS
