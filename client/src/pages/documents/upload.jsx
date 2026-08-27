@@ -369,22 +369,43 @@ const DocumentUpload = () => {
         'cases',
         {
           limit: 100,
-          client_id:
-            formData.client_id ||
-            undefined,
         },
       ],
 
       queryFn: () =>
         caseApi.getAll({
           limit: 100,
-          client_id:
-            formData.client_id ||
-            undefined,
         }),
 
       staleTime:
         5 * 60 * 1000,
+    });
+
+  const {
+    data:
+      clientCasesData,
+    isLoading:
+      clientCasesLoading,
+  } =
+    useQuery({
+      queryKey: [
+        'clients',
+        formData.client_id,
+        'cases',
+      ],
+
+      queryFn: () =>
+        clientApi.getCaseHistory(
+          formData.client_id
+        ),
+
+      enabled:
+        Boolean(
+          formData.client_id
+        ),
+
+      staleTime:
+        3 * 60 * 1000,
     });
 
   const {
@@ -442,6 +463,52 @@ const DocumentUpload = () => {
       ? clientsData.data.data
       : [];
 
+  const clientCases =
+    useMemo(() => {
+      const payload =
+        clientCasesData?.data?.data ??
+        clientCasesData?.data ??
+        [];
+
+      if (
+        Array.isArray(
+          payload
+        )
+      ) {
+        return payload;
+      }
+
+      if (
+        Array.isArray(
+          payload?.data
+        )
+      ) {
+        return payload.data;
+      }
+
+      if (
+        Array.isArray(
+          payload?.cases
+        )
+      ) {
+        return payload.cases;
+      }
+
+      return [];
+    }, [
+      clientCasesData,
+    ]);
+
+  const relationCases =
+    formData.client_id
+      ? clientCases
+      : cases;
+
+  const relationCasesLoading =
+    formData.client_id
+      ? clientCasesLoading
+      : casesLoading;
+
   const powerOfAttorneys =
     useMemo(() => {
       const raw =
@@ -461,8 +528,13 @@ const DocumentUpload = () => {
         (
           poa
         ) =>
-          poa.client_id ===
-          formData.client_id
+          String(
+            poa.client_id ||
+            ''
+          ) ===
+          String(
+            formData.client_id
+          )
       );
     }, [
       poaData,
@@ -507,8 +579,12 @@ const DocumentUpload = () => {
         (
           client
         ) =>
-          client.id ===
-          formData.client_id
+          String(
+            client.id
+          ) ===
+          String(
+            formData.client_id
+          )
       );
     }, [
       clients,
@@ -517,15 +593,19 @@ const DocumentUpload = () => {
 
   const selectedCase =
     useMemo(() => {
-      return cases.find(
+      return relationCases.find(
         (
           caseItem
         ) =>
-          caseItem.id ===
-          formData.case_id
+          String(
+            caseItem.id
+          ) ===
+          String(
+            formData.case_id
+          )
       );
     }, [
-      cases,
+      relationCases,
       formData.case_id,
     ]);
 
@@ -535,8 +615,12 @@ const DocumentUpload = () => {
         (
           poa
         ) =>
-          poa.id ===
-          formData.power_of_attorney_id
+          String(
+            poa.id
+          ) ===
+          String(
+            formData.power_of_attorney_id
+          )
       );
     }, [
       powerOfAttorneys,
@@ -2129,8 +2213,9 @@ const DocumentUpload = () => {
                     handleChange
                   }
                   disabled={
-                    casesLoading ||
-                    isUploading
+                    relationCasesLoading ||
+                    isUploading ||
+                    !formData.client_id
                   }
                   className="
                     h-10
@@ -2155,12 +2240,17 @@ const DocumentUpload = () => {
                 >
 
                   <option value="">
-                    {casesLoading
-                      ? 'Davalar yükleniyor...'
-                      : 'İlişki yok'}
+                    {!formData.client_id
+                      ? 'Önce müvekkil seçin'
+                      : relationCasesLoading
+                        ? 'Davalar yükleniyor...'
+                        : relationCases.length >
+                            0
+                          ? 'İlişki yok'
+                          : 'Bu müvekkile ait dava bulunamadı'}
                   </option>
 
-                  {cases.map(
+                  {relationCases.map(
                     (
                       caseItem
                     ) => (
@@ -2178,6 +2268,12 @@ const DocumentUpload = () => {
                   )}
 
                 </select>
+
+                {!formData.client_id && (
+                  <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
+                    Dava seçebilmek için önce müvekkili seçin.
+                  </p>
+                )}
 
                 {selectedCase && (
                   <div
@@ -2240,7 +2336,8 @@ const DocumentUpload = () => {
                 }
                 disabled={
                   poaLoading ||
-                  isUploading
+                  isUploading ||
+                  !formData.client_id
                 }
                 className="
                   h-10
@@ -2265,9 +2362,14 @@ const DocumentUpload = () => {
               >
 
                 <option value="">
-                  {poaLoading
-                    ? 'Vekaletnameler yükleniyor...'
-                    : 'İlişki yok'}
+                  {!formData.client_id
+                    ? 'Önce müvekkil seçin'
+                    : poaLoading
+                      ? 'Vekaletnameler yükleniyor...'
+                      : powerOfAttorneys.length >
+                          0
+                        ? 'İlişki yok'
+                        : 'Bu müvekkile ait vekaletname bulunamadı'}
                 </option>
 
                 {powerOfAttorneys.map(
@@ -2293,6 +2395,12 @@ const DocumentUpload = () => {
                 )}
 
               </select>
+
+              {!formData.client_id && (
+                <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
+                  Vekaletname seçebilmek için önce müvekkili seçin.
+                </p>
+              )}
 
               {selectedPowerOfAttorney && (
                 <div
