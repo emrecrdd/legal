@@ -323,7 +323,7 @@ const AnalysisResult = ({ analysis }) => {
         {result.draft && (
           <section>
             <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
-              Oluşturulan Taslak
+              Oluşturulan Şablon
             </h3>
 
             <div className="whitespace-pre-wrap rounded-lg bg-gray-50 p-4 text-sm leading-6 text-gray-800 dark:bg-gray-700 dark:text-gray-100">
@@ -335,7 +335,7 @@ const AnalysisResult = ({ analysis }) => {
         {result.content && (
           <section>
             <h3 className="mb-2 font-medium text-gray-900 dark:text-white">
-              Oluşturulan Taslak
+              Oluşturulan Şablon
             </h3>
 
             <div className="whitespace-pre-wrap rounded-lg bg-gray-50 p-4 text-sm leading-6 text-gray-800 dark:bg-gray-700 dark:text-gray-100">
@@ -541,13 +541,13 @@ const AIAssistant = () => {
 
     onSuccess: (response) => {
       setResult(unwrapResponse(response));
-      toast.success('Hukuki taslak oluşturuldu');
+      toast.success('Hukuki şablon oluşturuldu');
     },
 
     onError: (error) => {
       toast.error(
         error.response?.data?.message ||
-          'Taslak oluşturulamadı'
+          'Şablon oluşturulamadı'
       );
     },
   });
@@ -692,7 +692,7 @@ const AIAssistant = () => {
     }
 
     if (!data) {
-      toast.error('Taslak bilgileri hazırlanamadı');
+      toast.error('Şablon bilgileri hazırlanamadı');
       return;
     }
 
@@ -726,7 +726,7 @@ const AIAssistant = () => {
 
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Belge analizi, hukuki ön değerlendirme ve
-            taslak oluşturma işlemleri
+            şablon oluşturma işlemleri
           </p>
         </div>
 
@@ -753,7 +753,7 @@ const AIAssistant = () => {
           },
           {
             id: 'draft',
-            label: 'Taslak Oluştur',
+            label: 'Şablon Oluştur',
           },
         ].map((tab) => (
           <Button
@@ -1030,12 +1030,12 @@ const AIAssistant = () => {
           <Card.Header>
             <div>
               <h2 className="font-semibold text-gray-900 dark:text-white">
-                Hukuki Taslak Oluştur
+                Hukuki Şablon Oluştur
               </h2>
 
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 Belge bilgilerini doldurun. Yapay zekâ,
-                avukat incelemesine hazır bir ilk taslak
+                avukat incelemesine hazır bir ilk şablon
                 oluştursun.
               </p>
             </div>
@@ -1494,7 +1494,7 @@ Gecikme cezası`}
             )}
 
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
-              Oluşturulan taslak hukuki işlemden önce
+              Oluşturulan şablon hukuki işlemden önce
               avukat tarafından kontrol edilmelidir.
             </div>
 
@@ -1503,7 +1503,7 @@ Gecikme cezası`}
               loading={draftMutation.isPending}
               className="w-full"
             >
-              Taslak Oluştur
+              Şablon Oluştur
             </Button>
 
             <AnalysisResult analysis={result} />
