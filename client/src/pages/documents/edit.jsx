@@ -220,6 +220,59 @@ const normalizeTags = (
   ];
 };
 
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (
+    !caseItem
+  ) {
+    return 'Dava';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    'Dava'
+  );
+};
+
+const getCaseSecondaryInfo = (
+  caseItem
+) => {
+  if (
+    !caseItem
+  ) {
+    return '';
+  }
+
+  return [
+    caseItem.judiciary_type,
+    caseItem.judiciary_unit,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -1543,7 +1596,9 @@ const DocumentEdit = () => {
                             caseItem.id
                           }
                         >
-                          {caseItem.title}
+                          {getCaseDisplayName(
+                            caseItem
+                          )}
                         </option>
                       )
                     )}
@@ -1553,9 +1608,25 @@ const DocumentEdit = () => {
                 </div>
 
                 {selectedCase && (
-                  <p className="mt-2 truncate text-xs text-gray-400 dark:text-slate-500">
-                    Seçili: {selectedCase.title}
-                  </p>
+                  <div className="mt-2">
+
+                    <p className="truncate text-xs font-medium text-gray-500 dark:text-slate-400">
+                      Seçili: {getCaseDisplayName(
+                        selectedCase
+                      )}
+                    </p>
+
+                    {getCaseSecondaryInfo(
+                      selectedCase
+                    ) && (
+                      <p className="mt-0.5 truncate text-[10px] text-gray-400 dark:text-slate-500">
+                        {getCaseSecondaryInfo(
+                          selectedCase
+                        )}
+                      </p>
+                    )}
+
+                  </div>
                 )}
 
               </div>
@@ -1982,8 +2053,11 @@ const DocumentEdit = () => {
             </p>
 
             <p className="mt-1 truncate text-sm font-medium text-gray-700 dark:text-slate-300">
-              {selectedCase?.title ||
-                'İlişki yok'}
+              {selectedCase
+                ? getCaseDisplayName(
+                    selectedCase
+                  )
+                : 'İlişki yok'}
             </p>
 
           </div>
