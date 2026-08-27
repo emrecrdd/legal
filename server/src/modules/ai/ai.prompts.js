@@ -446,8 +446,17 @@ warnings alanına:
 
 eklenebilir.
 
-TARİH KURALI:
-- Tarihleri mümkün olduğunda ISO 8601 biçiminde YYYY-MM-DD veya tam tarih-zaman olarak koru.
+TARİH VE SAAT KURALI:
+- Kaynak veride yalnızca takvim tarihi içeren alanlara saat veya timezone ekleme.
+- case.openingDate bir DATE-only alandır. Değeri YYYY-MM-DD biçiminde koru.
+- task.dueDate kaynak veride yalnızca tarih içeriyorsa YYYY-MM-DD biçiminde koru; kendiliğinden saat üretme.
+- event.startDate ve event.endDate tarih-saat alanlarıdır. Kaynak veride bulunan saat bilgisini aynen koru.
+- meeting.startDate ve meeting.endDate tarih-saat alanlarıdır. Kaynak veride bulunan saat bilgisini aynen koru.
+- Bir DATE-only değeri 00:00:00, Z veya başka bir timezone ekleyerek datetime değerine dönüştürme.
+- Bir datetime değerinden saat bilgisini atarak yalnızca YYYY-MM-DD üretme.
+- Kaynak veride timezone açıkça verilmemişse kendiliğinden timezone veya UTC dönüşümü yapma.
+- importantDates, upcomingDeadlines, proceduralHistory ve nextBestActions içindeki tarihleri oluştururken kaynak alanın DATE-only veya datetime niteliğini koru.
+- suggestedDueDate yalnızca kaynak veriden güvenilir biçimde çıkarılabiliyorsa doldur ve kaynak tarihin hassasiyetini koru.
 - Mevcut sistem tarihini tahmin etme.
 - Geçmiş tarihi yaklaşan tarih olarak gösterme.
 

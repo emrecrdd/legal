@@ -124,6 +124,28 @@ const formatDateTime = (
   }
 };
 
+const isDateOnlyValue = (value) => {
+  if (!value) {
+    return false;
+  }
+
+  return /^\d{4}-\d{2}-\d{2}$/.test(
+    String(value).trim()
+  );
+};
+
+const formatAIImportantDate = (value) => {
+  if (!value) {
+    return '-';
+  }
+
+  if (isDateOnlyValue(value)) {
+    return formatDateUTC(value);
+  }
+
+  return formatDateTime(value);
+};
+
 const unwrapResponse = (response) => {
   return response?.data?.data ?? response?.data ?? null;
 };
@@ -658,7 +680,7 @@ const CaseAIAnalysis = ({
 
                     <div className="text-right">
                       <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        {formatDateTime(item.date)}
+                        {formatAIImportantDate(item.date)}
                       </p>
 
                       <Badge
@@ -1203,7 +1225,7 @@ const CaseCompletionAnalysis = ({
 
                   <div className="text-right">
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {formatDateTime(item.date)}
+                      {formatAIImportantDate(item.date)}
                     </p>
 
                     <Badge variant={getRiskBadgeVariant(item.importance)}>
