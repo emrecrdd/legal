@@ -283,6 +283,40 @@ const formatDateTime = (
   }
 };
 
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (!caseItem) {
+    return '-';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    '-'
+  );
+};
+
 const getPersonName = (
   person,
   fallback = '-'
@@ -1333,10 +1367,14 @@ const DocumentsList = () => {
                                 dark:hover:text-blue-400
                               "
                               title={
-                                doc.case.title
+                                getCaseDisplayName(
+                                  doc.case
+                                )
                               }
                             >
-                              {doc.case.title}
+                              {getCaseDisplayName(
+                                doc.case
+                              )}
                             </Link>
                           ) : (
                             <span
@@ -1349,10 +1387,14 @@ const DocumentsList = () => {
                                 dark:text-slate-400
                               "
                               title={
-                                doc.case.title
+                                getCaseDisplayName(
+                                  doc.case
+                                )
                               }
                             >
-                              {doc.case.title}
+                              {getCaseDisplayName(
+                                doc.case
+                              )}
                             </span>
                           )
                         ) : (

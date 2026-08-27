@@ -247,6 +247,40 @@ const formatDateTime = (
   }
 };
 
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (!caseItem) {
+    return '-';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    '-'
+  );
+};
+
 const getPersonName = (
   person
 ) => {
@@ -2722,10 +2756,9 @@ const handlePreview = async (
                   to={`/cases/${documentItem.case.id}`}
                   className="mt-1 block font-medium text-blue-600 hover:underline"
                 >
-                  {
+                  {getCaseDisplayName(
                     documentItem.case
-                      .title
-                  }
+                  )}
                 </Link>
               ) : (
                 <span className="mt-1 block text-gray-400">
