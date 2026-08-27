@@ -17,7 +17,6 @@ import {
 } from '../../features/payments/payment.query.js';
 
 import clientApi from '../../features/clients/client.api.js';
-import caseApi from '../../features/cases/case.api.js';
 
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
@@ -28,10 +27,8 @@ import {
   ArrowLeft,
   CalendarDays,
   CreditCard,
-  Plus,
   Save,
   Scale,
-  Trash2,
   WalletCards,
 } from 'lucide-react';
 
@@ -284,23 +281,26 @@ const PaymentPlanCreate = () => {
   // ======================================================
 
   const {
-    data: clientsData,
-    isLoading: clientsLoading,
-  } = useQuery({
-    queryKey: [
-      'payment-plan-clients',
-    ],
+    data:
+      clientsData,
+    isLoading:
+      clientsLoading,
+  } =
+    useQuery({
+      queryKey: [
+        'payment-plan-clients',
+      ],
 
-    queryFn: () =>
-      clientApi.getAll({
-        page: 1,
-        limit: 100,
-        status: 'active',
-      }),
+      queryFn: () =>
+        clientApi.getAll({
+          page: 1,
+          limit: 100,
+          status: 'active',
+        }),
 
-    staleTime:
-      5 * 60 * 1000,
-  });
+      staleTime:
+        5 * 60 * 1000,
+    });
 
   const clients =
     Array.isArray(
@@ -310,46 +310,70 @@ const PaymentPlanCreate = () => {
       : [];
 
   // ======================================================
-  // CASES
+  // CLIENT CASES
   // ======================================================
 
   const {
-    data: casesData,
-    isLoading: casesLoading,
-  } = useQuery({
-    queryKey: [
-      'payment-plan-cases',
-      formData.client_id,
-    ],
+    data:
+      clientCasesData,
+    isLoading:
+      clientCasesLoading,
+  } =
+    useQuery({
+      queryKey: [
+        'payment-plan-client-cases',
+        formData.client_id,
+      ],
 
-    queryFn: async () => {
-      /*
-       * Eğer case API'nizde client_id filtresi destekleniyorsa
-       * bu yapı direkt çalışır.
-       */
-      return caseApi.getAll({
-        page: 1,
-        limit: 100,
-        client_id:
-          formData.client_id,
-      });
-    },
+      queryFn: () =>
+        clientApi.getCaseHistory(
+          formData.client_id
+        ),
 
-    enabled:
-      Boolean(
-        formData.client_id
-      ),
+      enabled:
+        Boolean(
+          formData.client_id
+        ),
 
-    staleTime:
-      5 * 60 * 1000,
-  });
+      staleTime:
+        3 * 60 * 1000,
+    });
 
   const cases =
-    Array.isArray(
-      casesData?.data?.data
-    )
-      ? casesData.data.data
-      : [];
+    useMemo(() => {
+      const payload =
+        clientCasesData?.data?.data ??
+        clientCasesData?.data ??
+        [];
+
+      if (
+        Array.isArray(
+          payload
+        )
+      ) {
+        return payload;
+      }
+
+      if (
+        Array.isArray(
+          payload?.data
+        )
+      ) {
+        return payload.data;
+      }
+
+      if (
+        Array.isArray(
+          payload?.cases
+        )
+      ) {
+        return payload.cases;
+      }
+
+      return [];
+    }, [
+      clientCasesData,
+    ]);
 
   // ======================================================
   // DERIVED VALUES
@@ -451,31 +475,51 @@ const PaymentPlanCreate = () => {
     } =
       event.target;
 
+    const nextValue =
+      type ===
+      'checkbox'
+        ? checked
+        : value;
+
     setFormData(
-      (current) => ({
-        ...current,
+      (
+        current
+      ) => {
+        if (
+          name ===
+          'client_id'
+        ) {
+          return {
+            ...current,
 
-        [name]:
-          type === 'checkbox'
-            ? checked
-            : value,
+            client_id:
+              nextValue,
 
-        /*
-         * Müvekkil değişince eski dava seçimini temizle.
-         */
-        ...(name === 'client_id'
-          ? {
-              case_id: '',
-            }
-          : {}),
-      })
+            /*
+             * Müvekkil değişince eski dava seçimi
+             * her zaman temizlenir.
+             */
+            case_id:
+              '',
+          };
+        }
+
+        return {
+          ...current,
+
+          [name]:
+            nextValue,
+        };
+      }
     );
 
     if (
       errors[name]
     ) {
       setErrors(
-        (current) => ({
+        (
+          current
+        ) => ({
           ...current,
 
           [name]:
@@ -489,7 +533,9 @@ const PaymentPlanCreate = () => {
     type
   ) => {
     setFormData(
-      (current) => ({
+      (
+        current
+      ) => ({
         ...current,
 
         plan_type:
@@ -724,10 +770,6 @@ const PaymentPlanCreate = () => {
       notify_in_app:
         formData.notify_in_app,
 
-      /*
-       * İlk etapta draft oluşturuyoruz.
-       * Kullanıcı detay ekranından aktive edebilir.
-       */
       status:
         'draft',
     };
@@ -777,16 +819,13 @@ const PaymentPlanCreate = () => {
           className="inline-flex items-center gap-1 text-blue-600 hover:underline"
         >
           <ArrowLeft className="h-4 w-4" />
-
           Finans
         </Link>
 
         <div className="mt-3 flex items-start gap-3">
 
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/20">
-
             <WalletCards className="h-5 w-5 text-blue-600" />
-
           </div>
 
           <div>
@@ -812,9 +851,7 @@ const PaymentPlanCreate = () => {
         className="space-y-6"
       >
 
-        {/* ==================================================
-            GENERAL INFORMATION
-        ================================================== */}
+        {/* GENERAL INFORMATION */}
 
         <Card>
 
@@ -902,7 +939,9 @@ const PaymentPlanCreate = () => {
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 >
                   <option value="">
-                    Müvekkil seçin
+                    {clientsLoading
+                      ? 'Müvekkiller yükleniyor...'
+                      : 'Müvekkil seçin'}
                   </option>
 
                   {clients.map(
@@ -917,9 +956,7 @@ const PaymentPlanCreate = () => {
                           client.id
                         }
                       >
-                        {
-                          client.name
-                        }
+                        {client.name}
                       </option>
                     )
                   )}
@@ -928,9 +965,7 @@ const PaymentPlanCreate = () => {
 
                 {errors.client_id && (
                   <p className="mt-1 text-sm text-red-600">
-                    {
-                      errors.client_id
-                    }
+                    {errors.client_id}
                   </p>
                 )}
 
@@ -955,12 +990,18 @@ const PaymentPlanCreate = () => {
                   disabled={
                     isPending ||
                     !formData.client_id ||
-                    casesLoading
+                    clientCasesLoading
                   }
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 >
                   <option value="">
-                    Dava bağlantısı yok
+                    {!formData.client_id
+                      ? 'Önce müvekkil seçin'
+                      : clientCasesLoading
+                        ? 'Davalar yükleniyor...'
+                        : cases.length > 0
+                          ? 'Dava bağlantısı yok'
+                          : 'Bu müvekkile ait dava bulunamadı'}
                   </option>
 
                   {cases.map(
@@ -983,6 +1024,12 @@ const PaymentPlanCreate = () => {
                   )}
 
                 </select>
+
+                {!formData.client_id && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Dava seçebilmek için önce müvekkili seçin.
+                  </p>
+                )}
 
               </div>
 
@@ -1044,9 +1091,7 @@ const PaymentPlanCreate = () => {
 
         </Card>
 
-        {/* ==================================================
-            MONEY
-        ================================================== */}
+        {/* MONEY */}
 
         <Card>
 
@@ -1119,8 +1164,6 @@ const PaymentPlanCreate = () => {
 
             </div>
 
-            {/* SUMMARY */}
-
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
 
               <div className="rounded-xl bg-gray-50 p-4 dark:bg-gray-800">
@@ -1166,8 +1209,6 @@ const PaymentPlanCreate = () => {
               </div>
 
             </div>
-
-            {/* PLAN TYPE */}
 
             <div>
 
@@ -1285,9 +1326,7 @@ const PaymentPlanCreate = () => {
 
         </Card>
 
-        {/* ==================================================
-            INSTALLMENT PREVIEW
-        ================================================== */}
+        {/* INSTALLMENT PREVIEW */}
 
         {installmentPreview.length >
           0 && (
@@ -1390,9 +1429,7 @@ const PaymentPlanCreate = () => {
           </Card>
         )}
 
-        {/* ==================================================
-            REMINDERS
-        ================================================== */}
+        {/* REMINDERS */}
 
         <Card>
 
@@ -1463,7 +1500,6 @@ const PaymentPlanCreate = () => {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 
                   <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-
                     <input
                       type="checkbox"
                       name="notify_on_due_date"
@@ -1474,12 +1510,10 @@ const PaymentPlanCreate = () => {
                         handleChange
                       }
                     />
-
                     Vade gününde bildir
                   </label>
 
                   <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-
                     <input
                       type="checkbox"
                       name="notify_on_overdue"
@@ -1490,12 +1524,10 @@ const PaymentPlanCreate = () => {
                         handleChange
                       }
                     />
-
                     Gecikmede bildir
                   </label>
 
                   <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-
                     <input
                       type="checkbox"
                       name="notify_in_app"
@@ -1506,12 +1538,10 @@ const PaymentPlanCreate = () => {
                         handleChange
                       }
                     />
-
                     Uygulama içi bildirim
                   </label>
 
                   <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-
                     <input
                       type="checkbox"
                       name="notify_by_email"
@@ -1522,12 +1552,10 @@ const PaymentPlanCreate = () => {
                         handleChange
                       }
                     />
-
                     E-posta bildirimi
                   </label>
 
                   <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-
                     <input
                       type="checkbox"
                       name="notify_by_sms"
@@ -1538,7 +1566,6 @@ const PaymentPlanCreate = () => {
                         handleChange
                       }
                     />
-
                     SMS bildirimi
                   </label>
 
@@ -1599,7 +1626,6 @@ const PaymentPlanCreate = () => {
             }
           >
             <Save className="mr-2 h-4 w-4" />
-
             Ödeme Planını Oluştur
           </Button>
 
