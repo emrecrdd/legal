@@ -1117,20 +1117,16 @@ const documentIncludes = [
   },
 
   {
-    model:
-      Case,
-
-    as:
-      'case',
-
-    attributes: [
-      'id',
-      'title',
-    ],
-
-    required:
-      false,
-  },
+  model: Case,
+  as: 'case',
+  attributes: [
+    'id',
+    'title',
+    'court_name',
+    'case_number',
+  ],
+  required: false,
+},
 
   {
     model:
