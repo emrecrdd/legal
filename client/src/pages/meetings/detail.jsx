@@ -224,6 +224,59 @@ const getPersonName = (
 };
 
 // ======================================================
+// CASE NAME HELPER
+// ======================================================
+
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (!caseItem) {
+    return 'Dava';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    'Dava'
+  );
+};
+
+const getCaseSecondaryInfo = (
+  caseItem
+) => {
+  if (!caseItem) {
+    return '';
+  }
+
+  return [
+    caseItem.judiciary_type,
+    caseItem.judiciary_unit,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+};
+
+// ======================================================
 // FILE NAME HELPER
 // ======================================================
 
@@ -1206,9 +1259,19 @@ const MeetingDetail = () => {
                     dark:text-blue-400
                   "
                 >
-                  {
-                    meeting.case.title
-                  }
+                  {getCaseDisplayName(
+                    meeting.case
+                  )}
+
+                  {getCaseSecondaryInfo(
+                    meeting.case
+                  ) && (
+                    <span className="mt-1 block text-xs font-normal text-gray-400 no-underline dark:text-slate-500">
+                      {getCaseSecondaryInfo(
+                        meeting.case
+                      )}
+                    </span>
+                  )}
                 </Link>
               ) : (
                 <p className="mt-1 text-sm text-gray-400">
