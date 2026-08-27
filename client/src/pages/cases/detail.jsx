@@ -1900,20 +1900,25 @@ const handleApplySelectedCaseUpdates = () => {
 
             <div className="min-w-0">
 
-              <h1
-                className="
-                  truncate
-                  text-2xl
-                  font-semibold
-                  tracking-[-0.035em]
-                  text-gray-900
-                  dark:text-white
-                "
-              >
-                {caseItem.title ||
-                  caseItem.judiciary_type ||
-                  'Dava Dosyası'}
-              </h1>
+            <h1
+  className="
+    truncate
+    text-2xl
+    font-semibold
+    tracking-[-0.035em]
+    text-gray-900
+    dark:text-white
+  "
+>
+  {[
+    caseItem.court_name,
+    caseItem.case_number,
+  ]
+    .filter(Boolean)
+    .join(' · ') ||
+    caseItem.title ||
+    'Dava Dosyası'}
+</h1>
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
 
@@ -1948,38 +1953,18 @@ const handleApplySelectedCaseUpdates = () => {
                   </Badge>
                 )}
 
-                {caseItem.case_number && (
-                  <span
-                    className="
-                      rounded-full
-                      border
-                      border-gray-200
-                      bg-gray-50
-                      px-2.5
-                      py-1
-                      text-xs
-                      font-medium
-                      text-gray-500
-                      dark:border-white/[0.07]
-                      dark:bg-white/[0.025]
-                      dark:text-slate-400
-                    "
-                  >
-                    {caseItem.case_number}
-                  </span>
-                )}
+               
 
               </div>
 
-              <p className="mt-3 text-sm text-gray-500 dark:text-slate-400">
-                {[
-                  caseItem.judiciary_type,
-                  caseItem.judiciary_unit,
-                  caseItem.court_name,
-                ]
-                  .filter(Boolean)
-                  .join(' · ') || 'Yargı bilgisi belirtilmemiş'}
-              </p>
+             <p className="mt-3 text-sm text-gray-500 dark:text-slate-400">
+  {[
+    caseItem.judiciary_type,
+    caseItem.judiciary_unit,
+  ]
+    .filter(Boolean)
+    .join(' · ') || 'Yargı bilgisi belirtilmemiş'}
+</p>
 
             </div>
 
