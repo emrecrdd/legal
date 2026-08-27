@@ -1784,7 +1784,8 @@ const TaskCreate = () => {
                   }
                   disabled={
                     relationCasesLoading ||
-                    !canViewCases
+                    !canViewCases ||
+                    !formData.client_id
                   }
                   className="
                     h-10
@@ -1811,14 +1812,14 @@ const TaskCreate = () => {
                   <option value="">
                     {!canViewCases
                       ? 'Dava görüntüleme yetkiniz yok'
-                      : relationCasesLoading
-                        ? 'Davalar yükleniyor...'
-                        : formData.client_id
-                          ? relationCases.length >
-                            0
+                      : !formData.client_id
+                        ? 'Önce müvekkil seçin'
+                        : relationCasesLoading
+                          ? 'Davalar yükleniyor...'
+                          : relationCases.length >
+                              0
                             ? 'Dava seçin (isteğe bağlı)'
-                            : 'Bu müvekkile ait dava bulunamadı'
-                          : 'Dava seçin (isteğe bağlı)'}
+                            : 'Bu müvekkile ait dava bulunamadı'}
                   </option>
 
                   {canViewCases &&
@@ -1840,6 +1841,13 @@ const TaskCreate = () => {
                     )}
 
                 </select>
+
+                {!formData.client_id &&
+                  canViewClients && (
+                    <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
+                      Dava seçebilmek için önce ilişkili müvekkili seçin.
+                    </p>
+                  )}
 
                 {isAiPrefill &&
                   canViewCases &&
