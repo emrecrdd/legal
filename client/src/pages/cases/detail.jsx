@@ -393,10 +393,10 @@ const CaseAIAnalysis = ({
             )}
 
             {analysis.model && (
-              <Badge variant="default">
-                {analysis.model}
-              </Badge>
-            )}
+  <Badge variant="default">
+    Derkenar AI · Gelişmiş Hukuki Analiz
+  </Badge>
+)}
 
             <Button
               variant="outline"
@@ -518,17 +518,23 @@ const CaseAIAnalysis = ({
         )}
 
         {/* MEVCUT DURUM */}
-        {result.currentStatus && (
-          <section>
-            <h3 className="mb-2 font-semibold text-gray-900 dark:text-white">
-              Mevcut Durum
-            </h3>
+{result.currentStatus && (
+  <section>
+    <h3 className="mb-2 font-semibold text-gray-900 dark:text-white">
+      Mevcut Durum
+    </h3>
 
-            <div className="rounded-lg bg-gray-50 p-4 text-sm leading-6 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-              {result.currentStatus}
-            </div>
-          </section>
-        )}
+    <div className="rounded-lg bg-gray-50 p-4 text-sm leading-6 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+      {{
+        preparation: 'Hazırlık',
+        active: 'Aktif',
+        pending: 'Beklemede',
+        completed: 'Tamamlandı',
+        closed: 'Kapandı',
+      }[result.currentStatus] || result.currentStatus}
+    </div>
+  </section>
+)}
 
         {/* NEXT BEST ACTIONS */}
         {Array.isArray(result.nextBestActions) &&
