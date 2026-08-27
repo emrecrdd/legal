@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -20,7 +19,6 @@ import {
 } from '../../features/payments/payment.query.js';
 
 import clientApi from '../../features/clients/client.api.js';
-import caseApi from '../../features/cases/case.api.js';
 
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
@@ -240,34 +238,27 @@ const FinanceCreate = () => {
       : [];
 
   // ======================================================
-  // CASES
+  // CLIENT CASES
   // ======================================================
 
   const {
     data:
-      casesData,
+      clientCasesData,
 
     isLoading:
       casesLoading,
   } =
     useQuery({
       queryKey: [
-        'cases',
-        'finance-select',
+        'clients',
         formData.client_id,
+        'finance-cases',
       ],
 
       queryFn: () =>
-        caseApi.getAll({
-          client_id:
-            formData.client_id,
-
-          page:
-            1,
-
-          limit:
-            100,
-        }),
+        clientApi.getCaseHistory(
+          formData.client_id
+        ),
 
       enabled:
         Boolean(
@@ -275,17 +266,47 @@ const FinanceCreate = () => {
         ),
 
       staleTime:
-        5 * 60 * 1000,
+        3 * 60 * 1000,
     });
 
   const cases =
-    Array.isArray(
-      casesData
-        ?.data
-        ?.data
-    )
-      ? casesData.data.data
-      : [];
+    useMemo(() => {
+      const payload =
+        clientCasesData
+          ?.data
+          ?.data ??
+        clientCasesData
+          ?.data ??
+        [];
+
+      if (
+        Array.isArray(
+          payload
+        )
+      ) {
+        return payload;
+      }
+
+      if (
+        Array.isArray(
+          payload?.data
+        )
+      ) {
+        return payload.data;
+      }
+
+      if (
+        Array.isArray(
+          payload?.cases
+        )
+      ) {
+        return payload.cases;
+      }
+
+      return [];
+    }, [
+      clientCasesData,
+    ]);
 
   // ======================================================
   // PAYMENT PLANS
@@ -347,8 +368,12 @@ const FinanceCreate = () => {
           (
             plan
           ) =>
-            plan.id ===
-            formData.payment_plan_id
+            String(
+              plan.id
+            ) ===
+            String(
+              formData.payment_plan_id
+            )
         ) ||
         null
       );
@@ -359,9 +384,6 @@ const FinanceCreate = () => {
 
   // ======================================================
   // SELECTED PLAN DETAIL
-  //
-  // findAll() taksitleri döndürmüyor.
-  // Plan seçildiğinde findOne() ile detail çekiyoruz.
   // ======================================================
 
   const {
@@ -418,8 +440,12 @@ const FinanceCreate = () => {
           (
             installment
           ) =>
-            installment.id ===
-            formData.installment_id
+            String(
+              installment.id
+            ) ===
+            String(
+              formData.installment_id
+            )
         ) ||
         null
       );
@@ -461,85 +487,6 @@ const FinanceCreate = () => {
       : 0;
 
   // ======================================================
-  // SYNC RELATED FIELDS
-  // ======================================================
-
-  useEffect(() => {
-    setFormData(
-      (
-        current
-      ) => ({
-        ...current,
-
-        case_id:
-          '',
-
-        payment_plan_id:
-          '',
-
-        installment_id:
-          '',
-      })
-    );
-  }, [
-    formData.client_id,
-  ]);
-
-  useEffect(() => {
-    setFormData(
-      (
-        current
-      ) => ({
-        ...current,
-
-        payment_plan_id:
-          '',
-
-        installment_id:
-          '',
-      })
-    );
-  }, [
-    formData.case_id,
-  ]);
-
-  useEffect(() => {
-    setFormData(
-      (
-        current
-      ) => ({
-        ...current,
-
-        installment_id:
-          '',
-      })
-    );
-  }, [
-    formData.payment_plan_id,
-  ]);
-
-  useEffect(() => {
-    if (
-      !isExpense
-    ) {
-      return;
-    }
-
-    setFormData(
-      (
-        current
-      ) => ({
-        ...current,
-
-        installment_id:
-          '',
-      })
-    );
-  }, [
-    isExpense,
-  ]);
-
-  // ======================================================
   // CHANGE
   // ======================================================
 
@@ -555,12 +502,79 @@ const FinanceCreate = () => {
     setFormData(
       (
         current
-      ) => ({
-        ...current,
+      ) => {
+        /*
+         * İlişki zinciri:
+         *
+         * Müvekkil
+         *   -> Dava
+         *   -> Ödeme Planı
+         *   -> Taksit
+         *
+         * Üst kayıt değiştiğinde alt seçimler
+         * aynı state güncellemesinde temizlenir.
+         */
+        if (
+          name ===
+          'client_id'
+        ) {
+          return {
+            ...current,
 
-        [name]:
-          value,
-      })
+            client_id:
+              value,
+
+            case_id:
+              '',
+
+            payment_plan_id:
+              '',
+
+            installment_id:
+              '',
+          };
+        }
+
+        if (
+          name ===
+          'case_id'
+        ) {
+          return {
+            ...current,
+
+            case_id:
+              value,
+
+            payment_plan_id:
+              '',
+
+            installment_id:
+              '',
+          };
+        }
+
+        if (
+          name ===
+          'payment_plan_id'
+        ) {
+          return {
+            ...current,
+
+            payment_plan_id:
+              value,
+
+            installment_id:
+              '',
+          };
+        }
+
+        return {
+          ...current,
+
+          [name]:
+            value,
+        };
+      }
     );
 
     if (
@@ -933,16 +947,13 @@ const FinanceCreate = () => {
           className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
         >
           <ArrowLeft className="h-4 w-4" />
-
           Finans
         </Link>
 
         <div className="mt-3 flex items-start gap-3">
 
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/20">
-
             <ReceiptText className="h-5 w-5 text-blue-600" />
-
           </div>
 
           <div>
@@ -1128,7 +1139,10 @@ const FinanceCreate = () => {
                     ? 'Önce müvekkil seçin'
                     : casesLoading
                       ? 'Davalar yükleniyor...'
-                      : 'Dava bağlantısı yok'}
+                      : cases.length >
+                          0
+                        ? 'Dava bağlantısı yok'
+                        : 'Bu müvekkile ait dava bulunamadı'}
                 </option>
 
                 {cases.map(
@@ -1151,6 +1165,12 @@ const FinanceCreate = () => {
                 )}
 
               </select>
+
+              {!formData.client_id && (
+                <p className="mt-1 text-xs text-gray-400">
+                  Dava seçebilmek için önce müvekkili seçin.
+                </p>
+              )}
 
               {formData.client_id &&
                 !casesLoading &&
@@ -1675,7 +1695,6 @@ const FinanceCreate = () => {
               }
             >
               <Save className="mr-2 h-4 w-4" />
-
               Finans Hareketini Kaydet
             </Button>
 
