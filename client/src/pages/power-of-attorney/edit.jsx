@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useState,
 } from 'react';
 
@@ -20,7 +21,7 @@ import {
 } from '../../features/power-of-attorney/powerOfAttorney.api.js';
 
 import clientApi from '../../features/clients/client.api.js';
-import caseApi from '../../features/cases/case.api.js';
+import documentApi from '../../features/documents/document.api.js';
 
 import {
   useAuth,
@@ -197,6 +198,16 @@ const PowerOfAttorneyEdit = () => {
   ] = useState({});
 
   const [
+    selectedFile,
+    setSelectedFile,
+  ] = useState(null);
+
+  const [
+    fileInputKey,
+    setFileInputKey,
+  ] = useState(0);
+
+  const [
     initializedId,
     setInitializedId,
   ] = useState(null);
@@ -252,33 +263,26 @@ const PowerOfAttorneyEdit = () => {
   });
 
   // ======================================================
-  // CASES
+  // CLIENT CASES
   // ======================================================
 
   const {
-    data: casesData,
+    data:
+      clientCasesData,
+
     isLoading:
       casesLoading,
   } = useQuery({
     queryKey: [
-      'cases',
-      {
-        client_id:
-          formData.client_id ||
-          undefined,
-
-        limit: 100,
-      },
+      'clients',
+      formData.client_id,
+      'power-of-attorney-edit-cases',
     ],
 
     queryFn: () =>
-      caseApi.getAll({
-        client_id:
-          formData.client_id ||
-          undefined,
-
-        limit: 100,
-      }),
+      clientApi.getCaseHistory(
+        formData.client_id
+      ),
 
     enabled:
       Boolean(
@@ -286,7 +290,7 @@ const PowerOfAttorneyEdit = () => {
       ),
 
     staleTime:
-      5 * 60 * 1000,
+      3 * 60 * 1000,
   });
 
   // ======================================================
@@ -306,11 +310,40 @@ const PowerOfAttorneyEdit = () => {
       : [];
 
   const cases =
-    Array.isArray(
-      casesData?.data?.data
-    )
-      ? casesData.data.data
-      : [];
+    useMemo(() => {
+      const payload =
+        clientCasesData?.data?.data ??
+        clientCasesData?.data ??
+        [];
+
+      if (
+        Array.isArray(
+          payload
+        )
+      ) {
+        return payload;
+      }
+
+      if (
+        Array.isArray(
+          payload?.data
+        )
+      ) {
+        return payload.data;
+      }
+
+      if (
+        Array.isArray(
+          payload?.cases
+        )
+      ) {
+        return payload.cases;
+      }
+
+      return [];
+    }, [
+      clientCasesData,
+    ]);
 
   // ======================================================
   // INITIALIZE FORM
@@ -384,38 +417,143 @@ const PowerOfAttorneyEdit = () => {
 
   const updateMutation =
     useMutation({
-      mutationFn: (
-        data
-      ) =>
-        powerOfAttorneyApi.update(
-          id,
-          data
-        ),
-
-      onSuccess: async () => {
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: [
-              'powerOfAttorneys',
-            ],
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey: [
-              'powerOfAttorney',
+      mutationFn:
+        async ({
+          data,
+          file,
+        }) => {
+          const updateResponse =
+            await powerOfAttorneyApi.update(
               id,
-            ],
-          }),
-        ]);
+              data
+            );
 
-        toast.success(
-          'Vekaletname başarıyla güncellendi'
-        );
+          let documentWarning =
+            null;
 
-        navigate(
-          `/power-of-attorney/${id}`
-        );
-      },
+          if (
+            file
+          ) {
+            try {
+              const uploadData =
+                new FormData();
+
+              uploadData.append(
+                'file',
+                file
+              );
+
+              uploadData.append(
+                'name',
+                file.name ||
+                data.title ||
+                'Vekaletname belgesi'
+              );
+
+              uploadData.append(
+                'category',
+                'general'
+              );
+
+              uploadData.append(
+                'power_of_attorney_id',
+                id
+              );
+
+              uploadData.append(
+                'client_id',
+                data.client_id
+              );
+
+              if (
+                data.case_id
+              ) {
+                uploadData.append(
+                  'case_id',
+                  data.case_id
+                );
+              }
+
+              uploadData.append(
+                'is_public',
+                'false'
+              );
+
+              uploadData.append(
+                'tags',
+                'vekaletname'
+              );
+
+              await documentApi.upload(
+                uploadData
+              );
+            } catch (
+              documentError
+            ) {
+              documentWarning =
+                documentError
+                  ?.response
+                  ?.data
+                  ?.message ||
+                documentError
+                  ?.message ||
+                'Belge yüklenemedi';
+            }
+          }
+
+          return {
+            updateResponse,
+            documentWarning,
+          };
+        },
+
+      onSuccess:
+        async (
+          result
+        ) => {
+          await Promise.all([
+            queryClient.invalidateQueries({
+              queryKey: [
+                'powerOfAttorneys',
+              ],
+            }),
+
+            queryClient.invalidateQueries({
+              queryKey: [
+                'powerOfAttorney',
+                id,
+              ],
+            }),
+
+            queryClient.invalidateQueries({
+              queryKey: [
+                'documents',
+              ],
+            }),
+          ]);
+
+          if (
+            result?.documentWarning
+          ) {
+            toast(
+              `Vekaletname güncellendi ancak belge yüklenemedi: ${result.documentWarning}`,
+              {
+                icon:
+                  '⚠️',
+              }
+            );
+          } else {
+            toast.success(
+              selectedFile
+                ? 'Vekaletname ve belge başarıyla güncellendi'
+                : 'Vekaletname başarıyla güncellendi'
+            );
+          }
+
+          navigate(
+            `/power-of-attorney/${id}`
+          );
+        },
 
       onError: (error) => {
         toast.error(
@@ -471,24 +609,32 @@ const PowerOfAttorneyEdit = () => {
     } = event.target;
 
     setFormData(
-      (current) => ({
-        ...current,
-        [name]: value,
-      })
-    );
+      (
+        current
+      ) => {
+        if (
+          name ===
+          'client_id'
+        ) {
+          return {
+            ...current,
 
-    if (
-      name === 'client_id'
-    ) {
-      setFormData(
-        (current) => ({
+            client_id:
+              value,
+
+            case_id:
+              '',
+          };
+        }
+
+        return {
           ...current,
-          client_id:
+
+          [name]:
             value,
-          case_id: '',
-        })
-      );
-    }
+        };
+      }
+    );
 
     if (
       errors[name]
@@ -572,6 +718,74 @@ const PowerOfAttorneyEdit = () => {
     };
 
   // ======================================================
+  // DOCUMENT
+  // ======================================================
+
+  const handleFileChange =
+    (
+      event
+    ) => {
+      const file =
+        event.target.files?.[0] ||
+        null;
+
+      if (
+        !file
+      ) {
+        setSelectedFile(
+          null
+        );
+
+        return;
+      }
+
+      const maxSize =
+        10 *
+        1024 *
+        1024;
+
+      if (
+        file.size >
+        maxSize
+      ) {
+        toast.error(
+          'Belge boyutu 10MB’dan büyük olamaz'
+        );
+
+        setSelectedFile(
+          null
+        );
+
+        setFileInputKey(
+          (
+            current
+          ) =>
+            current + 1
+        );
+
+        return;
+      }
+
+      setSelectedFile(
+        file
+      );
+    };
+
+  const clearSelectedFile =
+    () => {
+      setSelectedFile(
+        null
+      );
+
+      setFileInputKey(
+        (
+          current
+        ) =>
+          current + 1
+      );
+    };
+
+  // ======================================================
   // VALIDATION
   // ======================================================
 
@@ -642,10 +856,9 @@ const PowerOfAttorneyEdit = () => {
     }
 
     /*
-     * Burada artık FormData göndermiyoruz.
-     *
-     * Edit ekranı sadece vekaletname metadata'sını değiştiriyor.
-     * Fiziksel belge yönetimi Documents modülü üzerinden yapılmalı.
+     * Vekaletname metadata'sı normal update endpoint'ine gider.
+     * Seçilen yeni belge varsa güncelleme başarılı olduktan sonra
+     * Document modülünün upload endpoint'i üzerinden ilişkilendirilir.
      */
     const submitData = {
       client_id:
@@ -684,9 +897,13 @@ const PowerOfAttorneyEdit = () => {
         null,
     };
 
-    updateMutation.mutate(
-      submitData
-    );
+    updateMutation.mutate({
+      data:
+        submitData,
+
+      file:
+        selectedFile,
+    });
   };
 
   // ======================================================
@@ -840,7 +1057,7 @@ const PowerOfAttorneyEdit = () => {
 
       </div>
 
-      {/* INFO */}
+      {/* DOCUMENT */}
 
       <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
 
@@ -848,24 +1065,100 @@ const PowerOfAttorneyEdit = () => {
 
           <FilePlus2 className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
 
-          <div>
+          <div className="min-w-0 flex-1">
 
             <p className="font-medium text-blue-900 dark:text-blue-200">
-              Belge dosyaları ayrı yönetilir
+              Vekaletname Belgesi
             </p>
 
             <p className="mt-1 text-sm leading-6 text-blue-800 dark:text-blue-300">
-              Bu ekran vekaletnamenin kayıt bilgilerini düzenler.
-              Yeni vekaletname belgesi eklemek veya mevcut belgeleri yönetmek için belge modülünü kullanın.
+              İsterseniz bu güncelleme sırasında yeni bir belge ekleyebilirsiniz.
+              Belge, bu vekaletname ve seçili müvekkil/dava ile ilişkilendirilir.
             </p>
 
-            <Link
-              to={`/documents/upload?power_of_attorney_id=${id}`}
-              className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-blue-700 hover:underline dark:text-blue-300"
-            >
-              <FilePlus2 className="h-4 w-4" />
-              Bu vekaletnameye belge ekle
-            </Link>
+            {Array.isArray(
+              poa.documents
+            ) &&
+              poa.documents.length >
+                0 && (
+                <div className="mt-3 space-y-2">
+
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                    Mevcut Belgeler
+                  </p>
+
+                  {poa.documents.map(
+                    (
+                      document
+                    ) => (
+                      <div
+                        key={
+                          document.id
+                        }
+                        className="rounded-lg border border-blue-200/70 bg-white/70 px-3 py-2 dark:border-blue-800 dark:bg-slate-900/30"
+                      >
+                        <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
+                          {document.original_name ||
+                            document.name ||
+                            'Belge'}
+                        </p>
+                      </div>
+                    )
+                  )}
+
+                </div>
+              )}
+
+            <div className="mt-4">
+
+              <label className="mb-1.5 block text-sm font-medium text-blue-900 dark:text-blue-200">
+                Yeni Belge Ekle
+              </label>
+
+              <input
+                key={
+                  fileInputKey
+                }
+                type="file"
+                onChange={
+                  handleFileChange
+                }
+                disabled={
+                  updateMutation.isPending
+                }
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt,.udf"
+                className="block w-full text-sm text-blue-900 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-700 disabled:opacity-60 dark:text-blue-200"
+              />
+
+              <p className="mt-1 text-xs text-blue-700/80 dark:text-blue-300/80">
+                PDF, Word, Excel, görsel, metin ve UDF · Maksimum 10MB
+              </p>
+
+              {selectedFile && (
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-white/80 px-3 py-2 dark:border-blue-800 dark:bg-slate-900/40">
+
+                  <p className="min-w-0 truncate text-sm font-medium text-gray-900 dark:text-white">
+                    {selectedFile.name}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={
+                      clearSelectedFile
+                    }
+                    disabled={
+                      updateMutation.isPending
+                    }
+                    className="shrink-0 text-gray-400 transition hover:text-red-600 disabled:opacity-50"
+                    aria-label="Seçili belgeyi kaldır"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+
+                </div>
+              )}
+
+            </div>
 
           </div>
 
@@ -974,7 +1267,12 @@ const PowerOfAttorneyEdit = () => {
               <option value="">
                 {!formData.client_id
                   ? 'Önce müvekkil seçin'
-                  : 'Dava seçin (isteğe bağlı)'}
+                  : casesLoading
+                    ? 'Davalar yükleniyor...'
+                    : cases.length >
+                        0
+                      ? 'Dava seçin (isteğe bağlı)'
+                      : 'Bu müvekkile ait dava bulunamadı'}
               </option>
 
               {cases.map(
