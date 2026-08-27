@@ -20,7 +20,6 @@ import {
 } from '../../features/power-of-attorney/powerOfAttorney.api.js';
 
 import clientApi from '../../features/clients/client.api.js';
-import caseApi from '../../features/cases/case.api.js';
 
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
@@ -275,31 +274,23 @@ const PowerOfAttorneyCreate = () => {
   } =
     useQuery({
       queryKey: [
-        'cases',
-        {
-          client_id:
-            formData.client_id ||
-            undefined,
-
-          limit:
-            100,
-        },
+        'clients',
+        formData.client_id,
+        'power-of-attorney-cases',
       ],
 
       queryFn: () =>
-        caseApi.getAll({
-          client_id:
-            formData.client_id ||
-            undefined,
-
-          limit:
-            100,
-        }),
+        clientApi.getCaseHistory(
+          formData.client_id
+        ),
 
       enabled:
         Boolean(
           formData.client_id
         ),
+
+      staleTime:
+        3 * 60 * 1000,
     });
 
   const clients =
@@ -310,11 +301,43 @@ const PowerOfAttorneyCreate = () => {
       : [];
 
   const cases =
-    Array.isArray(
-      casesData?.data?.data
-    )
-      ? casesData.data.data
-      : [];
+    useMemo(() => {
+      const payload =
+        casesData
+          ?.data
+          ?.data ??
+        casesData
+          ?.data ??
+        [];
+
+      if (
+        Array.isArray(
+          payload
+        )
+      ) {
+        return payload;
+      }
+
+      if (
+        Array.isArray(
+          payload?.data
+        )
+      ) {
+        return payload.data;
+      }
+
+      if (
+        Array.isArray(
+          payload?.cases
+        )
+      ) {
+        return payload.cases;
+      }
+
+      return [];
+    }, [
+      casesData,
+    ]);
 
   // ====================================================
   // SELECTED DATA
@@ -326,8 +349,12 @@ const PowerOfAttorneyCreate = () => {
         (
           client
         ) =>
-          client.id ===
-          formData.client_id
+          String(
+            client.id
+          ) ===
+          String(
+            formData.client_id
+          )
       );
     }, [
       clients,
@@ -340,8 +367,12 @@ const PowerOfAttorneyCreate = () => {
         (
           caseItem
         ) =>
-          caseItem.id ===
-          formData.case_id
+          String(
+            caseItem.id
+          ) ===
+          String(
+            formData.case_id
+          )
       );
     }, [
       cases,
