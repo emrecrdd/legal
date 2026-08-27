@@ -229,6 +229,55 @@ const isValidHttpUrl = (
   }
 };
 
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (!caseItem) {
+    return 'Dava';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    'Dava'
+  );
+};
+
+const getCaseSecondaryInfo = (
+  caseItem
+) => {
+  if (!caseItem) {
+    return '';
+  }
+
+  return [
+    caseItem.judiciary_type,
+    caseItem.judiciary_unit,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -1471,7 +1520,9 @@ const MeetingCreate = () => {
                           caseItem.id
                         }
                       >
-                        {caseItem.title}
+                        {getCaseDisplayName(
+                          caseItem
+                        )}
                       </option>
                     )
                   )}
@@ -1496,13 +1547,28 @@ const MeetingCreate = () => {
                       dark:bg-white/[0.025]
                     "
                   >
-                    <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
-                      {selectedCase.title}
-                    </p>
+                    <div className="flex items-center gap-2">
 
-                    {selectedCase.case_number && (
+                      <BriefcaseBusiness
+                        size={15}
+                        className="shrink-0 text-gray-400 dark:text-slate-500"
+                      />
+
+                      <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
+                        {getCaseDisplayName(
+                          selectedCase
+                        )}
+                      </p>
+
+                    </div>
+
+                    {getCaseSecondaryInfo(
+                      selectedCase
+                    ) && (
                       <p className="mt-1 text-[10px] text-gray-400 dark:text-slate-500">
-                        {selectedCase.case_number}
+                        {getCaseSecondaryInfo(
+                          selectedCase
+                        )}
                       </p>
                     )}
                   </div>

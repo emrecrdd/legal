@@ -84,6 +84,9 @@ const CASE_SUMMARY_ATTRIBUTES = [
   'id',
   'title',
   'case_number',
+  'court_name',
+  'judiciary_type',
+  'judiciary_unit',
   'created_by',
   'assigned_to',
 ];
@@ -517,13 +520,8 @@ const assertCaseAccessForMeeting =
       await Case.findOne({
         where,
 
-        attributes: [
-          'id',
-          'title',
-          'case_number',
-          'created_by',
-          'assigned_to',
-        ],
+        attributes:
+  CASE_SUMMARY_ATTRIBUTES,
 
         transaction,
       });
