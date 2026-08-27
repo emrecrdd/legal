@@ -407,15 +407,7 @@ const AnalysisResult = ({ analysis }) => {
           </div>
         )}
 
-        <details>
-          <summary className="cursor-pointer text-sm font-medium text-gray-600 dark:text-gray-300">
-            Teknik JSON çıktısını göster
-          </summary>
-
-          <pre className="mt-3 max-h-[500px] overflow-auto whitespace-pre-wrap rounded-lg bg-gray-950 p-4 text-xs text-gray-100">
-            {JSON.stringify(analysis, null, 2)}
-          </pre>
-        </details>
+        
       </Card.Body>
     </Card>
   );
