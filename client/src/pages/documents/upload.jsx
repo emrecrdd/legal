@@ -266,6 +266,60 @@ const getCategoryLabel = (
   );
 };
 
+
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (
+    !caseItem
+  ) {
+    return 'Dava';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    'Dava'
+  );
+};
+
+const getCaseSecondaryInfo = (
+  caseItem
+) => {
+  if (
+    !caseItem
+  ) {
+    return '';
+  }
+
+  return [
+    caseItem.judiciary_type,
+    caseItem.judiciary_unit,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -2262,7 +2316,9 @@ const DocumentUpload = () => {
                           caseItem.id
                         }
                       >
-                        {caseItem.title}
+                        {getCaseDisplayName(
+                          caseItem
+                        )}
                       </option>
                     )
                   )}
@@ -2300,12 +2356,18 @@ const DocumentUpload = () => {
                     <div className="min-w-0">
 
                       <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
-                        {selectedCase.title}
+                        {getCaseDisplayName(
+                          selectedCase
+                        )}
                       </p>
 
-                      {selectedCase.case_number && (
+                      {getCaseSecondaryInfo(
+                        selectedCase
+                      ) && (
                         <p className="mt-0.5 text-[10px] text-gray-400 dark:text-slate-500">
-                          {selectedCase.case_number}
+                          {getCaseSecondaryInfo(
+                            selectedCase
+                          )}
                         </p>
                       )}
 
