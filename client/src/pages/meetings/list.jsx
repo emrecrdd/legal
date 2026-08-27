@@ -142,6 +142,40 @@ const formatDate = (
   }
 };
 
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (!caseItem) {
+    return '-';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    '-'
+  );
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -622,12 +656,14 @@ const MeetingsList = () => {
                             dark:hover:text-blue-400
                           "
                           title={
-                            meeting.case
-                              .title
+                            getCaseDisplayName(
+                              meeting.case
+                            )
                           }
                         >
-                          {meeting.case
-                            .title}
+                          {getCaseDisplayName(
+                            meeting.case
+                          )}
                         </Link>
                       ) : (
                         <span className="text-gray-400 dark:text-slate-600">

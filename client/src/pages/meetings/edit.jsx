@@ -246,6 +246,55 @@ const localToUTC = (dateTime) => {
   }
 };
 
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (!caseItem) {
+    return 'Dava';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    'Dava'
+  );
+};
+
+const getCaseSecondaryInfo = (
+  caseItem
+) => {
+  if (!caseItem) {
+    return '';
+  }
+
+  return [
+    caseItem.judiciary_type,
+    caseItem.judiciary_unit,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -314,6 +363,8 @@ const MeetingEdit = () => {
 
   const {
     data: casesData,
+    isLoading:
+      casesLoading,
   } = useQuery({
     queryKey: [
       'cases',
@@ -330,6 +381,8 @@ const MeetingEdit = () => {
 
   const {
     data: clientsData,
+    isLoading:
+      clientsLoading,
   } = useQuery({
     queryKey: [
       'clients',
@@ -342,6 +395,60 @@ const MeetingEdit = () => {
       clientApi.getAll({
         limit: 100,
       }),
+  });
+
+  const {
+    data:
+      clientCasesData,
+
+    isLoading:
+      clientCasesLoading,
+  } = useQuery({
+    queryKey: [
+      'clients',
+      formData.client_id,
+      'meeting-edit-cases',
+    ],
+
+    queryFn: () =>
+      clientApi.getCaseHistory(
+        formData.client_id
+      ),
+
+    enabled:
+      Boolean(
+        formData.client_id
+      ),
+
+    staleTime:
+      3 * 60 * 1000,
+  });
+
+  const {
+    data:
+      selectedCaseData,
+
+    isLoading:
+      selectedCaseLoading,
+  } = useQuery({
+    queryKey: [
+      'case',
+      formData.case_id,
+      'meeting-edit-relation',
+    ],
+
+    queryFn: () =>
+      caseApi.getOne(
+        formData.case_id
+      ),
+
+    enabled:
+      Boolean(
+        formData.case_id
+      ),
+
+    staleTime:
+      3 * 60 * 1000,
   });
 
   const {
@@ -375,6 +482,195 @@ const MeetingEdit = () => {
   const users =
     usersData?.data?.data ||
     [];
+
+
+  const clientCases =
+    useMemo(() => {
+      const payload =
+        clientCasesData?.data?.data ??
+        clientCasesData?.data ??
+        [];
+
+      if (
+        Array.isArray(
+          payload
+        )
+      ) {
+        return payload;
+      }
+
+      if (
+        Array.isArray(
+          payload?.data
+        )
+      ) {
+        return payload.data;
+      }
+
+      if (
+        Array.isArray(
+          payload?.cases
+        )
+      ) {
+        return payload.cases;
+      }
+
+      return [];
+    }, [
+      clientCasesData,
+    ]);
+
+  const selectedCaseDetail =
+    selectedCaseData?.data?.data ??
+    selectedCaseData?.data ??
+    null;
+
+  const caseClients =
+    useMemo(() => {
+      if (
+        !selectedCaseDetail
+      ) {
+        return [];
+      }
+
+      const candidates = [
+        selectedCaseDetail.clients,
+        selectedCaseDetail.case_clients,
+        selectedCaseDetail.related_clients,
+      ];
+
+      for (
+        const candidate of
+        candidates
+      ) {
+        if (
+          Array.isArray(
+            candidate
+          )
+        ) {
+          return candidate
+            .map(
+              (
+                item
+              ) =>
+                item?.client ||
+                item
+            )
+            .filter(
+              (
+                item
+              ) =>
+                item?.id
+            );
+        }
+      }
+
+      if (
+        selectedCaseDetail.client?.id
+      ) {
+        return [
+          selectedCaseDetail.client,
+        ];
+      }
+
+      if (
+        selectedCaseDetail.client_id
+      ) {
+        const matched =
+          clients.find(
+            (
+              client
+            ) =>
+              String(
+                client.id
+              ) ===
+              String(
+                selectedCaseDetail.client_id
+              )
+          );
+
+        return matched
+          ? [
+              matched,
+            ]
+          : [];
+      }
+
+      return [];
+    }, [
+      selectedCaseDetail,
+      clients,
+    ]);
+
+  const relationCases =
+    formData.client_id
+      ? clientCases
+      : cases;
+
+  const relationCasesLoading =
+    formData.client_id
+      ? clientCasesLoading
+      : casesLoading;
+
+  const relationClients =
+    formData.case_id
+      ? caseClients
+      : clients;
+
+  const relationClientsLoading =
+    formData.case_id
+      ? selectedCaseLoading
+      : clientsLoading;
+
+  const selectedCase =
+    useMemo(() => {
+      return (
+        relationCases.find(
+          (
+            item
+          ) =>
+            String(
+              item.id
+            ) ===
+            String(
+              formData.case_id
+            )
+        ) ||
+        (
+          selectedCaseDetail &&
+          String(
+            selectedCaseDetail.id
+          ) ===
+          String(
+            formData.case_id
+          )
+            ? selectedCaseDetail
+            : null
+        )
+      );
+    }, [
+      relationCases,
+      selectedCaseDetail,
+      formData.case_id,
+    ]);
+
+  const selectedClient =
+    useMemo(() => {
+      return clients.find(
+        (
+          item
+        ) =>
+          String(
+            item.id
+          ) ===
+          String(
+            formData.client_id
+          )
+      );
+    }, [
+      clients,
+      formData.client_id,
+    ]);
 
   // ======================================================
   // PERMISSIONS
@@ -587,10 +883,86 @@ const MeetingEdit = () => {
     } = event.target;
 
     setFormData(
-      (current) => ({
-        ...current,
-        [name]: value,
-      })
+      (
+        current
+      ) => {
+        /*
+         * Müvekkil değişirse mevcut dava yeni müvekkile
+         * ait değilse temizlenir.
+         */
+        if (
+          name ===
+          'client_id'
+        ) {
+          const currentCaseStillValid =
+            !current.case_id ||
+            clientCases.some(
+              (
+                caseItem
+              ) =>
+                String(
+                  caseItem.id
+                ) ===
+                String(
+                  current.case_id
+                )
+            );
+
+          return {
+            ...current,
+
+            client_id:
+              value,
+
+            case_id:
+              currentCaseStillValid
+                ? current.case_id
+                : '',
+          };
+        }
+
+        /*
+         * Dava değişirse mevcut müvekkil yeni davaya
+         * bağlı değilse temizlenir.
+         */
+        if (
+          name ===
+          'case_id'
+        ) {
+          const currentClientStillValid =
+            !current.client_id ||
+            caseClients.some(
+              (
+                client
+              ) =>
+                String(
+                  client.id
+                ) ===
+                String(
+                  current.client_id
+                )
+            );
+
+          return {
+            ...current,
+
+            case_id:
+              value,
+
+            client_id:
+              currentClientStillValid
+                ? current.client_id
+                : '',
+          };
+        }
+
+        return {
+          ...current,
+
+          [name]:
+            value,
+        };
+      }
     );
 
     if (errors[name]) {
@@ -1315,16 +1687,23 @@ const MeetingEdit = () => {
                     handleChange
                   }
                   disabled={
-                    updateMutation.isPending
+                    updateMutation.isPending ||
+                    relationCasesLoading
                   }
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 >
 
                   <option value="">
-                    Dava seçin
+                    {relationCasesLoading
+                      ? 'Davalar yükleniyor...'
+                      : formData.client_id &&
+                          relationCases.length ===
+                            0
+                        ? 'Bu müvekkile ait dava bulunamadı'
+                        : 'Dava seçin'}
                   </option>
 
-                  {cases.map(
+                  {relationCases.map(
                     (caseItem) => (
                       <option
                         key={
@@ -1334,14 +1713,36 @@ const MeetingEdit = () => {
                           caseItem.id
                         }
                       >
-                        {
-                          caseItem.title
-                        }
+                        {getCaseDisplayName(
+                          caseItem
+                        )}
                       </option>
                     )
                   )}
 
                 </select>
+
+                {selectedCase && (
+                  <div className="mt-2">
+
+                    <p className="truncate text-xs font-medium text-gray-500 dark:text-slate-400">
+                      Seçili: {getCaseDisplayName(
+                        selectedCase
+                      )}
+                    </p>
+
+                    {getCaseSecondaryInfo(
+                      selectedCase
+                    ) && (
+                      <p className="mt-0.5 truncate text-[10px] text-gray-400 dark:text-slate-500">
+                        {getCaseSecondaryInfo(
+                          selectedCase
+                        )}
+                      </p>
+                    )}
+
+                  </div>
+                )}
 
               </div>
 
@@ -1362,16 +1763,23 @@ const MeetingEdit = () => {
                     handleChange
                   }
                   disabled={
-                    updateMutation.isPending
+                    updateMutation.isPending ||
+                    relationClientsLoading
                   }
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 >
 
                   <option value="">
-                    Müvekkil seçin
+                    {relationClientsLoading
+                      ? 'Müvekkiller yükleniyor...'
+                      : formData.case_id &&
+                          relationClients.length ===
+                            0
+                        ? 'Bu davaya bağlı müvekkil bulunamadı'
+                        : 'Müvekkil seçin'}
                   </option>
 
-                  {clients.map(
+                  {relationClients.map(
                     (client) => (
                       <option
                         key={
@@ -1392,6 +1800,12 @@ const MeetingEdit = () => {
                   )}
 
                 </select>
+
+                {selectedClient && (
+                  <p className="mt-2 truncate text-xs text-gray-400 dark:text-slate-500">
+                    Seçili: {selectedClient.name}
+                  </p>
+                )}
 
               </div>
 
