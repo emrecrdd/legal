@@ -13,7 +13,7 @@ import {
 } from 'url';
 
 import AdmZip from 'adm-zip';
-
+import unzipper from 'unzipper';
 import {
   XMLParser,
 } from 'fast-xml-parser';
@@ -2098,492 +2098,697 @@ export const documentService = {
   // ====================================================
 
   async getUdfPreview(
-    documentOrId,
-    actor
+  documentOrId,
+  actor
+) {
+  const documentId =
+    typeof documentOrId ===
+    'object'
+      ? documentOrId?.id
+      : documentOrId;
+
+  if (
+    !documentId
   ) {
-    const documentId =
-      typeof documentOrId ===
-      'object'
-        ? documentOrId?.id
-        : documentOrId;
+    throw new Error(
+      'Document not found'
+    );
+  }
 
-    if (
-      !documentId
-    ) {
-      throw new Error(
-        'Document not found'
-      );
-    }
+  const document =
+    await assertDocumentReadAccess(
+      documentId,
+      actor
+    );
 
-    const document =
-      await assertDocumentReadAccess(
-        documentId,
-        actor
-      );
+  if (
+    !isUdfDocument(
+      document
+    )
+  ) {
+    throw new Error(
+      'Document is not a UDF file'
+    );
+  }
 
-    if (
-      !isUdfDocument(
-        document
-      )
-    ) {
-      throw new Error(
-        'Document is not a UDF file'
-      );
-    }
+  const filePath =
+    resolveStoredFilePath(
+      document.file_path
+    );
 
-    const filePath =
-      resolveStoredFilePath(
-        document.file_path
-      );
+  try {
+    await fsPromises.access(
+      filePath
+    );
+  } catch {
+    throw new Error(
+      'File not found'
+    );
+  }
 
-    try {
-      await fsPromises.access(
+  // ====================================================
+  // READ UDF BUFFER
+  // ====================================================
+
+  let udfBuffer;
+
+  try {
+    udfBuffer =
+      await fsPromises.readFile(
         filePath
       );
-    } catch {
-      throw new Error(
-        'File not found'
+  } catch {
+    throw new Error(
+      'UDF file could not be read'
+    );
+  }
+
+  if (
+    !udfBuffer?.length
+  ) {
+    throw new Error(
+      'UDF file is empty'
+    );
+  }
+
+  /*
+   * ZIP local-file signature.
+   *
+   * UDF normalde ZIP container'dır.
+   */
+  const hasZipSignature =
+    udfBuffer.length >= 4 &&
+    udfBuffer[0] === 0x50 &&
+    udfBuffer[1] === 0x4b;
+
+  if (
+    !hasZipSignature
+  ) {
+    throw new Error(
+      'UDF file is not a valid ZIP container'
+    );
+  }
+
+  // ====================================================
+  // ZIP READER
+  //
+  // 1. AdmZip
+  // 2. unzipper fallback
+  // ====================================================
+
+  let entries =
+    [];
+
+  let getEntryBuffer =
+    null;
+
+  try {
+    const zip =
+      new AdmZip(
+        udfBuffer
       );
-    }
 
-    let zip;
+    const admEntries =
+      zip.getEntries();
 
+    entries =
+      admEntries.map(
+        (
+          entry
+        ) => ({
+          name:
+            entry.entryName,
+
+          size:
+            Number(
+              entry.header?.size
+            ) || 0,
+
+          source:
+            entry,
+        })
+      );
+
+    getEntryBuffer =
+      async (
+        entry
+      ) => {
+        return entry
+          .source
+          .getData();
+      };
+  } catch (
+    admZipError
+  ) {
+    /*
+     * Bazı geçerli ZIP varyantlarında AdmZip
+     * merkezi dizin / END header yorumunda
+     * başarısız olabiliyor.
+     *
+     * Bu durumda daha toleranslı unzipper
+     * ile ikinci kez deniyoruz.
+     */
     try {
-      zip =
-        new AdmZip(
-          filePath
+      const directory =
+        await unzipper.Open.buffer(
+          udfBuffer
         );
-    } catch {
+
+      entries =
+        directory.files.map(
+          (
+            entry
+          ) => ({
+            name:
+              entry.path,
+
+            size:
+              Number(
+                entry.uncompressedSize
+              ) || 0,
+
+            source:
+              entry,
+          })
+        );
+
+      getEntryBuffer =
+        async (
+          entry
+        ) => {
+          return entry
+            .source
+            .buffer();
+        };
+    } catch (
+      unzipperError
+    ) {
+      console.error(
+        'UDF ZIP open failed:',
+        {
+          documentId:
+            document.id,
+
+          fileName:
+            document.original_name,
+
+          fileSize:
+            udfBuffer.length,
+
+          signature:
+            udfBuffer
+              .subarray(
+                0,
+                16
+              )
+              .toString(
+                'hex'
+              ),
+
+          admZipError:
+            admZipError?.message,
+
+          unzipperError:
+            unzipperError?.message,
+        }
+      );
+
       throw new Error(
         'UDF container could not be opened'
       );
     }
+  }
 
-    // ==================================================
-    // ZIP ENTRY LIMIT / BASIC VALIDATION
-    // ==================================================
+  // ====================================================
+  // BASIC ZIP VALIDATION
+  // ====================================================
 
-    const entries =
-      zip.getEntries();
+  if (
+    !Array.isArray(
+      entries
+    ) ||
+    entries.length ===
+      0
+  ) {
+    throw new Error(
+      'UDF container is empty'
+    );
+  }
 
-    if (
-      !Array.isArray(
-        entries
-      ) ||
-      entries.length ===
-        0
-    ) {
-      throw new Error(
-        'UDF container is empty'
+  if (
+    entries.length >
+    100
+  ) {
+    throw new Error(
+      'UDF container contains too many files'
+    );
+  }
+
+  // ====================================================
+  // FIND CONTENT.XML
+  // ====================================================
+
+  /*
+   * Bazı arşivlerde dosya root'ta olmayabilir.
+   * basename üzerinden de kabul ediyoruz.
+   */
+  const contentEntry =
+    entries.find(
+      (
+        entry
+      ) =>
+        path
+          .basename(
+            entry.name ||
+            ''
+          )
+          .toLowerCase() ===
+        'content.xml'
+    );
+
+  if (
+    !contentEntry
+  ) {
+    throw new Error(
+      'UDF content.xml not found'
+    );
+  }
+
+  const MAX_UDF_XML_SIZE =
+    5 *
+    1024 *
+    1024;
+
+  if (
+    contentEntry.size >
+    MAX_UDF_XML_SIZE
+  ) {
+    throw new Error(
+      'UDF document content is too large'
+    );
+  }
+
+  // ====================================================
+  // EXTRACT CONTENT.XML
+  // ====================================================
+
+  let contentBuffer;
+
+  try {
+    contentBuffer =
+      await getEntryBuffer(
+        contentEntry
       );
-    }
+  } catch {
+    throw new Error(
+      'UDF content.xml could not be extracted'
+    );
+  }
 
-    if (
-      entries.length >
-      100
-    ) {
-      throw new Error(
-        'UDF container contains too many files'
+  if (
+    !contentBuffer?.length
+  ) {
+    throw new Error(
+      'UDF content is empty'
+    );
+  }
+
+  if (
+    contentBuffer.length >
+    MAX_UDF_XML_SIZE
+  ) {
+    throw new Error(
+      'UDF document content is too large'
+    );
+  }
+
+  const xml =
+    contentBuffer.toString(
+      'utf8'
+    );
+
+  if (
+    !xml.trim()
+  ) {
+    throw new Error(
+      'UDF content is empty'
+    );
+  }
+
+  // ====================================================
+  // XML PARSER
+  // ====================================================
+
+  const parser =
+    new XMLParser({
+      ignoreAttributes:
+        false,
+
+      attributeNamePrefix:
+        '',
+
+      trimValues:
+        false,
+
+      parseTagValue:
+        false,
+
+      parseAttributeValue:
+        false,
+
+      cdataPropName:
+        '__cdata',
+    });
+
+  let parsed;
+
+  try {
+    parsed =
+      parser.parse(
+        xml
       );
-    }
+  } catch {
+    throw new Error(
+      'UDF XML could not be parsed'
+    );
+  }
 
-    const contentEntry =
-      entries.find(
+  /*
+   * Normal UDF:
+   *
+   * <template>...</template>
+   *
+   * Namespace'li varyantlarda root key farklı
+   * gelebileceği için ikinci kontrolü de yapıyoruz.
+   */
+  let template =
+    parsed?.template ||
+    null;
+
+  if (
+    !template &&
+    parsed &&
+    typeof parsed ===
+      'object'
+  ) {
+    const templateKey =
+      Object.keys(
+        parsed
+      ).find(
         (
-          entry
+          key
         ) =>
-          entry.entryName
-            ?.toLowerCase() ===
-          'content.xml'
+          key
+            .toLowerCase()
+            .endsWith(
+              ':template'
+            )
       );
 
     if (
-      !contentEntry
+      templateKey
     ) {
-      throw new Error(
-        'UDF content.xml not found'
-      );
+      template =
+        parsed[
+          templateKey
+        ];
     }
+  }
 
-    /*
-     * XML boyutunu sınırlıyoruz.
-     *
-     * Böylece ZIP bomb / aşırı büyük XML gibi
-     * durumlarda gereksiz memory tüketimini azaltıyoruz.
-     */
-    const MAX_UDF_XML_SIZE =
-      5 * 1024 * 1024;
+  if (
+    !template
+  ) {
+    throw new Error(
+      'UDF template not found'
+    );
+  }
 
-    if (
+  // ====================================================
+  // CONTENT
+  // ====================================================
+
+  let rawContent =
+    null;
+
+  if (
+    typeof template.content ===
+    'string'
+  ) {
+    rawContent =
+      template.content;
+  } else if (
+    template.content &&
+    typeof template.content ===
+      'object'
+  ) {
+    rawContent =
+      template.content
+        .__cdata ??
+      template.content[
+        '#text'
+      ] ??
+      '';
+  }
+
+  const content =
+    String(
+      rawContent ||
+      ''
+    );
+
+  if (
+    !content.trim()
+  ) {
+    throw new Error(
+      'UDF document content is empty'
+    );
+  }
+
+  // ====================================================
+  // PAGE FORMAT
+  // ====================================================
+
+  const pageFormat =
+    template.properties
+      ?.pageFormat ||
+    template.pageFormat ||
+    template.pageformat ||
+    {};
+
+  const toNumber = (
+    value,
+    fallback = null
+  ) => {
+    const number =
       Number(
-        contentEntry.header
-          ?.size
-      ) >
-      MAX_UDF_XML_SIZE
-    ) {
-      throw new Error(
-        'UDF document content is too large'
+        value
       );
-    }
 
-    let contentBuffer;
+    return Number.isFinite(
+      number
+    )
+      ? number
+      : fallback;
+  };
 
-    try {
-      contentBuffer =
-        contentEntry.getData();
-    } catch {
-      throw new Error(
-        'UDF content.xml could not be extracted'
-      );
-    }
-
-    if (
-      !contentBuffer?.length
-    ) {
-      throw new Error(
-        'UDF content is empty'
-      );
-    }
-
-    if (
-      contentBuffer.length >
-      MAX_UDF_XML_SIZE
-    ) {
-      throw new Error(
-        'UDF document content is too large'
-      );
-    }
-
-    const xml =
-      contentBuffer.toString(
-        'utf8'
+  const pointToMm = (
+    value,
+    fallback
+  ) => {
+    const number =
+      toNumber(
+        value
       );
 
     if (
-      !xml.trim()
+      number === null ||
+      number < 0
     ) {
-      throw new Error(
-        'UDF content is empty'
-      );
+      return fallback;
     }
 
-    // ==================================================
-    // XML PARSER
-    // ==================================================
-
-    const parser =
-      new XMLParser({
-        ignoreAttributes:
-          false,
-
-        attributeNamePrefix:
-          '',
-
-        trimValues:
-          false,
-
-        parseTagValue:
-          false,
-
-        parseAttributeValue:
-          false,
-
-        cdataPropName:
-          '__cdata',
-      });
-
-    let parsed;
-
-    try {
-      parsed =
-        parser.parse(
-          xml
-        );
-    } catch {
-      throw new Error(
-        'UDF XML could not be parsed'
-      );
-    }
-
-    const template =
-      parsed?.template;
-
-    if (
-      !template
-    ) {
-      throw new Error(
-        'UDF template not found'
-      );
-    }
-
-    // ==================================================
-    // CONTENT
-    // ==================================================
-
-    let rawContent =
-      null;
-
-    if (
-      typeof template.content ===
-      'string'
-    ) {
-      rawContent =
-        template.content;
-    } else if (
-      template.content &&
-      typeof template.content ===
-        'object'
-    ) {
-      rawContent =
-        template.content
-          .__cdata ??
-        template.content
-          ['#text'] ??
-        '';
-    }
-
-    const content =
-      String(
-        rawContent ||
-        ''
-      );
-
-    if (
-      !content.trim()
-    ) {
-      throw new Error(
-        'UDF document content is empty'
-      );
-    }
-
-    // ==================================================
-    // PAGE FORMAT
-    // ==================================================
-
-    const pageFormat =
-      template.properties
-        ?.pageFormat ||
-      {};
-
-    const toNumber = (
-      value,
-      fallback = null
-    ) => {
-      const number =
-        Number(
-          value
-        );
-
-      return Number.isFinite(
-        number
+    return Number(
+      (
+        number *
+        0.352778
+      ).toFixed(
+        2
       )
-        ? number
-        : fallback;
-    };
+    );
+  };
 
-    /*
-     * UYAP sayfa ayarlarında ölçüler point benzeri
-     * değerler taşır.
-     *
-     * 1 pt ≈ 0.352778 mm
-     */
-    const pointToMm = (
-      value,
-      fallback
-    ) => {
-      const number =
-        toNumber(
-          value
+  // ====================================================
+  // DOCUMENT PROPERTIES
+  // ====================================================
+
+  let documentProperties =
+    null;
+
+  const propertiesEntry =
+    entries.find(
+      (
+        entry
+      ) => {
+        const fileName =
+          path
+            .basename(
+              entry.name ||
+              ''
+            )
+            .toLowerCase();
+
+        return (
+          fileName ===
+            'documentproperties.xml' ||
+          fileName ===
+            'properties.xml'
+        );
+      }
+    );
+
+  if (
+    propertiesEntry &&
+    propertiesEntry.size <=
+      1024 * 1024
+  ) {
+    try {
+      const propertiesBuffer =
+        await getEntryBuffer(
+          propertiesEntry
         );
 
       if (
-        number === null ||
-        number < 0
+        propertiesBuffer
+          ?.length &&
+        propertiesBuffer.length <=
+          1024 * 1024
       ) {
-        return fallback;
-      }
-
-      return Number(
-        (
-          number *
-          0.352778
-        ).toFixed(
-          2
-        )
-      );
-    };
-
-    // ==================================================
-    // DOCUMENT PROPERTIES
-    // ==================================================
-
-    let documentProperties =
-      null;
-
-    const propertiesEntry =
-      entries.find(
-        (
-          entry
-        ) =>
-          entry.entryName
-            ?.toLowerCase() ===
-          'documentproperties.xml'
-      );
-
-    if (
-      propertiesEntry
-    ) {
-      try {
-        const propertiesBuffer =
-          propertiesEntry.getData();
-
-        if (
-          propertiesBuffer
-            ?.length &&
-          propertiesBuffer.length <=
-            1024 * 1024
-        ) {
-          const propertiesXml =
+        documentProperties =
+          parser.parse(
             propertiesBuffer.toString(
               'utf8'
-            );
-
-          documentProperties =
-            parser.parse(
-              propertiesXml
-            );
-        }
-      } catch {
-        /*
-         * documentproperties.xml preview için
-         * zorunlu değildir.
-         *
-         * Bozuksa asıl belge önizlemesini
-         * engellemiyoruz.
-         */
-        documentProperties =
-          null;
+            )
+          );
       }
+    } catch {
+      documentProperties =
+        null;
     }
+  }
 
-    // ==================================================
-    // SIGNATURE PRESENCE
-    // ==================================================
+  // ====================================================
+  // SIGNATURE
+  // ====================================================
 
-    const signatureEntry =
-      entries.find(
-        (
-          entry
-        ) =>
-          entry.entryName
-            ?.toLowerCase() ===
-          'sign.sgn'
-      );
+  const signatureEntry =
+    entries.find(
+      (
+        entry
+      ) => {
+        const fileName =
+          path
+            .basename(
+              entry.name ||
+              ''
+            )
+            .toLowerCase();
 
-    /*
-     * DİKKAT:
-     *
-     * sign.sgn'nin bulunması yalnızca UDF içinde
-     * imza verisi bulunduğunu gösterir.
-     *
-     * Bu alan "imza geçerli" anlamına GELMEZ.
-     * Kriptografik imza doğrulaması ayrı özelliktir.
-     */
-    const hasSignature =
-      Boolean(
-        signatureEntry
-      );
+        return (
+          fileName ===
+            'sign.sgn' ||
+          fileName ===
+            'signature.p7s'
+        );
+      }
+    );
 
-    // ==================================================
-    // RESPONSE
-    // ==================================================
+  // ====================================================
+  // RESPONSE
+  // ====================================================
 
-    return {
-      id:
-        document.id,
+  return {
+    id:
+      document.id,
 
-      name:
-        document.name,
+    name:
+      document.name,
 
-      original_name:
-        document.original_name,
+    original_name:
+      document.original_name,
 
-      file_type:
-        'udf',
+    file_type:
+      'udf',
 
-      mime_type:
-        document.mime_type,
+    mime_type:
+      document.mime_type,
 
-      version:
-        document.version,
+    version:
+      document.version,
 
-      format_version:
-        template.format_id ||
-        null,
+    format_version:
+      template.format_id ||
+      null,
 
-      content,
+    content,
 
-      page: {
-        width_mm:
-          210,
+    page: {
+      width_mm:
+        210,
 
-        height_mm:
-          297,
+      height_mm:
+        297,
 
-        orientation:
-          String(
-            pageFormat.paperOrientation ||
-            '1'
+      orientation:
+        String(
+          pageFormat.paperOrientation ||
+          '1'
+        ),
+
+      margins: {
+        left:
+          pointToMm(
+            pageFormat.leftMargin,
+            15
           ),
 
-        margins: {
-          left:
-            pointToMm(
-              pageFormat.leftMargin,
-              15
-            ),
+        right:
+          pointToMm(
+            pageFormat.rightMargin,
+            15
+          ),
 
-          right:
-            pointToMm(
-              pageFormat.rightMargin,
-              15
-            ),
+        top:
+          pointToMm(
+            pageFormat.topMargin,
+            15
+          ),
 
-          top:
-            pointToMm(
-              pageFormat.topMargin,
-              15
-            ),
-
-          bottom:
-            pointToMm(
-              pageFormat.bottomMargin,
-              15
-            ),
-        },
+        bottom:
+          pointToMm(
+            pageFormat.bottomMargin,
+            15
+          ),
       },
+    },
 
-      /*
-       * UYAP'ın paragraph / content / table / field
-       * yapısını sonraki renderer aşamasında
-       * kullanacağız.
-       */
-      elements:
-        template.elements ||
-        null,
+    elements:
+      template.elements ||
+      null,
 
-      document_properties:
-        documentProperties,
+    document_properties:
+      documentProperties,
 
-      signature: {
-        present:
-          hasSignature,
+    signature: {
+      present:
+        Boolean(
+          signatureEntry
+        ),
 
-        verified:
-          false,
-      },
-    };
-  },
+      verified:
+        false,
+    },
+  };
+},
 
   // ====================================================
   // VERSIONS
