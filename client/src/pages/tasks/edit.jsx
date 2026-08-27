@@ -414,7 +414,26 @@ const formatForDateTimeLocal = (
     return '';
   }
 };
+const localToUTC = (
+  dateTime
+) => {
+  if (!dateTime) {
+    return null;
+  }
 
+  const parsed =
+    new Date(dateTime);
+
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
+    return null;
+  }
+
+  return parsed.toISOString();
+};
 // ======================================================
 // STATUS
 // ======================================================
@@ -1433,8 +1452,9 @@ const TaskEdit = () => {
           formData.priority;
 
         updateData.due_date =
-          formData.due_date ||
-          null;
+  localToUTC(
+    formData.due_date
+  );
 
         updateData.estimated_hours =
           formData

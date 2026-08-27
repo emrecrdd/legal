@@ -241,29 +241,18 @@ const localToUTC = (
     return null;
   }
 
-  try {
-    const normalized =
-      dateTime.length === 16
-        ? `${dateTime}:00`
-        : dateTime;
+  const parsed =
+    new Date(dateTime);
 
-    const date =
-      new Date(
-        `${normalized}+03:00`
-      );
-
-    if (
-      Number.isNaN(
-        date.getTime()
-      )
-    ) {
-      return null;
-    }
-
-    return date.toISOString();
-  } catch {
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
     return null;
   }
+
+  return parsed.toISOString();
 };
 // ======================================================
 // COMPONENT
@@ -882,7 +871,7 @@ const TaskCreate = () => {
               )
             : null,
 
-        due_date:
+       due_date:
   localToUTC(
     formData.due_date
   ),
