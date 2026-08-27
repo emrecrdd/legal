@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -32,7 +31,6 @@ import {
   ArrowLeft,
   BriefcaseBusiness,
   CalendarClock,
-  Clock3,
   Link2,
   MapPin,
   Plus,
@@ -271,31 +269,6 @@ const MeetingCreate = () => {
     useState({});
 
   // ====================================================
-  // SELF ASSIGN
-  // ====================================================
-
-  useEffect(() => {
-    if (
-      user?.role !==
-        'admin' &&
-      user?.id
-    ) {
-      setFormData(
-        (
-          current
-        ) => ({
-          ...current,
-
-          assigned_to:
-            user.id,
-        })
-      );
-    }
-  }, [
-    user,
-  ]);
-
-  // ====================================================
   // QUERIES
   // ====================================================
 
@@ -341,6 +314,30 @@ const MeetingCreate = () => {
 
   const {
     data:
+      clientCasesData,
+    isLoading:
+      clientCasesLoading,
+  } =
+    useQuery({
+      queryKey: [
+        'clients',
+        formData.client_id,
+        'cases',
+      ],
+
+      queryFn: () =>
+        clientApi.getCaseHistory(
+          formData.client_id
+        ),
+
+      enabled:
+        Boolean(
+          formData.client_id
+        ),
+    });
+
+  const {
+    data:
       usersData,
     isLoading:
       usersLoading,
@@ -379,6 +376,52 @@ const MeetingCreate = () => {
       ? usersData.data.data
       : [];
 
+  const clientCases =
+    useMemo(() => {
+      const payload =
+        clientCasesData?.data?.data ??
+        clientCasesData?.data ??
+        [];
+
+      if (
+        Array.isArray(
+          payload
+        )
+      ) {
+        return payload;
+      }
+
+      if (
+        Array.isArray(
+          payload?.data
+        )
+      ) {
+        return payload.data;
+      }
+
+      if (
+        Array.isArray(
+          payload?.cases
+        )
+      ) {
+        return payload.cases;
+      }
+
+      return [];
+    }, [
+      clientCasesData,
+    ]);
+
+  const relationCases =
+    formData.client_id
+      ? clientCases
+      : cases;
+
+  const relationCasesLoading =
+    formData.client_id
+      ? clientCasesLoading
+      : casesLoading;
+
   const assignableUsers =
     useMemo(() => {
       if (
@@ -402,15 +445,19 @@ const MeetingCreate = () => {
 
   const selectedCase =
     useMemo(() => {
-      return cases.find(
+      return relationCases.find(
         (
           item
         ) =>
-          item.id ===
-          formData.case_id
+          String(
+            item.id
+          ) ===
+          String(
+            formData.case_id
+          )
       );
     }, [
-      cases,
+      relationCases,
       formData.case_id,
     ]);
 
@@ -420,8 +467,12 @@ const MeetingCreate = () => {
         (
           item
         ) =>
-          item.id ===
-          formData.client_id
+          String(
+            item.id
+          ) ===
+          String(
+            formData.client_id
+          )
       );
     }, [
       clients,
@@ -497,11 +548,29 @@ const MeetingCreate = () => {
       setFormData(
         (
           current
-        ) => ({
-          ...current,
-          [name]:
-            value,
-        })
+        ) => {
+          if (
+            name ===
+            'client_id'
+          ) {
+            return {
+              ...current,
+
+              client_id:
+                value,
+
+              case_id:
+                '',
+            };
+          }
+
+          return {
+            ...current,
+
+            [name]:
+              value,
+          };
+        }
       );
 
       if (
@@ -1227,7 +1296,7 @@ const MeetingCreate = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Toplantıyı bir dava veya müvekkille ilişkilendirin
+                  Önce müvekkili, ardından o müvekkile ait davayı seçin
                 </p>
 
               </div>
@@ -1239,97 +1308,6 @@ const MeetingCreate = () => {
           <Card.Body>
 
             <div className="grid gap-4 md:grid-cols-2">
-
-              {/* CASE */}
-
-              <div>
-
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  İlişkili Dava
-                </label>
-
-                <select
-                  name="case_id"
-                  value={
-                    formData.case_id
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  disabled={
-                    casesLoading
-                  }
-                  className="
-                    h-10
-                    w-full
-                    rounded-lg
-                    border
-                    border-gray-200
-                    bg-white
-                    px-3.5
-                    text-sm
-                    text-gray-700
-                    outline-none
-                    disabled:cursor-not-allowed
-                    disabled:opacity-50
-                    focus:border-blue-500
-                    focus:ring-2
-                    focus:ring-blue-500/10
-                    dark:border-white/[0.08]
-                    dark:bg-white/[0.035]
-                    dark:text-slate-300
-                  "
-                >
-                  <option value="">
-                    {casesLoading
-                      ? 'Davalar yükleniyor...'
-                      : 'Dava seçin (isteğe bağlı)'}
-                  </option>
-
-                  {cases.map(
-                    (
-                      caseItem
-                    ) => (
-                      <option
-                        key={
-                          caseItem.id
-                        }
-                        value={
-                          caseItem.id
-                        }
-                      >
-                        {caseItem.title}
-                      </option>
-                    )
-                  )}
-                </select>
-
-                {selectedCase && (
-                  <div
-                    className="
-                      mt-3
-                      rounded-lg
-                      border
-                      border-gray-100
-                      bg-gray-50
-                      p-3
-                      dark:border-white/[0.05]
-                      dark:bg-white/[0.025]
-                    "
-                  >
-                    <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
-                      {selectedCase.title}
-                    </p>
-
-                    {selectedCase.case_number && (
-                      <p className="mt-1 text-[10px] text-gray-400 dark:text-slate-500">
-                        {selectedCase.case_number}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-              </div>
 
               {/* CLIENT */}
 
@@ -1424,6 +1402,109 @@ const MeetingCreate = () => {
                       {selectedClient.name}
                     </p>
 
+                  </div>
+                )}
+
+              </div>
+
+              {/* CASE */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  İlişkili Dava
+                </label>
+
+                <select
+                  name="case_id"
+                  value={
+                    formData.case_id
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    relationCasesLoading ||
+                    !formData.client_id
+                  }
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    text-sm
+                    text-gray-700
+                    outline-none
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                  "
+                >
+                  <option value="">
+                    {!formData.client_id
+                      ? 'Önce müvekkil seçin'
+                      : relationCasesLoading
+                        ? 'Davalar yükleniyor...'
+                        : relationCases.length >
+                            0
+                          ? 'Dava seçin (isteğe bağlı)'
+                          : 'Bu müvekkile ait dava bulunamadı'}
+                  </option>
+
+                  {relationCases.map(
+                    (
+                      caseItem
+                    ) => (
+                      <option
+                        key={
+                          caseItem.id
+                        }
+                        value={
+                          caseItem.id
+                        }
+                      >
+                        {caseItem.title}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                {!formData.client_id && (
+                  <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
+                    Dava seçebilmek için önce ilişkili müvekkili seçin.
+                  </p>
+                )}
+
+                {selectedCase && (
+                  <div
+                    className="
+                      mt-3
+                      rounded-lg
+                      border
+                      border-gray-100
+                      bg-gray-50
+                      p-3
+                      dark:border-white/[0.05]
+                      dark:bg-white/[0.025]
+                    "
+                  >
+                    <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
+                      {selectedCase.title}
+                    </p>
+
+                    {selectedCase.case_number && (
+                      <p className="mt-1 text-[10px] text-gray-400 dark:text-slate-500">
+                        {selectedCase.case_number}
+                      </p>
+                    )}
                   </div>
                 )}
 
