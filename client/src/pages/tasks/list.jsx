@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -307,6 +306,42 @@ const getUserInitials = (
   );
 };
 
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (
+    !caseItem
+  ) {
+    return '-';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    '-'
+  );
+};
+
 const getTaskAssignees = (
   task
 ) => {
@@ -432,12 +467,6 @@ const TasksList = () => {
   const pagination =
     data?.data
       ?.pagination;
-
-  useEffect(() => {
-    setPage(1);
-  }, [
-    debouncedSearch,
-  ]);
 
   // ====================================================
   // DERIVED DATA
@@ -758,11 +787,15 @@ const TasksList = () => {
                 }
                 onChange={(
                   event
-                ) =>
+                ) => {
                   setSearch(
                     event.target.value
-                  )
-                }
+                  );
+
+                  setPage(
+                    1
+                  );
+                }}
                 icon={
                   <Search size={16} />
                 }
@@ -1261,10 +1294,14 @@ const TasksList = () => {
                               dark:hover:text-blue-400
                             "
                             title={
-                              task.case.title
+                              getCaseDisplayName(
+                                task.case
+                              )
                             }
                           >
-                            {task.case.title}
+                            {getCaseDisplayName(
+                              task.case
+                            )}
                           </Link>
                         ) : (
                           <span
@@ -1277,10 +1314,14 @@ const TasksList = () => {
                               dark:text-slate-400
                             "
                             title={
-                              task.case.title
+                              getCaseDisplayName(
+                                task.case
+                              )
                             }
                           >
-                            {task.case.title}
+                            {getCaseDisplayName(
+                              task.case
+                            )}
                           </span>
                         )
                       ) : (
