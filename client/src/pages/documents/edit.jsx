@@ -342,6 +342,218 @@ const DocumentEdit = () => {
       : [];
 
   // ======================================================
+  // CLIENT CASES
+  //
+  // Müvekkil seçildiğinde yalnızca o müvekkile bağlı
+  // davaları getiriyoruz.
+  // ======================================================
+
+  const {
+    data:
+      clientCasesData,
+
+    isLoading:
+      clientCasesLoading,
+
+    error:
+      clientCasesError,
+  } = useQuery({
+    queryKey: [
+      'clients',
+      formData.client_id,
+      'document-edit-cases',
+    ],
+
+    queryFn: () =>
+      clientApi.getCaseHistory(
+        formData.client_id
+      ),
+
+    enabled:
+      Boolean(
+        formData.client_id
+      ),
+
+    staleTime:
+      3 * 60 * 1000,
+  });
+
+  const clientCases =
+    useMemo(() => {
+      const payload =
+        clientCasesData?.data?.data ??
+        clientCasesData?.data ??
+        [];
+
+      if (
+        Array.isArray(
+          payload
+        )
+      ) {
+        return payload;
+      }
+
+      if (
+        Array.isArray(
+          payload?.data
+        )
+      ) {
+        return payload.data;
+      }
+
+      if (
+        Array.isArray(
+          payload?.cases
+        )
+      ) {
+        return payload.cases;
+      }
+
+      return [];
+    }, [
+      clientCasesData,
+    ]);
+
+  // ======================================================
+  // SELECTED CASE DETAIL
+  //
+  // Dava önce seçilirse o davaya bağlı müvekkilleri
+  // gösterebilmek için dava detayını alıyoruz.
+  // ======================================================
+
+  const {
+    data:
+      selectedCaseData,
+
+    isLoading:
+      selectedCaseDetailLoading,
+
+    error:
+      selectedCaseDetailError,
+  } = useQuery({
+    queryKey: [
+      'case',
+      formData.case_id,
+      'document-edit-relation',
+    ],
+
+    queryFn: () =>
+      caseApi.getOne(
+        formData.case_id
+      ),
+
+    enabled:
+      Boolean(
+        formData.case_id
+      ),
+
+    staleTime:
+      3 * 60 * 1000,
+  });
+
+  const selectedCaseDetail =
+    selectedCaseData?.data?.data ??
+    selectedCaseData?.data ??
+    null;
+
+  const caseClients =
+    useMemo(() => {
+      if (
+        !selectedCaseDetail
+      ) {
+        return [];
+      }
+
+      const candidates = [
+        selectedCaseDetail.clients,
+        selectedCaseDetail.case_clients,
+        selectedCaseDetail.related_clients,
+      ];
+
+      for (
+        const candidate of
+        candidates
+      ) {
+        if (
+          Array.isArray(
+            candidate
+          )
+        ) {
+          return candidate
+            .map(
+              (
+                item
+              ) =>
+                item?.client ||
+                item
+            )
+            .filter(
+              (
+                item
+              ) =>
+                item?.id
+            );
+        }
+      }
+
+      if (
+        selectedCaseDetail.client?.id
+      ) {
+        return [
+          selectedCaseDetail.client,
+        ];
+      }
+
+      if (
+        selectedCaseDetail.client_id
+      ) {
+        const matched =
+          clients.find(
+            (
+              client
+            ) =>
+              String(
+                client.id
+              ) ===
+              String(
+                selectedCaseDetail.client_id
+              )
+          );
+
+        return matched
+          ? [
+              matched,
+            ]
+          : [];
+      }
+
+      return [];
+    }, [
+      selectedCaseDetail,
+      clients,
+    ]);
+
+  const relationCases =
+    formData.client_id
+      ? clientCases
+      : cases;
+
+  const relationCasesLoading =
+    formData.client_id
+      ? clientCasesLoading
+      : casesLoading;
+
+  const relationClients =
+    formData.case_id
+      ? caseClients
+      : clients;
+
+  const relationClientsLoading =
+    formData.case_id
+      ? selectedCaseDetailLoading
+      : clientsLoading;
+
+  // ======================================================
   // FORM INITIALIZATION
   // ======================================================
 
@@ -429,22 +641,48 @@ const DocumentEdit = () => {
 
   const selectedCase =
     useMemo(() => {
-      return cases.find(
-        (item) =>
-          item.id ===
-          formData.case_id
+      return (
+        relationCases.find(
+          (
+            item
+          ) =>
+            String(
+              item.id
+            ) ===
+            String(
+              formData.case_id
+            )
+        ) ||
+        (
+          selectedCaseDetail &&
+          String(
+            selectedCaseDetail.id
+          ) ===
+          String(
+            formData.case_id
+          )
+            ? selectedCaseDetail
+            : null
+        )
       );
     }, [
-      cases,
+      relationCases,
+      selectedCaseDetail,
       formData.case_id,
     ]);
 
   const selectedClient =
     useMemo(() => {
       return clients.find(
-        (item) =>
-          item.id ===
-          formData.client_id
+        (
+          item
+        ) =>
+          String(
+            item.id
+          ) ===
+          String(
+            formData.client_id
+          )
       );
     }, [
       clients,
@@ -454,7 +692,9 @@ const DocumentEdit = () => {
   const hasRelationLoadError =
     Boolean(
       casesError ||
-        clientsError
+      clientsError ||
+      clientCasesError ||
+      selectedCaseDetailError
     );
 
   // ======================================================
@@ -471,16 +711,42 @@ const DocumentEdit = () => {
       checked,
     } = event.target;
 
-    setFormData(
-      (current) => ({
-        ...current,
+    const nextValue =
+      type ===
+      'checkbox'
+        ? checked
+        : value;
 
-        [name]:
-          type ===
-          'checkbox'
-            ? checked
-            : value,
-      })
+    setFormData(
+      (
+        current
+      ) => {
+        /*
+         * Müvekkil değiştiğinde mevcut dava artık
+         * o müvekkile ait olmayabilir.
+         */
+        if (
+          name ===
+          'client_id'
+        ) {
+          return {
+            ...current,
+
+            client_id:
+              nextValue,
+
+            case_id:
+              '',
+          };
+        }
+
+        return {
+          ...current,
+
+          [name]:
+            nextValue,
+        };
+      }
     );
 
     if (errors[name]) {
@@ -1229,7 +1495,7 @@ const DocumentEdit = () => {
                       handleChange
                     }
                     disabled={
-                      casesLoading ||
+                      relationCasesLoading ||
                       updateMutation.isPending
                     }
                     className="
@@ -1256,10 +1522,16 @@ const DocumentEdit = () => {
                   >
 
                     <option value="">
-                      İlişki yok
+                      {relationCasesLoading
+                        ? 'Davalar yükleniyor...'
+                        : formData.client_id &&
+                            relationCases.length ===
+                              0
+                          ? 'Bu müvekkile ait dava bulunamadı'
+                          : 'İlişki yok'}
                     </option>
 
-                    {cases.map(
+                    {relationCases.map(
                       (
                         caseItem
                       ) => (
@@ -1309,7 +1581,7 @@ const DocumentEdit = () => {
                       handleChange
                     }
                     disabled={
-                      clientsLoading ||
+                      relationClientsLoading ||
                       updateMutation.isPending
                     }
                     className="
@@ -1336,10 +1608,16 @@ const DocumentEdit = () => {
                   >
 
                     <option value="">
-                      İlişki yok
+                      {relationClientsLoading
+                        ? 'Müvekkiller yükleniyor...'
+                        : formData.case_id &&
+                            relationClients.length ===
+                              0
+                          ? 'Bu davaya bağlı müvekkil bulunamadı'
+                          : 'İlişki yok'}
                     </option>
 
-                    {clients.map(
+                    {relationClients.map(
                       (
                         client
                       ) => (
@@ -1391,7 +1669,7 @@ const DocumentEdit = () => {
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
 
               <p>
-                Dava veya müvekkil ilişkisini değiştirmek belgenin dosya içindeki bağlamını değiştirir.
+                Müvekkil seçildiğinde yalnızca o müvekkile bağlı davalar; dava seçildiğinde yalnızca o davaya bağlı müvekkiller gösterilir. İlişkiyi değiştirmek belgenin dosya içindeki bağlamını değiştirir.
               </p>
 
             </div>
