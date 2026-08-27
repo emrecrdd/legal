@@ -461,7 +461,7 @@ const PaymentPlanDetail = () => {
             variant="secondary"
             onClick={() =>
               navigate(
-                '/payments'
+                '/finance'
               )
             }
           >
@@ -490,7 +490,7 @@ const PaymentPlanDetail = () => {
           <div className="min-w-0">
 
             <Link
-              to="/payments"
+              to="/finance"
               className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
             >
               <ArrowLeft className="h-4 w-4" />
