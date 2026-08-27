@@ -73,21 +73,52 @@ const formatDateUTC = (date) => {
   }
 };
 
-const formatDateTimeUTC = (date) => {
-  if (!date) return '-';
+const formatDateTime = (
+  value
+) => {
+  if (!value) {
+    return '-';
+  }
 
   try {
-    const d = new Date(date);
+    const date =
+      new Date(value);
 
-    if (Number.isNaN(d.getTime())) {
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
       return '-';
     }
 
-    return `${String(d.getUTCDate()).padStart(2, '0')}.${String(
-      d.getUTCMonth() + 1
-    ).padStart(2, '0')}.${d.getUTCFullYear()} ${String(
-      d.getUTCHours()
-    ).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+    return new Intl.DateTimeFormat(
+      'tr-TR',
+      {
+        timeZone:
+          'Europe/Istanbul',
+
+        day:
+          '2-digit',
+
+        month:
+          '2-digit',
+
+        year:
+          'numeric',
+
+        hour:
+          '2-digit',
+
+        minute:
+          '2-digit',
+
+        hour12:
+          false,
+      }
+    ).format(
+      date
+    );
   } catch {
     return '-';
   }
@@ -627,7 +658,7 @@ const CaseAIAnalysis = ({
 
                     <div className="text-right">
                       <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        {formatDateTimeUTC(item.date)}
+                        {formatDateTime(item.date)}
                       </p>
 
                       <Badge
@@ -1172,7 +1203,7 @@ const CaseCompletionAnalysis = ({
 
                   <div className="text-right">
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {formatDateTimeUTC(item.date)}
+                      {formatDateTime(item.date)}
                     </p>
 
                     <Badge variant={getRiskBadgeVariant(item.importance)}>
@@ -3376,7 +3407,7 @@ const handleApplySelectedCaseUpdates = () => {
 
                           <Clock3 className="h-3.5 w-3.5" />
 
-                          {formatDateTimeUTC(
+                          {formatDateTime(
                             event.start_date
                           )}
 
