@@ -59,6 +59,11 @@ const ALLOWED_MIME_TYPES =
     'image/png',
     'image/gif',
     'image/webp',
+
+    // UYAP UDF
+    'application/udf',
+    'application/x-udf',
+    'application/octet-stream',
   ]);
 
 const STATUS_OPTIONS = [
@@ -79,6 +84,43 @@ const STATUS_OPTIONS = [
 // ======================================================
 // HELPERS
 // ======================================================
+
+const getFileExtension = (
+  fileName = ''
+) => {
+  const normalized =
+    String(
+      fileName
+    )
+      .trim()
+      .toLowerCase();
+
+  const lastDotIndex =
+    normalized.lastIndexOf(
+      '.'
+    );
+
+  if (
+    lastDotIndex === -1
+  ) {
+    return '';
+  }
+
+  return normalized.slice(
+    lastDotIndex
+  );
+};
+
+const isUdfFile = (
+  file
+) => {
+  return (
+    getFileExtension(
+      file?.name
+    ) ===
+    '.udf'
+  );
+};
 
 const formatFileSize = (
   bytes
@@ -122,6 +164,14 @@ const getFileTypeLabel = (
 ) => {
   if (!file) {
     return '-';
+  }
+
+  if (
+    isUdfFile(
+      file
+    )
+  ) {
+    return 'UYAP UDF';
   }
 
   if (
@@ -518,17 +568,33 @@ const PowerOfAttorneyCreate = () => {
         return;
       }
 
-      if (
-        !ALLOWED_MIME_TYPES.has(
+      const udf =
+        isUdfFile(
+          selectedFile
+        );
+
+      const allowedMime =
+        ALLOWED_MIME_TYPES.has(
           selectedFile.type
-        )
+        );
+
+      const allowed =
+        udf ||
+        (
+          allowedMime &&
+          selectedFile.type !==
+            'application/octet-stream'
+        );
+
+      if (
+        !allowed
       ) {
         setFile(
           null
         );
 
         setFileError(
-          'Yalnızca PDF, Word veya desteklenen görsel dosyaları yüklenebilir.'
+          'Yalnızca PDF, UDF, Word veya desteklenen görsel dosyaları yüklenebilir.'
         );
 
         return;
@@ -1611,7 +1677,7 @@ const PowerOfAttorneyCreate = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Taratılmış vekaletname veya elektronik belgeyi kayda ekleyin
+                  Taratılmış vekaletname, PDF veya UYAP UDF belgesini kayda ekleyin
                 </p>
 
               </div>
@@ -1784,6 +1850,10 @@ const PowerOfAttorneyCreate = () => {
                     </Badge>
 
                     <Badge variant="default">
+                      UYAP UDF
+                    </Badge>
+
+                    <Badge variant="default">
                       Word
                     </Badge>
 
@@ -1809,7 +1879,7 @@ const PowerOfAttorneyCreate = () => {
                 onChange={
                   handleFileChange
                 }
-                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp"
+                accept=".pdf,.udf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp"
               />
 
             </div>
@@ -1839,7 +1909,12 @@ const PowerOfAttorneyCreate = () => {
                   "
                 >
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-                  Dosya doğrulandı ve yüklemeye hazır.
+
+                  {isUdfFile(
+                    file
+                  )
+                    ? 'UYAP UDF dosyası doğrulandı ve yüklemeye hazır.'
+                    : 'Dosya doğrulandı ve yüklemeye hazır.'}
                 </div>
               )}
 
