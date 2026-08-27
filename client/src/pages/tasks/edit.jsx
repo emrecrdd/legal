@@ -11,6 +11,10 @@ import {
 } from 'react-router-dom';
 
 import {
+  useQuery,
+} from '@tanstack/react-query';
+
+import {
   useTask,
   useUpdateTask,
   useDeleteTask,
@@ -22,8 +26,11 @@ import {
   useCases,
 } from '../../features/cases/case.query.js';
 
+import caseApi from '../../features/cases/case.api.js';
+
 import {
   useClients,
+  useClientCaseHistory,
 } from '../../features/clients/client.query.js';
 
 import {
@@ -249,6 +256,59 @@ const getUserInitials = (
       .toUpperCase() ||
     '?'
   );
+};
+
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (
+    !caseItem
+  ) {
+    return 'Dava';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    'Dava'
+  );
+};
+
+const getCaseSecondaryInfo = (
+  caseItem
+) => {
+  if (
+    !caseItem
+  ) {
+    return '';
+  }
+
+  return [
+    caseItem.judiciary_type,
+    caseItem.judiciary_unit,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 };
 
 const getRoleLabel = (
@@ -550,19 +610,78 @@ const TaskEdit = () => {
   const {
     data:
       casesData,
+
+    isLoading:
+      casesLoading,
   } =
-    useCases({
-      limit:
-        100,
-    });
+    useCases(
+      {
+        limit:
+          100,
+      },
+      {
+        enabled:
+          canViewCases,
+      }
+    );
 
   const {
     data:
       clientsData,
+
+    isLoading:
+      clientsLoading,
   } =
-    useClients({
-      limit:
-        100,
+    useClients(
+      {
+        limit:
+          100,
+      },
+      {
+        enabled:
+          canViewClients,
+      }
+    );
+
+
+  const {
+    data:
+      clientCasesData,
+
+    isLoading:
+      clientCasesLoading,
+  } =
+    useClientCaseHistory(
+      formData.client_id
+    );
+
+  const {
+    data:
+      selectedCaseData,
+
+    isLoading:
+      selectedCaseLoading,
+  } =
+    useQuery({
+      queryKey: [
+        'case',
+        formData.case_id,
+        'task-edit-relation',
+      ],
+
+      queryFn: () =>
+        caseApi.getOne(
+          formData.case_id
+        ),
+
+      enabled:
+        canViewCases &&
+        Boolean(
+          formData.case_id
+        ),
+
+      staleTime:
+        3 * 60 * 1000,
     });
 
   // ====================================================
@@ -617,6 +736,195 @@ const TaskEdit = () => {
           .data
           .data
       : [];
+
+
+  const clientCases =
+    useMemo(() => {
+      const payload =
+        clientCasesData?.data?.data ??
+        clientCasesData?.data ??
+        [];
+
+      if (
+        Array.isArray(
+          payload
+        )
+      ) {
+        return payload;
+      }
+
+      if (
+        Array.isArray(
+          payload?.data
+        )
+      ) {
+        return payload.data;
+      }
+
+      if (
+        Array.isArray(
+          payload?.cases
+        )
+      ) {
+        return payload.cases;
+      }
+
+      return [];
+    }, [
+      clientCasesData,
+    ]);
+
+  const selectedCaseDetail =
+    selectedCaseData?.data?.data ??
+    selectedCaseData?.data ??
+    null;
+
+  const caseClients =
+    useMemo(() => {
+      if (
+        !selectedCaseDetail
+      ) {
+        return [];
+      }
+
+      const candidates = [
+        selectedCaseDetail.clients,
+        selectedCaseDetail.case_clients,
+        selectedCaseDetail.related_clients,
+      ];
+
+      for (
+        const candidate of
+        candidates
+      ) {
+        if (
+          Array.isArray(
+            candidate
+          )
+        ) {
+          return candidate
+            .map(
+              (
+                item
+              ) =>
+                item?.client ||
+                item
+            )
+            .filter(
+              (
+                item
+              ) =>
+                item?.id
+            );
+        }
+      }
+
+      if (
+        selectedCaseDetail.client?.id
+      ) {
+        return [
+          selectedCaseDetail.client,
+        ];
+      }
+
+      if (
+        selectedCaseDetail.client_id
+      ) {
+        const matched =
+          clients.find(
+            (
+              client
+            ) =>
+              String(
+                client.id
+              ) ===
+              String(
+                selectedCaseDetail.client_id
+              )
+          );
+
+        return matched
+          ? [
+              matched,
+            ]
+          : [];
+      }
+
+      return [];
+    }, [
+      selectedCaseDetail,
+      clients,
+    ]);
+
+  const relationCases =
+    formData.client_id
+      ? clientCases
+      : cases;
+
+  const relationCasesLoading =
+    formData.client_id
+      ? clientCasesLoading
+      : casesLoading;
+
+  const relationClients =
+    formData.case_id
+      ? caseClients
+      : clients;
+
+  const relationClientsLoading =
+    formData.case_id
+      ? selectedCaseLoading
+      : clientsLoading;
+
+  const selectedCase =
+    useMemo(() => {
+      return (
+        relationCases.find(
+          (
+            item
+          ) =>
+            normalizeId(
+              item.id
+            ) ===
+            normalizeId(
+              formData.case_id
+            )
+        ) ||
+        (
+          selectedCaseDetail &&
+          normalizeId(
+            selectedCaseDetail.id
+          ) ===
+          normalizeId(
+            formData.case_id
+          )
+            ? selectedCaseDetail
+            : null
+        )
+      );
+    }, [
+      relationCases,
+      selectedCaseDetail,
+      formData.case_id,
+    ]);
+
+  const selectedClient =
+    useMemo(() => {
+      return clients.find(
+        (
+          item
+        ) =>
+          normalizeId(
+            item.id
+          ) ===
+          normalizeId(
+            formData.client_id
+          )
+      );
+    }, [
+      clients,
+      formData.client_id,
+    ]);
 
   // ====================================================
   // WORKFLOW + PERMISSIONS
@@ -834,12 +1142,76 @@ const TaskEdit = () => {
     setFormData(
       (
         current
-      ) => ({
-        ...current,
+      ) => {
+        if (
+          name ===
+          'client_id'
+        ) {
+          const currentCaseStillValid =
+            !current.case_id ||
+            caseClients.some(
+              (
+                client
+              ) =>
+                normalizeId(
+                  client.id
+                ) ===
+                normalizeId(
+                  value
+                )
+            );
 
-        [name]:
-          value,
-      })
+          return {
+            ...current,
+
+            client_id:
+              value,
+
+            case_id:
+              currentCaseStillValid
+                ? current.case_id
+                : '',
+          };
+        }
+
+        if (
+          name ===
+          'case_id'
+        ) {
+          const currentClientStillValid =
+            !current.client_id ||
+            clientCases.some(
+              (
+                caseItem
+              ) =>
+                normalizeId(
+                  caseItem.id
+                ) ===
+                normalizeId(
+                  value
+                )
+            );
+
+          return {
+            ...current,
+
+            case_id:
+              value,
+
+            client_id:
+              currentClientStillValid
+                ? current.client_id
+                : '',
+          };
+        }
+
+        return {
+          ...current,
+
+          [name]:
+            value,
+        };
+      }
     );
 
     if (
@@ -2087,7 +2459,8 @@ const TaskEdit = () => {
                 }
                 disabled={
                   !canEdit ||
-                  !canViewCases
+                  !canViewCases ||
+                  relationCasesLoading
                 }
                 className="
                   w-full
@@ -2109,11 +2482,17 @@ const TaskEdit = () => {
               >
 
                 <option value="">
-                  Dava seçin
+                  {relationCasesLoading
+                    ? 'Davalar yükleniyor...'
+                    : formData.client_id &&
+                        relationCases.length ===
+                          0
+                      ? 'Bu müvekkile ait dava bulunamadı'
+                      : 'Dava seçin'}
                 </option>
 
                 {canViewCases &&
-                  cases.map(
+                  relationCases.map(
                     (
                       caseItem
                     ) => (
@@ -2127,12 +2506,36 @@ const TaskEdit = () => {
                           )
                         }
                       >
-                        {caseItem.title}
+                        {getCaseDisplayName(
+                          caseItem
+                        )}
                       </option>
                     )
                   )}
 
               </select>
+
+              {selectedCase && (
+                <div className="mt-2">
+
+                  <p className="truncate text-xs font-medium text-gray-500 dark:text-slate-400">
+                    Seçili: {getCaseDisplayName(
+                      selectedCase
+                    )}
+                  </p>
+
+                  {getCaseSecondaryInfo(
+                    selectedCase
+                  ) && (
+                    <p className="mt-0.5 truncate text-[10px] text-gray-400 dark:text-slate-500">
+                      {getCaseSecondaryInfo(
+                        selectedCase
+                      )}
+                    </p>
+                  )}
+
+                </div>
+              )}
 
               {!canViewCases && (
                 <p className="mt-1.5 text-xs text-gray-400">
@@ -2158,7 +2561,8 @@ const TaskEdit = () => {
                 }
                 disabled={
                   !canEdit ||
-                  !canViewClients
+                  !canViewClients ||
+                  relationClientsLoading
                 }
                 className="
                   w-full
@@ -2180,11 +2584,17 @@ const TaskEdit = () => {
               >
 
                 <option value="">
-                  Müvekkil seçin
+                  {relationClientsLoading
+                    ? 'Müvekkiller yükleniyor...'
+                    : formData.case_id &&
+                        relationClients.length ===
+                          0
+                      ? 'Bu davaya bağlı müvekkil bulunamadı'
+                      : 'Müvekkil seçin'}
                 </option>
 
                 {canViewClients &&
-                  clients.map(
+                  relationClients.map(
                     (
                       client
                     ) => (
@@ -2204,6 +2614,12 @@ const TaskEdit = () => {
                   )}
 
               </select>
+
+              {selectedClient && (
+                <p className="mt-2 truncate text-xs text-gray-400 dark:text-slate-500">
+                  Seçili: {selectedClient.name}
+                </p>
+              )}
 
               {!canViewClients && (
                 <p className="mt-1.5 text-xs text-gray-400">

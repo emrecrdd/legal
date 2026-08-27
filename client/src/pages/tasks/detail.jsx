@@ -226,6 +226,33 @@ const getAssignmentData = (
   );
 };
 
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (!caseItem) {
+    return 'Dava';
+  }
+
+  const courtName = String(
+    caseItem.court_name || ''
+  ).trim();
+
+  const caseNumber = String(
+    caseItem.case_number || ''
+  ).trim();
+
+  if (courtName && caseNumber) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    'Dava'
+  );
+};
+
 const getNumericProgress = (
   value
 ) => {
@@ -2074,7 +2101,7 @@ const TaskDetail = () => {
       </p>
 
       <p className="mt-1 font-medium text-blue-600 dark:text-blue-400">
-        {task.case.title}
+        {getCaseDisplayName(task.case)}
       </p>
     </Link>
   ) : (
@@ -2085,7 +2112,7 @@ const TaskDetail = () => {
       </p>
 
       <p className="mt-1 font-medium text-gray-700 dark:text-slate-300">
-        {task.case.title}
+        {getCaseDisplayName(task.case)}
       </p>
 
     </div>

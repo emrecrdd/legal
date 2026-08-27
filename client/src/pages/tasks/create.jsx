@@ -181,6 +181,60 @@ const getInitials = (
   return `${first}${last}`.toUpperCase();
 };
 
+
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (
+    !caseItem
+  ) {
+    return 'Dava';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    'Dava'
+  );
+};
+
+const getCaseSecondaryInfo = (
+  caseItem
+) => {
+  if (
+    !caseItem
+  ) {
+    return '';
+  }
+
+  return [
+    caseItem.judiciary_type,
+    caseItem.judiciary_unit,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -1835,7 +1889,9 @@ const TaskCreate = () => {
                             caseItem.id
                           }
                         >
-                          {caseItem.title}
+                          {getCaseDisplayName(
+                          caseItem
+                        )}
                         </option>
                       )
                     )}
@@ -1865,12 +1921,18 @@ const TaskCreate = () => {
                   <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.025]">
 
                     <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
-                      {selectedCase.title}
+                      {getCaseDisplayName(
+                        selectedCase
+                      )}
                     </p>
 
-                    {selectedCase.case_number && (
+                    {getCaseSecondaryInfo(
+                      selectedCase
+                    ) && (
                       <p className="mt-1 text-[10px] text-gray-400 dark:text-slate-500">
-                        {selectedCase.case_number}
+                        {getCaseSecondaryInfo(
+                          selectedCase
+                        )}
                       </p>
                     )}
 
