@@ -394,6 +394,48 @@ const TaskCreate = () => {
       : [];
 
   // ====================================================
+  // RELATION FILTERS
+  // ====================================================
+
+  const getCaseClientId = (
+    caseItem
+  ) => {
+    return (
+      caseItem?.client_id ||
+      caseItem?.client?.id ||
+      caseItem?.Client?.id ||
+      null
+    );
+  };
+
+  const filteredCases =
+    useMemo(() => {
+      if (
+        !formData.client_id
+      ) {
+        return cases;
+      }
+
+      return cases.filter(
+        (
+          caseItem
+        ) =>
+          String(
+            getCaseClientId(
+              caseItem
+            ) ||
+            ''
+          ) ===
+          String(
+            formData.client_id
+          )
+      );
+    }, [
+      cases,
+      formData.client_id,
+    ]);
+
+  // ====================================================
   // PREFILL
   // ====================================================
 
@@ -618,12 +660,131 @@ const TaskCreate = () => {
       setFormData(
         (
           current
-        ) => ({
-          ...current,
+        ) => {
+          // ================================================
+          // CLIENT CHANGED
+          // ================================================
 
-          [name]:
-            value,
-        })
+          if (
+            name ===
+            'client_id'
+          ) {
+            let nextCaseId =
+              current.case_id;
+
+            if (
+              nextCaseId &&
+              value
+            ) {
+              const currentCase =
+                cases.find(
+                  (
+                    caseItem
+                  ) =>
+                    String(
+                      caseItem.id
+                    ) ===
+                    String(
+                      nextCaseId
+                    )
+                );
+
+              const caseClientId =
+                getCaseClientId(
+                  currentCase
+                );
+
+              if (
+                String(
+                  caseClientId ||
+                  ''
+                ) !==
+                String(
+                  value
+                )
+              ) {
+                nextCaseId =
+                  '';
+              }
+            }
+
+            return {
+              ...current,
+
+              client_id:
+                value,
+
+              case_id:
+                value
+                  ? nextCaseId
+                  : '',
+            };
+          }
+
+          // ================================================
+          // CASE CHANGED
+          // ================================================
+
+          if (
+            name ===
+            'case_id'
+          ) {
+            if (
+              !value
+            ) {
+              return {
+                ...current,
+
+                case_id:
+                  '',
+              };
+            }
+
+            const nextCase =
+              cases.find(
+                (
+                  caseItem
+                ) =>
+                  String(
+                    caseItem.id
+                  ) ===
+                  String(
+                    value
+                  )
+              );
+
+            const caseClientId =
+              getCaseClientId(
+                nextCase
+              );
+
+            return {
+              ...current,
+
+              case_id:
+                value,
+
+              client_id:
+                caseClientId &&
+                canViewClients
+                  ? String(
+                      caseClientId
+                    )
+                  : current.client_id,
+            };
+          }
+
+          // ================================================
+          // NORMAL FIELD
+          // ================================================
+
+          return {
+            ...current,
+
+            [name]:
+              value,
+          };
+        }
       );
 
       if (
@@ -1852,11 +2013,16 @@ const TaskCreate = () => {
                       ? 'Dava görüntüleme yetkiniz yok'
                       : casesLoading
                         ? 'Davalar yükleniyor...'
-                        : 'Dava seçin (isteğe bağlı)'}
+                        : formData.client_id
+                          ? filteredCases.length >
+                            0
+                            ? 'Dava seçin (isteğe bağlı)'
+                            : 'Bu müvekkile ait dava bulunamadı'
+                          : 'Dava seçin (isteğe bağlı)'}
                   </option>
 
                   {canViewCases &&
-                    cases.map(
+                    filteredCases.map(
                       (
                         caseItem
                       ) => (
