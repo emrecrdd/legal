@@ -67,6 +67,14 @@ const ASSIGNEE_ATTRIBUTES = [
   'last_name',
   'email',
 ];
+const CASE_SUMMARY_ATTRIBUTES = [
+  'id',
+  'title',
+  'court_name',
+  'case_number',
+  'judiciary_type',
+  'judiciary_unit',
+];
 
 // ======================================================
 // ASSIGNEE HELPERS
@@ -1034,11 +1042,10 @@ const assertCaseAccessForTask =
         where,
 
         attributes: [
-          'id',
-          'title',
-          'created_by',
-          'assigned_to',
-        ],
+  ...CASE_SUMMARY_ATTRIBUTES,
+  'created_by',
+  'assigned_to',
+],
 
         transaction,
       });
@@ -1405,20 +1412,18 @@ const LIST_INCLUDE = [
   },
 
   {
-    model:
-      Case,
+  model:
+    Case,
 
-    as:
-      'case',
+  as:
+    'case',
 
-    attributes: [
-      'id',
-      'title',
-    ],
+  attributes:
+    CASE_SUMMARY_ATTRIBUTES,
 
-    required:
-      false,
-  },
+  required:
+    false,
+},
 
   {
     model:
@@ -1925,20 +1930,18 @@ export const taskService = {
             },
 
             {
-              model:
-                Case,
+  model:
+    Case,
 
-              as:
-                'case',
+  as:
+    'case',
 
-              attributes: [
-                'id',
-                'title',
-              ],
+  attributes:
+    CASE_SUMMARY_ATTRIBUTES,
 
-              required:
-                false,
-            },
+  required:
+    false,
+},
 
             {
               model:
@@ -2939,22 +2942,19 @@ if (
         include: [
           ASSIGNEES_INCLUDE,
 
-          {
-            model:
-              Case,
+         {
+  model:
+    Case,
 
-            as:
-              'case',
+  as:
+    'case',
 
-            attributes: [
-              'id',
-              'title',
-            ],
+  attributes:
+    CASE_SUMMARY_ATTRIBUTES,
 
-            required:
-              false,
-          },
-
+  required:
+    false,
+},
           {
             model:
               Client,
@@ -3219,21 +3219,18 @@ if (
             ASSIGNEES_INCLUDE,
 
             {
-              model:
-                Case,
+  model:
+    Case,
 
-              as:
-                'case',
+  as:
+    'case',
 
-              attributes: [
-                'id',
-                'title',
-              ],
+  attributes:
+    CASE_SUMMARY_ATTRIBUTES,
 
-              required:
-                false,
-            },
-          ],
+  required:
+    false,
+},],
 
           order: [
             [
@@ -3266,21 +3263,19 @@ if (
           include: [
             ASSIGNEES_INCLUDE,
 
-            {
-              model:
-                Case,
+           {
+  model:
+    Case,
 
-              as:
-                'case',
+  as:
+    'case',
 
-              attributes: [
-                'id',
-                'title',
-              ],
+  attributes:
+    CASE_SUMMARY_ATTRIBUTES,
 
-              required:
-                false,
-            },
+  required:
+    false,
+},
           ],
 
           order: [
@@ -3584,21 +3579,18 @@ if (
         ASSIGNEES_INCLUDE,
 
         {
-          model:
-            Case,
+  model:
+    Case,
 
-          as:
-            'case',
+  as:
+    'case',
 
-          attributes: [
-            'id',
-            'title',
-          ],
+  attributes:
+    CASE_SUMMARY_ATTRIBUTES,
 
-          required:
-            false,
-        },
-      ],
+  required:
+    false,
+},],
 
       order: [
         [
@@ -3657,21 +3649,19 @@ if (
       include: [
         ASSIGNEES_INCLUDE,
 
-        {
-          model:
-            Case,
+       {
+  model:
+    Case,
 
-          as:
-            'case',
+  as:
+    'case',
 
-          attributes: [
-            'id',
-            'title',
-          ],
+  attributes:
+    CASE_SUMMARY_ATTRIBUTES,
 
-          required:
-            false,
-        },
+  required:
+    false,
+},
       ],
 
       order: [
