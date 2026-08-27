@@ -79,6 +79,37 @@ const splitLines = (value) => {
     .map((item) => item.trim())
     .filter(Boolean);
 };
+const riskLabels = {
+  low: 'Düşük',
+  medium: 'Orta',
+  high: 'Yüksek',
+  critical: 'Kritik',
+};
+
+const categoryLabels = {
+  general: 'Genel',
+  contract: 'Sözleşme',
+  petition: 'Dilekçe',
+  court_decision: 'Mahkeme Kararı',
+  evidence: 'Delil',
+  other: 'Diğer',
+};
+
+const analysisTypeLabels = {
+  document_analysis: 'Belge Analizi',
+  document_classification: 'Belge Sınıflandırma',
+  legal_research: 'Hukuki Ön Değerlendirme',
+  legal_assessment: 'Hukuki Ön Değerlendirme',
+  draft_generation: 'Şablon Oluşturma',
+  template_generation: 'Şablon Oluşturma',
+};
+
+const analysisStatusLabels = {
+  completed: 'Tamamlandı',
+  pending: 'Bekliyor',
+  processing: 'İşleniyor',
+  failed: 'Başarısız',
+};
 
 const ResultList = ({ items }) => {
   if (!Array.isArray(items) || items.length === 0) {
@@ -127,11 +158,11 @@ const AnalysisResult = ({ analysis }) => {
               </Badge>
             )}
 
-            {analysis.model && (
-              <Badge variant="secondary">
-                {analysis.model}
-              </Badge>
-            )}
+           {analysis.model && (
+  <Badge variant="secondary">
+    Derkenar AI · Gelişmiş Hukuki Analiz
+  </Badge>
+)}
 
             {result.overallRiskLevel && (
               <Badge
@@ -145,7 +176,9 @@ const AnalysisResult = ({ analysis }) => {
                       : 'success'
                 }
               >
-                Risk: {result.overallRiskLevel}
+               Risk:{' '}
+{riskLabels[result.overallRiskLevel] ||
+  result.overallRiskLevel}
               </Badge>
             )}
           </div>
@@ -281,7 +314,7 @@ const AnalysisResult = ({ analysis }) => {
                               : 'success'
                         }
                       >
-                        {risk.level}
+                        {riskLabels[risk.level] || risk.level}
                       </Badge>
                     </div>
 
@@ -851,7 +884,9 @@ const AIAssistant = () => {
 
                         {document.category && (
                           <p className="text-sm text-gray-500">
-                            Kategori: {document.category}
+                            Kategori:{' '}
+{categoryLabels[document.category] ||
+  document.category}
                           </p>
                         )}
                       </div>
@@ -934,7 +969,8 @@ const AIAssistant = () => {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-gray-900 dark:text-white">
-                          {analysis.analysis_type}
+                          {analysisTypeLabels[analysis.analysis_type] ||
+  analysis.analysis_type}
                         </span>
 
                         <Badge
@@ -946,7 +982,8 @@ const AIAssistant = () => {
                                 : 'warning'
                           }
                         >
-                          {analysis.status}
+                          {analysisStatusLabels[analysis.status] ||
+  analysis.status}
                         </Badge>
                       </div>
 
