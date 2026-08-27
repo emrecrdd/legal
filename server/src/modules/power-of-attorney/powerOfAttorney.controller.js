@@ -97,29 +97,7 @@ const getPowerOfAttorneyAccessContext = (
   };
 };
 
-const getDocumentAccessContext = (
-  user
-) => {
-  return {
-    userId:
-      user.id,
 
-    canViewAllCases:
-      hasOptionalPermission(
-        user,
-        PERMISSION_KEYS.VIEW_ALL_CASES
-      ),
-
-    /*
-     * Document service'in güncel sürümü bu alanı
-     * kullanıyorsa admin için global erişim sağlar.
-     *
-     * Kullanılmıyorsa ekstra property zararsızdır.
-     */
-    canViewAllDocuments:
-      user?.role === 'admin',
-  };
-};
 
 const normalizeNullableId = (
   value
@@ -334,119 +312,105 @@ export const powerOfAttorneyController = {
       // OPTIONAL DOCUMENT
       // ==================================================
 
-      if (
-        req.file
-      ) {
-        try {
-          const documentData = {
-            file:
-              req.file,
+      // ==================================================
+// OPTIONAL DOCUMENT
+// ==================================================
 
-            name:
-              `${
-                data.title ||
-                powerOfAttorney.title ||
-                'Vekaletname'
-              } - Vekaletname`,
+if (
+  req.file
+) {
+  try {
+    const documentData = {
+      file:
+        req.file,
 
-            description:
-              data.description ||
-              'Vekaletname belgesi',
+      name:
+        `${
+          data.title ||
+          powerOfAttorney.title ||
+          'Vekaletname'
+        } - Vekaletname`,
 
-            category:
-              'general',
+      description:
+        data.description ||
+        'Vekaletname belgesi',
 
-            uploaded_by:
-              req.user.id,
+      category:
+        'general',
 
-            power_of_attorney_id:
-              powerOfAttorney.id,
+      power_of_attorney_id:
+        powerOfAttorney.id,
 
-            client_id:
-              powerOfAttorney.client_id ||
-              null,
+      client_id:
+        powerOfAttorney.client_id ||
+        null,
 
-            case_id:
-              powerOfAttorney.case_id ||
-              null,
+      case_id:
+        powerOfAttorney.case_id ||
+        null,
 
-            is_public:
-              false,
+      is_public:
+        false,
 
-            tags: [
-              'vekaletname',
-            ],
-          };
+      tags: [
+        'vekaletname',
+      ],
+    };
 
-          const documentAccess =
-            getDocumentAccessContext(
-              req.user
-            );
+    const savedDoc =
+      await documentService.upload(
+        documentData,
+        req.user
+      );
 
-          /*
-           * Document service'in BOLA-aware sürümü ikinci
-           * access argümanını kullanır.
-           *
-           * Eski tek-argümanlı sürümde JS ekstra argümanı
-           * sessizce yok sayar; böylece geriye uyumludur.
-           */
-          const savedDoc =
-            await documentService.upload(
-              documentData,
-              documentAccess
-            );
+    logger.info(
+      'Vekaletname belgesi yüklendi',
+      {
+        powerOfAttorneyId:
+          powerOfAttorney.id,
 
-          logger.info(
-            'Vekaletname belgesi yüklendi',
-            {
-              powerOfAttorneyId:
-                powerOfAttorney.id,
+        documentId:
+          savedDoc.id,
 
-              documentId:
-                savedDoc.id,
-
-              userId:
-                req.user.id,
-            }
-          );
-        } catch (docError) {
-          logger.error(
-            'Vekaletname belge yükleme hatası',
-            {
-              powerOfAttorneyId:
-                powerOfAttorney.id,
-
-              userId:
-                req.user.id,
-
-              message:
-                docError.message,
-            }
-          );
-
-          /*
-           * Mevcut davranışı koruyoruz:
-           * Vekaletname oluştuysa belge hatası ana kaydı
-           * başarısız göstermiyor.
-           */
-          return res
-            .status(201)
-            .json({
-              success:
-                true,
-
-              message:
-                'Vekaletname oluşturuldu ama belge yüklenemedi',
-
-              data:
-                powerOfAttorney,
-
-              warning:
-                docError.message ||
-                'Belge yüklenirken bir hata oluştu',
-            });
-        }
+        userId:
+          req.user.id,
       }
+    );
+  } catch (
+    docError
+  ) {
+    logger.error(
+      'Vekaletname belge yükleme hatası',
+      {
+        powerOfAttorneyId:
+          powerOfAttorney.id,
+
+        userId:
+          req.user.id,
+
+        message:
+          docError.message,
+      }
+    );
+
+    return res
+      .status(201)
+      .json({
+        success:
+          true,
+
+        message:
+          'Vekaletname oluşturuldu ama belge yüklenemedi',
+
+        data:
+          powerOfAttorney,
+
+        warning:
+          docError.message ||
+          'Belge yüklenirken bir hata oluştu',
+      });
+  }
+}
 
       return res
         .status(201)
