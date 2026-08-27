@@ -16,6 +16,7 @@ import {
 
 import {
   useClients,
+  useClientCaseHistory,
 } from '../../features/clients/client.query.js';
 
 import {
@@ -203,7 +204,61 @@ const TaskCreate = () => {
     setFormData,
   ] =
     useState(
-      INITIAL_FORM
+      () => {
+        const priority =
+          searchParams.get(
+            'priority'
+          );
+
+        return {
+          ...INITIAL_FORM,
+
+          title:
+            searchParams.get(
+              'title'
+            ) || '',
+
+          description:
+            searchParams.get(
+              'description'
+            ) || '',
+
+          priority:
+            priority &&
+            VALID_PRIORITIES.has(
+              priority
+            )
+              ? priority
+              : 'normal',
+
+          due_date:
+            normalizeDateTimeLocal(
+              searchParams.get(
+                'due_date'
+              )
+            ),
+
+          estimated_hours:
+            searchParams.get(
+              'estimated_hours'
+            ) || '',
+
+          case_id:
+            searchParams.get(
+              'case_id'
+            ) || '',
+
+          client_id:
+            searchParams.get(
+              'client_id'
+            ) || '',
+
+          note:
+            searchParams.get(
+              'note'
+            ) || '',
+        };
+      }
     );
 
   const [
@@ -238,73 +293,10 @@ const TaskCreate = () => {
   // QUERY PARAM PREFILL
   // ====================================================
 
-  const prefillData =
-    useMemo(() => {
-      const priority =
-        searchParams.get(
-          'priority'
-        );
-
-      const dueDate =
-        searchParams.get(
-          'due_date'
-        );
-
-      return {
-        title:
-          searchParams.get(
-            'title'
-          ) || '',
-
-        description:
-          searchParams.get(
-            'description'
-          ) || '',
-
-        priority:
-          priority &&
-          VALID_PRIORITIES.has(
-            priority
-          )
-            ? priority
-            : 'normal',
-
-        due_date:
-          normalizeDateTimeLocal(
-            dueDate
-          ),
-
-        estimated_hours:
-          searchParams.get(
-            'estimated_hours'
-          ) || '',
-
-        case_id:
-          searchParams.get(
-            'case_id'
-          ) || '',
-
-        client_id:
-          searchParams.get(
-            'client_id'
-          ) || '',
-
-        note:
-          searchParams.get(
-            'note'
-          ) || '',
-
-        source:
-          searchParams.get(
-            'source'
-          ) || '',
-      };
-    }, [
-      searchParams,
-    ]);
-
   const isAiPrefill =
-    prefillData.source ===
+    searchParams.get(
+      'source'
+    ) ===
     'ai';
 
   // ====================================================
@@ -353,6 +345,16 @@ const TaskCreate = () => {
       }
     );
 
+  const {
+    data:
+      clientCasesData,
+    isLoading:
+      clientCasesLoading,
+  } =
+    useClientCaseHistory(
+      formData.client_id
+    );
+
   const createMutation =
     useCreateTask();
 
@@ -394,165 +396,54 @@ const TaskCreate = () => {
       : [];
 
   // ====================================================
-  // RELATION FILTERS
+  // RELATION CASES
   // ====================================================
 
-  const getCaseClientId = (
-    caseItem
-  ) => {
-    return (
-      caseItem?.client_id ||
-      caseItem?.client?.id ||
-      caseItem?.Client?.id ||
-      null
-    );
-  };
-
-  const filteredCases =
+  const clientCases =
     useMemo(() => {
+      const payload =
+        clientCasesData?.data?.data ??
+        clientCasesData?.data ??
+        [];
+
       if (
-        !formData.client_id
+        Array.isArray(
+          payload
+        )
       ) {
-        return cases;
+        return payload;
       }
 
-      return cases.filter(
-        (
-          caseItem
-        ) =>
-          String(
-            getCaseClientId(
-              caseItem
-            ) ||
-            ''
-          ) ===
-          String(
-            formData.client_id
-          )
-      );
+      if (
+        Array.isArray(
+          payload?.data
+        )
+      ) {
+        return payload.data;
+      }
+
+      if (
+        Array.isArray(
+          payload?.cases
+        )
+      ) {
+        return payload.cases;
+      }
+
+      return [];
     }, [
-      cases,
-      formData.client_id,
+      clientCasesData,
     ]);
 
-  // ====================================================
-  // PREFILL
-  // ====================================================
+  const relationCases =
+    formData.client_id
+      ? clientCases
+      : cases;
 
-  useEffect(() => {
-    const hasPrefill =
-      Boolean(
-        prefillData.title
-      ) ||
-      Boolean(
-        prefillData.description
-      ) ||
-      Boolean(
-        prefillData.case_id
-      ) ||
-      Boolean(
-        prefillData.client_id
-      ) ||
-      Boolean(
-        prefillData.due_date
-      ) ||
-      Boolean(
-        prefillData.estimated_hours
-      ) ||
-      Boolean(
-        prefillData.note
-      ) ||
-      isAiPrefill;
-
-    if (
-      !hasPrefill
-    ) {
-      return;
-    }
-
-    setFormData(
-      (
-        current
-      ) => ({
-        ...current,
-
-        title:
-          prefillData.title ||
-          current.title,
-
-        description:
-          prefillData.description ||
-          current.description,
-
-        priority:
-          prefillData.priority ||
-          current.priority,
-
-        due_date:
-          prefillData.due_date ||
-          current.due_date,
-
-        estimated_hours:
-          prefillData.estimated_hours ||
-          current.estimated_hours,
-
-        case_id:
-          canViewCases
-            ? (
-                prefillData.case_id ||
-                current.case_id
-              )
-            : '',
-
-        client_id:
-          canViewClients
-            ? (
-                prefillData.client_id ||
-                current.client_id
-              )
-            : '',
-
-        note:
-          prefillData.note ||
-          current.note,
-      })
-    );
-  }, [
-    prefillData,
-    isAiPrefill,
-    canViewCases,
-    canViewClients,
-  ]);
-
-  // ====================================================
-  // DEFAULT ASSIGNEE
-  // ====================================================
-
-  /*
-   * ASSIGN_TASKS yetkisi olmayan kullanıcı
-   * otomatik kendisine atanır.
-   */
-  useEffect(() => {
-    if (
-      !canAssignTasks &&
-      user?.id
-    ) {
-      setFormData(
-        (
-          current
-        ) => ({
-          ...current,
-
-          assignee_ids: [
-            user.id,
-          ],
-        })
-      );
-    }
-  }, [
-    canAssignTasks,
-    user?.id,
-  ]);
+  const relationCasesLoading =
+    formData.client_id
+      ? clientCasesLoading
+      : casesLoading;
 
   // ====================================================
   // SELECTED DATA
@@ -566,15 +457,19 @@ const TaskCreate = () => {
         return null;
       }
 
-      return cases.find(
+      return relationCases.find(
         (
           item
         ) =>
-          item.id ===
-          formData.case_id
+          String(
+            item.id
+          ) ===
+          String(
+            formData.case_id
+          )
       );
     }, [
-      cases,
+      relationCases,
       formData.case_id,
       canViewCases,
     ]);
@@ -661,53 +556,17 @@ const TaskCreate = () => {
         (
           current
         ) => {
-          // ================================================
-          // CLIENT CHANGED
-          // ================================================
-
+          /*
+           * Müvekkil değiştiğinde önceki dava seçimini
+           * temizliyoruz.
+           *
+           * Yeni müvekkilin dava listesi
+           * /clients/:id/cases endpoint'inden gelir.
+           */
           if (
             name ===
             'client_id'
           ) {
-            let nextCaseId =
-              current.case_id;
-
-            if (
-              nextCaseId &&
-              value
-            ) {
-              const currentCase =
-                cases.find(
-                  (
-                    caseItem
-                  ) =>
-                    String(
-                      caseItem.id
-                    ) ===
-                    String(
-                      nextCaseId
-                    )
-                );
-
-              const caseClientId =
-                getCaseClientId(
-                  currentCase
-                );
-
-              if (
-                String(
-                  caseClientId ||
-                  ''
-                ) !==
-                String(
-                  value
-                )
-              ) {
-                nextCaseId =
-                  '';
-              }
-            }
-
             return {
               ...current,
 
@@ -715,68 +574,9 @@ const TaskCreate = () => {
                 value,
 
               case_id:
-                value
-                  ? nextCaseId
-                  : '',
+                '',
             };
           }
-
-          // ================================================
-          // CASE CHANGED
-          // ================================================
-
-          if (
-            name ===
-            'case_id'
-          ) {
-            if (
-              !value
-            ) {
-              return {
-                ...current,
-
-                case_id:
-                  '',
-              };
-            }
-
-            const nextCase =
-              cases.find(
-                (
-                  caseItem
-                ) =>
-                  String(
-                    caseItem.id
-                  ) ===
-                  String(
-                    value
-                  )
-              );
-
-            const caseClientId =
-              getCaseClientId(
-                nextCase
-              );
-
-            return {
-              ...current,
-
-              case_id:
-                value,
-
-              client_id:
-                caseClientId &&
-                canViewClients
-                  ? String(
-                      caseClientId
-                    )
-                  : current.client_id,
-            };
-          }
-
-          // ================================================
-          // NORMAL FIELD
-          // ================================================
 
           return {
             ...current,
@@ -1983,7 +1783,7 @@ const TaskCreate = () => {
                     handleChange
                   }
                   disabled={
-                    casesLoading ||
+                    relationCasesLoading ||
                     !canViewCases
                   }
                   className="
@@ -2011,10 +1811,10 @@ const TaskCreate = () => {
                   <option value="">
                     {!canViewCases
                       ? 'Dava görüntüleme yetkiniz yok'
-                      : casesLoading
+                      : relationCasesLoading
                         ? 'Davalar yükleniyor...'
                         : formData.client_id
-                          ? filteredCases.length >
+                          ? relationCases.length >
                             0
                             ? 'Dava seçin (isteğe bağlı)'
                             : 'Bu müvekkile ait dava bulunamadı'
@@ -2022,7 +1822,7 @@ const TaskCreate = () => {
                   </option>
 
                   {canViewCases &&
-                    filteredCases.map(
+                    relationCases.map(
                       (
                         caseItem
                       ) => (
