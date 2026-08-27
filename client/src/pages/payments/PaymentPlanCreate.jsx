@@ -253,6 +253,40 @@ const buildInstallmentPreview = ({
   );
 };
 
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (!caseItem) {
+    return '-';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    '-'
+  );
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -1016,9 +1050,9 @@ const PaymentPlanCreate = () => {
                           caseItem.id
                         }
                       >
-                        {caseItem.case_number
-                          ? `${caseItem.case_number} - ${caseItem.title}`
-                          : caseItem.title}
+                        {getCaseDisplayName(
+                          caseItem
+                        )}
                       </option>
                     )
                   )}
