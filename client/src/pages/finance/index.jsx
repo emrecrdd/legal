@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useState,
 } from 'react';
 
@@ -311,6 +310,41 @@ const getPlanStatusVariant = (
   }
 };
 
+const getCaseDisplayName = (
+  caseItem
+) => {
+  if (!caseItem) {
+    return '-';
+  }
+
+  const courtName =
+    String(
+      caseItem.court_name ||
+      caseItem.court?.name ||
+      ''
+    ).trim();
+
+  const caseNumber =
+    String(
+      caseItem.case_number ||
+      ''
+    ).trim();
+
+  if (
+    courtName &&
+    caseNumber
+  ) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return (
+    courtName ||
+    caseNumber ||
+    caseItem.title ||
+    '-'
+  );
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -468,42 +502,9 @@ const Finance = () => {
   // PAGE RESET
   // ======================================================
 
-  useEffect(() => {
-    setPage(1);
-  }, [
-    debouncedSearch,
-    statusFilter,
-    typeFilter,
-  ]);
-
   // ======================================================
   // PAGINATION SAFETY
   // ======================================================
-
-  useEffect(() => {
-    if (
-      !pagination
-    ) {
-      return;
-    }
-
-    const totalPages =
-      Number(
-        pagination.totalPages
-      ) || 1;
-
-    if (
-      page >
-      totalPages
-    ) {
-      setPage(
-        totalPages
-      );
-    }
-  }, [
-    pagination,
-    page,
-  ]);
 
   // ======================================================
   // FILTERS
@@ -1259,10 +1260,9 @@ const Finance = () => {
 
                         {plan.case && (
                           <span className="max-w-[12rem] truncate text-xs text-gray-400">
-                            {plan.case
-                              .case_number ||
+                            {getCaseDisplayName(
                               plan.case
-                                .title}
+                            )}
                           </span>
                         )}
 
@@ -1314,11 +1314,15 @@ const Finance = () => {
                 }
                 onChange={(
                   event
-                ) =>
+                ) => {
                   setSearch(
                     event.target.value
-                  )
-                }
+                  );
+
+                  setPage(
+                    1
+                  );
+                }}
                 className="pl-10"
               />
 
@@ -1334,11 +1338,15 @@ const Finance = () => {
                 }
                 onChange={(
                   event
-                ) =>
+                ) => {
                   setTypeFilter(
                     event.target.value
-                  )
-                }
+                  );
+
+                  setPage(
+                    1
+                  );
+                }}
                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               >
 
@@ -1373,11 +1381,15 @@ const Finance = () => {
                 }
                 onChange={(
                   event
-                ) =>
+                ) => {
                   setStatusFilter(
                     event.target.value
-                  )
-                }
+                  );
+
+                  setPage(
+                    1
+                  );
+                }}
                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               >
 
@@ -1550,8 +1562,9 @@ const Finance = () => {
                                 to={`/cases/${payment.case.id}`}
                                 className="block max-w-[14rem] truncate text-sm font-medium text-gray-900 hover:text-blue-600 dark:text-white"
                               >
-                                {payment.case
-                                  .title}
+                                {getCaseDisplayName(
+                                  payment.case
+                                )}
                               </Link>
                             )}
 

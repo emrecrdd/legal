@@ -189,6 +189,26 @@ const getPersonName = (
 // COMPONENT
 // ======================================================
 
+const getCaseDisplayName = (caseItem) => {
+  if (!caseItem) return '-';
+
+  const courtName = String(
+    caseItem.court_name ||
+    caseItem.court?.name ||
+    ''
+  ).trim();
+
+  const caseNumber = String(
+    caseItem.case_number || ''
+  ).trim();
+
+  if (courtName && caseNumber) {
+    return `${courtName} · ${caseNumber}`;
+  }
+
+  return courtName || caseNumber || caseItem.title || '-';
+};
+
 const PaymentPlanDetail = () => {
   const {
     id,
@@ -824,9 +844,9 @@ const PaymentPlanDetail = () => {
                     to={`/cases/${plan.case.id}`}
                     className="mt-1 block font-medium text-blue-600 hover:underline"
                   >
-                    {plan.case.case_number
-                      ? `${plan.case.case_number} - ${plan.case.title}`
-                      : plan.case.title}
+                    {getCaseDisplayName(
+                      plan.case
+                    )}
                   </Link>
                 ) : (
                   <p className="mt-1 font-medium text-gray-900 dark:text-white">
