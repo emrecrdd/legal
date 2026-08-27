@@ -1657,22 +1657,25 @@ const PAYMENT_INCLUDE = [
   },
 
   {
-    model:
-      Case,
+  model:
+    Case,
 
-    as:
-      'case',
+  as:
+    'case',
 
-    attributes: [
-      'id',
-      'title',
-      'case_number',
-      'status',
-    ],
+  attributes: [
+    'id',
+    'title',
+    'case_number',
+    'court_name',
+    'judiciary_type',
+    'judiciary_unit',
+    'status',
+  ],
 
-    required:
-      false,
-  },
+  required:
+    false,
+},
 
   {
     model:
@@ -3467,23 +3470,26 @@ export const paymentService = {
           )
         ),
 
-      include: [
-        {
-          model:
-            Case,
+     include: [
+  {
+    model:
+      Case,
 
-          as:
-            'case',
+    as:
+      'case',
 
-          attributes: [
-            'id',
-            'title',
-            'case_number',
-          ],
+    attributes: [
+      'id',
+      'title',
+      'case_number',
+      'court_name',
+      'judiciary_type',
+      'judiciary_unit',
+    ],
 
-          required:
-            false,
-        },
+    required:
+      false,
+  },
 
         {
           model:
