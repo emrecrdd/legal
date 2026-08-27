@@ -31,10 +31,22 @@ import {
   AlertTriangle,
   ArrowLeft,
   BriefcaseBusiness,
+  File,
+  FileArchive,
+  FileImage,
+  FileSpreadsheet,
   FileText,
+  Folder,
   FolderOpen,
+  Gavel,
+  Image,
   LockKeyhole,
+  Mail,
+  Paperclip,
+  Pin,
   Save,
+  Search,
+  Send,
   ShieldCheck,
   Tags,
   UserRound,
@@ -60,42 +72,42 @@ const CATEGORY_OPTIONS = [
   {
     value: 'general',
     label: 'Genel',
-    icon: '📁',
+    icon: Folder,
   },
   {
     value: 'petition',
     label: 'Dilekçe',
-    icon: '📝',
+    icon: FileText,
   },
   {
     value: 'expert_report',
     label: 'Bilirkişi Raporu',
-    icon: '📊',
+    icon: FileSpreadsheet,
   },
   {
     value: 'court_decision',
     label: 'Mahkeme Kararı',
-    icon: '⚖️',
+    icon: Gavel,
   },
   {
     value: 'notification',
     label: 'Tebligat',
-    icon: '📨',
+    icon: Send,
   },
   {
     value: 'evidence',
     label: 'Delil',
-    icon: '🔍',
+    icon: Search,
   },
   {
     value: 'correspondence',
     label: 'Yazışma',
-    icon: '✉️',
+    icon: Mail,
   },
   {
     value: 'other',
     label: 'Diğer',
-    icon: '📌',
+    icon: Pin,
   },
 ];
 
@@ -127,24 +139,26 @@ const getCategoryVariant = (
 const getFileIcon = (
   fileType
 ) => {
-  switch (fileType) {
+  switch (
+    fileType
+  ) {
     case 'pdf':
-      return '📄';
+      return FileText;
 
     case 'word':
-      return '📝';
+      return FileText;
 
     case 'excel':
-      return '📊';
+      return FileSpreadsheet;
 
     case 'udf':
-      return '📑';
+      return FileArchive;
 
     case 'image':
-      return '🖼️';
+      return FileImage;
 
     default:
-      return '📎';
+      return Paperclip;
   }
 };
 
@@ -683,6 +697,10 @@ const DocumentEdit = () => {
       formData.category,
     ]);
 
+
+  const SelectedCategoryIcon =
+    selectedCategory.icon;
+
   const tagsPreview =
     useMemo(() => {
       return normalizeTags(
@@ -748,6 +766,12 @@ const DocumentEdit = () => {
       clientsError ||
       clientCasesError ||
       selectedCaseDetailError
+    );
+
+
+  const PhysicalFileIcon =
+    getFileIcon(
+      documentItem?.file_type
     );
 
   // ======================================================
@@ -954,8 +978,8 @@ const DocumentEdit = () => {
     return (
       <div className="py-12 text-center">
 
-        <div className="mb-4 text-5xl">
-          📄
+        <div className="mb-4 flex justify-center">
+          <FileText className="h-12 w-12 text-gray-400" />
         </div>
 
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -1233,7 +1257,6 @@ const DocumentEdit = () => {
                   justify-center
                   rounded-xl
                   bg-white
-                  text-3xl
                   shadow-sm
                   dark:bg-white/[0.04]
                   ${
@@ -1244,9 +1267,10 @@ const DocumentEdit = () => {
                   }
                 `}
               >
-                {getFileIcon(
-                  documentItem.file_type
-                )}
+                <PhysicalFileIcon
+                  className="h-7 w-7"
+                  strokeWidth={1.8}
+                />
               </div>
 
               <div className="min-w-0 flex-1">
@@ -1455,7 +1479,6 @@ const DocumentEdit = () => {
                         category.value
                       }
                     >
-                      {category.icon}{' '}
                       {category.label}
                     </option>
                   )
@@ -1470,7 +1493,7 @@ const DocumentEdit = () => {
                     selectedCategory.value
                   )}
                 >
-                  {selectedCategory.icon}{' '}
+                  <SelectedCategoryIcon className="mr-1 h-3.5 w-3.5" />
                   {selectedCategory.label}
                 </Badge>
 
