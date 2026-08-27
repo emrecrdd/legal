@@ -234,7 +234,37 @@ const getCaseSecondaryInfo = (
     .filter(Boolean)
     .join(' · ');
 };
+const localToUTC = (
+  dateTime
+) => {
+  if (!dateTime) {
+    return null;
+  }
 
+  try {
+    const normalized =
+      dateTime.length === 16
+        ? `${dateTime}:00`
+        : dateTime;
+
+    const date =
+      new Date(
+        `${normalized}+03:00`
+      );
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return null;
+    }
+
+    return date.toISOString();
+  } catch {
+    return null;
+  }
+};
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -853,8 +883,9 @@ const TaskCreate = () => {
             : null,
 
         due_date:
-          formData.due_date ||
-          null,
+  localToUTC(
+    formData.due_date
+  ),
 
         estimated_hours:
           formData.estimated_hours !==
