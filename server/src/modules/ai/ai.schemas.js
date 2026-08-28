@@ -395,7 +395,204 @@ export const documentAnalysisSchema = {
     'warnings',
   ],
 };
+export const caseQuestionSchema = {
+  type: 'object',
+  additionalProperties: false,
 
+  properties: {
+    question: {
+      type: 'string',
+    },
+
+    shortAnswer: {
+      type: 'string',
+    },
+
+    answer: {
+      type: 'string',
+    },
+
+    keyFindings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          finding: {
+            type: 'string',
+          },
+
+          importance: {
+            type: 'string',
+            enum: [
+              'low',
+              'medium',
+              'high',
+              'critical',
+            ],
+          },
+
+          sourceType: {
+            anyOf: [
+              {
+                type: 'string',
+                enum: [
+                  'case',
+                  'document',
+                  'task',
+                  'event',
+                  'meeting',
+                  'note',
+                ],
+              },
+              {
+                type: 'null',
+              },
+            ],
+          },
+
+          sourceId: nullableString,
+        },
+
+        required: [
+          'finding',
+          'importance',
+          'sourceType',
+          'sourceId',
+        ],
+      },
+    },
+
+    sources: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          sourceType: {
+            type: 'string',
+            enum: [
+              'case',
+              'document',
+              'task',
+              'event',
+              'meeting',
+              'note',
+            ],
+          },
+
+          sourceId: {
+            type: 'string',
+          },
+
+          title: {
+            type: 'string',
+          },
+
+          relevance: {
+            type: 'string',
+          },
+        },
+
+        required: [
+          'sourceType',
+          'sourceId',
+          'title',
+          'relevance',
+        ],
+      },
+    },
+
+    missingInformation: stringArray,
+
+    suggestedActions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          title: {
+            type: 'string',
+          },
+
+          description: nullableString,
+
+          priority: {
+            type: 'string',
+            enum: [
+              'low',
+              'normal',
+              'high',
+              'critical',
+            ],
+          },
+
+          sourceType: {
+            anyOf: [
+              {
+                type: 'string',
+                enum: [
+                  'case',
+                  'document',
+                  'task',
+                  'event',
+                  'meeting',
+                  'note',
+                ],
+              },
+              {
+                type: 'null',
+              },
+            ],
+          },
+
+          sourceId: nullableString,
+
+          canCreateTask: {
+            type: 'boolean',
+          },
+        },
+
+        required: [
+          'title',
+          'description',
+          'priority',
+          'sourceType',
+          'sourceId',
+          'canCreateTask',
+        ],
+      },
+    },
+
+    confidence: {
+      type: 'number',
+      minimum: 0,
+      maximum: 1,
+    },
+
+    requiresHumanReview: {
+      type: 'boolean',
+    },
+
+    reviewReasons: stringArray,
+  },
+
+  required: [
+    'question',
+    'shortAnswer',
+    'answer',
+    'keyFindings',
+    'sources',
+    'missingInformation',
+    'suggestedActions',
+    'confidence',
+    'requiresHumanReview',
+    'reviewReasons',
+  ],
+};
 export const caseSummarySchema = {
   type: 'object',
   additionalProperties: false,
@@ -1437,6 +1634,7 @@ export const AI_SCHEMAS = Object.freeze({
   documentAnalysis: documentAnalysisSchema,
   caseSummary: caseSummarySchema,
   caseCompletion: caseCompletionSchema,
+  caseQuestion: caseQuestionSchema,
   entityExtraction: entityExtractionSchema,
   legalResearch: legalResearchSchema,
   documentClassification: documentClassificationSchema,

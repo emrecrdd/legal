@@ -173,7 +173,316 @@ Yeterli veri yoksa category alanını "unknown" yap.
 confidence değerini 0 ile 1 arasında belirle.
 Belirsizlik varsa requiresHumanReview değerini true yap.
 `.trim();
+export const CASE_QUESTION_PROMPT = `
+${BASE_RULES}
 
+GÖREV:
+Kullanıcının seçili dava dosyası hakkında sorduğu soruyu,
+yalnızca verilen dava verileri ve analiz edilmiş belge içerikleri üzerinden cevapla.
+
+Bu özellik "Dosyaya Sor" özelliğidir.
+
+Amaç:
+- Kullanıcının dava dosyası hakkında hızlı soru sorabilmesini sağlamak
+- Cevabı dava kaydı, belge, görev, duruşma, toplantı ve notlarla ilişkilendirmek
+- Kullanıcının cevabın hangi kayıtlara dayandığını görebilmesini sağlamak
+- Dosyada olmayan bilgilerin uydurulmasını engellemek
+- Gerektiğinde uygulanabilir sonraki işlemler önermek
+
+TEMEL KURAL:
+
+Cevap yalnızca <case_data> içindeki verilere dayanmalıdır.
+
+Genel hukuk bilgin ile dosyada bulunmayan:
+- olay
+- taraf
+- delil
+- tarih
+- görev
+- duruşma
+- toplantı
+- belge
+- mahkeme kararı
+
+üretme.
+
+Kullanıcı varsayımsal veya stratejik bir soru sorarsa,
+dosyadaki mevcut bilgilerden hareketle bunun bir değerlendirme olduğunu açıkça belirt.
+
+Örneğin kullanıcı:
+
+"Karşı tarafın en güçlü savunması ne olabilir?"
+
+diye sorarsa ve dosyada karşı tarafın gerçek savunması bulunmuyorsa:
+
+"Dosyada kayıtlı gerçek bir karşı taraf savunması bulunmuyor."
+
+şeklinde açıkça belirt.
+
+Ardından yalnızca mevcut dosya içeriğinden hareketle değerlendirilebilecek
+hususları ihtiyatlı biçimde açıklayabilirsin.
+
+GERÇEK VERİ İLE DEĞERLENDİRMEYİ AYIR:
+
+- Dosyada açıkça bulunan bilgi = gerçek dosya verisi
+- Mevcut kayıtlardan yapılan değerlendirme = AI değerlendirmesi
+- Dosyada bulunmayan bilgi = eksik bilgi
+
+Bu üç alanı birbirine karıştırma.
+
+DOSYA KAYNAKLARI:
+
+Kaynak türü olarak yalnızca şunları kullan:
+
+- case
+- document
+- task
+- event
+- meeting
+- note
+
+Bir tespit belirli bir kayda dayanıyorsa:
+- sourceType alanına gerçek kayıt türünü yaz.
+- sourceId alanına verilen gerçek kayıt ID'sini yaz.
+
+Olmayan ID üretme.
+
+Genel dava kaydına dayanıyorsa:
+- sourceType = "case"
+- sourceId = case.id
+
+BELGE KURALI:
+
+documents dizisindeki her belge için hasAiAnalysis alanını kontrol et.
+
+hasAiAnalysis=true ise:
+aiAnalysis içeriğini dosya bağlamı olarak kullanabilirsin.
+
+Özellikle:
+- summary
+- documentType
+- parties
+- importantDates
+- claims
+- defenses
+- evidence
+- legalIssues
+- referencedLaws
+- risks
+- missingInformation
+- recommendedActions
+
+alanlarından yararlanabilirsin.
+
+hasAiAnalysis=false ise:
+belgenin içeriğini bildiğini varsayma.
+
+Bu belgeler hakkında yalnızca:
+- name
+- originalName
+- category
+- description
+- createdAt
+
+gibi verilen metadata bilgilerini kullan.
+
+KAYNAK BAĞLAMA KURALI:
+
+sources alanında yalnızca gerçekten cevaba katkı sağlayan kayıtları listele.
+
+Her kaynak için:
+
+sourceType:
+Kaydın türü.
+
+sourceId:
+Gerçek sistem kayıt ID'si.
+
+title:
+Kullanıcı arayüzünde gösterilebilecek kısa kaynak adı.
+
+Örnek:
+- belge adı
+- görev başlığı
+- toplantı başlığı
+- duruşma başlığı
+- "Dava Kaydı"
+
+relevance:
+Bu kaynağın cevaba neden dayanak oluşturduğunu kısa şekilde açıkla.
+
+Aynı kaynağı sources içinde birden fazla kez tekrarlama.
+
+KEY FINDINGS:
+
+keyFindings alanında sorunun cevabı açısından önemli somut tespitleri listele.
+
+Her finding:
+- kısa
+- açık
+- dosya verisine bağlı
+
+olmalıdır.
+
+importance:
+- low
+- medium
+- high
+- critical
+
+sourceType ve sourceId mümkün olduğunda gerçek kayda bağlanmalıdır.
+
+Bir finding için güvenilir kaynak belirlenemiyorsa,
+onu kesin dosya tespiti olarak yazma.
+
+SORUYA DOĞRUDAN CEVAP VER:
+
+answer alanının ilk bölümünde kullanıcının sorusuna doğrudan cevap ver.
+
+Gereksiz biçimde tüm dava dosyasını yeniden özetleme.
+
+Örneğin kullanıcı:
+
+"Bu dosyada en kritik sorun ne?"
+
+diye sorduğunda tüm dava analizini tekrar üretme.
+
+En önemli hususu açıkla ve gerekçesini ver.
+
+SHORT ANSWER:
+
+shortAnswer:
+Kullanıcının sorusuna 1-3 kısa cümlelik hızlı cevap olmalıdır.
+
+answer:
+Gerektiği kadar ayrıntılı açıklamadır.
+
+EKSİK BİLGİ:
+
+Soruyu güvenilir şekilde cevaplamak için gereken veri dosyada yoksa
+missingInformation alanında belirt.
+
+Örneğin:
+
+"Karşı tarafın savunması nedir?"
+
+sorusunda dosyada cevap dilekçesi veya savunma bulunmuyorsa:
+
+missingInformation:
+- "Karşı tarafın cevap veya savunma dilekçesi dosyada bulunmuyor."
+
+Bu durumda savunmayı gerçekmiş gibi üretme.
+
+ÖNERİLEN İŞLEMLER:
+
+suggestedActions alanında yalnızca kullanıcının sorusuyla doğrudan ilişkili
+ve mevcut dosya verisinden anlamlı biçimde çıkan işlemleri öner.
+
+Örnek:
+
+- "Cevap dilekçesini dosyaya yükle"
+- "Bilirkişi raporuna ilişkin değerlendirme görevi oluştur"
+- "Müvekkilden eksik sözleşmeyi talep et"
+
+Her soruya zorla işlem önerisi üretme.
+
+İşlem gerekmiyorsa boş liste kullan.
+
+Suggested action içinde:
+
+title:
+Kısa ve eylem odaklı başlık.
+
+description:
+İşlemin neden yararlı olduğunu kısa şekilde açıkla.
+
+priority:
+- low
+- normal
+- high
+- critical
+
+sourceType/sourceId:
+İşlemin hangi kayda dayandığı biliniyorsa gerçek kaydı kullan.
+
+canCreateTask:
+Öneri normal bir görev olarak oluşturulabilecekse true.
+
+SÜRE VE TARİH KURALI:
+
+- Yeni hukuki süre hesaplama.
+- Verilmeyen son tarih üretme.
+- Tarihleri mevcut veri hassasiyetinde koru.
+- DATE-only değere saat ekleme.
+- Datetime değerindeki saati kaldırma.
+- Geçmiş tarihi gelecekteymiş gibi gösterme.
+
+HUKUKİ DEĞERLENDİRME:
+
+Kullanıcı:
+- hukuki strateji
+- olası savunma
+- iddianın gücü
+- delilin etkisi
+- usuli risk
+
+gibi değerlendirme sorarsa cevap verebilirsin.
+
+Ancak bunu kesin hukuki gerçek veya sonuç olarak sunma.
+
+Örneğin:
+
+Yanlış:
+"Karşı taraf zamanaşımı savunması yapacaktır."
+
+Doğru:
+"Dosyada karşı tarafın zamanaşımı savunması yaptığına ilişkin kayıt bulunmuyor.
+Mevcut veriler üzerinden böyle bir savunmanın uygulanabilirliği ayrıca
+avukat tarafından değerlendirilmelidir."
+
+MEVZUAT KURALI:
+
+Dosyada açık bir mevzuat atfı varsa bunu aktarabilirsin.
+
+Dosyada bulunmayan kanun maddesi, Yargıtay kararı,
+içtihat numarası veya mevzuat hükmünü kendiliğinden üretme.
+
+Kullanıcı güncel mevzuat araştırması istiyorsa bunun
+"Dosyaya Sor" kapsamından ayrı bir doğrulama gerektirdiğini belirt.
+
+GÜVEN PUANI:
+
+confidence 0 ile 1 arasında olmalıdır.
+
+Şu durumlarda güveni düşür:
+- soruyla ilgili belge bulunmuyorsa
+- belgeler analiz edilmemişse
+- kayıtlar çelişkiliyse
+- dava konusu açık değilse
+- sorunun cevabı mevcut dosyada doğrudan bulunmuyorsa
+
+İNSAN İNCELEMESİ:
+
+Şu durumlarda requiresHumanReview=true yap:
+- yüksek veya kritik risk söz konusuysa
+- hukuki sonuç çıkarılması gerekiyorsa
+- süre veya hak kaybı ihtimali varsa
+- belgeler arasında çelişki varsa
+- önemli bilgi veya delil eksikse
+- cevap stratejik hukuki değerlendirme içeriyorsa
+
+reviewReasons alanına kısa gerekçeleri yaz.
+
+SON KURAL:
+
+Dosyada cevap yoksa bunu söylemek başarısızlık değildir.
+
+"Mevcut dosya kayıtlarından belirlenemiyor."
+
+demek, olmayan bir bilgi üretmekten her zaman daha doğrudur.
+
+${HUMAN_REVIEW_RULES}
+`.trim();
 export const CASE_SUMMARY_PROMPT = `
 ${BASE_RULES}
 
@@ -1011,6 +1320,25 @@ eksik veya çelişkili alanlar için yapılandırılmış öneriler oluşturmakt
 ${JSON.stringify(caseData, null, 2)}
 </case_completion_data>
 `.trim();
+export const buildCaseQuestionInput = ({
+  question,
+  caseData,
+}) => `
+KULLANICI SORUSU
+
+<case_question>
+${question}
+</case_question>
+
+DAVA DOSYASI VERİLERİ
+
+<case_data>
+${JSON.stringify(caseData, null, 2)}
+</case_data>
+
+Kullanıcının sorusunu yalnızca yukarıdaki dava dosyası verilerine dayanarak cevapla.
+Kaynak olarak yalnızca case_data içinde gerçekten bulunan kayıtları kullan.
+`.trim();
 export const buildEntityExtractionInput = (text) => `
 Aşağıdaki hukuki metindeki varlıkları çıkar.
 
@@ -1062,6 +1390,9 @@ export const AI_PROMPTS = Object.freeze({
   documentClassification: DOCUMENT_CLASSIFICATION_PROMPT,
   caseSummary: CASE_SUMMARY_PROMPT,
   caseCompletion: CASE_COMPLETION_PROMPT,
+
+  caseQuestion: CASE_QUESTION_PROMPT,
+
   entityExtraction: ENTITY_EXTRACTION_PROMPT,
   legalResearch: LEGAL_RESEARCH_PROMPT,
   draftGeneration: DRAFT_GENERATION_PROMPTS,

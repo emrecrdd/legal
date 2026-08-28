@@ -498,7 +498,74 @@ async analyzeCaseCompletion(req, res) {
       );
     }
   },
+  /**
+   * Seçili dava dosyası hakkında kaynaklı soru-cevap üretir.
+   *
+   * POST /ai/cases/:caseId/ask
+   * body: { question: string }
+   */
+  async askCaseQuestion(req, res) {
+    try {
+      const { caseId } = req.params;
+      const { question } = req.body || {};
 
+      const result =
+        await aiService.askCaseQuestion({
+          caseId,
+          question,
+          actor: req.user,
+        });
+
+      await createAuditLogSafely({
+        req,
+        action: 'create',
+        entityType: 'ai_analysis',
+        entityId: result.id,
+
+        description:
+          'AI Dosyaya Sor yanıtı oluşturuldu',
+
+        metadata: {
+          analysisType:
+            result.type,
+
+          caseId,
+
+          model:
+            result.model,
+
+          confidence:
+            result.confidence ??
+            null,
+
+          totalTokens:
+            result.usage
+              ?.totalTokens || 0,
+
+          durationMs:
+            result.durationMs ||
+            null,
+
+          promptVersion:
+            result.promptVersion ||
+            null,
+        },
+      });
+
+      return successResponse(
+        res,
+        result,
+        'Dosya sorusu yanıtlandı',
+        201
+      );
+    } catch (error) {
+      return handleControllerError(
+        res,
+        error,
+        'askCaseQuestion'
+      );
+    }
+  },
   /**
    * Hukuki soru için avukat
    * kontrolüne tabi ön değerlendirme

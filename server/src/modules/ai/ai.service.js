@@ -24,6 +24,7 @@ import { User } from '../../models/User.js';
 
 import {
   caseCompletionSchema,
+  caseQuestionSchema,
   caseSummarySchema,
   documentAnalysisSchema,
   documentClassificationSchema,
@@ -34,12 +35,14 @@ import {
 
 import {
   CASE_COMPLETION_PROMPT,
+  CASE_QUESTION_PROMPT,
   CASE_SUMMARY_PROMPT,
   DOCUMENT_ANALYSIS_PROMPT,
   DOCUMENT_CLASSIFICATION_PROMPT,
   ENTITY_EXTRACTION_PROMPT,
   LEGAL_RESEARCH_PROMPT,
   buildCaseCompletionInput,
+  buildCaseQuestionInput,
   buildCaseSummaryInput,
   buildDraftInput,
   buildEntityExtractionInput,
@@ -65,6 +68,7 @@ const ANALYSIS_TYPES = Object.freeze({
   DOCUMENT_CLASSIFICATION: 'document_classification',
   ENTITY_EXTRACTION: 'entity_extraction',
   CASE_SUMMARY: 'case_summary',
+  CASE_QUESTION: 'case_question',
   CASE_COMPLETION: 'case_completion',
   LEGAL_RESEARCH: 'legal_research',
   DRAFT_GENERATION: 'draft_generation',
@@ -795,6 +799,237 @@ async analyzeCaseCompletion({
     );
   }
 }
+  /**
+   * Seçili dava dosyası hakkında kaynaklı soru-cevap üretir.
+   */
+  async askCaseQuestion({
+    caseId,
+    question,
+    userId: legacyUserId = null,
+    actor = null,
+  }) {
+    this.validateUuidLike(caseId, 'caseId');
+
+    this.validateRequiredText(
+      question,
+      'question',
+      10_000
+    );
+
+    const actorContext =
+      await this.resolveActorContext({
+        actor,
+        userId: legacyUserId,
+      });
+
+    const userId =
+      requireActorId(actorContext);
+
+    /*
+     * getCaseWithContext erişim kontrolünü de uygular.
+     * Böylece kullanıcı erişemediği bir davayı AI üzerinden
+     * sorgulayamaz.
+     */
+    const caseRecord =
+      await this.getCaseWithContext(
+        caseId,
+        actorContext
+      );
+
+    const casePayload =
+      this.prepareCasePayload(
+        caseRecord
+      );
+
+    const normalizedQuestion =
+      question.trim();
+
+    const input =
+      buildCaseQuestionInput({
+        question: normalizedQuestion,
+        caseData: casePayload,
+      });
+
+    /*
+     * Soru da input içerisinde bulunduğu için aynı dava
+     * bağlamında farklı sorular farklı hash üretir.
+     */
+    const inputHash =
+      this.createInputHash({
+        text: input,
+        operation:
+          ANALYSIS_TYPES.CASE_QUESTION,
+        promptVersion:
+          PROMPT_VERSION,
+      });
+
+    /*
+     * Aynı kullanıcı + aynı dava durumu + aynı soru
+     * tekrar sorulursa mevcut yanıt kullanılabilir.
+     *
+     * Dava verisi değişirse casePayload değişeceği için
+     * hash de otomatik olarak değişir.
+     */
+    const cached =
+      await this.findCachedAnalysis({
+        analysisType:
+          ANALYSIS_TYPES.CASE_QUESTION,
+        caseId,
+        userId,
+        inputHash,
+      });
+
+    if (cached) {
+      return this.formatAnalysisResponse(
+        cached,
+        true
+      );
+    }
+
+    const analysis =
+      await this.createPendingAnalysis({
+        analysisType:
+          ANALYSIS_TYPES.CASE_QUESTION,
+
+        caseId,
+        userId,
+        inputHash,
+
+        metadata: {
+          caseTitle:
+            caseRecord.title ||
+            caseRecord.case_number ||
+            null,
+
+          questionPreview:
+            normalizedQuestion.slice(
+              0,
+              250
+            ),
+
+          documentCount:
+            casePayload.documents
+              ?.length || 0,
+
+          analyzedDocumentCount:
+            casePayload
+              .documentContext
+              ?.analyzedDocuments || 0,
+        },
+      });
+
+    try {
+      const providerResult =
+        await aiProvider
+          .createStructuredResponse({
+            instructions:
+              CASE_QUESTION_PROMPT,
+
+            input,
+
+            schemaName:
+              'legal_case_question',
+
+            schema:
+              caseQuestionSchema,
+
+            schemaDescription:
+              'Seçili dava dosyasındaki kayıt ve analiz edilmiş belgelere dayalı kaynaklı soru-cevap sonucu.',
+
+            maxOutputTokens:
+              8_000,
+
+            metadata: {
+              operation:
+                ANALYSIS_TYPES
+                  .CASE_QUESTION,
+
+              analysisId:
+                analysis.id,
+
+              caseId,
+              userId,
+            },
+          });
+
+      /*
+       * Modelin döndürdüğü sourceId değerlerine doğrudan
+       * güvenmiyoruz.
+       *
+       * Yalnızca gerçekten bu dava context'inde bulunan
+       * kaynakları kabul ediyoruz.
+       */
+      const sanitizedOutput =
+        this.sanitizeCaseQuestionSources(
+          providerResult.output,
+          casePayload
+        );
+
+      /*
+       * completeAnalysis providerResult.output'u DB'ye
+       * yazdığı için temizlenmiş sonucu providerResult'a
+       * geri koyuyoruz.
+       */
+      const sanitizedProviderResult = {
+        ...providerResult,
+        output: sanitizedOutput,
+      };
+
+      await this.completeAnalysis({
+        analysis,
+        providerResult:
+          sanitizedProviderResult,
+
+        confidence:
+          sanitizedOutput.confidence,
+      });
+
+      logger.info(
+        'AI Dosyaya Sor yanıtı oluşturuldu',
+        {
+          analysisId:
+            analysis.id,
+
+          caseId,
+          userId,
+
+          model:
+            providerResult.model,
+
+          sourceCount:
+            sanitizedOutput.sources
+              ?.length || 0,
+
+          findingCount:
+            sanitizedOutput.keyFindings
+              ?.length || 0,
+
+          suggestedActionCount:
+            sanitizedOutput
+              .suggestedActions
+              ?.length || 0,
+
+          durationMs:
+            providerResult.durationMs,
+        }
+      );
+
+      return this.formatAnalysisResponse(
+        analysis,
+        false
+      );
+    } catch (error) {
+      await this.failAnalysis(
+        analysis,
+        error
+      );
+
+      throw this.normalizeServiceError(
+        error,
+        'Dosya sorusu yanıtlanamadı.'
+      );
+    }
+  }
   /**
    * Hukuki soru hakkında kaynak doğrulaması gerektiren
    * bir ön değerlendirme oluşturur.
@@ -1634,6 +1869,272 @@ prepareCasePayload(caseRecord) {
     },
   };
 }
+  sanitizeCaseQuestionSources(
+    output,
+    casePayload
+  ) {
+    if (
+      !output ||
+      typeof output !== 'object'
+    ) {
+      return output;
+    }
+
+    const registry =
+      new Map();
+
+    const register = (
+      sourceType,
+      sourceId,
+      title
+    ) => {
+      if (!sourceId) return;
+
+      registry.set(
+        `${sourceType}:${sourceId}`,
+        {
+          sourceType,
+          sourceId,
+          title:
+            title ||
+            'Kaynak',
+        }
+      );
+    };
+
+    /*
+     * Dava kaydı
+     */
+    register(
+      'case',
+      casePayload.id,
+      casePayload.courtName &&
+        casePayload.caseNumber
+        ? `${casePayload.courtName} · ${casePayload.caseNumber}`
+        : casePayload.title ||
+          casePayload.caseNumber ||
+          'Dava Kaydı'
+    );
+
+    /*
+     * Belgeler
+     */
+    for (
+      const document of
+      casePayload.documents || []
+    ) {
+      register(
+        'document',
+        document.id,
+        document.originalName ||
+          document.name ||
+          'Belge'
+      );
+    }
+
+    /*
+     * Görevler
+     */
+    for (
+      const task of
+      casePayload.tasks || []
+    ) {
+      register(
+        'task',
+        task.id,
+        task.title ||
+          'Görev'
+      );
+    }
+
+    /*
+     * Duruşma / etkinlikler
+     */
+    for (
+      const event of
+      casePayload.events || []
+    ) {
+      register(
+        'event',
+        event.id,
+        event.title ||
+          'Etkinlik'
+      );
+    }
+
+    /*
+     * Toplantılar
+     */
+    for (
+      const meeting of
+      casePayload.meetings || []
+    ) {
+      register(
+        'meeting',
+        meeting.id,
+        meeting.title ||
+          'Toplantı'
+      );
+    }
+
+    /*
+     * Notlar
+     *
+     * Not içeriğini title olarak kullanmıyoruz.
+     * Böylece kaynak kartında gereksiz/hassas metin
+     * tekrar edilmez.
+     */
+    for (
+      const note of
+      casePayload.notes || []
+    ) {
+      register(
+        'note',
+        note.id,
+        'Dosya Notu'
+      );
+    }
+
+    const resolveSource = (
+      sourceType,
+      sourceId
+    ) => {
+      if (
+        !sourceType ||
+        !sourceId
+      ) {
+        return null;
+      }
+
+      return (
+        registry.get(
+          `${sourceType}:${sourceId}`
+        ) || null
+      );
+    };
+
+    /*
+     * Ana sources listesi
+     */
+    const seenSources =
+      new Set();
+
+    const sources = (
+      Array.isArray(output.sources)
+        ? output.sources
+        : []
+    )
+      .map((source) => {
+        const valid =
+          resolveSource(
+            source?.sourceType,
+            source?.sourceId
+          );
+
+        if (!valid) {
+          return null;
+        }
+
+        const key =
+          `${valid.sourceType}:${valid.sourceId}`;
+
+        if (
+          seenSources.has(key)
+        ) {
+          return null;
+        }
+
+        seenSources.add(key);
+
+        return {
+          sourceType:
+            valid.sourceType,
+
+          sourceId:
+            valid.sourceId,
+
+          /*
+           * Başlığı modelden değil,
+           * backend registry'den alıyoruz.
+           */
+          title:
+            valid.title,
+
+          relevance:
+            typeof source?.relevance ===
+            'string'
+              ? source.relevance
+              : '',
+        };
+      })
+      .filter(Boolean);
+
+    /*
+     * Key findings içindeki uydurma kaynakları
+     * null'a çeviriyoruz.
+     */
+    const keyFindings = (
+      Array.isArray(
+        output.keyFindings
+      )
+        ? output.keyFindings
+        : []
+    ).map((finding) => {
+      const valid =
+        resolveSource(
+          finding?.sourceType,
+          finding?.sourceId
+        );
+
+      return {
+        ...finding,
+
+        sourceType:
+          valid?.sourceType ||
+          null,
+
+        sourceId:
+          valid?.sourceId ||
+          null,
+      };
+    });
+
+    /*
+     * Suggested actions için de aynı kontrol.
+     */
+    const suggestedActions = (
+      Array.isArray(
+        output.suggestedActions
+      )
+        ? output.suggestedActions
+        : []
+    ).map((action) => {
+      const valid =
+        resolveSource(
+          action?.sourceType,
+          action?.sourceId
+        );
+
+      return {
+        ...action,
+
+        sourceType:
+          valid?.sourceType ||
+          null,
+
+        sourceId:
+          valid?.sourceId ||
+          null,
+      };
+    });
+
+    return {
+      ...output,
+      sources,
+      keyFindings,
+      suggestedActions,
+    };
+  }
 
   async resolveActorContext({ actor = null, userId = null } = {}) {
     if (actor?.id) {

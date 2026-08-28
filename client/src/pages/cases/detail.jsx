@@ -40,10 +40,12 @@ import {
   Gavel,
   ListTodo,
   Mail,
+  MessageCircle,
   Phone,
   Plus,
   RefreshCw,
   Scale,
+  Send,
   ShieldAlert,
   Sparkles,
   UserRound,
@@ -836,6 +838,336 @@ const CaseAIAnalysis = ({
 
 
 // ======================================================
+// DOSYAYA SOR
+// ======================================================
+
+const CASE_QUESTION_SUGGESTIONS = [
+  'Bu dosyada şu anda en kritik risk nedir?',
+  'Yaklaşan işlem ve dikkat edilmesi gereken tarihler neler?',
+  'Dosyada hangi bilgi veya deliller eksik görünüyor?',
+  'Karşı tarafın savunması hakkında dosyada ne kayıtlı?',
+];
+
+const getCaseQuestionSourceLink = (source, caseId) => {
+  if (!source?.sourceType || !source?.sourceId) return null;
+
+  switch (source.sourceType) {
+    case 'case':
+      return `/cases/${caseId || source.sourceId}`;
+    case 'document':
+      return `/documents/${source.sourceId}`;
+    case 'task':
+      return `/tasks/${source.sourceId}`;
+    case 'event':
+      return `/events/${source.sourceId}`;
+    case 'meeting':
+      return `/meetings/${source.sourceId}`;
+    default:
+      return null;
+  }
+};
+
+const CASE_QUESTION_SOURCE_LABELS = {
+  case: 'Dava kaydı',
+  document: 'Belge',
+  task: 'Görev',
+  event: 'Duruşma / Etkinlik',
+  meeting: 'Toplantı',
+  note: 'Dosya notu',
+};
+
+const CaseQuestionPanel = ({
+  analysis,
+  asking,
+  onAsk,
+  caseId,
+  canCreateTasks,
+}) => {
+  const [question, setQuestion] = useState('');
+  const result = analysis?.result || analysis || null;
+
+  const submitQuestion = (value = question) => {
+    const normalized = String(value || '').trim();
+    if (!normalized || asking) return;
+    setQuestion(normalized);
+    onAsk(normalized);
+  };
+
+  return (
+    <Card>
+      <Card.Header>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Dosyaya Sor
+              </h2>
+            </div>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Bu dava kaydı, görevler, duruşmalar, toplantılar, notlar ve analiz edilmiş belgeler üzerinden kaynaklı yanıt alın.
+            </p>
+          </div>
+
+          <Badge variant="default">
+            Derkenar AI · Dosya Hafızası
+          </Badge>
+        </div>
+      </Card.Header>
+
+      <Card.Body className="space-y-5">
+        <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-800/50">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Bu dosya hakkında ne bilmek istiyorsunuz?
+              </label>
+              <textarea
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    submitQuestion();
+                  }
+                }}
+                rows={3}
+                maxLength={10000}
+                disabled={asking}
+                placeholder="Örn. Bu dosyada şu anda en kritik eksiklik nedir?"
+                className="w-full resize-y rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                Ctrl/⌘ + Enter ile sorabilirsiniz.
+              </p>
+            </div>
+
+            <Button
+              type="button"
+              loading={asking}
+              disabled={asking || !question.trim()}
+              onClick={() => submitQuestion()}
+            >
+              <Send className="mr-2 h-4 w-4" />
+              Dosyaya Sor
+            </Button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {CASE_QUESTION_SUGGESTIONS.map((item) => (
+              <button
+                key={item}
+                type="button"
+                disabled={asking}
+                onClick={() => {
+                  setQuestion(item);
+                  submitQuestion(item);
+                }}
+                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-left text-xs font-medium text-gray-600 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:text-blue-300"
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {asking && !result && (
+          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-200">
+            Derkenar AI dosya kayıtlarını ve mevcut belge analizlerini değerlendiriyor...
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-6">
+            <section className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-900/50 dark:bg-blue-900/20">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-semibold text-blue-950 dark:text-blue-100">
+                  Kısa Cevap
+                </h3>
+                {typeof result.confidence === 'number' && (
+                  <Badge variant="info">
+                    Güven %{Math.round(result.confidence * 100)}
+                  </Badge>
+                )}
+              </div>
+              <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-7 text-blue-950 dark:text-blue-100">
+                {result.shortAnswer || 'Yanıt oluşturuldu.'}
+              </p>
+            </section>
+
+            {result.answer && (
+              <section>
+                <h3 className="mb-2 font-semibold text-gray-900 dark:text-white">
+                  Dosya Üzerinden Değerlendirme
+                </h3>
+                <p className="whitespace-pre-wrap text-sm leading-7 text-gray-700 dark:text-gray-300">
+                  {result.answer}
+                </p>
+              </section>
+            )}
+
+            {Array.isArray(result.keyFindings) && result.keyFindings.length > 0 && (
+              <section>
+                <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+                  Önemli Tespitler
+                </h3>
+                <div className="space-y-3">
+                  {result.keyFindings.map((finding, index) => {
+                    const sourceLink = getCaseQuestionSourceLink(finding, caseId);
+                    return (
+                      <div key={`${finding.finding}-${index}`} className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <p className="text-sm leading-6 text-gray-800 dark:text-gray-200">
+                            {finding.finding}
+                          </p>
+                          <Badge variant={getRiskBadgeVariant(finding.importance)}>
+                            {RISK_LABELS[finding.importance] || finding.importance || 'Belirsiz'}
+                          </Badge>
+                        </div>
+                        {finding.sourceType && finding.sourceId && (
+                          <div className="mt-3 text-xs">
+                            {sourceLink ? (
+                              <Link to={sourceLink} className="font-medium text-blue-600 hover:underline dark:text-blue-400">
+                                Kaynağı aç · {CASE_QUESTION_SOURCE_LABELS[finding.sourceType] || 'Kaynak'}
+                              </Link>
+                            ) : (
+                              <span className="text-gray-500">
+                                Kaynak · {CASE_QUESTION_SOURCE_LABELS[finding.sourceType] || 'Dosya kaydı'}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {Array.isArray(result.sources) && result.sources.length > 0 && (
+              <section>
+                <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+                  Kullanılan Kaynaklar
+                </h3>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {result.sources.map((source, index) => {
+                    const sourceLink = getCaseQuestionSourceLink(source, caseId);
+                    const content = (
+                      <div className="rounded-xl border border-gray-200 p-3 transition hover:border-blue-300 dark:border-gray-700 dark:hover:border-blue-500/40">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
+                            {source.title || 'Kaynak'}
+                          </p>
+                          <span className="shrink-0 text-xs text-gray-400">
+                            {CASE_QUESTION_SOURCE_LABELS[source.sourceType] || source.sourceType}
+                          </span>
+                        </div>
+                        {source.relevance && (
+                          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                            {source.relevance}
+                          </p>
+                        )}
+                      </div>
+                    );
+
+                    return sourceLink ? (
+                      <Link key={`${source.sourceType}-${source.sourceId}-${index}`} to={sourceLink}>
+                        {content}
+                      </Link>
+                    ) : (
+                      <div key={`${source.sourceType}-${source.sourceId}-${index}`}>
+                        {content}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {Array.isArray(result.missingInformation) && result.missingInformation.length > 0 && (
+              <section>
+                <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+                  Dosyadan Belirlenemeyenler
+                </h3>
+                <ul className="space-y-2">
+                  {result.missingInformation.map((item, index) => (
+                    <li key={`${item}-${index}`} className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {Array.isArray(result.suggestedActions) && result.suggestedActions.length > 0 && (
+              <section>
+                <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+                  Önerilen İşlemler
+                </h3>
+                <div className="space-y-3">
+                  {result.suggestedActions.map((action, index) => (
+                    <div key={`${action.title}-${index}`} className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          {action.title}
+                        </p>
+                        <Badge variant={getActionPriorityVariant(action.priority)}>
+                          {ACTION_PRIORITY_LABELS[action.priority] || action.priority || 'Normal'}
+                        </Badge>
+                      </div>
+                      {action.description && (
+                        <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                          {action.description}
+                        </p>
+                      )}
+                      {action.canCreateTask && canCreateTasks && (
+                        <div className="mt-3">
+                          <Link
+                            to={`/tasks/create?${new URLSearchParams({
+                              source: 'ai_case_question',
+                              case_id: caseId || '',
+                              title: action.title || '',
+                              description: action.description || '',
+                              priority: action.priority || 'normal',
+                              note: 'Derkenar AI Dosyaya Sor önerisinden oluşturuldu.',
+                            }).toString()}`}
+                          >
+                            <Button type="button" size="sm" variant="outline">
+                              <Sparkles className="mr-2 h-4 w-4" />
+                              Görev Oluştur
+                            </Button>
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {result.requiresHumanReview && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
+                <div className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
+                  <AlertTriangle className="h-5 w-5" />
+                  Avukat incelemesi gerekli
+                </div>
+                {Array.isArray(result.reviewReasons) && result.reviewReasons.length > 0 && (
+                  <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-amber-800 dark:text-amber-200">
+                    {result.reviewReasons.map((reason, index) => (
+                      <li key={`${reason}-${index}`}>{reason}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </Card.Body>
+    </Card>
+  );
+};
+
+// ======================================================
 // AI DOSYA TAMAMLAMA PANELİ
 // ======================================================
 
@@ -1374,6 +1706,9 @@ const CaseDetail = () => {
   const [caseCompletion, setCaseCompletion] =
     useState(null);
 
+  const [caseQuestionAnalysis, setCaseQuestionAnalysis] =
+    useState(null);
+
   const [
     selectedMissingParties,
     setSelectedMissingParties,
@@ -1437,6 +1772,42 @@ const CaseDetail = () => {
       },
     });
 
+
+  const caseQuestionMutation =
+    useMutation({
+      mutationFn: (question) =>
+        aiApi.askCaseQuestion(
+          id,
+          question
+        ),
+
+      onSuccess: (response) => {
+        const result =
+          unwrapResponse(response);
+
+        setCaseQuestionAnalysis(result);
+
+        toast.success(
+          result?.cached
+            ? 'Kayıtlı dosya yanıtı getirildi'
+            : 'Dosya sorusu yanıtlandı'
+        );
+      },
+
+      onError: (error) => {
+        console.error(
+          'Case question error:',
+          error
+        );
+
+        toast.error(
+          getApiErrorMessage(
+            error,
+            'Dosya sorusu yanıtlanamadı'
+          )
+        );
+      },
+    });
 
   const caseCompletionMutation =
     useMutation({
@@ -1720,6 +2091,29 @@ const handleApplySelectedCaseUpdates = () => {
     });
   };
 
+
+  const handleCaseQuestion = (question) => {
+    if (!canUseAI) {
+      toast.error('AI kullanımı için yetkiniz bulunmuyor');
+      return;
+    }
+
+    if (!id) {
+      return;
+    }
+
+    const normalizedQuestion =
+      String(question || '').trim();
+
+    if (!normalizedQuestion) {
+      toast.error('Lütfen dosya hakkında bir soru yazın');
+      return;
+    }
+
+    caseQuestionMutation.mutate(
+      normalizedQuestion
+    );
+  };
 
   const handleCaseCompletion = (
     force = false
@@ -2307,6 +2701,14 @@ const handleApplySelectedCaseUpdates = () => {
             canCreateTasks={
               canCreateTasks
             }
+          />
+
+          <CaseQuestionPanel
+            analysis={caseQuestionAnalysis}
+            asking={caseQuestionMutation.isPending}
+            onAsk={handleCaseQuestion}
+            caseId={caseItem.id}
+            canCreateTasks={canCreateTasks}
           />
 
           <CaseCompletionAnalysis

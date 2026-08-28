@@ -179,7 +179,14 @@ router.post(
 
   aiController.analyzeCaseCompletion
 );
+// Dosyaya Sor
+router.post(
+  '/cases/:caseId/ask',
 
+  expensiveAiRateLimiter,
+
+  aiController.askCaseQuestion
+);
 // ======================================================
 // LEGAL RESEARCH
 // ======================================================

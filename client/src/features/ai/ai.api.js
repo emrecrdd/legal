@@ -35,6 +35,14 @@ analyzeCaseCompletion(
       data
     );
   },
+    askCaseQuestion(caseId, question) {
+    return axios.post(
+      `/ai/cases/${caseId}/ask`,
+      {
+        question,
+      }
+    );
+  },
 
   generateLegalResearch(data) {
     return axios.post('/ai/legal-research', data);
