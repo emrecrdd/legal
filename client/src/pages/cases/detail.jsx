@@ -1216,7 +1216,7 @@ const HearingPreparationPanel = ({
             <div className="flex items-center gap-2">
               <Gavel className="h-5 w-5 text-rose-600 dark:text-rose-400" />
               <h2 className="font-semibold text-gray-900 dark:text-white">
-                Duruşmaya Hazırla
+                Duruşma Hazırlık Brifi
               </h2>
             </div>
 
@@ -3063,6 +3063,29 @@ const upcomingHearings =
                   Dosyayı Tamamla
                 </Button>
               </>
+            )}
+
+            {canUseAI && upcomingHearings.length > 1 && (
+              <div className="min-w-[260px]">
+                <select
+                  value={selectedHearingId}
+                  disabled={hearingPreparationMutation.isPending}
+                  onChange={(event) => {
+                    setSelectedHearingId(event.target.value);
+                    setHearingPreparation(null);
+                  }}
+                  aria-label="Hazırlanacak duruşma"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                >
+                  <option value="">Hazırlanacak duruşmayı seçin</option>
+
+                  {upcomingHearings.map((event) => (
+                    <option key={event.id} value={event.id}>
+                      {event.title || 'Duruşma'} · {formatDateTime(event.start_date)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
 
             {canEditCase && (
