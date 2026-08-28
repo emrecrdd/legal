@@ -1177,6 +1177,7 @@ const HearingPreparationPanel = ({
   preparing,
   onRefresh,
   caseId,
+  clientId,
   canCreateTasks,
 }) => {
   if (!analysis) {
@@ -1488,9 +1489,10 @@ const HearingPreparationPanel = ({
                     {item.canCreateTask && canCreateTasks && (
                       <Link
                         to={`/tasks/create?${new URLSearchParams({
-                          source: 'ai_hearing_preparation',
-                          case_id: caseId || '',
-                          title: item.title || '',
+                         source: 'ai_hearing_preparation',
+case_id: caseId || '',
+client_id: clientId || '',
+title: item.title || '',
                           description: item.description || '',
                           priority: item.priority || 'normal',
                           note: 'Derkenar AI duruşma hazırlığı önerisinden oluşturuldu.',
@@ -3336,12 +3338,17 @@ const upcomingHearings =
           />
 
           <HearingPreparationPanel
-            analysis={hearingPreparation}
-            preparing={hearingPreparationMutation.isPending}
-            onRefresh={() => handleHearingPreparation(true)}
-            caseId={caseItem.id}
-            canCreateTasks={canCreateTasks}
-          />
+  analysis={hearingPreparation}
+  preparing={hearingPreparationMutation.isPending}
+  onRefresh={() => handleHearingPreparation(true)}
+  caseId={caseItem.id}
+  clientId={
+    caseItem.clients?.length === 1
+      ? caseItem.clients[0].id
+      : ''
+  }
+  canCreateTasks={canCreateTasks}
+/>
 
           <CaseCompletionAnalysis
             analysis={caseCompletion}

@@ -367,10 +367,7 @@ const TaskCreate = () => {
   // ====================================================
 
   const isAiPrefill =
-    searchParams.get(
-      'source'
-    ) ===
-    'ai';
+  (searchParams.get('source') || '').startsWith('ai');
 
   // ====================================================
   // QUERIES
