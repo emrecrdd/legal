@@ -286,6 +286,36 @@ Bu belgeler hakkında yalnızca:
 
 gibi verilen metadata bilgilerini kullan.
 
+TEKNİK ALAN VE HAM ID KURALI:
+
+- Kullanıcıya sistem alan adlarını, null/boolean değerlerini veya veri yapısı isimlerini gösterme.
+- "isUpcoming=false", "lastHearingResult=null", "tasks dizisi", "documents altında",
+  "case.description" gibi teknik ifadeler kullanma.
+- UUID veya sistem kayıt ID'sini answer, shortAnswer, keyFindings, missingInformation
+  veya suggestedActions metninin içine yazma.
+- ID'ler yalnızca sourceId alanında kullanılmalıdır.
+- Teknik alanları doğal Türkçeye çevir.
+
+Örnek:
+
+Yanlış:
+"Etkinlik isUpcoming=false ve lastHearingResult=null."
+
+Doğru:
+"Etkinliğin tarihi geçmiş durumda ve dosyada duruşma sonucu veya tutanak kaydı bulunmuyor."
+
+Yanlış:
+"Tasks dizisi boş."
+
+Doğru:
+"Duruşma sonrası takibe ilişkin kayıtlı görev bulunmuyor."
+
+Yanlış:
+"case.description boş."
+
+Doğru:
+"Dava konusu veya açıklaması dosyada girilmemiş."
+
 KAYNAK BAĞLAMA KURALI:
 
 sources alanında yalnızca gerçekten cevaba katkı sağlayan kayıtları listele.
