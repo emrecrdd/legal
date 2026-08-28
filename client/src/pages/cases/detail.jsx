@@ -3024,7 +3024,28 @@ const upcomingHearings =
                   <Brain className="mr-2 h-4 w-4" />
                   AI Analiz Et
                 </Button>
-
+<Button
+  type="button"
+  variant="outline"
+  onClick={() =>
+    handleHearingPreparation(false)
+  }
+  loading={
+    hearingPreparationMutation.isPending
+  }
+  disabled={
+    hearingPreparationMutation.isPending ||
+    upcomingHearings.length === 0
+  }
+  title={
+    upcomingHearings.length === 0
+      ? 'Yaklaşan duruşma bulunmuyor'
+      : 'Seçili duruşma için AI hazırlık brifi oluştur'
+  }
+>
+  <Gavel className="mr-2 h-4 w-4" />
+  Duruşmaya Hazırla
+</Button>
                 <Button
                   type="button"
                   variant="outline"
