@@ -36,17 +36,34 @@ analyzeCaseCompletion(
     );
   },
     askCaseQuestion(caseId, question) {
-    return axios.post(
-      `/ai/cases/${caseId}/ask`,
-      {
-        question,
-      }
-    );
-  },
+  return axios.post(
+    `/ai/cases/${caseId}/ask`,
+    {
+      question,
+    }
+  );
+},
 
-  generateLegalResearch(data) {
-    return axios.post('/ai/legal-research', data);
-  },
+prepareForHearing(
+  caseId,
+  eventId,
+  data = {}
+) {
+  return axios.post(
+    `/ai/cases/${caseId}/hearing-preparation`,
+    {
+      eventId,
+      ...data,
+    }
+  );
+},
+
+generateLegalResearch(data) {
+  return axios.post(
+    '/ai/legal-research',
+    data
+  );
+},
 
   extractEntities(text, documentId = null) {
     return axios.post('/ai/entities', {

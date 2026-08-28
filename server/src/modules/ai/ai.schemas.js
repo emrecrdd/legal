@@ -593,6 +593,441 @@ export const caseQuestionSchema = {
     'reviewReasons',
   ],
 };
+export const hearingPreparationSchema = {
+  type: 'object',
+  additionalProperties: false,
+
+  properties: {
+    hearingId: nullableString,
+
+    hearingTitle: nullableString,
+
+    hearingDate: nullableString,
+
+    shortBrief: {
+      type: 'string',
+      description:
+        'Avukatın duruşma öncesinde dosyanın durumunu hızlıca anlayabileceği kısa özet.',
+    },
+
+    caseStatus: {
+      type: 'string',
+      description:
+        'Dosyanın duruşma hazırlığı açısından mevcut durumunun kısa açıklaması.',
+    },
+
+    caseSummary: {
+      type: 'string',
+      description:
+        'Dava kaydı ve analiz edilmiş belgeler üzerinden oluşturulan duruşma odaklı dosya özeti.',
+    },
+
+    partiesAndPositions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          partyName: {
+            type: 'string',
+          },
+
+          role: nullableString,
+
+          position: {
+            type: 'string',
+            description:
+              'Yalnızca dosyada açıkça kayıtlı olan iddia, savunma veya taraf konumu.',
+          },
+
+          sourceType: {
+            anyOf: [
+              {
+                type: 'string',
+                enum: [
+                  'case',
+                  'document',
+                  'task',
+                  'event',
+                  'meeting',
+                  'note',
+                ],
+              },
+              {
+                type: 'null',
+              },
+            ],
+          },
+
+          sourceId: nullableString,
+        },
+
+        required: [
+          'partyName',
+          'role',
+          'position',
+          'sourceType',
+          'sourceId',
+        ],
+      },
+    },
+
+    claimsAndDefenses: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          type: {
+            type: 'string',
+            enum: [
+              'claim',
+              'defense',
+              'unknown',
+            ],
+          },
+
+          statement: {
+            type: 'string',
+          },
+
+          partyName: nullableString,
+
+          sourceType: {
+            anyOf: [
+              {
+                type: 'string',
+                enum: [
+                  'case',
+                  'document',
+                  'task',
+                  'event',
+                  'meeting',
+                  'note',
+                ],
+              },
+              {
+                type: 'null',
+              },
+            ],
+          },
+
+          sourceId: nullableString,
+        },
+
+        required: [
+          'type',
+          'statement',
+          'partyName',
+          'sourceType',
+          'sourceId',
+        ],
+      },
+    },
+
+    evidence: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          title: {
+            type: 'string',
+          },
+
+          assessment: {
+            type: 'string',
+            description:
+              'Delilin dosyadaki açık içeriğine göre kısa değerlendirmesi.',
+          },
+
+          importance: {
+            type: 'string',
+            enum: [
+              'low',
+              'medium',
+              'high',
+              'critical',
+            ],
+          },
+
+          sourceType: {
+            anyOf: [
+              {
+                type: 'string',
+                enum: [
+                  'case',
+                  'document',
+                  'task',
+                  'event',
+                  'meeting',
+                  'note',
+                ],
+              },
+              {
+                type: 'null',
+              },
+            ],
+          },
+
+          sourceId: nullableString,
+        },
+
+        required: [
+          'title',
+          'assessment',
+          'importance',
+          'sourceType',
+          'sourceId',
+        ],
+      },
+    },
+
+    hearingFocusPoints: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          point: {
+            type: 'string',
+          },
+
+          reason: {
+            type: 'string',
+          },
+
+          importance: {
+            type: 'string',
+            enum: [
+              'low',
+              'medium',
+              'high',
+              'critical',
+            ],
+          },
+
+          sourceType: {
+            anyOf: [
+              {
+                type: 'string',
+                enum: [
+                  'case',
+                  'document',
+                  'task',
+                  'event',
+                  'meeting',
+                  'note',
+                ],
+              },
+              {
+                type: 'null',
+              },
+            ],
+          },
+
+          sourceId: nullableString,
+        },
+
+        required: [
+          'point',
+          'reason',
+          'importance',
+          'sourceType',
+          'sourceId',
+        ],
+      },
+    },
+
+    missingInformation: stringArray,
+
+    preparationChecklist: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          title: {
+            type: 'string',
+          },
+
+          description: nullableString,
+
+          priority: {
+            type: 'string',
+            enum: [
+              'low',
+              'normal',
+              'high',
+              'critical',
+            ],
+          },
+
+          sourceType: {
+            anyOf: [
+              {
+                type: 'string',
+                enum: [
+                  'case',
+                  'document',
+                  'task',
+                  'event',
+                  'meeting',
+                  'note',
+                ],
+              },
+              {
+                type: 'null',
+              },
+            ],
+          },
+
+          sourceId: nullableString,
+
+          canCreateTask: {
+            type: 'boolean',
+          },
+        },
+
+        required: [
+          'title',
+          'description',
+          'priority',
+          'sourceType',
+          'sourceId',
+          'canCreateTask',
+        ],
+      },
+    },
+
+    criticalDates: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          date: {
+            type: 'string',
+          },
+
+          title: {
+            type: 'string',
+          },
+
+          description: nullableString,
+
+          sourceType: {
+            anyOf: [
+              {
+                type: 'string',
+                enum: [
+                  'case',
+                  'document',
+                  'task',
+                  'event',
+                  'meeting',
+                  'note',
+                ],
+              },
+              {
+                type: 'null',
+              },
+            ],
+          },
+
+          sourceId: nullableString,
+        },
+
+        required: [
+          'date',
+          'title',
+          'description',
+          'sourceType',
+          'sourceId',
+        ],
+      },
+    },
+
+    sources: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+
+        properties: {
+          sourceType: {
+            type: 'string',
+            enum: [
+              'case',
+              'document',
+              'task',
+              'event',
+              'meeting',
+              'note',
+            ],
+          },
+
+          sourceId: {
+            type: 'string',
+          },
+
+          title: {
+            type: 'string',
+          },
+
+          relevance: {
+            type: 'string',
+          },
+        },
+
+        required: [
+          'sourceType',
+          'sourceId',
+          'title',
+          'relevance',
+        ],
+      },
+    },
+
+    confidence: {
+      type: 'number',
+      minimum: 0,
+      maximum: 1,
+    },
+
+    requiresHumanReview: {
+      type: 'boolean',
+    },
+
+    reviewReasons: stringArray,
+  },
+
+  required: [
+    'hearingId',
+    'hearingTitle',
+    'hearingDate',
+    'shortBrief',
+    'caseStatus',
+    'caseSummary',
+    'partiesAndPositions',
+    'claimsAndDefenses',
+    'evidence',
+    'hearingFocusPoints',
+    'missingInformation',
+    'preparationChecklist',
+    'criticalDates',
+    'sources',
+    'confidence',
+    'requiresHumanReview',
+    'reviewReasons',
+  ],
+};
 export const caseSummarySchema = {
   type: 'object',
   additionalProperties: false,
@@ -1635,6 +2070,9 @@ export const AI_SCHEMAS = Object.freeze({
   caseSummary: caseSummarySchema,
   caseCompletion: caseCompletionSchema,
   caseQuestion: caseQuestionSchema,
+
+  hearingPreparation: hearingPreparationSchema,
+
   entityExtraction: entityExtractionSchema,
   legalResearch: legalResearchSchema,
   documentClassification: documentClassificationSchema,

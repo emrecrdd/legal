@@ -179,6 +179,7 @@ router.post(
 
   aiController.analyzeCaseCompletion
 );
+
 // Dosyaya Sor
 router.post(
   '/cases/:caseId/ask',
@@ -186,6 +187,15 @@ router.post(
   expensiveAiRateLimiter,
 
   aiController.askCaseQuestion
+);
+
+// Duruşmaya Hazırla
+router.post(
+  '/cases/:caseId/hearing-preparation',
+
+  expensiveAiRateLimiter,
+
+  aiController.prepareForHearing
 );
 // ======================================================
 // LEGAL RESEARCH

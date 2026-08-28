@@ -1167,6 +1167,444 @@ const CaseQuestionPanel = ({
   );
 };
 
+
+// ======================================================
+// DURUŞMAYA HAZIRLA
+// ======================================================
+
+const HearingPreparationPanel = ({
+  analysis,
+  preparing,
+  onRefresh,
+  caseId,
+  canCreateTasks,
+}) => {
+  if (!analysis) {
+    return null;
+  }
+
+  const result = analysis.result || analysis;
+
+  const renderSourceLink = (item) => {
+    const sourceLink = getCaseQuestionSourceLink(item, caseId);
+
+    if (!item?.sourceType || !item?.sourceId) {
+      return null;
+    }
+
+    return sourceLink ? (
+      <Link
+        to={sourceLink}
+        className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+      >
+        Kaynağı aç ·{' '}
+        {CASE_QUESTION_SOURCE_LABELS[item.sourceType] || 'Kaynak'}
+      </Link>
+    ) : (
+      <span className="text-xs text-gray-500">
+        Kaynak ·{' '}
+        {CASE_QUESTION_SOURCE_LABELS[item.sourceType] || 'Dosya kaydı'}
+      </span>
+    );
+  };
+
+  return (
+    <Card>
+      <Card.Header>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Gavel className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Duruşmaya Hazırla
+              </h2>
+            </div>
+
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Seçili duruşma için dosya kayıtları ve analiz edilmiş belgeler üzerinden hazırlık brifi.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {analysis.cached && (
+              <Badge variant="info">
+                Kayıtlı hazırlık
+              </Badge>
+            )}
+
+            {typeof result.confidence === 'number' && (
+              <Badge variant="default">
+                Güven %{Math.round(result.confidence * 100)}
+              </Badge>
+            )}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              loading={preparing}
+              disabled={preparing}
+              onClick={onRefresh}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Yeniden Hazırla
+            </Button>
+          </div>
+        </div>
+      </Card.Header>
+
+      <Card.Body className="space-y-6">
+        <section className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 dark:border-rose-900/50 dark:bg-rose-900/10">
+          <div className="flex items-start gap-3">
+            <CalendarDays className="mt-0.5 h-5 w-5 text-rose-600" />
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white">
+                {result.hearingTitle || 'Duruşma'}
+              </p>
+              {result.hearingDate && (
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                  {formatAIImportantDate(result.hearingDate)}
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {result.shortBrief && (
+          <section>
+            <h3 className="mb-2 font-semibold text-gray-900 dark:text-white">
+              Duruşma Özeti
+            </h3>
+            <p className="whitespace-pre-wrap text-sm leading-7 text-gray-700 dark:text-gray-300">
+              {result.shortBrief}
+            </p>
+          </section>
+        )}
+
+        {(result.caseStatus || result.caseSummary) && (
+          <section>
+            <h3 className="mb-2 font-semibold text-gray-900 dark:text-white">
+              Dosyanın Mevcut Durumu
+            </h3>
+            <div className="rounded-xl bg-gray-50 p-4 dark:bg-gray-800">
+              {result.caseStatus && (
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  {result.caseStatus}
+                </p>
+              )}
+              {result.caseSummary && (
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-gray-600 dark:text-gray-300">
+                  {result.caseSummary}
+                </p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {Array.isArray(result.partiesAndPositions) && result.partiesAndPositions.length > 0 && (
+          <section>
+            <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+              Taraflar ve Pozisyonlar
+            </h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              {result.partiesAndPositions.map((party, index) => (
+                <div
+                  key={`${party.partyName}-${index}`}
+                  className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {party.partyName}
+                    </p>
+                    {party.role && <Badge variant="default">{party.role}</Badge>}
+                  </div>
+                  {party.position && (
+                    <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                      {party.position}
+                    </p>
+                  )}
+                  <div className="mt-3">{renderSourceLink(party)}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {Array.isArray(result.claimsAndDefenses) && result.claimsAndDefenses.length > 0 && (
+          <section>
+            <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+              İddia ve Savunmalar
+            </h3>
+            <div className="space-y-3">
+              {result.claimsAndDefenses.map((item, index) => (
+                <div
+                  key={`${item.statement}-${index}`}
+                  className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant={
+                        item.type === 'claim'
+                          ? 'warning'
+                          : item.type === 'defense'
+                            ? 'info'
+                            : 'default'
+                      }
+                    >
+                      {item.type === 'claim'
+                        ? 'İddia'
+                        : item.type === 'defense'
+                          ? 'Savunma'
+                          : 'Belirsiz'}
+                    </Badge>
+                    {item.partyName && (
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {item.partyName}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300">
+                    {item.statement}
+                  </p>
+                  <div className="mt-3">{renderSourceLink(item)}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {Array.isArray(result.evidence) && result.evidence.length > 0 && (
+          <section>
+            <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+              Önemli Deliller
+            </h3>
+            <div className="space-y-3">
+              {result.evidence.map((item, index) => (
+                <div
+                  key={`${item.title}-${index}`}
+                  className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {item.title}
+                    </p>
+                    <Badge variant={getRiskBadgeVariant(item.importance)}>
+                      {RISK_LABELS[item.importance] || item.importance || 'Belirsiz'}
+                    </Badge>
+                  </div>
+                  {item.assessment && (
+                    <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                      {item.assessment}
+                    </p>
+                  )}
+                  <div className="mt-3">{renderSourceLink(item)}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {Array.isArray(result.hearingFocusPoints) && result.hearingFocusPoints.length > 0 && (
+          <section>
+            <div className="mb-3 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              <h3 className="font-semibold text-gray-900 dark:text-white">
+                Duruşmada Dikkat Edilecekler
+              </h3>
+            </div>
+            <div className="space-y-3">
+              {result.hearingFocusPoints.map((item, index) => (
+                <div
+                  key={`${item.point}-${index}`}
+                  className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-800 dark:bg-amber-900/10"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="font-medium text-amber-950 dark:text-amber-100">
+                      {item.point}
+                    </p>
+                    <Badge variant={getRiskBadgeVariant(item.importance)}>
+                      {RISK_LABELS[item.importance] || item.importance || 'Belirsiz'}
+                    </Badge>
+                  </div>
+                  {item.reason && (
+                    <p className="mt-2 text-sm leading-6 text-amber-900 dark:text-amber-200">
+                      {item.reason}
+                    </p>
+                  )}
+                  <div className="mt-3">{renderSourceLink(item)}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {Array.isArray(result.missingInformation) && result.missingInformation.length > 0 && (
+          <section>
+            <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+              Eksik Bilgi / Belgeler
+            </h3>
+            <ul className="space-y-2">
+              {result.missingInformation.map((item, index) => (
+                <li
+                  key={`${item}-${index}`}
+                  className="rounded-lg bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900 dark:bg-amber-900/20 dark:text-amber-200"
+                >
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {Array.isArray(result.preparationChecklist) && result.preparationChecklist.length > 0 && (
+          <section>
+            <div className="mb-3 flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              <h3 className="font-semibold text-gray-900 dark:text-white">
+                Hazırlık Kontrol Listesi
+              </h3>
+            </div>
+            <div className="space-y-3">
+              {result.preparationChecklist.map((item, index) => (
+                <div
+                  key={`${item.title}-${index}`}
+                  className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {item.title}
+                    </p>
+                    <Badge variant={getActionPriorityVariant(item.priority)}>
+                      {ACTION_PRIORITY_LABELS[item.priority] || item.priority || 'Normal'}
+                    </Badge>
+                  </div>
+                  {item.description && (
+                    <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                      {item.description}
+                    </p>
+                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    {renderSourceLink(item)}
+                    {item.canCreateTask && canCreateTasks && (
+                      <Link
+                        to={`/tasks/create?${new URLSearchParams({
+                          source: 'ai_hearing_preparation',
+                          case_id: caseId || '',
+                          title: item.title || '',
+                          description: item.description || '',
+                          priority: item.priority || 'normal',
+                          note: 'Derkenar AI duruşma hazırlığı önerisinden oluşturuldu.',
+                        }).toString()}`}
+                      >
+                        <Button type="button" size="sm" variant="outline">
+                          <Sparkles className="mr-2 h-4 w-4" />
+                          Görev Oluştur
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {Array.isArray(result.criticalDates) && result.criticalDates.length > 0 && (
+          <section>
+            <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+              Kritik Tarihler
+            </h3>
+            <div className="space-y-2">
+              {result.criticalDates.map((item, index) => (
+                <div
+                  key={`${item.date}-${item.title}-${index}`}
+                  className="rounded-xl bg-gray-50 p-4 dark:bg-gray-800"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {item.title}
+                      </p>
+                      {item.description && (
+                        <p className="mt-1 text-sm text-gray-500">
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {formatAIImportantDate(item.date)}
+                    </p>
+                  </div>
+                  <div className="mt-2">{renderSourceLink(item)}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {Array.isArray(result.sources) && result.sources.length > 0 && (
+          <section>
+            <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+              Kullanılan Kaynaklar
+            </h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              {result.sources.map((source, index) => {
+                const sourceLink = getCaseQuestionSourceLink(source, caseId);
+                const content = (
+                  <div className="rounded-xl border border-gray-200 p-3 transition hover:border-blue-300 dark:border-gray-700 dark:hover:border-blue-500/40">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
+                        {source.title || 'Kaynak'}
+                      </p>
+                      <span className="shrink-0 text-xs text-gray-400">
+                        {CASE_QUESTION_SOURCE_LABELS[source.sourceType] || source.sourceType}
+                      </span>
+                    </div>
+                    {source.relevance && (
+                      <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                        {source.relevance}
+                      </p>
+                    )}
+                  </div>
+                );
+
+                return sourceLink ? (
+                  <Link
+                    key={`${source.sourceType}-${source.sourceId}-${index}`}
+                    to={sourceLink}
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <div key={`${source.sourceType}-${source.sourceId}-${index}`}>
+                    {content}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {result.requiresHumanReview && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
+            <div className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
+              <AlertTriangle className="h-5 w-5" />
+              Avukat incelemesi gerekli
+            </div>
+            {Array.isArray(result.reviewReasons) && result.reviewReasons.length > 0 && (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-amber-800 dark:text-amber-200">
+                {result.reviewReasons.map((reason, index) => (
+                  <li key={`${reason}-${index}`}>{reason}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </Card.Body>
+    </Card>
+  );
+};
+
 // ======================================================
 // AI DOSYA TAMAMLAMA PANELİ
 // ======================================================
@@ -1708,7 +2146,15 @@ const CaseDetail = () => {
 
   const [caseQuestionAnalysis, setCaseQuestionAnalysis] =
     useState(null);
+const [
+  hearingPreparation,
+  setHearingPreparation,
+] = useState(null);
 
+const [
+  selectedHearingId,
+  setSelectedHearingId,
+] = useState('');
   const [
     selectedMissingParties,
     setSelectedMissingParties,
@@ -1808,7 +2254,47 @@ const CaseDetail = () => {
         );
       },
     });
+const hearingPreparationMutation =
+  useMutation({
+    mutationFn: ({
+      eventId,
+      force = false,
+    }) =>
+      aiApi.prepareForHearing(
+        id,
+        eventId,
+        {
+          force,
+        }
+      ),
 
+    onSuccess: (response) => {
+      const result =
+        unwrapResponse(response);
+
+      setHearingPreparation(result);
+
+      toast.success(
+        result?.cached
+          ? 'Kayıtlı duruşma hazırlığı getirildi'
+          : 'Duruşma hazırlığı oluşturuldu'
+      );
+    },
+
+    onError: (error) => {
+      console.error(
+        'Hearing preparation error:',
+        error
+      );
+
+      toast.error(
+        getApiErrorMessage(
+          error,
+          'Duruşma hazırlığı oluşturulamadı'
+        )
+      );
+    },
+  });
   const caseCompletionMutation =
     useMutation({
       mutationFn: ({
@@ -2066,7 +2552,36 @@ const handleApplySelectedCaseUpdates = () => {
 
   applyCaseUpdatesMutation.mutate(selected);
 };
+const upcomingHearings =
+  Array.isArray(caseItem?.events)
+    ? caseItem.events
+        .filter((event) => {
+          if (!event?.id || !event?.start_date) {
+            return false;
+          }
 
+          const startDate =
+            new Date(event.start_date);
+
+          if (
+            Number.isNaN(
+              startDate.getTime()
+            )
+          ) {
+            return false;
+          }
+
+          return (
+            startDate.getTime() >
+            Date.now()
+          );
+        })
+        .sort(
+          (a, b) =>
+            new Date(a.start_date).getTime() -
+            new Date(b.start_date).getTime()
+        )
+    : [];
   const aiAnalysis =
     aiSummaryMutation.data
       ? unwrapResponse(
@@ -2114,6 +2629,71 @@ const handleApplySelectedCaseUpdates = () => {
       normalizedQuestion
     );
   };
+  const handleHearingPreparation = (
+  force = false
+) => {
+  if (!canUseAI) {
+    toast.error(
+      'AI kullanımı için yetkiniz bulunmuyor'
+    );
+    return;
+  }
+
+  if (!id) {
+    return;
+  }
+
+  if (
+    upcomingHearings.length === 0
+  ) {
+    toast.error(
+      'Bu dosyada yaklaşan duruşma bulunmuyor'
+    );
+    return;
+  }
+
+  let eventId =
+    selectedHearingId;
+
+  if (
+    upcomingHearings.length === 1
+  ) {
+    eventId =
+      upcomingHearings[0].id;
+
+    setSelectedHearingId(
+      eventId
+    );
+  }
+
+  if (!eventId) {
+    toast.error(
+      'Hazırlanacak duruşmayı seçin'
+    );
+    return;
+  }
+
+  const exists =
+    upcomingHearings.some(
+      (event) =>
+        event.id === eventId
+    );
+
+  if (!exists) {
+    setSelectedHearingId('');
+
+    toast.error(
+      'Seçilen duruşma artık yaklaşan duruşmalar arasında bulunmuyor'
+    );
+
+    return;
+  }
+
+  hearingPreparationMutation.mutate({
+    eventId,
+    force,
+  });
+};
 
   const handleCaseCompletion = (
     force = false
@@ -2707,6 +3287,14 @@ const handleApplySelectedCaseUpdates = () => {
             analysis={caseQuestionAnalysis}
             asking={caseQuestionMutation.isPending}
             onAsk={handleCaseQuestion}
+            caseId={caseItem.id}
+            canCreateTasks={canCreateTasks}
+          />
+
+          <HearingPreparationPanel
+            analysis={hearingPreparation}
+            preparing={hearingPreparationMutation.isPending}
+            onRefresh={() => handleHearingPreparation(true)}
             caseId={caseItem.id}
             canCreateTasks={canCreateTasks}
           />

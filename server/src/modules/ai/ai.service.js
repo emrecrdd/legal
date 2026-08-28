@@ -26,6 +26,7 @@ import {
   caseCompletionSchema,
   caseQuestionSchema,
   caseSummarySchema,
+  hearingPreparationSchema,
   documentAnalysisSchema,
   documentClassificationSchema,
   draftGenerationSchema,
@@ -37,6 +38,7 @@ import {
   CASE_COMPLETION_PROMPT,
   CASE_QUESTION_PROMPT,
   CASE_SUMMARY_PROMPT,
+  HEARING_PREPARATION_PROMPT,
   DOCUMENT_ANALYSIS_PROMPT,
   DOCUMENT_CLASSIFICATION_PROMPT,
   ENTITY_EXTRACTION_PROMPT,
@@ -44,6 +46,7 @@ import {
   buildCaseCompletionInput,
   buildCaseQuestionInput,
   buildCaseSummaryInput,
+  buildHearingPreparationInput,
   buildDraftInput,
   buildEntityExtractionInput,
   buildLegalResearchInput,
@@ -70,6 +73,9 @@ const ANALYSIS_TYPES = Object.freeze({
   CASE_SUMMARY: 'case_summary',
   CASE_QUESTION: 'case_question',
   CASE_COMPLETION: 'case_completion',
+
+  HEARING_PREPARATION: 'hearing_preparation',
+
   LEGAL_RESEARCH: 'legal_research',
   DRAFT_GENERATION: 'draft_generation',
 });
@@ -1030,6 +1036,306 @@ async analyzeCaseCompletion({
       );
     }
   }
+  /**
+ * Seçili yaklaşan duruşma için dava bağlamından
+ * yapılandırılmış duruşma hazırlık özeti oluşturur.
+ */
+async prepareForHearing({
+  caseId,
+  eventId,
+  userId: legacyUserId = null,
+  actor = null,
+  force = false,
+}) {
+  this.validateUuidLike(caseId, 'caseId');
+  this.validateUuidLike(eventId, 'eventId');
+
+  const actorContext =
+    await this.resolveActorContext({
+      actor,
+      userId: legacyUserId,
+    });
+
+  const userId =
+    requireActorId(actorContext);
+
+  /*
+   * Dava erişim kontrolü burada da merkezi context
+   * sorgusu üzerinden uygulanır.
+   */
+  const caseRecord =
+    await this.getCaseWithContext(
+      caseId,
+      actorContext
+    );
+
+  const casePayload =
+    this.prepareCasePayload(
+      caseRecord
+    );
+
+  /*
+   * eventId doğrudan kullanıcıdan geliyor.
+   * Bu nedenle yalnızca bu davanın context'inde gerçekten
+   * bulunan event kayıtları arasından seçiyoruz.
+   */
+  const targetHearing =
+    (casePayload.events || []).find(
+      (event) => event.id === eventId
+    );
+
+  if (!targetHearing) {
+    throw new AIServiceError(
+      'Duruşma kaydı bulunamadı.',
+      {
+        code: 'HEARING_NOT_FOUND',
+        statusCode: 404,
+      }
+    );
+  }
+
+  /*
+   * Duruşmaya Hazırla gelecekteki bir duruşma için çalışır.
+   *
+   * Tarihi geçmiş bir event hâlâ "planlandı" görünse bile
+   * bunu yaklaşan duruşma olarak kabul etmiyoruz.
+   */
+  if (!targetHearing.isUpcoming) {
+    throw new AIServiceError(
+      'Duruşmaya hazırlık yalnızca yaklaşan duruşmalar için oluşturulabilir.',
+      {
+        code: 'HEARING_NOT_UPCOMING',
+        statusCode: 422,
+      }
+    );
+  }
+
+  /*
+   * Prompt'a selected hearing ayrıca gönderiliyor.
+   * Böylece model birden fazla event varsa hangi duruşmaya
+   * hazırlanacağını kendisi tahmin etmiyor.
+   */
+  const input =
+    buildHearingPreparationInput({
+      caseData: casePayload,
+      targetHearing,
+    });
+
+  /*
+   * eventId ve event içeriği input içinde bulunduğu için
+   * farklı duruşmalar farklı cache hash'i üretir.
+   *
+   * Dava bağlamı değişirse de hash değişir.
+   */
+  const inputHash =
+    this.createInputHash({
+      text: input,
+      operation:
+        ANALYSIS_TYPES.HEARING_PREPARATION,
+      promptVersion:
+        PROMPT_VERSION,
+    });
+
+  if (!force) {
+    const cached =
+      await this.findCachedAnalysis({
+        analysisType:
+          ANALYSIS_TYPES.HEARING_PREPARATION,
+
+        caseId,
+        userId,
+        inputHash,
+      });
+
+    if (cached) {
+      return this.formatAnalysisResponse(
+        cached,
+        true
+      );
+    }
+  }
+
+  const analysis =
+    await this.createPendingAnalysis({
+      analysisType:
+        ANALYSIS_TYPES.HEARING_PREPARATION,
+
+      caseId,
+      userId,
+      inputHash,
+
+      metadata: {
+        caseTitle:
+          caseRecord.title ||
+          caseRecord.case_number ||
+          null,
+
+        hearingId:
+          targetHearing.id,
+
+        hearingTitle:
+          targetHearing.title ||
+          null,
+
+        hearingDate:
+          targetHearing.startDate ||
+          null,
+
+        documentCount:
+          casePayload.documents
+            ?.length || 0,
+
+        analyzedDocumentCount:
+          casePayload
+            .documentContext
+            ?.analyzedDocuments || 0,
+
+        unanalyzedDocumentCount:
+          casePayload
+            .documentContext
+            ?.unanalyzedDocuments || 0,
+      },
+    });
+
+  try {
+    const providerResult =
+      await aiProvider
+        .createStructuredResponse({
+          instructions:
+            HEARING_PREPARATION_PROMPT,
+
+          input,
+
+          schemaName:
+            'legal_hearing_preparation',
+
+          schema:
+            hearingPreparationSchema,
+
+          schemaDescription:
+            'Seçili yaklaşan duruşma için dava kayıtları ve analiz edilmiş belgelere dayalı yapılandırılmış duruşma hazırlık özeti.',
+
+          maxOutputTokens:
+            12_000,
+
+          metadata: {
+            operation:
+              ANALYSIS_TYPES
+                .HEARING_PREPARATION,
+
+            analysisId:
+              analysis.id,
+
+            caseId,
+            eventId:
+              targetHearing.id,
+
+            userId,
+          },
+        });
+
+    /*
+     * Modelin döndürdüğü ID'lere güvenmiyoruz.
+     * Yalnızca gerçek dava context'indeki kaynakları
+     * kabul ediyoruz.
+     */
+    const sanitizedOutput =
+      this.sanitizeHearingPreparationSources(
+        providerResult.output,
+        casePayload,
+        targetHearing
+      );
+
+    /*
+     * Duruşma kimliğini ve temel bilgisini
+     * modelin ürettiği değerlerden değil backend'deki
+     * gerçek event kaydından sabitliyoruz.
+     */
+    const finalOutput = {
+      ...sanitizedOutput,
+
+      hearingId:
+        targetHearing.id,
+
+      hearingTitle:
+        targetHearing.title ||
+        'Duruşma',
+
+      hearingDate:
+        targetHearing.startDate ||
+        null,
+    };
+
+    const sanitizedProviderResult = {
+      ...providerResult,
+      output: finalOutput,
+    };
+
+    await this.completeAnalysis({
+      analysis,
+
+      providerResult:
+        sanitizedProviderResult,
+
+      confidence:
+        finalOutput.confidence,
+    });
+
+    logger.info(
+      'AI duruşma hazırlığı oluşturuldu',
+      {
+        analysisId:
+          analysis.id,
+
+        caseId,
+
+        eventId:
+          targetHearing.id,
+
+        userId,
+
+        model:
+          providerResult.model,
+
+        sourceCount:
+          finalOutput.sources
+            ?.length || 0,
+
+        focusPointCount:
+          finalOutput
+            .hearingFocusPoints
+            ?.length || 0,
+
+        checklistCount:
+          finalOutput
+            .preparationChecklist
+            ?.length || 0,
+
+        evidenceCount:
+          finalOutput.evidence
+            ?.length || 0,
+
+        durationMs:
+          providerResult.durationMs,
+      }
+    );
+
+    return this.formatAnalysisResponse(
+      analysis,
+      false
+    );
+  } catch (error) {
+    await this.failAnalysis(
+      analysis,
+      error
+    );
+
+    throw this.normalizeServiceError(
+      error,
+      'Duruşma hazırlığı oluşturulamadı.'
+    );
+  }
+}
   /**
    * Hukuki soru hakkında kaynak doğrulaması gerektiren
    * bir ön değerlendirme oluşturur.
@@ -2135,7 +2441,293 @@ prepareCasePayload(caseRecord) {
       suggestedActions,
     };
   }
+sanitizeHearingPreparationSources(
+  output,
+  casePayload,
+  targetHearing
+) {
+  if (
+    !output ||
+    typeof output !== 'object'
+  ) {
+    return output;
+  }
 
+  const registry = new Map();
+
+  const register = (
+    sourceType,
+    sourceId,
+    title
+  ) => {
+    if (!sourceId) return;
+
+    registry.set(
+      `${sourceType}:${sourceId}`,
+      {
+        sourceType,
+        sourceId,
+        title:
+          title ||
+          'Kaynak',
+      }
+    );
+  };
+
+  /*
+   * Dava kaydı
+   */
+  register(
+    'case',
+    casePayload.id,
+    casePayload.courtName &&
+      casePayload.caseNumber
+      ? `${casePayload.courtName} · ${casePayload.caseNumber}`
+      : casePayload.title ||
+        casePayload.caseNumber ||
+        'Dava Kaydı'
+  );
+
+  /*
+   * Belgeler
+   */
+  for (
+    const document of
+    casePayload.documents || []
+  ) {
+    register(
+      'document',
+      document.id,
+      document.originalName ||
+        document.name ||
+        'Belge'
+    );
+  }
+
+  /*
+   * Görevler
+   */
+  for (
+    const task of
+    casePayload.tasks || []
+  ) {
+    register(
+      'task',
+      task.id,
+      task.title ||
+        'Görev'
+    );
+  }
+
+  /*
+   * Etkinlik / duruşmalar
+   */
+  for (
+    const event of
+    casePayload.events || []
+  ) {
+    register(
+      'event',
+      event.id,
+      event.title ||
+        'Duruşma / Etkinlik'
+    );
+  }
+
+  /*
+   * Toplantılar
+   */
+  for (
+    const meeting of
+    casePayload.meetings || []
+  ) {
+    register(
+      'meeting',
+      meeting.id,
+      meeting.title ||
+        'Toplantı'
+    );
+  }
+
+  /*
+   * Dosya notları.
+   * İçeriği kaynak kartı başlığı olarak göstermiyoruz.
+   */
+  for (
+    const note of
+    casePayload.notes || []
+  ) {
+    register(
+      'note',
+      note.id,
+      'Dosya Notu'
+    );
+  }
+
+  const resolveSource = (
+    sourceType,
+    sourceId
+  ) => {
+    if (
+      !sourceType ||
+      !sourceId
+    ) {
+      return null;
+    }
+
+    return (
+      registry.get(
+        `${sourceType}:${sourceId}`
+      ) || null
+    );
+  };
+
+  /*
+   * sourceType/sourceId kullanan herhangi bir array'i
+   * güvenli hale getiren ortak yardımcı.
+   */
+  const sanitizeReferencedItems = (
+    value
+  ) => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value.map((item) => {
+      const valid =
+        resolveSource(
+          item?.sourceType,
+          item?.sourceId
+        );
+
+      return {
+        ...item,
+
+        sourceType:
+          valid?.sourceType ||
+          null,
+
+        sourceId:
+          valid?.sourceId ||
+          null,
+      };
+    });
+  };
+
+  /*
+   * Ana sources listesinde uydurma ve tekrar eden
+   * kaynakları tamamen kaldırıyoruz.
+   */
+  const seenSources =
+    new Set();
+
+  const sources = (
+    Array.isArray(output.sources)
+      ? output.sources
+      : []
+  )
+    .map((source) => {
+      const valid =
+        resolveSource(
+          source?.sourceType,
+          source?.sourceId
+        );
+
+      if (!valid) {
+        return null;
+      }
+
+      const key =
+        `${valid.sourceType}:${valid.sourceId}`;
+
+      if (seenSources.has(key)) {
+        return null;
+      }
+
+      seenSources.add(key);
+
+      return {
+        sourceType:
+          valid.sourceType,
+
+        sourceId:
+          valid.sourceId,
+
+        /*
+         * Kaynak kartı başlığında modelin ürettiği
+         * başlığa güvenmiyoruz.
+         */
+        title:
+          valid.title,
+
+        relevance:
+          typeof source?.relevance ===
+          'string'
+            ? source.relevance
+            : '',
+      };
+    })
+    .filter(Boolean);
+
+  /*
+   * Selected hearing gerçek event olmak zorunda.
+   * Model farklı bir hearingId üretse bile dışarı çıkmaz.
+   */
+  const realHearing =
+    resolveSource(
+      'event',
+      targetHearing?.id
+    );
+
+  return {
+    ...output,
+
+    hearingId:
+      realHearing?.sourceId ||
+      targetHearing?.id ||
+      null,
+
+    hearingTitle:
+      targetHearing?.title ||
+      'Duruşma',
+
+    hearingDate:
+      targetHearing?.startDate ||
+      null,
+
+    partiesAndPositions:
+      sanitizeReferencedItems(
+        output.partiesAndPositions
+      ),
+
+    claimsAndDefenses:
+      sanitizeReferencedItems(
+        output.claimsAndDefenses
+      ),
+
+    evidence:
+      sanitizeReferencedItems(
+        output.evidence
+      ),
+
+    hearingFocusPoints:
+      sanitizeReferencedItems(
+        output.hearingFocusPoints
+      ),
+
+    preparationChecklist:
+      sanitizeReferencedItems(
+        output.preparationChecklist
+      ),
+
+    criticalDates:
+      sanitizeReferencedItems(
+        output.criticalDates
+      ),
+
+    sources,
+  };
+}
   async resolveActorContext({ actor = null, userId = null } = {}) {
     if (actor?.id) {
       this.validateUuidLike(actor.id, 'userId');

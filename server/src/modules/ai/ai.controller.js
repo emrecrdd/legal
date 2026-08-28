@@ -566,6 +566,107 @@ async analyzeCaseCompletion(req, res) {
       );
     }
   },
+    /**
+   * Seçili yaklaşan duruşma için
+   * AI duruşma hazırlığı oluşturur.
+   *
+   * POST /ai/cases/:caseId/hearing-preparation
+   * body: {
+   *   eventId: string,
+   *   force?: boolean
+   * }
+   */
+  async prepareForHearing(req, res) {
+    try {
+      const { caseId } = req.params;
+
+      const {
+        eventId,
+      } = req.body || {};
+
+      const force =
+        parseBoolean(
+          req.body?.force ??
+            req.query?.force,
+          false
+        );
+
+      const result =
+        await aiService.prepareForHearing({
+          caseId,
+          eventId,
+          actor: req.user,
+          force,
+        });
+
+      await createAuditLogSafely({
+        req,
+
+        action: 'create',
+
+        entityType:
+          'ai_analysis',
+
+        entityId:
+          result.id,
+
+        description:
+          result.cached
+            ? 'Kayıtlı AI duruşma hazırlığı görüntülendi'
+            : 'AI duruşma hazırlığı oluşturuldu',
+
+        metadata: {
+          analysisType:
+            result.type,
+
+          caseId,
+
+          eventId,
+
+          cached:
+            result.cached,
+
+          model:
+            result.model,
+
+          confidence:
+            result.confidence ??
+            null,
+
+          totalTokens:
+            result.usage
+              ?.totalTokens || 0,
+
+          durationMs:
+            result.durationMs ||
+            null,
+
+          promptVersion:
+            result.promptVersion ||
+            null,
+        },
+      });
+
+      return successResponse(
+        res,
+        result,
+
+        result.cached
+          ? 'Kayıtlı duruşma hazırlığı getirildi'
+          : 'Duruşma hazırlığı oluşturuldu',
+
+        result.cached
+          ? 200
+          : 201
+      );
+    } catch (error) {
+      return handleControllerError(
+        res,
+        error,
+        'prepareForHearing'
+      );
+    }
+  },
   /**
    * Hukuki soru için avukat
    * kontrolüne tabi ön değerlendirme
