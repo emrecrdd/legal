@@ -84,6 +84,7 @@ class AIAnalysis extends Sequelize.Model {
               'entity_extraction',
               'case_summary',
               'case_completion',
+               'case_question',
               'legal_research',
               'draft_generation',
               'sentiment_analysis'
