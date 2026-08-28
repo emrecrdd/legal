@@ -1115,12 +1115,66 @@ async prepareForHearing({
    * Böylece model birden fazla event varsa hangi duruşmaya
    * hazırlanacağını kendisi tahmin etmiyor.
    */
-  const input =
-    buildHearingPreparationInput({
-      caseData: casePayload,
-      targetHearing,
-    });
+  const aiCasePayload = {
+  ...casePayload,
 
+  events: (casePayload.events || []).map(
+    (event) => ({
+      ...event,
+      startDate: this.formatDateTimeForAI(
+        event.startDate
+      ),
+      endDate: this.formatDateTimeForAI(
+        event.endDate
+      ),
+    })
+  ),
+
+  meetings: (casePayload.meetings || []).map(
+    (meeting) => ({
+      ...meeting,
+      startDate: this.formatDateTimeForAI(
+        meeting.startDate
+      ),
+      endDate: this.formatDateTimeForAI(
+        meeting.endDate
+      ),
+    })
+  ),
+
+  tasks: (casePayload.tasks || []).map(
+    (task) => ({
+      ...task,
+      dueDate: this.formatDateTimeForAI(
+        task.dueDate
+      ),
+      completedAt: this.formatDateTimeForAI(
+        task.completedAt
+      ),
+      startedAt: this.formatDateTimeForAI(
+        task.startedAt
+      ),
+    })
+  ),
+};
+
+const aiTargetHearing = {
+  ...targetHearing,
+
+  startDate: this.formatDateTimeForAI(
+    targetHearing.startDate
+  ),
+
+  endDate: this.formatDateTimeForAI(
+    targetHearing.endDate
+  ),
+};
+
+const input =
+  buildHearingPreparationInput({
+    caseData: aiCasePayload,
+    targetHearing: aiTargetHearing,
+  });
   /*
    * eventId ve event içeriği input içinde bulunduğu için
    * farklı duruşmalar farklı cache hash'i üretir.
@@ -1910,7 +1964,48 @@ async prepareForHearing({
 
   return caseRecord;
 }
+formatDateTimeForAI(value) {
+  if (!value) {
+    return null;
+  }
 
+  if (
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    return value;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  const parts = new Intl.DateTimeFormat(
+    'en-CA',
+    {
+      timeZone: 'Europe/Istanbul',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }
+  ).formatToParts(date);
+
+  const get = (type) =>
+    parts.find(
+      (part) => part.type === type
+    )?.value;
+
+  return (
+    `${get('year')}-${get('month')}-${get('day')}` +
+    `T${get('hour')}:${get('minute')}:${get('second')}+03:00`
+  );
+}
 prepareCasePayload(caseRecord) {
   const rawData =
     typeof caseRecord.toJSON === 'function'
@@ -2474,9 +2569,6 @@ sanitizeHearingPreparationSources(
     );
   };
 
-  /*
-   * Dava kaydı
-   */
   register(
     'case',
     casePayload.id,
@@ -2488,9 +2580,6 @@ sanitizeHearingPreparationSources(
         'Dava Kaydı'
   );
 
-  /*
-   * Belgeler
-   */
   for (
     const document of
     casePayload.documents || []
@@ -2504,9 +2593,6 @@ sanitizeHearingPreparationSources(
     );
   }
 
-  /*
-   * Görevler
-   */
   for (
     const task of
     casePayload.tasks || []
@@ -2519,9 +2605,6 @@ sanitizeHearingPreparationSources(
     );
   }
 
-  /*
-   * Etkinlik / duruşmalar
-   */
   for (
     const event of
     casePayload.events || []
@@ -2534,9 +2617,6 @@ sanitizeHearingPreparationSources(
     );
   }
 
-  /*
-   * Toplantılar
-   */
   for (
     const meeting of
     casePayload.meetings || []
@@ -2549,10 +2629,6 @@ sanitizeHearingPreparationSources(
     );
   }
 
-  /*
-   * Dosya notları.
-   * İçeriği kaynak kartı başlığı olarak göstermiyoruz.
-   */
   for (
     const note of
     casePayload.notes || []
@@ -2582,10 +2658,6 @@ sanitizeHearingPreparationSources(
     );
   };
 
-  /*
-   * sourceType/sourceId kullanan herhangi bir array'i
-   * güvenli hale getiren ortak yardımcı.
-   */
   const sanitizeReferencedItems = (
     value
   ) => {
@@ -2614,10 +2686,178 @@ sanitizeHearingPreparationSources(
     });
   };
 
+  const partiesAndPositions =
+    sanitizeReferencedItems(
+      output.partiesAndPositions
+    );
+
+  const claimsAndDefenses =
+    sanitizeReferencedItems(
+      output.claimsAndDefenses
+    );
+
+  const evidence =
+    sanitizeReferencedItems(
+      output.evidence
+    );
+
+  const hearingFocusPoints =
+    sanitizeReferencedItems(
+      output.hearingFocusPoints
+    );
+
+  const preparationChecklist =
+    sanitizeReferencedItems(
+      output.preparationChecklist
+    );
+
   /*
-   * Ana sources listesinde uydurma ve tekrar eden
-   * kaynakları tamamen kaldırıyoruz.
+   * Hedef duruşmanın bitiş bilgisini kritik tarih
+   * olarak dışarı çıkarmıyoruz.
+   *
+   * Model "bitiş", "end", "son tarih" gibi bir madde
+   * üretse dahi hedef event'in endDate değerine
+   * dayanıyorsa filtrelenir.
    */
+  const normalizedTargetEndDate =
+    targetHearing?.endDate
+      ? new Date(
+          targetHearing.endDate
+        ).getTime()
+      : null;
+
+  const criticalDates =
+    sanitizeReferencedItems(
+      output.criticalDates
+    ).filter((item) => {
+      if (
+        item?.sourceType !==
+          'event' ||
+        item?.sourceId !==
+          targetHearing?.id
+      ) {
+        return true;
+      }
+
+      const itemDate =
+        item?.date
+          ? new Date(
+              item.date
+            ).getTime()
+          : null;
+
+      if (
+        normalizedTargetEndDate &&
+        itemDate &&
+        itemDate ===
+          normalizedTargetEndDate
+      ) {
+        return false;
+      }
+
+      const searchableText = [
+        item?.title,
+        item?.description,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase(
+          'tr-TR'
+        );
+
+      if (
+        searchableText.includes(
+          'bitiş'
+        ) ||
+        searchableText.includes(
+          'bitis'
+        ) ||
+        searchableText.includes(
+          'end_date'
+        ) ||
+        searchableText.includes(
+          'enddate'
+        )
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+
+  /*
+   * Brif içindeki gerçek referanslardan
+   * kullanılan kaynak anahtarlarını çıkarıyoruz.
+   */
+  const referencedSourceKeys =
+    new Set();
+
+  const collectReferences = (
+    items
+  ) => {
+    for (
+      const item of
+      items || []
+    ) {
+      const valid =
+        resolveSource(
+          item?.sourceType,
+          item?.sourceId
+        );
+
+      if (!valid) {
+        continue;
+      }
+
+      referencedSourceKeys.add(
+        `${valid.sourceType}:${valid.sourceId}`
+      );
+    }
+  };
+
+  collectReferences(
+    partiesAndPositions
+  );
+
+  collectReferences(
+    claimsAndDefenses
+  );
+
+  collectReferences(
+    evidence
+  );
+
+  collectReferences(
+    hearingFocusPoints
+  );
+
+  collectReferences(
+    preparationChecklist
+  );
+
+  collectReferences(
+    criticalDates
+  );
+
+  /*
+   * Ana dava kaydını brifin temel kaynağı olarak
+   * tutuyoruz.
+   */
+  if (casePayload.id) {
+    referencedSourceKeys.add(
+      `case:${casePayload.id}`
+    );
+  }
+
+  /*
+   * Hedef duruşma da bu çıktının zorunlu kaynağıdır.
+   */
+  if (targetHearing?.id) {
+    referencedSourceKeys.add(
+      `event:${targetHearing.id}`
+    );
+  }
+
   const seenSources =
     new Set();
 
@@ -2640,7 +2880,21 @@ sanitizeHearingPreparationSources(
       const key =
         `${valid.sourceType}:${valid.sourceId}`;
 
-      if (seenSources.has(key)) {
+      /*
+       * Gerçekten brifte kullanılmayan
+       * kaynakları göstermiyoruz.
+       */
+      if (
+        !referencedSourceKeys.has(
+          key
+        )
+      ) {
+        return null;
+      }
+
+      if (
+        seenSources.has(key)
+      ) {
         return null;
       }
 
@@ -2653,10 +2907,6 @@ sanitizeHearingPreparationSources(
         sourceId:
           valid.sourceId,
 
-        /*
-         * Kaynak kartı başlığında modelin ürettiği
-         * başlığa güvenmiyoruz.
-         */
         title:
           valid.title,
 
@@ -2670,9 +2920,62 @@ sanitizeHearingPreparationSources(
     .filter(Boolean);
 
   /*
-   * Selected hearing gerçek event olmak zorunda.
-   * Model farklı bir hearingId üretse bile dışarı çıkmaz.
+   * Model sources listesine dava veya hedef duruşmayı
+   * koymamış olsa bile bunlar brifin temel kaynaklarıdır.
+   * Registry'den güvenli biçimde ekliyoruz.
    */
+  const ensureSource = (
+    sourceType,
+    sourceId,
+    relevance
+  ) => {
+    const valid =
+      resolveSource(
+        sourceType,
+        sourceId
+      );
+
+    if (!valid) {
+      return;
+    }
+
+    const key =
+      `${valid.sourceType}:${valid.sourceId}`;
+
+    if (
+      seenSources.has(key)
+    ) {
+      return;
+    }
+
+    seenSources.add(key);
+
+    sources.push({
+      sourceType:
+        valid.sourceType,
+
+      sourceId:
+        valid.sourceId,
+
+      title:
+        valid.title,
+
+      relevance,
+    });
+  };
+
+  ensureSource(
+    'case',
+    casePayload.id,
+    'Dosyanın genel bilgileri ve taraf kayıtları için temel kaynak.'
+  );
+
+  ensureSource(
+    'event',
+    targetHearing?.id,
+    'Hedef duruşmanın tarih, tür ve etkinlik bilgileri için temel kaynak.'
+  );
+
   const realHearing =
     resolveSource(
       'event',
@@ -2695,35 +2998,12 @@ sanitizeHearingPreparationSources(
       targetHearing?.startDate ||
       null,
 
-    partiesAndPositions:
-      sanitizeReferencedItems(
-        output.partiesAndPositions
-      ),
-
-    claimsAndDefenses:
-      sanitizeReferencedItems(
-        output.claimsAndDefenses
-      ),
-
-    evidence:
-      sanitizeReferencedItems(
-        output.evidence
-      ),
-
-    hearingFocusPoints:
-      sanitizeReferencedItems(
-        output.hearingFocusPoints
-      ),
-
-    preparationChecklist:
-      sanitizeReferencedItems(
-        output.preparationChecklist
-      ),
-
-    criticalDates:
-      sanitizeReferencedItems(
-        output.criticalDates
-      ),
+    partiesAndPositions,
+    claimsAndDefenses,
+    evidence,
+    hearingFocusPoints,
+    preparationChecklist,
+    criticalDates,
 
     sources,
   };

@@ -831,7 +831,21 @@ EK GÜVENLİK VE GROUNDING KURALLARI:
 - Önerilerde kayıtlı olgular ile AI önerisini dilsel olarak ayır.
   "Dosyada kayıtlıdır" yalnızca gerçek kayıtlar için;
   "kontrol edilebilir / teyit edilebilir" ise öneriler için kullanılmalı.
+- Kullanıcıya hiçbir koşulda ham sistem alan adı gösterme.
+  event.hearingType, hearingType, documents, documentContext,
+  opposingCounsel, expenseStatus, clients, case.subject gibi alan adlarını
+  kullanıcı metnine yazma. Bunları doğal Türkçeye çevir.
 
+- target_hearing içindeki tarih ve saat değerlerini aynen koru.
+  Saat dilimi dönüşümü, çıkarma veya ekleme yapma.
+  Aynı duruşma tarihi bütün çıktı alanlarında aynı saatle gösterilmelidir.
+
+- Hedef duruşmanın end_date bilgisini criticalDates içine ekleme.
+  Hedef duruşma için yalnızca başlangıç tarihini kritik tarih olarak kullan.
+
+- sources alanına yalnızca brifteki somut bir tespit tarafından gerçekten
+  kullanılan kaynakları ekle. Sadece case_data içinde bulunduğu için toplantı,
+  görev, not veya başka kayıtları kaynak listesine ekleme.
 SON KURAL:
 
 Amaç avukat adına nihai strateji belirlemek değildir.
