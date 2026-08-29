@@ -52,7 +52,7 @@ import {
   buildLegalResearchInput,
   getDraftPrompt,
 } from './ai.prompts.js';
-
+import { documentService } from '../documents/document.service.js';
 import {
   ROLES,
   PERMISSION_KEYS,
@@ -348,11 +348,30 @@ class AIService {
     let openAIFileId = null;
 
     try {
-      const uploadedFile = await aiProvider.uploadFile({
-        buffer: file.buffer,
-        filename: document.original_name,
-        mimeType: document.mime_type,
-      });
+      let uploadBuffer = file.buffer;
+let uploadFilename = document.original_name;
+let uploadMimeType = document.mime_type;
+
+const isUdf =
+  document.file_type === 'udf' ||
+  path.extname(document.original_name || '').toLowerCase() === '.udf';
+
+if (isUdf) {
+  const udfPreview = await documentService.getUdfPreview(
+    document.id,
+    actorContext
+  );
+
+  uploadBuffer = Buffer.from(udfPreview.content, 'utf8');
+  uploadFilename = `${path.parse(document.original_name || 'document').name}.txt`;
+  uploadMimeType = 'text/plain';
+}
+
+const uploadedFile = await aiProvider.uploadFile({
+  buffer: uploadBuffer,
+  filename: uploadFilename,
+  mimeType: uploadMimeType,
+});
 
       openAIFileId = uploadedFile.id;
 
