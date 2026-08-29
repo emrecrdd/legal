@@ -36,33 +36,6 @@ export const CASE_STATUS_LABELS = {
 };
 
 // ======================================================
-// ICONS
-// ======================================================
-
-export const CASE_STATUS_ICONS = {
-  [CASE_STATUS.PREPARATION]:
-    '📝',
-
-  [CASE_STATUS.ACTIVE]:
-    '⚖️',
-
-  [CASE_STATUS.HEARING]:
-    '🏛️',
-
-  [CASE_STATUS.APPEAL]:
-    '⬆️',
-
-  [CASE_STATUS.CASSATION]:
-    '⬆️⬆️',
-
-  [CASE_STATUS.CONCLUDED]:
-    '✅',
-
-  [CASE_STATUS.ARCHIVED]:
-    '📦',
-};
-
-// ======================================================
 // BADGE VARIANTS
 // Badge.jsx ile uyumlu
 // ======================================================
@@ -146,11 +119,6 @@ export const CASE_STATUS_OPTIONS =
           value
         ],
 
-      icon:
-        CASE_STATUS_ICONS[
-          value
-        ],
-
       variant:
         CASE_STATUS_BADGE_VARIANTS[
           value
@@ -185,17 +153,6 @@ export const getCaseStatusVariant = (
   );
 };
 
-export const getCaseStatusIcon = (
-  status
-) => {
-  return (
-    CASE_STATUS_ICONS[
-      status
-    ] ||
-    '📁'
-  );
-};
-
 export const isCaseClosed = (
   status
 ) => {
@@ -225,7 +182,6 @@ export default {
   CASE_STATUS,
 
   CASE_STATUS_LABELS,
-  CASE_STATUS_ICONS,
   CASE_STATUS_COLORS,
   CASE_STATUS_BADGE_VARIANTS,
 
@@ -234,7 +190,6 @@ export default {
 
   getCaseStatusLabel,
   getCaseStatusVariant,
-  getCaseStatusIcon,
 
   isCaseClosed,
   isCaseActive,

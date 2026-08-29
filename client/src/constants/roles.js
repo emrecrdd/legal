@@ -41,12 +41,7 @@ export const ROLE_COLORS = {
 // ICONS
 // ======================================================
 
-export const ROLE_ICONS = {
-  [ROLES.ADMIN]: '👑',
-  [ROLES.LAWYER]: '⚖️',
-  [ROLES.INTERN]: '📚',
-  [ROLES.SECRETARY]: '📋',
-};
+
 
 // ======================================================
 // SELECT OPTIONS
@@ -503,7 +498,6 @@ export default {
 
   ROLE_LABELS,
   ROLE_COLORS,
-  ROLE_ICONS,
   ROLE_OPTIONS,
 
   PERMISSION_KEYS,

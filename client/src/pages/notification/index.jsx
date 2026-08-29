@@ -110,10 +110,23 @@ const TYPE_CONFIG = {
 // ======================================================
 
 const getTypeConfig = (
-  type
+  notification
 ) => {
+  if (
+    notification?.type === 'event' &&
+    notification?.metadata?.eventType === 'hearing'
+  ) {
+    return {
+      ...TYPE_CONFIG.event,
+      label: 'Duruşma',
+      icon: Scale,
+    };
+  }
+
   return (
-    TYPE_CONFIG[type] ||
+    TYPE_CONFIG[
+      notification?.type
+    ] ||
     TYPE_CONFIG.default
   );
 };
@@ -618,7 +631,7 @@ const NotificationsPage = () => {
                   dark:text-slate-400
                 "
               >
-                Görev, dava, etkinlik ve sistem bildirimlerinizi takip edin.
+              Görev, dava, duruşma, toplantı ve sistem bildirimlerinizi takip edin.
               </p>
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -751,9 +764,9 @@ const NotificationsPage = () => {
                   notification
                 ) => {
                   const config =
-                    getTypeConfig(
-                      notification.type
-                    );
+  getTypeConfig(
+    notification
+  );
 
                   const TypeIcon =
                     config.icon;

@@ -291,19 +291,19 @@ const UserCreate = () => {
               className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white"
             >
               <option value="lawyer">
-                ⚖️ Avukat
+                Avukat
               </option>
 
               <option value="secretary">
-                📋 Sekreter
+                 Sekreter
               </option>
 
               <option value="intern">
-                📚 Stajyer
+                 Stajyer
               </option>
 
               <option value="admin">
-                👑 Yönetici
+                 Yönetici
               </option>
             </select>
           </div>

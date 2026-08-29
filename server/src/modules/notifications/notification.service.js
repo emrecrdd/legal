@@ -256,9 +256,6 @@ export const notificationService = {
 
   // ====================================================
   // GET ONE
-  //
-  // SECURITY:
-  // Sadece notification sahibi erişebilir.
   // ====================================================
 
   async getOne(
@@ -273,9 +270,6 @@ export const notificationService = {
 
   // ====================================================
   // MARK AS READ
-  //
-  // SECURITY:
-  // Sadece notification sahibi değiştirebilir.
   // ====================================================
 
   async markAsRead(
@@ -338,9 +332,6 @@ export const notificationService = {
 
   // ====================================================
   // REMOVE ONE
-  //
-  // SECURITY:
-  // Sadece notification sahibi silebilir.
   // ====================================================
 
   async remove(
@@ -396,7 +387,7 @@ export const notificationService = {
     return this.create(
       userId,
       'task',
-      '📋 Yeni Görev Atandı',
+      'Yeni Görev Atandı',
       `${assignedBy} size "${taskTitle}" görevini atadı.`,
       `/tasks/${taskId}`,
       {
@@ -420,12 +411,14 @@ export const notificationService = {
     return this.create(
       userId,
       'event',
-      '⚖️ Duruşma Hatırlatıcı',
+      'Duruşma Hatırlatıcı',
       `"${eventTitle}" duruşmanız ${dateStr} tarihinde.`,
       `/events/${eventId}`,
       {
         eventId,
         eventDate,
+        eventType:
+          'hearing',
       }
     );
   },
@@ -444,8 +437,8 @@ export const notificationService = {
 
     return this.create(
       userId,
-      'event',
-      '👤 Toplantı Hatırlatıcı',
+      'meeting',
+      'Toplantı Hatırlatıcı',
       `"${meetingTitle}" toplantınız ${dateStr} tarihinde.`,
       `/meetings/${meetingId}`,
       {
@@ -471,7 +464,7 @@ export const notificationService = {
     return this.create(
       userId,
       'system',
-      '📄 Yeni Belge Yüklendi',
+      'Yeni Belge Yüklendi',
       `${uploadedBy} "${documentName}" belgesini ${destination} yükledi.`,
       `/documents/${documentId}`,
       {
@@ -514,7 +507,7 @@ export const notificationService = {
     return this.create(
       userId,
       'system',
-      '📁 Dava Durumu Değişti',
+      'Dava Durumu Değişti',
       `"${caseTitle}" davasının durumu "${statusMap[oldStatus] || oldStatus}" → "${statusMap[newStatus] || newStatus}" olarak değiştirildi.`,
       `/cases/${caseId}`,
       {
