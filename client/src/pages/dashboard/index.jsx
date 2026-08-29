@@ -160,7 +160,21 @@ const getPriorityVariant = (
     'default'
   );
 };
+const getGreeting = () => {
+  const hour = Number(
+    new Intl.DateTimeFormat('tr-TR', {
+      timeZone: 'Europe/Istanbul',
+      hour: '2-digit',
+      hour12: false,
+    }).format(new Date())
+  );
 
+  if (hour >= 5 && hour < 12) return 'Günaydın';
+  if (hour >= 12 && hour < 18) return 'İyi günler';
+  if (hour >= 18 && hour < 22) return 'İyi akşamlar';
+
+  return 'İyi geceler';
+};
 // ======================================================
 // DASHBOARD
 // ======================================================
@@ -877,10 +891,10 @@ const Dashboard = () => {
                 md:text-3xl
               "
             >
-              Günaydın,{' '}
-              {user?.first_name ||
-                user?.name ||
-                'Kullanıcı'}
+             {getGreeting()},{' '}
+{user?.first_name ||
+  user?.name ||
+  'Kullanıcı'}
             </h1>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">

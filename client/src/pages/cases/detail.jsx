@@ -359,6 +359,7 @@ const CaseAIAnalysis = ({
   onRefresh,
   refreshing,
   caseId,
+    clientId,
   canCreateTasks,
 }) => {
   if (!analysis) {
@@ -591,6 +592,7 @@ const CaseAIAnalysis = ({
     to={`/tasks/create?${new URLSearchParams({
       source: 'ai',
       case_id: caseId || '',
+      client_id: clientId || '',
       title: action.title || '',
       description: action.description || '',
       priority: action.priority || 'normal',
@@ -881,6 +883,7 @@ const CaseQuestionPanel = ({
   asking,
   onAsk,
   caseId,
+  clientId,
   canCreateTasks,
 }) => {
   const [question, setQuestion] = useState('');
@@ -1126,6 +1129,7 @@ const CaseQuestionPanel = ({
                             to={`/tasks/create?${new URLSearchParams({
                               source: 'ai_case_question',
                               case_id: caseId || '',
+                              client_id: clientId || '',
                               title: action.title || '',
                               description: action.description || '',
                               priority: action.priority || 'normal',
@@ -3324,6 +3328,11 @@ const upcomingHearings =
               aiSummaryMutation.isPending
             }
             caseId={caseItem.id}
+            clientId={
+              caseItem.clients?.length === 1
+                  ? caseItem.clients[0].id
+                  : ''
+           }
             canCreateTasks={
               canCreateTasks
             }
@@ -3334,6 +3343,11 @@ const upcomingHearings =
             asking={caseQuestionMutation.isPending}
             onAsk={handleCaseQuestion}
             caseId={caseItem.id}
+  clientId={
+    caseItem.clients?.length === 1
+      ? caseItem.clients[0].id
+      : ''
+  }
             canCreateTasks={canCreateTasks}
           />
 
