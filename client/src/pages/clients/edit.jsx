@@ -1123,33 +1123,46 @@ const ClientEdit = () => {
   // ======================================================
 
   const handleDelete =
-    () => {
-      if (
-        !canDelete
-      ) {
-        toast.error(
-          'Müvekkil kaydını kaldırma yetkiniz bulunmuyor'
-        );
+  () => {
+    if (
+      !canDelete
+    ) {
+      toast.error(
+        'Müvekkil kaydını kaldırma yetkiniz bulunmuyor'
+      );
 
-        return;
-      }
+      return;
+    }
 
-      if (
-        deleteMutation.isPending
-      ) {
-        return;
-      }
+    if (
+      deleteMutation.isPending
+    ) {
+      return;
+    }
 
-      const confirmed =
-        window.confirm(
-          `"${client?.name}" müvekkil kaydını kaldırmak istediğinize emin misiniz?\n\nKayıt sistemden kaldırılacak ancak ilişkili kayıtlar ayrıca silinmeyecektir.`
-        );
+    const caseCount =
+      Number(
+        client?.summary?.case_count ??
+        client?.case_count ??
+        client?.cases?.length ??
+        0
+      );
 
-      if (
-        !confirmed
-      ) {
-        return;
-      }
+    const confirmMessage =
+      caseCount > 0
+        ? `"${client?.name}" müvekkil kaydı ${caseCount} dava dosyasına bağlı.\n\nMüvekkil kaydı kaldırılırsa dava dosyaları silinmeyecek ve sistemde korunacaktır. Bu dosyalar müvekkilsiz olarak görüntülenebilir.\n\nDevam etmek istiyor musunuz?`
+        : `"${client?.name}" müvekkil kaydını kaldırmak istediğinize emin misiniz?\n\nBu işlem müvekkil kaydını sistemden kaldıracaktır.`;
+
+    const confirmed =
+      window.confirm(
+        confirmMessage
+      );
+
+    if (
+      !confirmed
+    ) {
+      return;
+    }
 
       deleteMutation.mutate(
         id,

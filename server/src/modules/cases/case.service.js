@@ -1642,9 +1642,11 @@ export const caseService = {
         is_active:
           true,
 
-        role:
-          'lawyer',
-      },
+         role: {
+    [Op.in]: [
+      'lawyer',
+      'admin',
+         ],  },  },
 
       attributes: [
         'id',
