@@ -632,11 +632,20 @@ class ReminderWorker {
       ];
 
     const sourceRecord =
-      source.record;
+  source.record;
 
-    const title =
-      reminder.title ||
-      `${sourceConfig.label} Hatırlatması`;
+const isHearing =
+  source.type === 'event' &&
+  sourceRecord.event_type === 'hearing';
+
+const sourceLabel =
+  isHearing
+    ? 'Duruşma'
+    : sourceConfig.label;
+
+const title =
+  reminder.title ||
+  `${sourceLabel} Hatırlatması`;
 
     const targetDate =
       reminder.metadata
@@ -664,13 +673,13 @@ class ReminderWorker {
       );
 
     const details = [
-      {
-        label:
-          sourceConfig.label,
+  {
+    label:
+      sourceLabel,
 
-        value:
-          sourceRecord.title,
-      },
+    value:
+      sourceRecord.title,
+  },
 
       {
         label:
@@ -719,30 +728,39 @@ class ReminderWorker {
       'event'
     ) {
       if (
-        sourceRecord.event_type
-      ) {
-        details.push({
-          label:
-            'Etkinlik Türü',
+  sourceRecord.event_type &&
+  !isHearing
+) {
+  details.push({
+    label:
+      'Etkinlik Türü',
 
-          value:
-            sourceRecord.event_type,
-        });
-      }
+    value:
+      sourceRecord.event_type,
+  });
+}
 
-      if (
-        sourceRecord.hearing_type &&
-        sourceRecord.event_type ===
-          'hearing'
-      ) {
-        details.push({
-          label:
-            'Duruşma Türü',
+if (
+  sourceRecord.hearing_type &&
+  isHearing
+) {
+  const hearingTypeLabels = {
+    preliminary: 'Ön İnceleme',
+    evidentiary: 'Tahkikat',
+    final: 'Karar',
+  };
 
-          value:
-            sourceRecord.hearing_type,
-        });
-      }
+  details.push({
+    label:
+      'Duruşma Türü',
+
+    value:
+      hearingTypeLabels[
+        sourceRecord.hearing_type
+      ] ||
+      sourceRecord.hearing_type,
+  });
+}
 
       if (
         sourceRecord.location
