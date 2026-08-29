@@ -194,20 +194,62 @@ const Login = () => {
 
       {/* HEADER */}
 
-      <div className="mb-8">
+     <div className="mb-8">
 
-        <p
-          className="
-            text-[10px]
-            font-bold
-            uppercase
-            tracking-[0.16em]
-            text-blue-600
-            dark:text-blue-400
-          "
-        >
-          Güvenli Giriş
-        </p>
+  {/* BRAND */}
+
+  <div className="mb-7 flex items-center gap-3">
+    <img
+      src="/favicon.svg"
+      alt="Derkenar"
+      className="
+        h-10
+        w-10
+        shrink-0
+      "
+    />
+
+    <div>
+      <div
+        className="
+          text-lg
+          font-bold
+          tracking-[0.12em]
+          text-gray-900
+          dark:text-white
+        "
+      >
+        DERKENAR
+      </div>
+
+      <div
+        className="
+          mt-0.5
+          text-[10px]
+          font-medium
+          uppercase
+          tracking-[0.12em]
+          text-gray-400
+          dark:text-slate-500
+        "
+      >
+        Hukuk Büro Yönetim Sistemi
+      </div>
+    </div>
+  </div>
+
+  <p
+    className="
+      text-[10px]
+      font-bold
+      uppercase
+      tracking-[0.16em]
+      text-blue-600
+      dark:text-blue-400
+    "
+  >
+    Güvenli Giriş
+  </p>
 
         <h2
           className="
