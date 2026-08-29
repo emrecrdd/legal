@@ -64,7 +64,7 @@ const __dirname = path.dirname(__filename);
 
 const UPLOAD_DIRECTORY = path.resolve(__dirname, '../../../uploads');
 
-const PROMPT_VERSION = 'v1';
+const PROMPT_VERSION = 'v2';
 
 const ANALYSIS_TYPES = Object.freeze({
   DOCUMENT_ANALYSIS: 'document_analysis',
