@@ -342,6 +342,70 @@ const formatDateTime = (
 };
 
 // ======================================================
+// RELATION HELPERS
+// ======================================================
+
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getPersonName = (
+  person
+) => {
+  if (
+    !person ||
+    typeof person !==
+      'object'
+  ) {
+    return '';
+  }
+
+  const fullName = [
+    person.first_name,
+    person.last_name,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  return (
+    fullName ||
+    String(
+      person.name ||
+      ''
+    ).trim()
+  );
+};
+
+// ======================================================
 // CALENDAR FILE HELPER
 // ======================================================
 
@@ -574,6 +638,15 @@ const EventDetail = () => {
             const rawData =
               response?.data;
 
+            if (
+              rawData === null ||
+              rawData === undefined
+            ) {
+              throw new Error(
+                'Takvim dosyası boş döndü'
+              );
+            }
+
             const blob =
               rawData instanceof
               Blob
@@ -725,6 +798,27 @@ const EventDetail = () => {
     event?.case ||
     null;
 
+  const caseId =
+    normalizeId(
+      event?.case_id ??
+      caseItem?.id
+    );
+
+  const assignedPerson =
+    event?.assignedTo ||
+    (
+      event?.assigned_to &&
+      typeof event.assigned_to ===
+        'object'
+        ? event.assigned_to
+        : null
+    );
+
+  const assignedPersonName =
+    getPersonName(
+      assignedPerson
+    );
+
   const clients =
     Array.isArray(
       caseItem?.clients
@@ -748,12 +842,16 @@ const EventDetail = () => {
 
   const attendeeCount =
     attendees.length +
-    (event?.assignedTo
-      ? 1
-      : 0) +
-    (event?.opposing_counsel
-      ? 1
-      : 0);
+    (
+      assignedPerson
+        ? 1
+        : 0
+    ) +
+    (
+      event?.opposing_counsel
+        ? 1
+        : 0
+    );
 
   // ====================================================
   // LOADING
@@ -832,15 +930,15 @@ const EventDetail = () => {
 
           <Link
             to={
-              event.case_id
-                ? `/cases/${event.case_id}`
+              caseId
+                ? `/cases/${caseId}`
                 : '/calendar'
             }
             className="inline-flex items-center gap-1 text-sm text-gray-500 transition-colors hover:text-blue-600"
           >
             <ArrowLeft className="h-4 w-4" />
 
-            {event.case_id
+            {caseId
               ? 'Davaya Dön'
               : 'Takvime Dön'}
           </Link>
@@ -856,7 +954,8 @@ const EventDetail = () => {
             <div>
 
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {event.title}
+                {event.title ||
+                  'Duruşma'}
               </h1>
 
               <div className="mt-2 flex flex-wrap gap-2">
@@ -1103,7 +1202,9 @@ const EventDetail = () => {
           <Card.Body>
 
             <Link
-              to={`/cases/${caseItem.id}`}
+              to={`/cases/${normalizeId(
+                caseItem.id
+              )}`}
               className="text-lg font-semibold text-blue-600 hover:underline dark:text-blue-400"
             >
               {caseItem.title}
@@ -1192,7 +1293,9 @@ const EventDetail = () => {
                       >
 
                         <Link
-                          to={`/clients/${client.id}`}
+                          to={`/clients/${normalizeId(
+                            client.id
+                          )}`}
                           className="font-semibold text-blue-600 hover:underline dark:text-blue-400"
                         >
                           {client.name}
@@ -1359,7 +1462,7 @@ const EventDetail = () => {
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
 
-              {event.assignedTo && (
+              {assignedPerson && (
                 <div className="rounded-xl border border-purple-200 bg-purple-50 p-4 dark:border-purple-800 dark:bg-purple-900/20">
 
                   <div className="flex items-center gap-3">
@@ -1371,8 +1474,8 @@ const EventDetail = () => {
                     <div>
 
                       <p className="font-semibold text-gray-900 dark:text-white">
-                        {event.assignedTo.first_name}{' '}
-                        {event.assignedTo.last_name}
+                        {assignedPersonName ||
+                          'Atanan Avukat'}
                       </p>
 
                       <p className="text-sm text-purple-600 dark:text-purple-300">
@@ -1624,9 +1727,10 @@ const EventDetail = () => {
                 </p>
 
                 <p className="mt-1 font-medium text-gray-900 dark:text-white">
-                  {event.creator
-                    ? `${event.creator.first_name || ''} ${event.creator.last_name || ''}`.trim()
-                    : '-'}
+                  {getPersonName(
+                    event.creator
+                  ) ||
+                    '-'}
                 </p>
 
               </div>
