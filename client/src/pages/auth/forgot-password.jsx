@@ -237,7 +237,7 @@ const ForgotPassword = () => {
             className="
               h-auto
               w-full
-              max-w-[260px]
+              max-w-[300px]
               object-contain
               object-left
             "
