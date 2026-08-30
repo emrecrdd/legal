@@ -11,7 +11,7 @@ import {
 import Sidebar from '../components/layout/Sidebar.jsx';
 import Topbar from '../components/layout/Topbar.jsx';
 import MobileNav from '../components/layout/MobileNav.jsx';
-
+import IdleBrandOverlay from '../components/layout/IdleBrandOverlay.jsx';
 const DashboardLayout = () => {
   const [
     sidebarOpen,
@@ -119,6 +119,7 @@ const DashboardLayout = () => {
 
         </div>
       </div>
+      <IdleBrandOverlay />
     </div>
   );
 };
