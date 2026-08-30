@@ -437,18 +437,45 @@ const SidebarContent = ({
 
       <div className="flex h-[76px] shrink-0 items-center justify-between px-5">
 
-       <div className="min-w-0 flex-1">
+       <div className="flex items-center gap-3">
+
   <img
-    src="/derkenar-logo.png"
-    alt="Derkenar"
+    src="/favicon.svg"
+    alt=""
     className="
-      h-auto
-      w-full
-      max-w-[190px]
-      object-contain
-      object-left
+      h-10
+      w-10
+      shrink-0
     "
   />
+
+  <div>
+    <h2
+      className="
+        text-[18px]
+        font-bold
+        uppercase
+        tracking-[0.08em]
+        text-white
+      "
+    >
+      Derkenar
+    </h2>
+
+    <p
+      className="
+        mt-0.5
+        text-[9px]
+        font-semibold
+        uppercase
+        tracking-[0.16em]
+        text-amber-300/75
+      "
+    >
+      Hukuk Büro Yönetimi
+    </p>
+  </div>
+
 </div>
 
         {mobile && (
