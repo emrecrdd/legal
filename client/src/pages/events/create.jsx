@@ -511,55 +511,63 @@ const EventCreate = () => {
         ),
 
       onSuccess: async (
-  response
-) => {
-  const event =
-    response?.data?.data ??
-    response?.data ??
-    null;
+        response
+      ) => {
+        const event =
+          response?.data?.data ??
+          response?.data ??
+          null;
 
-  await Promise.all([
-    queryClient.invalidateQueries({
-      queryKey: ['calendar-events'],
-    }),
+        const caseId =
+          event?.case_id ||
+          caseIdFromUrl ||
+          formData.case_id ||
+          null;
 
-    queryClient.invalidateQueries({
-      queryKey: ['event'],
-    }),
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: ['calendar-events'],
+          }),
 
-    queryClient.invalidateQueries({
-      queryKey: ['events'],
-    }),
+          caseId
+            ? queryClient.invalidateQueries({
+                queryKey: [
+                  'case',
+                  String(caseId),
+                ],
+              })
+            : Promise.resolve(),
+        ]);
 
-    queryClient.invalidateQueries({
-      queryKey: ['case'],
-    }),
-  ]);
+        toast.success(
+          'Duruşma başarıyla oluşturuldu'
+        );
 
-  toast.success(
-    'Duruşma başarıyla oluşturuldu'
-  );
+        if (
+          event?.id
+        ) {
+          navigate(
+            `/events/${event.id}`
+          );
 
-  if (event?.id) {
-    navigate(
-      `/events/${event.id}`
-    );
+          return;
+        }
 
-    return;
-  }
+        if (
+          caseId
+        ) {
+          navigate(
+            `/cases/${caseId}`
+          );
 
-  if (event?.case_id) {
-    navigate(
-      `/cases/${event.case_id}`
-    );
+          return;
+        }
 
-    return;
-  }
+        navigate(
+          '/calendar'
+        );
+      },
 
-  navigate(
-    '/calendar'
-  );
-},
       onError: (
         error
       ) => {
