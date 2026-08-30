@@ -348,6 +348,18 @@ export const useCreateMeeting =
           ],
         });
 
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-meetings',
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-monthly-meetings',
+          ],
+        });
+
         if (
           variables?.client_id
         ) {
@@ -459,6 +471,18 @@ export const useUpdateMeeting =
         queryClient.invalidateQueries({
           queryKey: [
             'calendar-meetings',
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-meetings',
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-monthly-meetings',
           ],
         });
 
@@ -585,6 +609,18 @@ export const useUpdateMeetingStatus =
 
         queryClient.invalidateQueries({
           queryKey: [
+            'dashboard-meetings',
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-monthly-meetings',
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
             'client-meeting-timeline',
           ],
         });
@@ -637,6 +673,7 @@ export const useDeleteMeeting =
             MEETING_QUERY_KEYS.detail(
               id
             ),
+          exact: true,
         });
 
         queryClient.invalidateQueries({
@@ -654,6 +691,18 @@ export const useDeleteMeeting =
         queryClient.invalidateQueries({
           queryKey: [
             'calendar-meetings',
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-meetings',
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-monthly-meetings',
           ],
         });
 
