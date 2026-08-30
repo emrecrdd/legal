@@ -152,17 +152,43 @@ const AuthLayout = () => {
 
           <div className="relative">
 
-            <div className="max-w-[300px]">
+            <div className="flex items-center gap-3">
               <img
-                src="/derkenar-logo.png"
-                alt="Derkenar"
+                src="/favicon.svg"
+                alt=""
                 className="
-                  h-auto
-                  w-full
-                  object-contain
-                  object-left
+                  h-11
+                  w-11
+                  shrink-0
                 "
               />
+
+              <div>
+                <h1
+                  className="
+                    text-lg
+                    font-bold
+                    uppercase
+                    tracking-[0.08em]
+                    text-white
+                  "
+                >
+                  Derkenar
+                </h1>
+
+                <p
+                  className="
+                    mt-0.5
+                    text-[9px]
+                    font-semibold
+                    uppercase
+                    tracking-[0.16em]
+                    text-amber-300/75
+                  "
+                >
+                  Hukuk Büro Yönetimi
+                </p>
+              </div>
             </div>
 
             <div className="mt-14 max-w-lg">
@@ -173,7 +199,7 @@ const AuthLayout = () => {
                   font-semibold
                   uppercase
                   tracking-[0.16em]
-                  text-blue-400
+                  text-amber-300
                 "
               >
                 Büro çalışma alanı
@@ -354,17 +380,48 @@ const AuthLayout = () => {
             {/* MOBILE BRAND */}
 
             <div className="mb-10 lg:hidden">
-              <img
-                src="/derkenar-logo.png"
-                alt="Derkenar"
-                className="
-                  h-auto
-                  w-full
-                  max-w-[240px]
-                  object-contain
-                  object-left
-                "
-              />
+
+              <div className="flex items-center gap-3">
+                <img
+                  src="/favicon.svg"
+                  alt=""
+                  className="
+                    h-10
+                    w-10
+                    shrink-0
+                  "
+                />
+
+                <div>
+                  <h1
+                    className="
+                      text-lg
+                      font-bold
+                      uppercase
+                      tracking-[0.08em]
+                      text-gray-900
+                      dark:text-white
+                    "
+                  >
+                    Derkenar
+                  </h1>
+
+                  <p
+                    className="
+                      mt-0.5
+                      text-[9px]
+                      font-semibold
+                      uppercase
+                      tracking-[0.16em]
+                      text-amber-600
+                      dark:text-amber-300/75
+                    "
+                  >
+                    Hukuk Büro Yönetimi
+                  </p>
+                </div>
+              </div>
+
             </div>
 
             {/* FORM */}
