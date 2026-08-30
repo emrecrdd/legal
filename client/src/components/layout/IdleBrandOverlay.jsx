@@ -4,10 +4,9 @@ import {
   useState,
 } from 'react';
 
-const IDLE_TIME = 60 * 1000;
+import useAuth from '../../hooks/useAuth.js';
 
-const PIN_STORAGE_KEY =
-  'derkenar_screen_lock_pin';
+const IDLE_TIME = 60 * 1000;
 
 const hashPin = async (
   value
@@ -35,6 +34,13 @@ const hashPin = async (
 };
 
 const IdleBrandOverlay = () => {
+  const { user } = useAuth();
+
+  const pinStorageKey =
+    user?.id
+      ? `derkenar_screen_lock_pin_${user.id}`
+      : null;
+
   const [
     isLocked,
     setIsLocked,
@@ -43,13 +49,7 @@ const IdleBrandOverlay = () => {
   const [
     hasPin,
     setHasPin,
-  ] = useState(() =>
-    Boolean(
-      localStorage.getItem(
-        PIN_STORAGE_KEY
-      )
-    )
-  );
+  ] = useState(false);
 
   const [
     pin,
@@ -170,6 +170,28 @@ const IdleBrandOverlay = () => {
   }, []);
 
   useEffect(() => {
+    if (!pinStorageKey) {
+      setHasPin(false);
+      setPin('');
+      setConfirmPin('');
+      setError('');
+      return;
+    }
+
+    setHasPin(
+      Boolean(
+        localStorage.getItem(
+          pinStorageKey
+        )
+      )
+    );
+
+    setPin('');
+    setConfirmPin('');
+    setError('');
+  }, [pinStorageKey]);
+
+  useEffect(() => {
     if (
       isLocked
     ) {
@@ -233,8 +255,15 @@ const IdleBrandOverlay = () => {
         const hashed =
           await hashPin(pin);
 
+        if (!pinStorageKey) {
+          setError(
+            'Kullanıcı bilgisi alınamadı.'
+          );
+          return;
+        }
+
         localStorage.setItem(
-          PIN_STORAGE_KEY,
+          pinStorageKey,
           hashed
         );
 
@@ -268,9 +297,16 @@ const IdleBrandOverlay = () => {
         const hashed =
           await hashPin(pin);
 
+        if (!pinStorageKey) {
+          setError(
+            'Kullanıcı bilgisi alınamadı.'
+          );
+          return;
+        }
+
         const savedHash =
           localStorage.getItem(
-            PIN_STORAGE_KEY
+            pinStorageKey
           );
 
         if (
