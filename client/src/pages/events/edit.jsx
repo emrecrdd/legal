@@ -403,6 +403,14 @@ const EventEdit = () => {
             queryKey: ['calendar-events'],
           }),
 
+          queryClient.invalidateQueries({
+            queryKey: ['dashboard-hearings'],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: ['dashboard-stats'],
+          }),
+
           ...caseIds.map(
             (caseId) =>
               queryClient.invalidateQueries({
@@ -451,6 +459,14 @@ const EventEdit = () => {
         await Promise.all([
           queryClient.invalidateQueries({
             queryKey: ['calendar-events'],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: ['dashboard-hearings'],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: ['dashboard-stats'],
           }),
 
           caseId
