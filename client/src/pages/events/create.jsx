@@ -529,14 +529,6 @@ const EventCreate = () => {
             queryKey: ['calendar-events'],
           }),
 
-          queryClient.invalidateQueries({
-            queryKey: ['dashboard-hearings'],
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey: ['dashboard-stats'],
-          }),
-
           caseId
             ? queryClient.invalidateQueries({
                 queryKey: [
