@@ -238,6 +238,22 @@ const ResetPassword = () => {
     return (
       <div className="w-full">
 
+        {/* BRAND */}
+
+        <div className="mb-7">
+          <img
+            src="/derkenar-logo.png"
+            alt="Derkenar"
+            className="
+              h-auto
+              w-full
+              max-w-[260px]
+              object-contain
+              object-left
+            "
+          />
+        </div>
+
         <div
           className="
             flex
