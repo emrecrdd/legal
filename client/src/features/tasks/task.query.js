@@ -199,6 +199,59 @@ const invalidateTaskStatistics = (
   });
 };
 
+const invalidateTaskCrossViews = (
+  queryClient
+) => {
+  // Takvimde görevler calendar-events sorgusundan geliyor.
+  queryClient.invalidateQueries({
+    queryKey: [
+      'calendar-events',
+    ],
+  });
+
+  // Dashboard görev kartı ve sayaçları.
+  queryClient.invalidateQueries({
+    queryKey: [
+      'dashboard-tasks',
+    ],
+  });
+
+  queryClient.invalidateQueries({
+    queryKey: [
+      'dashboard-stats',
+    ],
+  });
+
+  /*
+   * İlişki değişikliklerinde eski müvekkil/dava ID'si mutation
+   * payload'ında olmayabilir. Prefix invalidation hem eski hem yeni
+   * ilişki ekranının F5'siz yenilenmesini sağlar.
+   */
+  queryClient.invalidateQueries({
+    queryKey: [
+      'client-tasks',
+    ],
+  });
+
+  queryClient.invalidateQueries({
+    queryKey: [
+      'client-task-overview',
+    ],
+  });
+
+  queryClient.invalidateQueries({
+    queryKey: [
+      'client',
+    ],
+  });
+
+  queryClient.invalidateQueries({
+    queryKey: [
+      'case',
+    ],
+  });
+};
+
 const invalidateClientTasks = (
   queryClient,
   clientId
@@ -600,6 +653,10 @@ export const useCreateTask =
           queryClient
         );
 
+        invalidateTaskCrossViews(
+          queryClient
+        );
+
         success(
           'Görev başarıyla oluşturuldu'
         );
@@ -663,6 +720,14 @@ export const useUpdateTask =
             ?.case_id
         );
 
+        invalidateTaskStatistics(
+          queryClient
+        );
+
+        invalidateTaskCrossViews(
+          queryClient
+        );
+
         success(
           'Görev başarıyla güncellendi'
         );
@@ -713,9 +778,14 @@ export const useDeleteTask =
             TASK_QUERY_KEYS.detail(
               id
             ),
+          exact: true,
         });
 
         invalidateTaskStatistics(
+          queryClient
+        );
+
+        invalidateTaskCrossViews(
           queryClient
         );
 
@@ -773,6 +843,10 @@ export const useUpdateTaskStatus =
         );
 
         invalidateTaskStatistics(
+          queryClient
+        );
+
+        invalidateTaskCrossViews(
           queryClient
         );
 
@@ -843,6 +917,10 @@ export const useAssignTask =
           queryClient
         );
 
+        invalidateTaskCrossViews(
+          queryClient
+        );
+
         success(
           'Görev sorumluları başarıyla güncellendi'
         );
@@ -899,6 +977,10 @@ export const useStartTask =
         );
 
         invalidateTaskStatistics(
+          queryClient
+        );
+
+        invalidateTaskCrossViews(
           queryClient
         );
 
@@ -968,6 +1050,10 @@ export const useCompleteTask =
           queryClient
         );
 
+        invalidateTaskCrossViews(
+          queryClient
+        );
+
         success(
           'Görev tamamlandı. Onay bekleniyor.'
         );
@@ -1024,6 +1110,10 @@ export const useApproveTask =
         );
 
         invalidateTaskStatistics(
+          queryClient
+        );
+
+        invalidateTaskCrossViews(
           queryClient
         );
 
@@ -1134,6 +1224,10 @@ export const useUpdateProgress =
           queryClient
         );
 
+        invalidateTaskCrossViews(
+          queryClient
+        );
+
         success(
           'İlerleme güncellendi'
         );
@@ -1189,6 +1283,10 @@ export const useBulkUpdateTaskStatus =
         );
 
         invalidateTaskStatistics(
+          queryClient
+        );
+
+        invalidateTaskCrossViews(
           queryClient
         );
 
