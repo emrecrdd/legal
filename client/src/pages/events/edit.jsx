@@ -194,10 +194,7 @@ const EventEdit = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { id } = useParams();
-
-  const {
-    user,
-  } = useAuth();
+  const { user } = useAuth();
 
   const canEdit =
     hasPermission(
@@ -378,32 +375,50 @@ const EventEdit = () => {
         ),
 
       onSuccess: async () => {
-  await Promise.all([
-    queryClient.invalidateQueries({
-      queryKey: ['event', id],
-    }),
+        const oldCaseId =
+          event?.case_id
+            ? String(event.case_id)
+            : null;
 
-    queryClient.invalidateQueries({
-      queryKey: ['calendar-events'],
-    }),
+        const newCaseId =
+          formData.case_id
+            ? String(formData.case_id)
+            : null;
 
-    queryClient.invalidateQueries({
-      queryKey: ['events'],
-    }),
+        const caseIds = [
+          ...new Set(
+            [
+              oldCaseId,
+              newCaseId,
+            ].filter(Boolean)
+          ),
+        ];
 
-    queryClient.invalidateQueries({
-      queryKey: ['case'],
-    }),
-  ]);
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: ['event', id],
+          }),
 
-  toast.success(
-    'Duruşma başarıyla güncellendi'
-  );
+          queryClient.invalidateQueries({
+            queryKey: ['calendar-events'],
+          }),
 
-  navigate(
-    `/events/${id}`
-  );
-},
+          ...caseIds.map(
+            (caseId) =>
+              queryClient.invalidateQueries({
+                queryKey: ['case', caseId],
+              })
+          ),
+        ]);
+
+        toast.success(
+          'Duruşma başarıyla güncellendi'
+        );
+
+        navigate(
+          `/events/${id}`
+        );
+      },
 
       onError: (error) => {
         toast.error(
@@ -423,43 +438,44 @@ const EventEdit = () => {
         eventApi.remove(id),
 
       onSuccess: async () => {
-  queryClient.removeQueries({
-    queryKey: ['event', id],
-    exact: true,
-  });
+        const caseId =
+          event?.case_id
+            ? String(event.case_id)
+            : null;
 
-  await Promise.all([
-    queryClient.invalidateQueries({
-      queryKey: ['calendar-events'],
-    }),
+        queryClient.removeQueries({
+          queryKey: ['event', id],
+          exact: true,
+        });
 
-    queryClient.invalidateQueries({
-      queryKey: ['events'],
-    }),
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: ['calendar-events'],
+          }),
 
-    queryClient.invalidateQueries({
-      queryKey: ['case'],
-    }),
-  ]);
+          caseId
+            ? queryClient.invalidateQueries({
+                queryKey: ['case', caseId],
+              })
+            : Promise.resolve(),
+        ]);
 
-  toast.success(
-    'Duruşma silindi'
-  );
+        toast.success(
+          'Duruşma silindi'
+        );
 
-  if (
-    event?.case_id
-  ) {
-    navigate(
-      `/cases/${event.case_id}`
-    );
+        if (caseId) {
+          navigate(
+            `/cases/${caseId}`
+          );
 
-    return;
-  }
+          return;
+        }
 
-  navigate(
-    '/calendar'
-  );
-},
+        navigate(
+          '/calendar'
+        );
+      },
 
       onError: (error) => {
         toast.error(
