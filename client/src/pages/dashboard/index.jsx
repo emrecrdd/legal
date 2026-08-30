@@ -870,17 +870,27 @@ const Dashboard = () => {
 
           <div>
 
-            <p
-              className="
-                text-[10px]
-                font-bold
-                uppercase
-                tracking-[0.18em]
-                text-blue-300/70
-              "
-            >
-              Çalışma Alanı
-            </p>
+           <div className="flex items-center gap-2">
+  <span
+    className="
+      h-px
+      w-6
+      bg-amber-400
+    "
+  />
+
+  <p
+    className="
+      text-[10px]
+      font-bold
+      uppercase
+      tracking-[0.20em]
+      text-amber-300
+    "
+  >
+    Derkenar · Çalışma Alanı
+  </p>
+</div>
 
             <h1
               className="
@@ -906,16 +916,17 @@ const Dashboard = () => {
           <div className="flex flex-wrap items-center gap-3">
 
             <div
-              className="
-                rounded-xl
-                border
-                border-white/[0.08]
-                bg-white/[0.04]
-                px-4
-                py-3
-              "
+             className="
+  rounded-xl
+  border
+  border-amber-300/[0.12]
+  bg-white/[0.04]
+  px-4
+  py-3
+  shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]
+"
             >
-              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-amber-300/60">
                 Bugün
               </p>
 
