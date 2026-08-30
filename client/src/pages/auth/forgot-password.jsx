@@ -204,7 +204,6 @@ const ForgotPassword = () => {
         </p>
 
         <div className="mt-7">
-
           <Button
             type="button"
             className="w-full"
@@ -216,7 +215,6 @@ const ForgotPassword = () => {
           >
             Giriş Ekranına Dön
           </Button>
-
         </div>
 
       </div>
@@ -230,6 +228,22 @@ const ForgotPassword = () => {
 
       <div className="mb-8">
 
+        {/* BRAND */}
+
+        <div className="mb-7">
+          <img
+            src="/derkenar-logo.png"
+            alt="Derkenar"
+            className="
+              h-auto
+              w-full
+              max-w-[260px]
+              object-contain
+              object-left
+            "
+          />
+        </div>
+
         <div
           className="
             flex
@@ -238,10 +252,13 @@ const ForgotPassword = () => {
             items-center
             justify-center
             rounded-xl
-            bg-blue-50
-            text-blue-600
-            dark:bg-blue-500/[0.08]
-            dark:text-blue-400
+            border
+            border-amber-200/70
+            bg-amber-50
+            text-amber-700
+            dark:border-amber-400/15
+            dark:bg-amber-400/[0.07]
+            dark:text-amber-300
           "
         >
           <Mail size={20} />
@@ -254,8 +271,8 @@ const ForgotPassword = () => {
             font-bold
             uppercase
             tracking-[0.16em]
-            text-blue-600
-            dark:text-blue-400
+            text-amber-600
+            dark:text-amber-300
           "
         >
           Şifre Kurtarma
@@ -374,17 +391,14 @@ const ForgotPassword = () => {
                 outline-none
                 transition-all
                 placeholder:text-gray-400
-
                 dark:bg-white/[0.035]
                 dark:text-white
                 dark:placeholder:text-slate-500
-
                 ${
                   error
                     ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 dark:border-red-500/50'
-                    : 'border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 dark:border-white/[0.08] dark:hover:border-white/[0.14] dark:focus:border-blue-500/60'
+                    : 'border-gray-200 hover:border-gray-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10 dark:border-white/[0.08] dark:hover:border-white/[0.14] dark:focus:border-amber-400/60'
                 }
-
                 disabled:cursor-not-allowed
                 disabled:opacity-60
               `}
@@ -436,6 +450,7 @@ const ForgotPassword = () => {
           dark:border-white/[0.07]
         "
       >
+
         <Link
           to="/login"
           className="
@@ -446,14 +461,16 @@ const ForgotPassword = () => {
             font-semibold
             text-gray-500
             transition
-            hover:text-blue-600
+            hover:text-amber-600
             dark:text-slate-500
-            dark:hover:text-blue-400
+            dark:hover:text-amber-300
           "
         >
           <ArrowLeft size={14} />
+
           Giriş ekranına dön
         </Link>
+
       </div>
 
     </div>
