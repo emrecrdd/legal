@@ -182,6 +182,9 @@ const formatDateTime = (
 
       timeStyle:
         'short',
+
+      timeZone:
+        'Europe/Istanbul',
     }
   ).format(
     date
@@ -219,15 +222,46 @@ const maskIdentityNumber = (
   );
 };
 
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
 const normalizeCaseId = (
   party,
   fallbackCaseId
 ) => {
-  return (
-    party?.case_id ||
-    party?.case?.id ||
-    fallbackCaseId ||
-    null
+  return normalizeId(
+    party?.case_id ??
+    party?.case?.id ??
+    fallbackCaseId
   );
 };
 
@@ -237,10 +271,20 @@ const normalizeCaseId = (
 
 const CasePartyDetail = () => {
   const {
-    id,
-    caseId,
+    id: idParam,
+    caseId: caseIdParam,
   } =
     useParams();
+
+  const id =
+    normalizeId(
+      idParam
+    );
+
+  const caseId =
+    normalizeId(
+      caseIdParam
+    );
 
   const {
     user,
@@ -416,33 +460,72 @@ const CasePartyDetail = () => {
       caseId
     );
 
+  const resolvedPartyId =
+    normalizeId(
+      party?.id ??
+      id
+    );
+
   const isCompany =
     party.entity_type ===
     'company';
 
   const identityNumber =
-    party.identification_number ||
-    party.tc_number ||
+    normalizeId(
+      party.identification_number ??
+      party.tc_number
+    ) ||
     null;
+
+  const phone =
+    String(
+      party.phone ||
+      ''
+    ).trim();
+
+  const email =
+    String(
+      party.email ||
+      ''
+    ).trim();
+
+  const address =
+    String(
+      party.address ||
+      ''
+    ).trim();
+
+  const lawyerPhone =
+    String(
+      party.lawyer_phone ||
+      ''
+    ).trim();
+
+  const lawyerEmail =
+    String(
+      party.lawyer_email ||
+      ''
+    ).trim();
 
   const hasContact =
     Boolean(
-      party.phone ||
-      party.email ||
-      party.address
+      phone ||
+      email ||
+      address
     );
 
   const hasLawyer =
     Boolean(
       party.lawyer_name ||
-      party.lawyer_phone ||
-      party.lawyer_email ||
+      lawyerPhone ||
+      lawyerEmail ||
       party.lawyer_registry_number
     );
 
   const editUrl =
-    resolvedCaseId
-      ? `/cases/${resolvedCaseId}/parties/${party.id}/edit`
+    resolvedCaseId &&
+    resolvedPartyId
+      ? `/cases/${resolvedCaseId}/parties/${resolvedPartyId}/edit`
       : null;
 
   const backUrl =
@@ -789,31 +872,31 @@ const CasePartyDetail = () => {
 
               <div className="flex flex-wrap gap-2">
 
-                {party.phone && (
+                {phone && (
                   <a
-                    href={`tel:${party.phone}`}
+                    href={`tel:${phone}`}
                     className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-blue-500/20 dark:hover:bg-blue-500/[0.05] dark:hover:text-blue-400"
                   >
                     <Phone className="h-4 w-4" />
 
-                    {party.phone}
+                    {phone}
                   </a>
                 )}
 
-                {party.email && (
+                {email && (
                   <a
-                    href={`mailto:${party.email}`}
+                    href={`mailto:${email}`}
                     className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-blue-500/20 dark:hover:bg-blue-500/[0.05] dark:hover:text-blue-400"
                   >
                     <Mail className="h-4 w-4" />
 
-                    {party.email}
+                    {email}
                   </a>
                 )}
 
               </div>
 
-              {party.address && (
+              {address && (
                 <div className="flex items-start gap-3 rounded-xl border border-gray-100 p-4 dark:border-white/[0.06]">
 
                   <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-gray-400 dark:text-slate-500" />
@@ -825,7 +908,7 @@ const CasePartyDetail = () => {
                     </p>
 
                     <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-gray-700 dark:text-slate-300">
-                      {party.address}
+                      {address}
                     </p>
 
                   </div>
@@ -946,30 +1029,30 @@ const CasePartyDetail = () => {
 
                   <div className="mt-2 flex flex-wrap gap-2">
 
-                    {party.lawyer_phone && (
+                    {lawyerPhone && (
                       <a
-                        href={`tel:${party.lawyer_phone}`}
+                        href={`tel:${lawyerPhone}`}
                         className="inline-flex items-center gap-1.5 rounded-md bg-gray-50 px-2.5 py-1.5 text-sm font-medium text-blue-600 transition hover:bg-blue-50 dark:bg-white/[0.03] dark:text-blue-400 dark:hover:bg-blue-500/[0.06]"
                       >
                         <Phone className="h-4 w-4" />
 
-                        {party.lawyer_phone}
+                        {lawyerPhone}
                       </a>
                     )}
 
-                    {party.lawyer_email && (
+                    {lawyerEmail && (
                       <a
-                        href={`mailto:${party.lawyer_email}`}
+                        href={`mailto:${lawyerEmail}`}
                         className="inline-flex items-center gap-1.5 rounded-md bg-gray-50 px-2.5 py-1.5 text-sm font-medium text-blue-600 transition hover:bg-blue-50 dark:bg-white/[0.03] dark:text-blue-400 dark:hover:bg-blue-500/[0.06]"
                       >
                         <Mail className="h-4 w-4" />
 
-                        {party.lawyer_email}
+                        {lawyerEmail}
                       </a>
                     )}
 
-                    {!party.lawyer_phone &&
-                      !party.lawyer_email && (
+                    {!lawyerPhone &&
+                      !lawyerEmail && (
                       <span className="text-sm text-gray-400 dark:text-slate-600">
                         Belirtilmedi
                       </span>

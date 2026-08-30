@@ -90,6 +90,38 @@ const normalizeNullable = (
   );
 };
 
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
 const normalizeEmail = (
   value
 ) => {
@@ -342,15 +374,93 @@ const normalizeForm = (
 });
 
 // ======================================================
+// CACHE INVALIDATION
+// ======================================================
+
+const invalidateCasePartyViews = async (
+  queryClient,
+  {
+    caseId,
+    partyId = null,
+  }
+) => {
+  const normalizedCaseId =
+    normalizeId(
+      caseId
+    );
+
+  const normalizedPartyId =
+    normalizeId(
+      partyId
+    );
+
+  const invalidations = [
+    // Tüm dava listeleri / taraf sayısı gösteren ekranlar
+    queryClient.invalidateQueries({
+      queryKey: [
+        'cases',
+      ],
+    }),
+
+    // Davaya ait taraf listeleri
+    queryClient.invalidateQueries({
+      queryKey: [
+        'case-parties',
+      ],
+    }),
+  ];
+
+  if (
+    normalizedCaseId
+  ) {
+    invalidations.push(
+      queryClient.invalidateQueries({
+        queryKey: [
+          'case',
+          normalizedCaseId,
+        ],
+      })
+    );
+  }
+
+  if (
+    normalizedPartyId
+  ) {
+    invalidations.push(
+      queryClient.invalidateQueries({
+        queryKey: [
+          'case-party',
+          normalizedPartyId,
+        ],
+      })
+    );
+  }
+
+  await Promise.all(
+    invalidations
+  );
+};
+
+// ======================================================
 // COMPONENT
 // ======================================================
 
 const CasePartyEdit = () => {
   const {
-    id,
-    caseId,
+    id: idParam,
+    caseId: caseIdParam,
   } =
     useParams();
+
+  const id =
+    normalizeId(
+      idParam
+    );
+
+  const caseId =
+    normalizeId(
+      caseIdParam
+    );
 
   const navigate =
     useNavigate();
@@ -582,28 +692,14 @@ const CasePartyEdit = () => {
         ),
 
       onSuccess: async () => {
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: [
-              'case-party',
+        await invalidateCasePartyViews(
+          queryClient,
+          {
+            caseId,
+            partyId:
               id,
-            ],
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey: [
-              'case-parties',
-              caseId,
-            ],
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey: [
-              'case',
-              caseId,
-            ],
-          }),
-        ]);
+          }
+        );
 
         toast.success(
           'Taraf başarıyla güncellendi'
@@ -644,12 +740,33 @@ const CasePartyEdit = () => {
             (
               item
             ) => {
-              const field =
+              const rawField =
                 item?.path ||
                 item?.param;
 
+              const field =
+                Array.isArray(
+                  rawField
+                )
+                  ? rawField[
+                      rawField.length -
+                        1
+                    ]
+                  : String(
+                      rawField ||
+                      ''
+                    )
+                      .split('.')
+                      .filter(Boolean)
+                      .pop();
+
               if (
-                field
+                field &&
+                Object.prototype
+                  .hasOwnProperty.call(
+                    INITIAL_FORM,
+                    field
+                  )
               ) {
                 nextErrors[field] =
                   item?.msg ||
@@ -749,28 +866,27 @@ const CasePartyEdit = () => {
         ),
 
       onSuccess: async () => {
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: [
-              'case-parties',
-              caseId,
-            ],
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey: [
-              'case',
-              caseId,
-            ],
-          }),
-        ]);
+        await queryClient.cancelQueries({
+          queryKey: [
+            'case-party',
+            id,
+          ],
+        });
 
         queryClient.removeQueries({
           queryKey: [
             'case-party',
             id,
           ],
+          exact: true,
         });
+
+        await invalidateCasePartyViews(
+          queryClient,
+          {
+            caseId,
+          }
+        );
 
         toast.success(
           'Taraf kaydı silindi'
@@ -807,6 +923,12 @@ const CasePartyEdit = () => {
   const handleChange = (
     event
   ) => {
+    if (
+      isPending
+    ) {
+      return;
+    }
+
     const {
       name,
       value,
@@ -1130,6 +1252,21 @@ const CasePartyEdit = () => {
       }
 
       // ==================================================
+      // TAX OFFICE
+      // ==================================================
+
+      if (
+        isCompany &&
+        formData.tax_office
+          .trim()
+          .length >
+        150
+      ) {
+        nextErrors.tax_office =
+          'Vergi dairesi en fazla 150 karakter olabilir';
+      }
+
+      // ==================================================
       // PHONE
       // ==================================================
 
@@ -1172,6 +1309,16 @@ const CasePartyEdit = () => {
       // ==================================================
 
       if (
+        formData.lawyer_name
+          .trim()
+          .length >
+        255
+      ) {
+        nextErrors.lawyer_name =
+          'Avukat adı en fazla 255 karakter olabilir';
+      }
+
+      if (
         !validatePhone(
           formData.lawyer_phone
         )
@@ -1187,6 +1334,17 @@ const CasePartyEdit = () => {
       ) {
         nextErrors.lawyer_email =
           'Geçerli bir avukat e-posta adresi girin';
+      }
+
+      if (
+        formData
+          .lawyer_registry_number
+          .trim()
+          .length >
+        100
+      ) {
+        nextErrors.lawyer_registry_number =
+          'Baro sicil numarası en fazla 100 karakter olabilir';
       }
 
       // ==================================================
@@ -1225,6 +1383,17 @@ const CasePartyEdit = () => {
     if (
       isPending
     ) {
+      return;
+    }
+
+    if (
+      !id ||
+      !caseId
+    ) {
+      toast.error(
+        'Geçerli dava veya taraf kaydı bulunamadı'
+      );
+
       return;
     }
 
@@ -1363,6 +1532,17 @@ const CasePartyEdit = () => {
       if (
         isPending
       ) {
+        return;
+      }
+
+      if (
+        !id ||
+        !caseId
+      ) {
+        toast.error(
+          'Geçerli dava veya taraf kaydı bulunamadı'
+        );
+
         return;
       }
 

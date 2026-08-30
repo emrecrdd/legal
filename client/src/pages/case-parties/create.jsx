@@ -12,6 +12,7 @@ import {
 import {
   useMutation,
   useQuery,
+  useQueryClient,
 } from '@tanstack/react-query';
 
 import casePartyApi
@@ -152,6 +153,38 @@ const normalizeNullable = (
   return (
     normalized ||
     null
+  );
+};
+
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
   );
 };
 
@@ -385,17 +418,76 @@ const normalizeFormForComparison = (
 });
 
 // ======================================================
+// CACHE INVALIDATION
+// ======================================================
+
+const invalidateCasePartyViews = async (
+  queryClient,
+  caseId
+) => {
+  const normalizedCaseId =
+    normalizeId(
+      caseId
+    );
+
+  if (
+    !normalizedCaseId
+  ) {
+    return;
+  }
+
+  await Promise.all([
+    // Dava detay ekranı
+    queryClient.invalidateQueries({
+      queryKey: [
+        'case',
+        normalizedCaseId,
+      ],
+    }),
+
+    // Dava listeleri / taraf sayısı gösteren ekranlar
+    queryClient.invalidateQueries({
+      queryKey: [
+        'cases',
+      ],
+    }),
+
+    // Davaya ait taraf listeleri
+    queryClient.invalidateQueries({
+      queryKey: [
+        'case-parties',
+      ],
+    }),
+
+    // Taraf detay / ilişkili cache'ler
+    queryClient.invalidateQueries({
+      queryKey: [
+        'case-party',
+      ],
+    }),
+  ]);
+};
+
+// ======================================================
 // COMPONENT
 // ======================================================
 
 const CasePartyCreate = () => {
   const {
-    caseId,
+    caseId: caseIdParam,
   } =
     useParams();
 
+  const caseId =
+    normalizeId(
+      caseIdParam
+    );
+
   const navigate =
     useNavigate();
+
+  const queryClient =
+    useQueryClient();
 
   // ======================================================
   // STATE
@@ -432,7 +524,6 @@ const CasePartyCreate = () => {
     useQuery({
       queryKey: [
         'case',
-        'party-create',
         caseId,
       ],
 
@@ -530,13 +621,9 @@ const CasePartyCreate = () => {
           payload
         ),
 
-      onSuccess: (
+      onSuccess: async (
         response
       ) => {
-        toast.success(
-          'Taraf başarıyla eklendi'
-        );
-
         const party =
           response
             ?.data
@@ -545,11 +632,25 @@ const CasePartyCreate = () => {
             ?.data ??
           null;
 
+        await invalidateCasePartyViews(
+          queryClient,
+          caseId
+        );
+
+        toast.success(
+          'Taraf başarıyla eklendi'
+        );
+
+        const partyId =
+          normalizeId(
+            party?.id
+          );
+
         if (
-          party?.id
+          partyId
         ) {
           navigate(
-            `/cases/${caseId}/parties/${party.id}`
+            `/cases/${caseId}/parties/${partyId}`
           );
 
           return;
@@ -590,12 +691,33 @@ const CasePartyCreate = () => {
             (
               item
             ) => {
-              const field =
+              const rawField =
                 item?.path ||
                 item?.param;
 
+              const field =
+                Array.isArray(
+                  rawField
+                )
+                  ? rawField[
+                      rawField.length -
+                        1
+                    ]
+                  : String(
+                      rawField ||
+                      ''
+                    )
+                      .split('.')
+                      .filter(Boolean)
+                      .pop();
+
               if (
-                field
+                field &&
+                Object.prototype
+                  .hasOwnProperty.call(
+                    INITIAL_FORM,
+                    field
+                  )
               ) {
                 nextErrors[field] =
                   item?.msg ||
@@ -702,6 +824,12 @@ const CasePartyCreate = () => {
   const handleChange = (
     event
   ) => {
+    if (
+      isPending
+    ) {
+      return;
+    }
+
     const {
       name,
       value,
@@ -1154,6 +1282,16 @@ const CasePartyCreate = () => {
     if (
       isPending
     ) {
+      return;
+    }
+
+    if (
+      !caseId
+    ) {
+      toast.error(
+        'Geçerli bir dava kaydı bulunamadı'
+      );
+
       return;
     }
 
