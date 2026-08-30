@@ -437,56 +437,19 @@ const SidebarContent = ({
 
       <div className="flex h-[76px] shrink-0 items-center justify-between px-5">
 
-        <div className="flex items-center gap-3">
-
-          <div
-            className="
-              relative
-              flex
-              h-10
-              w-10
-              items-center
-              justify-center
-              rounded-xl
-              border
-              border-amber-400/20
-              bg-amber-400/[0.08]
-            "
-          >
-            <Gavel
-              size={20}
-              strokeWidth={2}
-              className="text-amber-300"
-            />
-
-            <span
-              className="
-                absolute
-                -right-1
-                -top-1
-                h-2
-                w-2
-                rounded-full
-                border-2
-                border-[#081b3d]
-                bg-emerald-400
-              "
-            />
-          </div>
-
-          <div>
-
-            <h2 className="text-[19px] font-bold tracking-[-0.03em] text-white">
-              Derkenar
-            </h2>
-
-            <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Hukuk Büro Yönetimi
-            </p>
-
-          </div>
-
-        </div>
+       <div className="min-w-0 flex-1">
+  <img
+    src="/derkenar-logo.png"
+    alt="Derkenar"
+    className="
+      h-auto
+      w-full
+      max-w-[190px]
+      object-contain
+      object-left
+    "
+  />
+</div>
 
         {mobile && (
           <button
