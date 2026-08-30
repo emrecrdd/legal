@@ -12,6 +12,7 @@ import {
 import {
   useMutation,
   useQuery,
+  useQueryClient,
 } from '@tanstack/react-query';
 
 import eventApi from '../../features/events/event.api.js';
@@ -191,8 +192,12 @@ const getRoleIcon = (role) => {
 
 const EventEdit = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { id } = useParams();
-  const { user } = useAuth();
+
+  const {
+    user,
+  } = useAuth();
 
   const canEdit =
     hasPermission(
@@ -372,15 +377,33 @@ const EventEdit = () => {
           payload
         ),
 
-      onSuccess: () => {
-        toast.success(
-          'Duruşma başarıyla güncellendi'
-        );
+      onSuccess: async () => {
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: ['event', id],
+    }),
 
-        navigate(
-          `/events/${id}`
-        );
-      },
+    queryClient.invalidateQueries({
+      queryKey: ['calendar-events'],
+    }),
+
+    queryClient.invalidateQueries({
+      queryKey: ['events'],
+    }),
+
+    queryClient.invalidateQueries({
+      queryKey: ['case'],
+    }),
+  ]);
+
+  toast.success(
+    'Duruşma başarıyla güncellendi'
+  );
+
+  navigate(
+    `/events/${id}`
+  );
+},
 
       onError: (error) => {
         toast.error(
@@ -399,25 +422,44 @@ const EventEdit = () => {
       mutationFn: () =>
         eventApi.remove(id),
 
-      onSuccess: () => {
-        toast.success(
-          'Duruşma silindi'
-        );
+      onSuccess: async () => {
+  queryClient.removeQueries({
+    queryKey: ['event', id],
+    exact: true,
+  });
 
-        if (
-          event?.case_id
-        ) {
-          navigate(
-            `/cases/${event.case_id}`
-          );
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: ['calendar-events'],
+    }),
 
-          return;
-        }
+    queryClient.invalidateQueries({
+      queryKey: ['events'],
+    }),
 
-        navigate(
-          '/calendar'
-        );
-      },
+    queryClient.invalidateQueries({
+      queryKey: ['case'],
+    }),
+  ]);
+
+  toast.success(
+    'Duruşma silindi'
+  );
+
+  if (
+    event?.case_id
+  ) {
+    navigate(
+      `/cases/${event.case_id}`
+    );
+
+    return;
+  }
+
+  navigate(
+    '/calendar'
+  );
+},
 
       onError: (error) => {
         toast.error(

@@ -12,6 +12,7 @@ import {
 import {
   useMutation,
   useQuery,
+  useQueryClient,
 } from '@tanstack/react-query';
 
 import eventApi from '../../features/events/event.api.js';
@@ -302,6 +303,9 @@ const EventCreate = () => {
   const navigate =
     useNavigate();
 
+  const queryClient =
+    useQueryClient();
+
   const {
     user,
   } =
@@ -506,43 +510,56 @@ const EventCreate = () => {
           payload
         ),
 
-      onSuccess: (
-        response
-      ) => {
-        const event =
-          response?.data?.data ??
-          response?.data ??
-          null;
+      onSuccess: async (
+  response
+) => {
+  const event =
+    response?.data?.data ??
+    response?.data ??
+    null;
 
-        toast.success(
-          'Duruşma başarıyla oluşturuldu'
-        );
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: ['calendar-events'],
+    }),
 
-        if (
-          event?.id
-        ) {
-          navigate(
-            `/events/${event.id}`
-          );
+    queryClient.invalidateQueries({
+      queryKey: ['event'],
+    }),
 
-          return;
-        }
+    queryClient.invalidateQueries({
+      queryKey: ['events'],
+    }),
 
-        if (
-          event?.case_id
-        ) {
-          navigate(
-            `/cases/${event.case_id}`
-          );
+    queryClient.invalidateQueries({
+      queryKey: ['case'],
+    }),
+  ]);
 
-          return;
-        }
+  toast.success(
+    'Duruşma başarıyla oluşturuldu'
+  );
 
-        navigate(
-          '/calendar'
-        );
-      },
+  if (event?.id) {
+    navigate(
+      `/events/${event.id}`
+    );
 
+    return;
+  }
+
+  if (event?.case_id) {
+    navigate(
+      `/cases/${event.case_id}`
+    );
+
+    return;
+  }
+
+  navigate(
+    '/calendar'
+  );
+},
       onError: (
         error
       ) => {
