@@ -19,7 +19,7 @@ import meetingApi from '../../features/meetings/meeting.api.js';
 import {
   useDeleteMeeting,
   useUpdateMeeting,
-} from '../../features/meetings/meeting.queries.js';
+} from '../../features/meetings/meeting.query.js';
 import caseApi from '../../features/cases/case.api.js';
 import clientApi from '../../features/clients/client.api.js';
 import userApi from '../../features/users/user.api.js';

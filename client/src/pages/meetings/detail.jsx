@@ -12,7 +12,7 @@ import meetingApi from '../../features/meetings/meeting.api.js';
 
 import {
   useUpdateMeetingStatus,
-} from '../../features/meetings/meeting.queries.js';
+} from '../../features/meetings/meeting.query.js';
 
 import {
   useAuth,
