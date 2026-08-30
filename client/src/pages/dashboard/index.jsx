@@ -879,17 +879,17 @@ const Dashboard = () => {
     "
   />
 
-  <p
-    className="
-      text-[10px]
-      font-bold
-      uppercase
-      tracking-[0.20em]
-      text-amber-300
-    "
-  >
-    Derkenar · Çalışma Alanı
-  </p>
+   <p
+              className="
+                text-[10px]
+                font-bold
+                uppercase
+                tracking-[0.18em]
+                text-blue-300/70
+              "
+            >
+              Çalışma Alanı
+            </p>
 </div>
 
             <h1
