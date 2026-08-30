@@ -198,45 +198,19 @@ const Login = () => {
 
   {/* BRAND */}
 
-  <div className="mb-7 flex items-center gap-3">
-    <img
-      src="/favicon.svg"
-      alt="Derkenar"
-      className="
-        h-10
-        w-10
-        shrink-0
-      "
-    />
-
-    <div>
-      <div
-        className="
-          text-lg
-          font-bold
-          tracking-[0.12em]
-          text-gray-900
-          dark:text-white
-        "
-      >
-        DERKENAR
-      </div>
-
-      <div
-        className="
-          mt-0.5
-          text-[10px]
-          font-medium
-          uppercase
-          tracking-[0.12em]
-          text-gray-400
-          dark:text-slate-500
-        "
-      >
-        Hukuk Büro Yönetim Sistemi
-      </div>
-    </div>
-  </div>
+<div className="mb-7">
+  <img
+    src="/derkenar-logo.png"
+    alt="Derkenar"
+    className="
+      h-auto
+      w-full
+      max-w-[300px]
+      object-contain
+      object-left
+    "
+  />
+</div>
 
   <p
     className="
