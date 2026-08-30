@@ -559,13 +559,15 @@ const Topbar = ({
             </h1>
 
             <p
-              className="
-                mt-0.5 hidden truncate
-                text-[11px] font-medium
-                text-gray-400
-                dark:text-slate-500
-                md:block
-              "
+             className="
+  mt-0.5 hidden truncate
+  text-[11px]
+  font-semibold
+  tracking-[0.02em]
+  text-gray-400
+  dark:text-slate-500
+  md:block
+"
             >
               {breadcrumb}
             </p>
@@ -595,12 +597,12 @@ const Topbar = ({
               bg-gray-50/80
               px-3.5
               transition-all
-              focus-within:border-blue-300
-              focus-within:bg-white
-              focus-within:shadow-[0_0_0_3px_rgba(59,130,246,0.08)]
+              focus-within:border-amber-300
+focus-within:bg-white
+focus-within:shadow-[0_0_0_3px_rgba(245,158,11,0.08)]
               dark:border-white/[0.07]
               dark:bg-white/[0.035]
-              dark:focus-within:border-blue-500/40
+              dark:focus-within:border-amber-400/35
               dark:focus-within:bg-white/[0.05]
             "
           >
@@ -610,7 +612,7 @@ const Topbar = ({
               className="
                 shrink-0 text-gray-400
                 transition-colors
-                group-focus-within:text-blue-500
+                group-focus-within:text-amber-500
                 dark:text-slate-500
               "
             />
@@ -1118,18 +1120,20 @@ const Topbar = ({
 
               <div
                 className="
-                  flex h-8 w-8
-                  items-center justify-center
-                  rounded-lg
-                  bg-[#0c2858]
-                  text-[10px] font-bold
-                  tracking-wide
-                  text-white
-                  shadow-sm
-                  dark:bg-blue-600
-                  md:h-9 md:w-9
-                  md:text-xs
-                "
+  flex h-8 w-8
+  items-center justify-center
+  rounded-lg
+  border
+  border-amber-400/20
+  bg-[#0c2858]
+  text-[10px] font-bold
+  tracking-wide
+  text-amber-100
+  shadow-sm
+  dark:bg-[#0c2858]
+  md:h-9 md:w-9
+  md:text-xs
+"
               >
                 {getInitials(
                   user
