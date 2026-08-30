@@ -23,6 +23,7 @@ import {
   LayoutDashboard,
   Search,
   Settings,
+  Info,
   ShieldCheck,
   Sparkles,
   TrendingUp,
@@ -243,6 +244,20 @@ const navigationGroups = [
 
         permission:
           PERMISSION_KEYS.VIEW_SETTINGS,
+      },
+
+      {
+        path:
+          '/system-info',
+
+        label:
+          'Sistem Bilgileri',
+
+        icon:
+          Info,
+
+        permission:
+          null,
       },
     ],
   },
@@ -614,67 +629,6 @@ const SidebarContent = ({
         )}
 
       </nav>
-
-      {/* ==================================================
-          FOOTER
-      ================================================== */}
-
-      <div className="shrink-0 p-4">
-
-        <div
-          className="
-            rounded-xl
-            border
-            border-white/[0.06]
-            bg-white/[0.025]
-            px-3
-            py-3
-          "
-        >
-
-          <div className="flex items-center gap-2">
-
-            <span className="relative flex h-2 w-2">
-
-              <span
-                className="
-                  absolute
-                  inline-flex
-                  h-full
-                  w-full
-                  animate-ping
-                  rounded-full
-                  bg-emerald-400
-                  opacity-40
-                "
-              />
-
-              <span
-                className="
-                  relative
-                  inline-flex
-                  h-2
-                  w-2
-                  rounded-full
-                  bg-emerald-400
-                "
-              />
-
-            </span>
-
-            <span className="text-[11px] font-medium text-slate-300">
-              Sistem aktif
-            </span>
-
-          </div>
-
-          <p className="mt-1 pl-4 text-[9px] text-slate-500">
-            Derkenar çalışma alanı
-          </p>
-
-        </div>
-
-      </div>
 
     </div>
   );

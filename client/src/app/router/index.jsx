@@ -146,6 +146,7 @@ import PaymentPlanDetail from '../../pages/payments/PaymentPlanDetail.jsx';
 import AIAssistant from '../../pages/ai/index.jsx';
 import Search from '../../pages/search/index.jsx';
 import Settings from '../../pages/settings/index.jsx';
+import SystemInfo from '../../pages/system-info/index.jsx';
 
 // ======================================================
 // USERS
@@ -1034,6 +1035,17 @@ const AppRouter = () => {
               }
             />
           </Route>
+
+          {/* ==================================================
+              SYSTEM INFO
+          ================================================== */}
+
+          <Route
+            path="/system-info"
+            element={
+              <SystemInfo />
+            }
+          />
 
           {/* ==================================================
     USERS - VIEW
