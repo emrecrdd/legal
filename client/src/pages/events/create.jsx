@@ -206,6 +206,38 @@ const normalizeNullable = (
   );
 };
 
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
 /*
  * datetime-local timezone bilgisi taşımaz.
  *
@@ -296,6 +328,84 @@ const getRoleIcon = (
 };
 
 // ======================================================
+// CACHE INVALIDATION
+// ======================================================
+
+const invalidateEventViews = async (
+  queryClient,
+  {
+    caseIds = [],
+  } = {}
+) => {
+  const normalizedCaseIds = [
+    ...new Set(
+      caseIds
+        .map(
+          (caseId) =>
+            normalizeId(
+              caseId
+            )
+        )
+        .filter(Boolean)
+    ),
+  ];
+
+  const invalidations = [
+    // Genel etkinlik / duruşma listeleri
+    queryClient.invalidateQueries({
+      queryKey: [
+        'events',
+      ],
+    }),
+
+    // Kullanıcının etkinlikleri
+    queryClient.invalidateQueries({
+      queryKey: [
+        'my-events',
+      ],
+    }),
+
+    // Takvim ve dashboard aylık özet
+    queryClient.invalidateQueries({
+      queryKey: [
+        'calendar-events',
+      ],
+    }),
+
+    // Dashboard "Bugünkü Duruşmalar"
+    queryClient.invalidateQueries({
+      queryKey: [
+        'dashboard-hearings',
+      ],
+    }),
+
+    // Davaya bağlı duruşma listeleri
+    queryClient.invalidateQueries({
+      queryKey: [
+        'case-events',
+      ],
+    }),
+  ];
+
+  normalizedCaseIds.forEach(
+    (caseId) => {
+      invalidations.push(
+        queryClient.invalidateQueries({
+          queryKey: [
+            'case',
+            caseId,
+          ],
+        })
+      );
+    }
+  );
+
+  await Promise.all(
+    invalidations
+  );
+};
+
+// ======================================================
 // COMPONENT
 // ======================================================
 
@@ -317,8 +427,10 @@ const EventCreate = () => {
     useSearchParams();
 
   const caseIdFromUrl =
-    searchParams.get(
-      'case'
+    normalizeId(
+      searchParams.get(
+        'case'
+      )
     );
 
   const [
@@ -426,6 +538,39 @@ const EventCreate = () => {
       ? lawyersData.data.data
       : [];
 
+  const assignableUsersWithCurrent =
+    (() => {
+      if (
+        !user?.id ||
+        ![
+          'lawyer',
+          'admin',
+        ].includes(
+          user.role
+        )
+      ) {
+        return assignableUsers;
+      }
+
+      const currentUserExists =
+        assignableUsers.some(
+          (person) =>
+            normalizeId(
+              person?.id
+            ) ===
+            normalizeId(
+              user.id
+            )
+        );
+
+      return currentUserExists
+        ? assignableUsers
+        : [
+            user,
+            ...assignableUsers,
+          ];
+    })();
+
   // ======================================================
   // DEFAULT ASSIGNEE
   // ======================================================
@@ -456,7 +601,9 @@ const EventCreate = () => {
 
           assigned_to:
             current.assigned_to ||
-            user.id,
+            normalizeId(
+              user.id
+            ),
         })
       );
     }
@@ -519,35 +666,36 @@ const EventCreate = () => {
           null;
 
         const caseId =
-          event?.case_id ||
-          caseIdFromUrl ||
-          formData.case_id ||
-          null;
+          normalizeId(
+            event?.case_id ??
+            event?.case?.id ??
+            formData.case_id ??
+            caseIdFromUrl
+          );
 
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: ['calendar-events'],
-          }),
-
-          caseId
-            ? queryClient.invalidateQueries({
-                queryKey: [
-                  'case',
-                  String(caseId),
-                ],
-              })
-            : Promise.resolve(),
-        ]);
+        await invalidateEventViews(
+          queryClient,
+          {
+            caseIds: [
+              caseId,
+            ],
+          }
+        );
 
         toast.success(
           'Duruşma başarıyla oluşturuldu'
         );
 
+        const eventId =
+          normalizeId(
+            event?.id
+          );
+
         if (
-          event?.id
+          eventId
         ) {
           navigate(
-            `/events/${event.id}`
+            `/events/${eventId}`
           );
 
           return;
@@ -636,6 +784,12 @@ const EventCreate = () => {
 
   const addAttendee =
     () => {
+      if (
+        isPending
+      ) {
+        return;
+      }
+
       const name =
         attendeeName.trim();
 
@@ -690,6 +844,12 @@ const EventCreate = () => {
   const removeAttendee = (
     index
   ) => {
+    if (
+      isPending
+    ) {
+      return;
+    }
+
     setAttendees(
       (
         current
@@ -891,7 +1051,10 @@ const EventCreate = () => {
         formData.expense_status,
 
       case_id:
-        caseIdFromUrl ||
+        normalizeId(
+          formData.case_id ||
+          caseIdFromUrl
+        ) ||
         null,
 
       assigned_to:
@@ -903,18 +1066,28 @@ const EventCreate = () => {
         ),
 
       attendees:
-        attendees.map(
-          (
-            attendee
-          ) => ({
-            name:
-              attendee.name.trim(),
+        attendees
+          .map(
+            (
+              attendee
+            ) => ({
+              name:
+                String(
+                  attendee.name ||
+                  ''
+                ).trim(),
 
-            role:
-              attendee.role ||
-              'diger',
-          })
-        ),
+              role:
+                attendee.role ||
+                'diger',
+            })
+          )
+          .filter(
+            (attendee) =>
+              Boolean(
+                attendee.name
+              )
+          ),
     };
 
     mutation.mutate(
@@ -1432,7 +1605,7 @@ const EventCreate = () => {
                       : 'Avukat seçin'}
                   </option>
 
-                  {assignableUsers.map(
+                  {assignableUsersWithCurrent.map(
                     (
                       person
                     ) => (
@@ -1441,13 +1614,23 @@ const EventCreate = () => {
                           person.id
                         }
                         value={
-                          person.id
+                          normalizeId(
+                            person.id
+                          )
                         }
                       >
                         {person.first_name}{' '}
                         {person.last_name}
-                        {person.id ===
-                        user?.id
+                        {user?.id !==
+                          null &&
+                        user?.id !==
+                          undefined &&
+                        normalizeId(
+                          person.id
+                        ) ===
+                          normalizeId(
+                            user.id
+                          )
                           ? ' (Kendiniz)'
                           : person.role ===
                             'admin'
@@ -1635,7 +1818,8 @@ const EventCreate = () => {
                           )
                         }
                         className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/20"
-                        aria-label="Katılımcıyı kaldır"
+                        aria-label={`${attendee.name} katılımcısını kaldır`}
+                        title="Katılımcıyı kaldır"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

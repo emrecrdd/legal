@@ -100,6 +100,22 @@ const normalizeNullable = (value) => {
   return normalized || null;
 };
 
+const normalizeId = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+
+  if (typeof value === 'object') {
+    return value.id === null ||
+      value.id === undefined ||
+      value.id === ''
+      ? ''
+      : String(value.id);
+  }
+
+  return String(value);
+};
+
 const toLocalDateTimeInput = (value) => {
   if (!value) {
     return '';
@@ -184,6 +200,71 @@ const getRoleIcon = (role) => {
         <UserRound className="h-4 w-4" />
       );
   }
+};
+
+// ======================================================
+// CACHE INVALIDATION
+// ======================================================
+
+const invalidateEventViews = async (
+  queryClient,
+  {
+    eventId = null,
+    caseIds = [],
+  } = {}
+) => {
+  const normalizedCaseIds = [
+    ...new Set(
+      caseIds
+        .map((caseId) => normalizeId(caseId))
+        .filter(Boolean)
+    ),
+  ];
+
+  const invalidations = [
+    // Genel event listeleri
+    queryClient.invalidateQueries({
+      queryKey: ['events'],
+    }),
+
+    // Kullanıcının event listesi
+    queryClient.invalidateQueries({
+      queryKey: ['my-events'],
+    }),
+
+    // Takvim + dashboard aylık görünümü
+    queryClient.invalidateQueries({
+      queryKey: ['calendar-events'],
+    }),
+
+    // Dashboard "Bugünkü Duruşmalar"
+    queryClient.invalidateQueries({
+      queryKey: ['dashboard-hearings'],
+    }),
+
+    // Davaya bağlı duruşma listeleri
+    queryClient.invalidateQueries({
+      queryKey: ['case-events'],
+    }),
+  ];
+
+  if (eventId) {
+    invalidations.push(
+      queryClient.invalidateQueries({
+        queryKey: ['event', normalizeId(eventId)],
+      })
+    );
+  }
+
+  normalizedCaseIds.forEach((caseId) => {
+    invalidations.push(
+      queryClient.invalidateQueries({
+        queryKey: ['case', caseId],
+      })
+    );
+  });
+
+  await Promise.all(invalidations);
 };
 
 // ======================================================
@@ -313,10 +394,16 @@ const EventEdit = () => {
         event.status || 'scheduled',
 
       case_id:
-        event.case_id || '',
+        normalizeId(
+          event.case_id ??
+          event.case?.id
+        ),
 
       assigned_to:
-        event.assigned_to || '',
+        normalizeId(
+          event.assigned_to ??
+          event.assignee?.id
+        ),
 
       is_all_day:
         Boolean(
@@ -376,40 +463,26 @@ const EventEdit = () => {
 
       onSuccess: async () => {
         const oldCaseId =
-          event?.case_id
-            ? String(event.case_id)
-            : null;
+          normalizeId(
+            event?.case_id ??
+            event?.case?.id
+          );
 
         const newCaseId =
-          formData.case_id
-            ? String(formData.case_id)
-            : null;
+          normalizeId(
+            formData.case_id
+          );
 
-        const caseIds = [
-          ...new Set(
-            [
+        await invalidateEventViews(
+          queryClient,
+          {
+            eventId: id,
+            caseIds: [
               oldCaseId,
               newCaseId,
-            ].filter(Boolean)
-          ),
-        ];
-
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: ['event', id],
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey: ['calendar-events'],
-          }),
-
-          ...caseIds.map(
-            (caseId) =>
-              queryClient.invalidateQueries({
-                queryKey: ['case', caseId],
-              })
-          ),
-        ]);
+            ],
+          }
+        );
 
         toast.success(
           'Duruşma başarıyla güncellendi'
@@ -439,26 +512,28 @@ const EventEdit = () => {
 
       onSuccess: async () => {
         const caseId =
-          event?.case_id
-            ? String(event.case_id)
-            : null;
+          normalizeId(
+            event?.case_id ??
+            event?.case?.id
+          );
+
+        await queryClient.cancelQueries({
+          queryKey: ['event', id],
+        });
 
         queryClient.removeQueries({
           queryKey: ['event', id],
           exact: true,
         });
 
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: ['calendar-events'],
-          }),
-
-          caseId
-            ? queryClient.invalidateQueries({
-                queryKey: ['case', caseId],
-              })
-            : Promise.resolve(),
-        ]);
+        await invalidateEventViews(
+          queryClient,
+          {
+            caseIds: [
+              caseId,
+            ],
+          }
+        );
 
         toast.success(
           'Duruşma silindi'
@@ -498,6 +573,10 @@ const EventEdit = () => {
   // ======================================================
 
   const handleChange = (e) => {
+    if (!canEdit) {
+      return;
+    }
+
     const {
       name,
       value,
@@ -532,6 +611,10 @@ const EventEdit = () => {
   // ======================================================
 
   const addAttendee = () => {
+    if (!canEdit || isPending) {
+      return;
+    }
+
     const name =
       attendeeName.trim();
 
@@ -579,6 +662,10 @@ const EventEdit = () => {
   const removeAttendee = (
     index
   ) => {
+    if (!canEdit || isPending) {
+      return;
+    }
+
     setAttendees(
       (current) =>
         current.filter(
@@ -791,19 +878,26 @@ const EventEdit = () => {
         ),
 
       attendees:
-        attendees.map(
-          (attendee) => ({
-            name:
-              String(
-                attendee.name ||
-                ''
-              ).trim(),
+        attendees
+          .map(
+            (attendee) => ({
+              name:
+                String(
+                  attendee.name ||
+                  ''
+                ).trim(),
 
-            role:
-              attendee.role ||
-              'diger',
-          })
-        ),
+              role:
+                attendee.role ||
+                'diger',
+            })
+          )
+          .filter(
+            (attendee) =>
+              Boolean(
+                attendee.name
+              )
+          ),
     };
 
     mutation.mutate(
@@ -947,14 +1041,14 @@ const EventEdit = () => {
               value={formData.title}
               onChange={handleChange}
               error={errors.title}
-              disabled={isPending}
+              disabled={isPending || !canEdit}
             />
 
             <textarea
               name="description"
               value={formData.description}
               onChange={handleChange}
-              disabled={isPending}
+              disabled={isPending || !canEdit}
               rows="3"
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               placeholder="Duruşmaya ilişkin genel not..."
@@ -966,7 +1060,7 @@ const EventEdit = () => {
                 name="hearing_type"
                 value={formData.hearing_type}
                 onChange={handleChange}
-                disabled={isPending}
+                disabled={isPending || !canEdit}
                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               >
                 {HEARING_TYPES.map(
@@ -985,7 +1079,7 @@ const EventEdit = () => {
                 name="status"
                 value={formData.status}
                 onChange={handleChange}
-                disabled={isPending}
+                disabled={isPending || !canEdit}
                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               >
                 {STATUS_OPTIONS.map(
@@ -1022,7 +1116,7 @@ const EventEdit = () => {
                 value={formData.start_date}
                 onChange={handleChange}
                 error={errors.start_date}
-                disabled={isPending}
+                disabled={isPending || !canEdit}
               />
 
               <Input
@@ -1032,7 +1126,7 @@ const EventEdit = () => {
                 value={formData.end_date}
                 onChange={handleChange}
                 error={errors.end_date}
-                disabled={isPending}
+                disabled={isPending || !canEdit}
               />
 
             </div>
@@ -1043,7 +1137,7 @@ const EventEdit = () => {
                 name="is_all_day"
                 checked={formData.is_all_day}
                 onChange={handleChange}
-                disabled={isPending}
+                disabled={isPending || !canEdit}
                 className="h-4 w-4 rounded"
               />
 
@@ -1070,7 +1164,7 @@ const EventEdit = () => {
                 name="location"
                 value={formData.location}
                 onChange={handleChange}
-                disabled={isPending}
+                disabled={isPending || !canEdit}
               />
 
               <Input
@@ -1078,7 +1172,7 @@ const EventEdit = () => {
                 name="court_room"
                 value={formData.court_room}
                 onChange={handleChange}
-                disabled={isPending}
+                disabled={isPending || !canEdit}
               />
 
               <Input
@@ -1086,7 +1180,7 @@ const EventEdit = () => {
                 name="judge_name"
                 value={formData.judge_name}
                 onChange={handleChange}
-                disabled={isPending}
+                disabled={isPending || !canEdit}
               />
 
             </div>
@@ -1115,7 +1209,8 @@ const EventEdit = () => {
                   onChange={handleChange}
                   disabled={
                     isPending ||
-                    lawyersLoading
+                    lawyersLoading ||
+                    !canEdit
                   }
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 >
@@ -1127,12 +1222,16 @@ const EventEdit = () => {
                     (person) => (
                       <option
                         key={person.id}
-                        value={person.id}
+                        value={normalizeId(person.id)}
                       >
                         {person.first_name}{' '}
                         {person.last_name}
-                        {person.id ===
-                        user?.id
+                        {user?.id !==
+                          null &&
+                        user?.id !==
+                          undefined &&
+                        normalizeId(person.id) ===
+                          normalizeId(user.id)
                           ? ' (Kendiniz)'
                           : person.role === 'admin'
                             ? ' (Yönetici)'
@@ -1148,7 +1247,7 @@ const EventEdit = () => {
                 name="opposing_counsel"
                 value={formData.opposing_counsel}
                 onChange={handleChange}
-                disabled={isPending}
+                disabled={isPending || !canEdit}
               />
 
             </div>
@@ -1174,7 +1273,7 @@ const EventEdit = () => {
                   )
                 }
                 onKeyDown={handleAttendeeKeyDown}
-                disabled={isPending}
+                disabled={isPending || !canEdit}
                 className="rounded-md border border-gray-300 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 placeholder="Katılımcı adı"
               />
@@ -1186,7 +1285,7 @@ const EventEdit = () => {
                     e.target.value
                   )
                 }
-                disabled={isPending}
+                disabled={isPending || !canEdit}
                 className="rounded-md border border-gray-300 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               >
                 {ROLE_OPTIONS.map(
@@ -1206,6 +1305,7 @@ const EventEdit = () => {
                 variant="outline"
                 disabled={
                   isPending ||
+                  !canEdit ||
                   !attendeeName.trim()
                 }
                 onClick={addAttendee}
@@ -1248,8 +1348,10 @@ const EventEdit = () => {
                       onClick={() =>
                         removeAttendee(index)
                       }
-                      disabled={isPending}
+                      disabled={isPending || !canEdit}
                       className="rounded p-2 text-gray-400 hover:text-red-600"
+                      aria-label={`${attendee.name} katılımcısını kaldır`}
+                      title="Katılımcıyı kaldır"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -1266,7 +1368,7 @@ const EventEdit = () => {
               name="last_hearing_result"
               value={formData.last_hearing_result}
               onChange={handleChange}
-              disabled={isPending}
+              disabled={isPending || !canEdit}
               rows="3"
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               placeholder="Son duruşma sonucu..."
@@ -1276,7 +1378,7 @@ const EventEdit = () => {
               name="expense_status"
               value={formData.expense_status}
               onChange={handleChange}
-              disabled={isPending}
+              disabled={isPending || !canEdit}
               className="w-full max-w-sm rounded-md border border-gray-300 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             >
               {EXPENSE_OPTIONS.map(
@@ -1299,7 +1401,7 @@ const EventEdit = () => {
               <Button
                 type="submit"
                 loading={mutation.isPending}
-                disabled={isPending}
+                disabled={isPending || !canEdit}
               >
                 <Save className="mr-2 h-4 w-4" />
                 Değişiklikleri Kaydet
@@ -1309,7 +1411,7 @@ const EventEdit = () => {
             <Button
               type="button"
               variant="secondary"
-              disabled={isPending}
+              disabled={isPending || !canEdit}
               onClick={() =>
                 navigate(
                   `/events/${id}`
@@ -1324,7 +1426,7 @@ const EventEdit = () => {
                 type="button"
                 variant="danger"
                 loading={deleteMutation.isPending}
-                disabled={isPending}
+                disabled={isPending || !canEdit}
                 onClick={handleDelete}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
