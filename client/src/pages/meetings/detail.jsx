@@ -11,6 +11,10 @@ import {
 import meetingApi from '../../features/meetings/meeting.api.js';
 
 import {
+  useUpdateMeetingStatus,
+} from '../../features/meetings/meeting.queries.js';
+
+import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
 
@@ -359,7 +363,6 @@ const MeetingDetail = () => {
     data,
     isLoading,
     error,
-    refetch,
   } =
     useQuery({
       queryKey: [
@@ -381,39 +384,20 @@ const MeetingDetail = () => {
   // STATUS MUTATION
   // ======================================================
 
-  const updateStatus =
-    useMutation({
-      mutationFn:
-        (
-          status
-        ) =>
-          meetingApi.updateStatus(
-            id,
-            status
-          ),
+  const updateMeetingStatus =
+    useUpdateMeetingStatus();
 
-      onSuccess:
-        () => {
-          toast.success(
-            'Toplantı durumu güncellendi'
-          );
+  const updateStatus = {
+    ...updateMeetingStatus,
 
-          refetch();
-        },
-
-      onError:
-        (
-          error
-        ) => {
-          toast.error(
-            error
-              ?.response
-              ?.data
-              ?.message ||
-              'Durum güncellenemedi'
-          );
-        },
-    });
+    mutate: (
+      status
+    ) =>
+      updateMeetingStatus.mutate({
+        id,
+        status,
+      }),
+  };
 
   // ======================================================
   // CALENDAR MUTATION
@@ -611,8 +595,8 @@ const MeetingDetail = () => {
     return (
       <div className="py-12 text-center">
 
-        <div className="mb-4 text-5xl">
-          🤝
+        <div className="mb-4 flex justify-center">
+          <UsersRound className="h-12 w-12 text-gray-300 dark:text-slate-600" />
         </div>
 
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">

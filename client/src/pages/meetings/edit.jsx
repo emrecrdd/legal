@@ -11,12 +11,15 @@ import {
 } from 'react-router-dom';
 
 import {
-  useMutation,
   useQuery,
-  useQueryClient,
 } from '@tanstack/react-query';
 
 import meetingApi from '../../features/meetings/meeting.api.js';
+
+import {
+  useDeleteMeeting,
+  useUpdateMeeting,
+} from '../../features/meetings/meeting.queries.js';
 import caseApi from '../../features/cases/case.api.js';
 import clientApi from '../../features/clients/client.api.js';
 import userApi from '../../features/users/user.api.js';
@@ -308,9 +311,6 @@ const MeetingEdit = () => {
 
   const { user } =
     useAuth();
-
-  const queryClient =
-    useQueryClient();
 
   const [
     formData,
@@ -786,89 +786,48 @@ const MeetingEdit = () => {
   // MUTATIONS
   // ======================================================
 
-  const updateMutation =
-    useMutation({
-      mutationFn: (data) =>
-        meetingApi.update(
+  const updateMeeting =
+    useUpdateMeeting();
+
+  const deleteMeeting =
+    useDeleteMeeting();
+
+  const updateMutation = {
+    ...updateMeeting,
+
+    mutate: (
+      data
+    ) =>
+      updateMeeting.mutate(
+        {
           id,
-          data
-        ),
+          data,
+        },
+        {
+          onSuccess: () => {
+            navigate(
+              `/meetings/${id}`
+            );
+          },
+        }
+      ),
+  };
 
-      onSuccess: async () => {
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: [
-              'meetings',
-            ],
-          }),
+  const deleteMutation = {
+    ...deleteMeeting,
 
-          queryClient.invalidateQueries({
-            queryKey: [
-              'meeting',
-              id,
-            ],
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey: [
-              'calendar-meetings',
-            ],
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey: [
-              'dashboard-meetings',
-            ],
-          }),
-        ]);
-
-        toast.success(
-          'Toplantı başarıyla güncellendi'
-        );
-
-        navigate(
-          `/meetings/${id}`
-        );
-      },
-
-      onError: (error) => {
-        toast.error(
-          error?.response
-            ?.data?.message ||
-            'Toplantı güncellenemedi'
-        );
-      },
-    });
-
-  const deleteMutation =
-    useMutation({
-      mutationFn: () =>
-        meetingApi.delete(id),
-
-      onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: [
-            'meetings',
-          ],
-        });
-
-        toast.success(
-          'Toplantı silindi'
-        );
-
-        navigate(
-          '/meetings'
-        );
-      },
-
-      onError: (error) => {
-        toast.error(
-          error?.response
-            ?.data?.message ||
-            'Toplantı silinemedi'
-        );
-      },
-    });
+    mutate: () =>
+      deleteMeeting.mutate(
+        id,
+        {
+          onSuccess: () => {
+            navigate(
+              '/meetings'
+            );
+          },
+        }
+      ),
+  };
 
   // ======================================================
   // HANDLERS

@@ -9,11 +9,12 @@ import {
 } from 'react-router-dom';
 
 import {
-  useMutation,
   useQuery,
 } from '@tanstack/react-query';
 
-import meetingApi from '../../features/meetings/meeting.api.js';
+import {
+  useCreateMeeting,
+} from '../../features/meetings/meeting.queries.js';
 import caseApi from '../../features/cases/case.api.js';
 import clientApi from '../../features/clients/client.api.js';
 import userApi from '../../features/users/user.api.js';
@@ -532,53 +533,43 @@ const MeetingCreate = () => {
   // MUTATION
   // ====================================================
 
-  const mutation =
-    useMutation({
-      mutationFn: (
-        data
-      ) =>
-        meetingApi.create(
-          data
-        ),
+  const createMeeting =
+    useCreateMeeting();
 
-      onSuccess: (
-        response
-      ) => {
-        toast.success(
-          'Toplantı başarıyla oluşturuldu'
-        );
+  const mutation = {
+    ...createMeeting,
 
-        const meetingId =
-          response?.data
-            ?.data?.id;
+    mutate: (
+      data
+    ) =>
+      createMeeting.mutate(
+        data,
+        {
+          onSuccess: (
+            response
+          ) => {
+            const meeting =
+              response?.data?.data ??
+              response?.data ??
+              null;
 
-        if (
-          meetingId
-        ) {
-          navigate(
-            `/meetings/${meetingId}`
-          );
+            if (
+              meeting?.id
+            ) {
+              navigate(
+                `/meetings/${meeting.id}`
+              );
 
-          return;
+              return;
+            }
+
+            navigate(
+              '/meetings'
+            );
+          },
         }
-
-        navigate(
-          '/meetings'
-        );
-      },
-
-      onError: (
-        error
-      ) => {
-        toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
-            'Toplantı oluşturulamadı'
-        );
-      },
-    });
+      ),
+  };
 
   // ====================================================
   // FORM HANDLERS

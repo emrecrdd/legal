@@ -342,6 +342,12 @@ export const useCreateMeeting =
           ],
         });
 
+        queryClient.invalidateQueries({
+          queryKey: [
+            'calendar-meetings',
+          ],
+        });
+
         if (
           variables?.client_id
         ) {
@@ -450,6 +456,12 @@ export const useUpdateMeeting =
           ],
         });
 
+        queryClient.invalidateQueries({
+          queryKey: [
+            'calendar-meetings',
+          ],
+        });
+
         if (
           variables?.data
             ?.client_id
@@ -469,6 +481,14 @@ export const useUpdateMeeting =
                 .client_id,
             ],
           });
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'client',
+              variables.data
+                .client_id,
+            ],
+          });
         }
 
         if (
@@ -478,6 +498,14 @@ export const useUpdateMeeting =
           queryClient.invalidateQueries({
             queryKey: [
               'case-meetings',
+              variables.data
+                .case_id,
+            ],
+          });
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'case',
               variables.data
                 .case_id,
             ],
@@ -551,6 +579,12 @@ export const useUpdateMeetingStatus =
 
         queryClient.invalidateQueries({
           queryKey: [
+            'calendar-meetings',
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
             'client-meeting-timeline',
           ],
         });
@@ -619,6 +653,12 @@ export const useDeleteMeeting =
 
         queryClient.invalidateQueries({
           queryKey: [
+            'calendar-meetings',
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
             'client-meetings',
           ],
         });
@@ -632,6 +672,18 @@ export const useDeleteMeeting =
         queryClient.invalidateQueries({
           queryKey: [
             'case-meetings',
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'client',
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'case',
           ],
         });
 
