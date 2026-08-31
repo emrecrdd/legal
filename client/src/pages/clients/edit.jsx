@@ -1,6 +1,6 @@
 import {
   useEffect,
-  useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -60,9 +60,71 @@ const INITIAL_FORM = {
   status: 'active',
 };
 
+const CLIENT_TYPE_OPTIONS = [
+  'individual',
+  'corporate',
+];
+
+const STATUS_OPTIONS = [
+  'active',
+  'passive',
+  'archived',
+];
+
+const MAX_LENGTHS = {
+  name: 255,
+  email: 254,
+  phoneDigits: 15,
+  address: 1000,
+  city: 100,
+  district: 100,
+  postalCode: 5,
+  notes: 5000,
+  tagsText: 1000,
+  tag: 50,
+  tagCount: 30,
+};
+
 // ======================================================
 // HELPERS
 // ======================================================
+
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id ??
+      value?._id;
+
+    if (
+      objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+    ) {
+      return '';
+    }
+
+    return String(
+      objectId
+    );
+  }
+
+  return String(
+    value
+  );
+};
 
 const normalizeTags = (
   value
@@ -71,26 +133,101 @@ const normalizeTags = (
     return [];
   }
 
-  return [
-    ...new Set(
-      String(value)
-        .split(',')
-        .map((tag) =>
-          tag.trim()
-        )
-        .filter(Boolean)
-    ),
-  ];
+  const seen =
+    new Set();
+
+  return String(
+    value
+  )
+    .split(',')
+    .map(
+      (tag) =>
+        tag.trim()
+    )
+    .filter(Boolean)
+    .filter(
+      (tag) => {
+        const key =
+          tag.toLocaleLowerCase(
+            'tr-TR'
+          );
+
+        if (
+          seen.has(
+            key
+          )
+        ) {
+          return false;
+        }
+
+        seen.add(
+          key
+        );
+
+        return true;
+      }
+    );
 };
 
 const normalizePhone = (
   value
 ) => {
-  return String(
-    value || ''
-  )
-    .replace(/[^\d+]/g, '')
-    .trim();
+  const raw =
+    String(
+      value ??
+      ''
+    ).trim();
+
+  if (!raw) {
+    return '';
+  }
+
+  const hasLeadingPlus =
+    raw.startsWith(
+      '+'
+    );
+
+  const digits =
+    raw.replace(
+      /\D/g,
+      ''
+    );
+
+  return hasLeadingPlus
+    ? `+${digits}`
+    : digits;
+};
+
+const sanitizePhoneInput = (
+  value
+) => {
+  const raw =
+    String(
+      value ??
+      ''
+    );
+
+  const hasLeadingPlus =
+    raw
+      .trim()
+      .startsWith(
+        '+'
+      );
+
+  const digits =
+    raw
+      .replace(
+        /\D/g,
+        ''
+      )
+      .slice(
+        0,
+        MAX_LENGTHS.phoneDigits
+      );
+
+  return hasLeadingPlus
+    ? `+${digits}`
+    : digits;
 };
 
 const normalizeNullable = (
@@ -98,7 +235,8 @@ const normalizeNullable = (
 ) => {
   const normalized =
     String(
-      value ?? ''
+      value ??
+      ''
     ).trim();
 
   return normalized || null;
@@ -121,7 +259,8 @@ const isValidTCKN = (
 ) => {
   const tckn =
     String(
-      value || ''
+      value ||
+      ''
     ).trim();
 
   if (
@@ -136,13 +275,6 @@ const isValidTCKN = (
     tckn
       .split('')
       .map(Number);
-
-  if (
-    digits[10] % 2 !==
-    0
-  ) {
-    return false;
-  }
 
   const oddSum =
     digits[0] +
@@ -160,9 +292,12 @@ const isValidTCKN = (
   const digit10 =
     (
       (
-        oddSum * 7
-      ) -
-      evenSum
+        (
+          oddSum * 7
+        ) -
+        evenSum
+      ) % 10 +
+      10
     ) % 10;
 
   if (
@@ -197,31 +332,64 @@ const formFromClient = (
   client
 ) => ({
   name:
-    client?.name || '',
+    String(
+      client?.name ??
+      ''
+    ),
 
   identification_number:
-    client?.identification_number || '',
+    String(
+      client?.identification_number ??
+      ''
+    ).replace(
+      /\D/g,
+      ''
+    ),
 
   email:
-    client?.email || '',
+    String(
+      client?.email ??
+      ''
+    ),
 
   phone:
-    client?.phone || '',
+    String(
+      client?.phone ??
+      ''
+    ),
 
   address:
-    client?.address || '',
+    String(
+      client?.address ??
+      ''
+    ),
 
   city:
-    client?.city || '',
+    String(
+      client?.city ??
+      ''
+    ),
 
   district:
-    client?.district || '',
+    String(
+      client?.district ??
+      ''
+    ),
 
   postal_code:
-    client?.postal_code || '',
+    String(
+      client?.postal_code ??
+      ''
+    ).replace(
+      /\D/g,
+      ''
+    ),
 
   notes:
-    client?.notes || '',
+    String(
+      client?.notes ??
+      ''
+    ),
 
   tags:
     Array.isArray(
@@ -230,22 +398,34 @@ const formFromClient = (
       ? client.tags.join(
           ', '
         )
-      : '',
+      : String(
+          client?.tags ??
+          ''
+        ),
 
   client_type:
-    client?.client_type ||
-    'individual',
+    CLIENT_TYPE_OPTIONS.includes(
+      client?.client_type
+    )
+      ? client.client_type
+      : 'individual',
 
   status:
-    client?.status ||
-    'active',
+    STATUS_OPTIONS.includes(
+      client?.status
+    )
+      ? client.status
+      : 'active',
 });
 
 const normalizeFormForComparison = (
   form
 ) => ({
   name:
-    form.name.trim(),
+    String(
+      form.name ??
+      ''
+    ).trim(),
 
   identification_number:
     normalizeNullable(
@@ -318,15 +498,98 @@ const normalizeFormForComparison = (
     form.status,
 });
 
+const getBackendFieldErrors = (
+  mutationError
+) => {
+  const responseErrors =
+    mutationError?.response
+      ?.data?.errors;
+
+  const result =
+    {};
+
+  if (
+    Array.isArray(
+      responseErrors
+    )
+  ) {
+    responseErrors.forEach(
+      (
+        item
+      ) => {
+        const field =
+          item?.path ||
+          item?.param ||
+          item?.field;
+
+        if (
+          field
+        ) {
+          result[field] =
+            item?.msg ||
+            item?.message ||
+            'Geçersiz değer';
+        }
+      }
+    );
+
+    return result;
+  }
+
+  if (
+    responseErrors &&
+    typeof responseErrors ===
+      'object'
+  ) {
+    Object.entries(
+      responseErrors
+    ).forEach(
+      ([
+        field,
+        value,
+      ]) => {
+        if (
+          Array.isArray(
+            value
+          )
+        ) {
+          result[field] =
+            value
+              .filter(Boolean)
+              .join(', ');
+
+          return;
+        }
+
+        if (
+          value
+        ) {
+          result[field] =
+            String(
+              value
+            );
+        }
+      }
+    );
+  }
+
+  return result;
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
 
 const ClientEdit = () => {
   const {
-    id,
+    id: idParam,
   } =
     useParams();
+
+  const id =
+    normalizeId(
+      idParam
+    );
 
   const navigate =
     useNavigate();
@@ -335,6 +598,9 @@ const ClientEdit = () => {
     user,
   } =
     useAuth();
+
+  const initializedClientIdRef =
+    useRef('');
 
   // ======================================================
   // QUERIES
@@ -362,21 +628,24 @@ const ClientEdit = () => {
   const [
     formData,
     setFormData,
-  ] = useState(
-    INITIAL_FORM
-  );
+  ] =
+    useState(
+      INITIAL_FORM
+    );
 
   const [
     initialFormData,
     setInitialFormData,
-  ] = useState(
-    INITIAL_FORM
-  );
+  ] =
+    useState(
+      INITIAL_FORM
+    );
 
   const [
     errors,
     setErrors,
-  ] = useState({});
+  ] =
+    useState({});
 
   // ======================================================
   // DATA
@@ -385,6 +654,7 @@ const ClientEdit = () => {
   const client =
     data?.data?.data ??
     data?.data ??
+    data ??
     null;
 
   // ======================================================
@@ -412,7 +682,23 @@ const ClientEdit = () => {
   // ======================================================
 
   useEffect(() => {
-    if (!client) {
+    if (
+      !client ||
+      !id
+    ) {
+      return;
+    }
+
+    /*
+     * Client detail artık relation değişiklikleri sebebiyle sık refetch
+     * edebilir. Her refetch'te formu yeniden doldurursak kullanıcının
+     * kaydetmediği değişiklikler silinir. Aynı route id'si için form
+     * yalnızca ilk server cevabında initialize edilir.
+     */
+    if (
+      initializedClientIdRef.current ===
+      id
+    ) {
       return;
     }
 
@@ -430,8 +716,12 @@ const ClientEdit = () => {
     );
 
     setErrors({});
+
+    initializedClientIdRef.current =
+      id;
   }, [
     client,
+    id,
   ]);
 
   // ======================================================
@@ -443,46 +733,27 @@ const ClientEdit = () => {
     'corporate';
 
   const tagsPreview =
-    useMemo(() => {
-      return normalizeTags(
-        formData.tags
-      );
-    }, [
-      formData.tags,
-    ]);
+    normalizeTags(
+      formData.tags
+    );
 
   const normalizedPayload =
-    useMemo(() => {
-      return normalizeFormForComparison(
-        formData
-      );
-    }, [
-      formData,
-    ]);
+    normalizeFormForComparison(
+      formData
+    );
 
   const initialNormalizedPayload =
-    useMemo(() => {
-      return normalizeFormForComparison(
-        initialFormData
-      );
-    }, [
-      initialFormData,
-    ]);
+    normalizeFormForComparison(
+      initialFormData
+    );
 
   const isDirty =
-    useMemo(() => {
-      return (
-        JSON.stringify(
-          normalizedPayload
-        ) !==
-        JSON.stringify(
-          initialNormalizedPayload
-        )
-      );
-    }, [
-      normalizedPayload,
-      initialNormalizedPayload,
-    ]);
+    JSON.stringify(
+      normalizedPayload
+    ) !==
+    JSON.stringify(
+      initialNormalizedPayload
+    );
 
   // ======================================================
   // CHANGE
@@ -491,6 +762,13 @@ const ClientEdit = () => {
   const handleChange = (
     event
   ) => {
+    if (
+      isPending ||
+      !canEdit
+    ) {
+      return;
+    }
+
     const {
       name,
       value,
@@ -505,21 +783,19 @@ const ClientEdit = () => {
       'identification_number'
     ) {
       nextValue =
-        value.replace(
-          /\D/g,
-          ''
-        );
-
-      nextValue =
-        isCorporate
-          ? nextValue.slice(
-              0,
-              10
-            )
-          : nextValue.slice(
-              0,
-              11
-            );
+        String(
+          value
+        )
+          .replace(
+            /\D/g,
+            ''
+          )
+          .slice(
+            0,
+            isCorporate
+              ? 10
+              : 11
+          );
     }
 
     if (
@@ -527,14 +803,16 @@ const ClientEdit = () => {
       'postal_code'
     ) {
       nextValue =
-        value
+        String(
+          value
+        )
           .replace(
             /\D/g,
             ''
           )
           .slice(
             0,
-            5
+            MAX_LENGTHS.postalCode
           );
     }
 
@@ -543,19 +821,106 @@ const ClientEdit = () => {
       'phone'
     ) {
       nextValue =
-        value
-          .replace(
-            /[^\d+\s()-]/g,
-            ''
-          )
-          .slice(
-            0,
-            25
-          );
+        sanitizePhoneInput(
+          value
+        );
+    }
+
+    if (
+      name ===
+      'name'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.name
+        );
+    }
+
+    if (
+      name ===
+      'email'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.email
+        );
+    }
+
+    if (
+      name ===
+      'address'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.address
+        );
+    }
+
+    if (
+      name ===
+      'city'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.city
+        );
+    }
+
+    if (
+      name ===
+      'district'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.district
+        );
+    }
+
+    if (
+      name ===
+      'notes'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.notes
+        );
+    }
+
+    if (
+      name ===
+      'tags'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.tagsText
+        );
     }
 
     setFormData(
-      (current) => ({
+      (
+        current
+      ) => ({
         ...current,
         [name]:
           nextValue,
@@ -566,7 +931,9 @@ const ClientEdit = () => {
       errors[name]
     ) {
       setErrors(
-        (current) => ({
+        (
+          current
+        ) => ({
           ...current,
           [name]:
             '',
@@ -580,10 +947,15 @@ const ClientEdit = () => {
   // ======================================================
 
   const handleClientTypeChange =
-    (type) => {
+    (
+      type
+    ) => {
       if (
         isPending ||
-        !canEdit
+        !canEdit ||
+        !CLIENT_TYPE_OPTIONS.includes(
+          type
+        )
       ) {
         return;
       }
@@ -596,7 +968,9 @@ const ClientEdit = () => {
       }
 
       setFormData(
-        (current) => ({
+        (
+          current
+        ) => ({
           ...current,
 
           client_type:
@@ -612,7 +986,9 @@ const ClientEdit = () => {
       );
 
       setErrors(
-        (current) => ({
+        (
+          current
+        ) => ({
           ...current,
 
           client_type:
@@ -634,7 +1010,10 @@ const ClientEdit = () => {
         {};
 
       const name =
-        formData.name.trim();
+        String(
+          formData.name ??
+          ''
+        ).trim();
 
       const identificationNumber =
         String(
@@ -671,10 +1050,6 @@ const ClientEdit = () => {
           )
           .trim();
 
-      // ==================================================
-      // NAME
-      // ==================================================
-
       if (
         !name
       ) {
@@ -690,15 +1065,11 @@ const ClientEdit = () => {
           'Müvekkil adı en az 2 karakter olmalıdır';
       } else if (
         name.length >
-        255
+        MAX_LENGTHS.name
       ) {
         nextErrors.name =
-          'Müvekkil adı en fazla 255 karakter olabilir';
+          `Müvekkil adı en fazla ${MAX_LENGTHS.name} karakter olabilir`;
       }
-
-      // ==================================================
-      // IDENTIFICATION
-      // ==================================================
 
       if (
         identificationNumber
@@ -707,48 +1078,22 @@ const ClientEdit = () => {
           isCorporate
         ) {
           if (
-            identificationNumber.length !==
-            10
-          ) {
-            nextErrors.identification_number =
-              'Vergi Kimlik Numarası 10 haneli olmalıdır';
-          }
-        } else {
-          if (
-            identificationNumber.length !==
-            11
-          ) {
-            nextErrors.identification_number =
-              'T.C. Kimlik Numarası 11 haneli olmalıdır';
-          } else if (
-            identificationNumber.startsWith(
-              '0'
-            )
-          ) {
-            nextErrors.identification_number =
-              'T.C. Kimlik Numarası 0 ile başlayamaz';
-          } else if (
-            Number(
-              identificationNumber[10]
-            ) % 2 !==
-            0
-          ) {
-            nextErrors.identification_number =
-              'T.C. Kimlik Numarasının son hanesi çift olmalıdır';
-          } else if (
-            !isValidTCKN(
+            !/^\d{10}$/.test(
               identificationNumber
             )
           ) {
             nextErrors.identification_number =
-              'Geçerli bir T.C. Kimlik Numarası giriniz';
+              'Vergi Kimlik Numarası 10 haneli olmalıdır';
           }
+        } else if (
+          !isValidTCKN(
+            identificationNumber
+          )
+        ) {
+          nextErrors.identification_number =
+            'Geçerli bir T.C. Kimlik Numarası giriniz';
         }
       }
-
-      // ==================================================
-      // PHONE
-      // ==================================================
 
       if (
         phone
@@ -763,16 +1108,12 @@ const ClientEdit = () => {
           digits.length <
             10 ||
           digits.length >
-            15
+            MAX_LENGTHS.phoneDigits
         ) {
           nextErrors.phone =
             'Geçerli bir telefon numarası giriniz';
         }
       }
-
-      // ==================================================
-      // EMAIL
-      // ==================================================
 
       if (
         email &&
@@ -786,76 +1127,61 @@ const ClientEdit = () => {
 
       if (
         email.length >
-        254
+        MAX_LENGTHS.email
       ) {
         nextErrors.email =
           'E-posta adresi çok uzun';
       }
 
-      // ==================================================
-      // POSTAL CODE
-      // ==================================================
-
       if (
         postalCode &&
-        postalCode.length !==
-        5
+        !/^\d{5}$/.test(
+          postalCode
+        )
       ) {
         nextErrors.postal_code =
           'Posta kodu 5 haneli olmalıdır';
       }
 
-      // ==================================================
-      // ADDRESS
-      // ==================================================
-
       if (
         formData.address.length >
-        1000
+        MAX_LENGTHS.address
       ) {
         nextErrors.address =
-          'Adres en fazla 1000 karakter olabilir';
+          `Adres en fazla ${MAX_LENGTHS.address} karakter olabilir`;
       }
-
-      // ==================================================
-      // CITY
-      // ==================================================
 
       if (
         formData.city.length >
-        100
+        MAX_LENGTHS.city
       ) {
         nextErrors.city =
-          'Şehir en fazla 100 karakter olabilir';
+          `Şehir en fazla ${MAX_LENGTHS.city} karakter olabilir`;
       }
-
-      // ==================================================
-      // DISTRICT
-      // ==================================================
 
       if (
         formData.district.length >
-        100
+        MAX_LENGTHS.district
       ) {
         nextErrors.district =
-          'İlçe en fazla 100 karakter olabilir';
+          `İlçe en fazla ${MAX_LENGTHS.district} karakter olabilir`;
       }
-
-      // ==================================================
-      // NOTES
-      // ==================================================
 
       if (
         formData.notes.length >
-        5000
+        MAX_LENGTHS.notes
       ) {
         nextErrors.notes =
-          'Genel not en fazla 5000 karakter olabilir';
+          `Genel not en fazla ${MAX_LENGTHS.notes} karakter olabilir`;
       }
 
-      // ==================================================
-      // TAGS
-      // ==================================================
+      if (
+        formData.tags.length >
+        MAX_LENGTHS.tagsText
+      ) {
+        nextErrors.tags =
+          `Etiket alanı en fazla ${MAX_LENGTHS.tagsText} karakter olabilir`;
+      }
 
       const tags =
         normalizeTags(
@@ -864,21 +1190,41 @@ const ClientEdit = () => {
 
       if (
         tags.length >
-        30
+        MAX_LENGTHS.tagCount
       ) {
         nextErrors.tags =
-          'En fazla 30 etiket eklenebilir';
+          `En fazla ${MAX_LENGTHS.tagCount} etiket eklenebilir`;
       }
 
       if (
         tags.some(
-          (tag) =>
+          (
+            tag
+          ) =>
             tag.length >
-            50
+            MAX_LENGTHS.tag
         )
       ) {
         nextErrors.tags =
-          'Etiketler en fazla 50 karakter olabilir';
+          `Etiketler en fazla ${MAX_LENGTHS.tag} karakter olabilir`;
+      }
+
+      if (
+        !CLIENT_TYPE_OPTIONS.includes(
+          formData.client_type
+        )
+      ) {
+        nextErrors.client_type =
+          'Geçersiz müvekkil türü';
+      }
+
+      if (
+        !STATUS_OPTIONS.includes(
+          formData.status
+        )
+      ) {
+        nextErrors.status =
+          'Geçersiz müvekkil durumu';
       }
 
       setErrors(
@@ -901,10 +1247,6 @@ const ClientEdit = () => {
     (
       mutationError
     ) => {
-      const responseErrors =
-        mutationError?.response
-          ?.data?.errors;
-
       const message =
         mutationError?.response
           ?.data?.message ||
@@ -912,38 +1254,10 @@ const ClientEdit = () => {
         '';
 
       const nextErrors =
-        {};
-
-      /*
-       * express-validator errors
-       */
-      if (
-        Array.isArray(
-          responseErrors
-        )
-      ) {
-        responseErrors.forEach(
-          (
-            item
-          ) => {
-            const field =
-              item?.path ||
-              item?.param;
-
-            if (
-              field
-            ) {
-              nextErrors[field] =
-                item?.msg ||
-                'Geçersiz değer';
-            }
-          }
+        getBackendFieldErrors(
+          mutationError
         );
-      }
 
-      /*
-       * Service / Sequelize error
-       */
       if (
         /TCKNO|T\.C\.|VKN|kimlik|identification_number/i.test(
           message
@@ -990,26 +1304,83 @@ const ClientEdit = () => {
       }
 
       if (
+        /address|adres/i.test(
+          message
+        )
+      ) {
+        nextErrors.address =
+          message;
+      }
+
+      if (
+        /city|şehir|sehir/i.test(
+          message
+        )
+      ) {
+        nextErrors.city =
+          message;
+      }
+
+      if (
+        /district|ilçe|ilce/i.test(
+          message
+        )
+      ) {
+        nextErrors.district =
+          message;
+      }
+
+      if (
+        /tag|etiket/i.test(
+          message
+        )
+      ) {
+        nextErrors.tags =
+          message;
+      }
+
+      if (
+        /status|durum/i.test(
+          message
+        )
+      ) {
+        nextErrors.status =
+          message;
+      }
+
+      if (
+        /client_type|müvekkil türü|müvekkil tipi/i.test(
+          message
+        )
+      ) {
+        nextErrors.client_type =
+          message;
+      }
+
+      if (
+        /note|not/i.test(
+          message
+        )
+      ) {
+        nextErrors.notes =
+          message;
+      }
+
+      if (
         Object.keys(
           nextErrors
         ).length >
         0
       ) {
         setErrors(
-          nextErrors
+          (
+            current
+          ) => ({
+            ...current,
+            ...nextErrors,
+          })
         );
-
-        toast.error(
-          'Formdaki hatalı alanları kontrol edin'
-        );
-
-        return;
       }
-
-      toast.error(
-        message ||
-        'Müvekkil güncellenemedi'
-      );
     };
 
   // ======================================================
@@ -1032,8 +1403,16 @@ const ClientEdit = () => {
     }
 
     if (
-      updateMutation.isPending
+      isPending
     ) {
+      return;
+    }
+
+    if (!id) {
+      toast.error(
+        'Geçerli müvekkil kaydı bulunamadı'
+      );
+
       return;
     }
 
@@ -1065,16 +1444,21 @@ const ClientEdit = () => {
           normalizedPayload,
       },
       {
+        /*
+         * Merkezi useUpdateClient hook'u cache'i senkronlayıp
+         * toast'ı gösterdikten sonra detail'e dönülür.
+         */
         onSuccess: () => {
-          toast.success(
-            'Müvekkil bilgileri güncellendi'
-          );
-
           navigate(
             `/clients/${id}`
           );
         },
 
+        /*
+         * Merkezi hook genel hata toast'ını gösterir.
+         * Bu sayfa yalnız alan bazlı hataları forma yerleştirir;
+         * ikinci bir toast üretmez.
+         */
         onError: (
           mutationError
         ) => {
@@ -1114,7 +1498,9 @@ const ClientEdit = () => {
       }
 
       navigate(
-        `/clients/${id}`
+        id
+          ? `/clients/${id}`
+          : '/clients'
       );
     };
 
@@ -1123,72 +1509,73 @@ const ClientEdit = () => {
   // ======================================================
 
   const handleDelete =
-  () => {
-    if (
-      !canDelete
-    ) {
-      toast.error(
-        'Müvekkil kaydını kaldırma yetkiniz bulunmuyor'
-      );
+    () => {
+      if (
+        !canDelete
+      ) {
+        toast.error(
+          'Müvekkil kaydını kaldırma yetkiniz bulunmuyor'
+        );
 
-      return;
-    }
+        return;
+      }
 
-    if (
-      deleteMutation.isPending
-    ) {
-      return;
-    }
+      if (
+        isPending
+      ) {
+        return;
+      }
 
-    const caseCount =
-      Number(
-        client?.summary?.case_count ??
-        client?.case_count ??
-        client?.cases?.length ??
-        0
-      );
+      if (!id) {
+        toast.error(
+          'Geçerli müvekkil kaydı bulunamadı'
+        );
 
-    const confirmMessage =
-      caseCount > 0
-        ? `"${client?.name}" müvekkil kaydı ${caseCount} dava dosyasına bağlı.\n\nMüvekkil kaydı kaldırılırsa dava dosyaları silinmeyecek ve sistemde korunacaktır. Bu dosyalar müvekkilsiz olarak görüntülenebilir.\n\nDevam etmek istiyor musunuz?`
-        : `"${client?.name}" müvekkil kaydını kaldırmak istediğinize emin misiniz?\n\nBu işlem müvekkil kaydını sistemden kaldıracaktır.`;
+        return;
+      }
 
-    const confirmed =
-      window.confirm(
-        confirmMessage
-      );
+      const caseCount =
+        Number(
+          client?.summary?.case_count ??
+          client?.case_count ??
+          client?.cases?.length ??
+          0
+        ) || 0;
 
-    if (
-      !confirmed
-    ) {
-      return;
-    }
+      const clientName =
+        String(
+          client?.name ||
+          'Seçili müvekkil'
+        );
+
+      const confirmMessage =
+        caseCount > 0
+          ? `"${clientName}" müvekkil kaydı ${caseCount} dava dosyasına bağlı.\n\nMüvekkil kaydı kaldırılırsa dava dosyalarının durumu backend silme politikasına göre güncellenecektir. Dava kayıtlarının kaldırılmadığını doğrulamadan bu metinde kesin davranış sözü verilmez.\n\nDevam etmek istiyor musunuz?`
+          : `"${clientName}" müvekkil kaydını kaldırmak istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`;
+
+      const confirmed =
+        window.confirm(
+          confirmMessage
+        );
+
+      if (
+        !confirmed
+      ) {
+        return;
+      }
 
       deleteMutation.mutate(
         id,
         {
-          onSuccess:
-            () => {
-              toast.success(
-                'Müvekkil kaydı kaldırıldı'
-              );
-
-              navigate(
-                '/clients'
-              );
-            },
-
-          onError:
-            (
-              mutationError
-            ) => {
-              toast.error(
-                mutationError?.response
-                  ?.data?.message ||
-                mutationError?.message ||
-                'Müvekkil kaydı kaldırılamadı'
-              );
-            },
+          /*
+           * Merkezi hook cache temizliği ve toast'ı tamamladıktan
+           * sonra listeye dönülür.
+           */
+          onSuccess: () => {
+            navigate(
+              '/clients'
+            );
+          },
         }
       );
     };
@@ -1202,17 +1589,13 @@ const ClientEdit = () => {
   ) {
     return (
       <div className="flex h-64 items-center justify-center">
-
         <div className="text-center">
-
           <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600" />
 
           <p className="mt-4 text-sm text-gray-500">
             Müvekkil bilgileri yükleniyor...
           </p>
-
         </div>
-
       </div>
     );
   }
@@ -1227,7 +1610,6 @@ const ClientEdit = () => {
   ) {
     return (
       <div className="py-16 text-center">
-
         <div className="mb-4 text-5xl">
           👤
         </div>
@@ -1237,7 +1619,9 @@ const ClientEdit = () => {
         </h2>
 
         <p className="mt-2 text-sm text-gray-500">
-          Bu kayıt silinmiş olabilir veya görüntüleme yetkiniz bulunmayabilir.
+          {error?.response?.data?.message ||
+            error?.message ||
+            'Bu kayıt silinmiş olabilir veya görüntüleme yetkiniz bulunmayabilir.'}
         </p>
 
         <Link
@@ -1248,7 +1632,6 @@ const ClientEdit = () => {
 
           Müvekkillere Dön
         </Link>
-
       </div>
     );
   }
@@ -1262,9 +1645,7 @@ const ClientEdit = () => {
   ) {
     return (
       <div className="mx-auto max-w-3xl py-12">
-
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center dark:border-amber-900/50 dark:bg-amber-900/10">
-
           <AlertTriangle className="mx-auto h-10 w-10 text-amber-600" />
 
           <h2 className="mt-3 text-lg font-semibold text-gray-900 dark:text-white">
@@ -1276,7 +1657,11 @@ const ClientEdit = () => {
           </p>
 
           <Link
-            to={`/clients/${id}`}
+            to={
+              id
+                ? `/clients/${id}`
+                : '/clients'
+            }
           >
             <Button
               className="mt-4"
@@ -1285,9 +1670,7 @@ const ClientEdit = () => {
               Müvekkil Detayına Dön
             </Button>
           </Link>
-
         </div>
-
       </div>
     );
   }
@@ -1298,13 +1681,15 @@ const ClientEdit = () => {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-
       {/* HEADER */}
 
       <div>
-
         <Link
-          to={`/clients/${id}`}
+          to={
+            id
+              ? `/clients/${id}`
+              : '/clients'
+          }
           className="inline-flex items-center gap-1 text-blue-600 hover:underline"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -1313,7 +1698,6 @@ const ClientEdit = () => {
         </Link>
 
         <div className="mt-2 flex flex-wrap items-center gap-3">
-
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             Müvekkil Bilgilerini Düzenle
           </h1>
@@ -1325,34 +1709,28 @@ const ClientEdit = () => {
               Kaydedilmemiş değişiklik
             </Badge>
           )}
-
         </div>
 
         <p className="mt-1 text-sm text-gray-500">
           Kimlik, iletişim, adres ve sınıflandırma bilgilerini güncelleyin.
         </p>
-
       </div>
 
       <Card>
-
         <form
           onSubmit={
             handleSubmit
           }
           className="space-y-6 p-6"
         >
-
           {/* CLIENT TYPE */}
 
           <div>
-
             <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Müvekkil Türü
             </label>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-
               <button
                 type="button"
                 disabled={
@@ -1380,7 +1758,6 @@ const ClientEdit = () => {
                     Gerçek kişi müvekkil
                   </p>
                 </div>
-
               </button>
 
               <button
@@ -1410,11 +1787,14 @@ const ClientEdit = () => {
                     Şirket veya kurum
                   </p>
                 </div>
-
               </button>
-
             </div>
 
+            {errors.client_type && (
+              <p className="mt-2 text-xs text-red-600">
+                {errors.client_type}
+              </p>
+            )}
           </div>
 
           <Input
@@ -1436,7 +1816,9 @@ const ClientEdit = () => {
             disabled={
               isPending
             }
-            maxLength={255}
+            maxLength={
+              MAX_LENGTHS.name
+            }
             placeholder={
               isCorporate
                 ? 'Örn: ABC Teknoloji A.Ş.'
@@ -1477,7 +1859,6 @@ const ClientEdit = () => {
           />
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
             <Input
               label="Telefon"
               name="phone"
@@ -1494,7 +1875,10 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
-              placeholder="+90 5XX XXX XX XX"
+              maxLength={
+                MAX_LENGTHS.phoneDigits + 1
+              }
+              placeholder="+905XXXXXXXXX"
             />
 
             <Input
@@ -1513,14 +1897,14 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
-              maxLength={254}
+              maxLength={
+                MAX_LENGTHS.email
+              }
               placeholder="ornek@domain.com"
             />
-
           </div>
 
           <div>
-
             <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Adres
             </label>
@@ -1536,9 +1920,15 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
-              maxLength={1000}
-              rows="3"
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              maxLength={
+                MAX_LENGTHS.address
+              }
+              rows={3}
+              className={`w-full rounded-md border bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-700 dark:text-white ${
+                errors.address
+                  ? 'border-red-500'
+                  : 'border-gray-300 dark:border-gray-600'
+              }`}
               placeholder="Açık adres..."
             />
 
@@ -1547,11 +1937,9 @@ const ClientEdit = () => {
                 {errors.address}
               </p>
             )}
-
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-
             <Input
               label="Şehir"
               name="city"
@@ -1567,7 +1955,9 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
-              maxLength={100}
+              maxLength={
+                MAX_LENGTHS.city
+              }
             />
 
             <Input
@@ -1585,7 +1975,9 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
-              maxLength={100}
+              maxLength={
+                MAX_LENGTHS.district
+              }
             />
 
             <Input
@@ -1604,14 +1996,14 @@ const ClientEdit = () => {
                 isPending
               }
               inputMode="numeric"
-              maxLength={5}
+              maxLength={
+                MAX_LENGTHS.postalCode
+              }
               placeholder="34000"
             />
-
           </div>
 
           <div>
-
             <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Durum
             </label>
@@ -1627,7 +2019,11 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              className={`w-full rounded-md border bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-700 dark:text-white ${
+                errors.status
+                  ? 'border-red-500'
+                  : 'border-gray-300 dark:border-gray-600'
+              }`}
             >
               <option value="active">
                 Aktif
@@ -1642,23 +2038,25 @@ const ClientEdit = () => {
               </option>
             </select>
 
+            {errors.status && (
+              <p className="mt-1 text-xs text-red-600">
+                {errors.status}
+              </p>
+            )}
+
             {formData.status ===
               'archived' && (
               <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
 
                 <p>
                   Arşiv durumu müvekkili silmez. Kayıt sistemde kalır ve ilişkili kayıtlarla bağlantısını korur.
                 </p>
-
               </div>
             )}
-
           </div>
 
           <div>
-
             <Input
               label="Etiketler"
               name="tags"
@@ -1674,24 +2072,28 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
+              maxLength={
+                MAX_LENGTHS.tagsText
+              }
               placeholder="VIP, şirket, ceza, icra"
             />
 
             <p className="mt-1 text-xs text-gray-500">
-              Birden fazla etiketi virgülle ayırın. En fazla 30 etiket eklenebilir.
+              Birden fazla etiketi virgülle ayırın. En fazla {MAX_LENGTHS.tagCount} etiket eklenebilir.
             </p>
 
             {tagsPreview.length >
               0 && (
               <div className="mt-3 flex flex-wrap gap-2">
-
                 {tagsPreview.map(
                   (
                     tag
                   ) => (
                     <Badge
                       key={
-                        tag
+                        tag.toLocaleLowerCase(
+                          'tr-TR'
+                        )
                       }
                       variant="default"
                     >
@@ -1699,14 +2101,11 @@ const ClientEdit = () => {
                     </Badge>
                   )
                 )}
-
               </div>
             )}
-
           </div>
 
           <div>
-
             <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Genel Not
             </label>
@@ -1722,9 +2121,15 @@ const ClientEdit = () => {
               disabled={
                 isPending
               }
-              maxLength={5000}
-              rows="5"
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              maxLength={
+                MAX_LENGTHS.notes
+              }
+              rows={5}
+              className={`w-full rounded-md border bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-700 dark:text-white ${
+                errors.notes
+                  ? 'border-red-500'
+                  : 'border-gray-300 dark:border-gray-600'
+              }`}
               placeholder="Müvekkille ilgili önemli genel bilgiler..."
             />
 
@@ -1738,14 +2143,12 @@ const ClientEdit = () => {
               )}
 
               <p className="text-xs text-gray-400">
-                {formData.notes.length}/5000
+                {formData.notes.length}/{MAX_LENGTHS.notes}
               </p>
             </div>
-
           </div>
 
           <div className="flex flex-wrap items-center gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
-
             <Button
               type="submit"
               loading={
@@ -1794,13 +2197,9 @@ const ClientEdit = () => {
                 Kaydı Kaldır
               </Button>
             )}
-
           </div>
-
         </form>
-
       </Card>
-
     </div>
   );
 };
