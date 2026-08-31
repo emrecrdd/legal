@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useState,
 } from 'react';
 
@@ -11,11 +10,17 @@ import {
 } from 'react-router-dom';
 
 import {
-  useMutation,
   useQuery,
 } from '@tanstack/react-query';
 
 import caseApi from '../../features/cases/case.api.js';
+
+import {
+  useCase,
+  useDeleteCase,
+  useUpdateCase,
+} from '../../features/cases/case.query.js';
+
 import clientApi from '../../features/clients/client.api.js';
 
 import {
@@ -212,6 +217,240 @@ const normalizeNullable = (
   );
 };
 
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id ??
+      value?._id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
+const normalizeIds = (
+  values
+) => {
+  if (
+    !Array.isArray(
+      values
+    )
+  ) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      values
+        .map(
+          normalizeId
+        )
+        .filter(
+          Boolean
+        )
+    ),
+  ];
+};
+
+const getArrayPayload = (
+  response
+) => {
+  const payload =
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    [];
+
+  if (
+    Array.isArray(
+      payload
+    )
+  ) {
+    return payload;
+  }
+
+  if (
+    Array.isArray(
+      payload?.data
+    )
+  ) {
+    return payload.data;
+  }
+
+  if (
+    Array.isArray(
+      payload?.items
+    )
+  ) {
+    return payload.items;
+  }
+
+  if (
+    Array.isArray(
+      payload?.results
+    )
+  ) {
+    return payload.results;
+  }
+
+  return [];
+};
+
+const getCaseClientIds = (
+  caseItem
+) => {
+  if (
+    Array.isArray(
+      caseItem?.clients
+    )
+  ) {
+    return normalizeIds(
+      caseItem.clients.map(
+        (client) =>
+          client?.id ??
+          client
+      )
+    );
+  }
+
+  if (
+    Array.isArray(
+      caseItem?.client_ids
+    )
+  ) {
+    return normalizeIds(
+      caseItem.client_ids
+    );
+  }
+
+  const singleClientId =
+    normalizeId(
+      caseItem?.client_id ??
+      caseItem?.client?.id
+    );
+
+  return singleClientId
+    ? [
+        singleClientId,
+      ]
+    : [];
+};
+
+const formatDateInput = (
+  value
+) => {
+  if (
+    !value
+  ) {
+    return '';
+  }
+
+  const normalized =
+    String(
+      value
+    ).trim();
+
+  const match =
+    normalized.match(
+      /^(\d{4}-\d{2}-\d{2})/
+    );
+
+  return (
+    match?.[1] ||
+    ''
+  );
+};
+
+const getBackendFieldErrors = (
+  error
+) => {
+  const backendErrors =
+    error?.response
+      ?.data?.errors;
+
+  const nextErrors =
+    {};
+
+  if (
+    Array.isArray(
+      backendErrors
+    )
+  ) {
+    backendErrors.forEach(
+      (item) => {
+        const field =
+          item?.path ||
+          item?.param ||
+          item?.field;
+
+        if (
+          field
+        ) {
+          nextErrors[field] =
+            item?.msg ||
+            item?.message ||
+            'Geçersiz değer';
+        }
+      }
+    );
+  } else if (
+    backendErrors &&
+    typeof backendErrors ===
+      'object'
+  ) {
+    Object.entries(
+      backendErrors
+    ).forEach(
+      ([
+        field,
+        value,
+      ]) => {
+        if (
+          Array.isArray(
+            value
+          )
+        ) {
+          nextErrors[field] =
+            value
+              .filter(Boolean)
+              .join(', ');
+        } else if (
+          value
+        ) {
+          nextErrors[field] =
+            String(
+              value
+            );
+        }
+      }
+    );
+  }
+
+  return nextErrors;
+};
+
 const normalizeFormForComparison = (
   form
 ) => ({
@@ -236,20 +475,15 @@ const normalizeFormForComparison = (
     ),
 
   client_ids:
-    [
-      ...form.client_ids,
-    ]
-      .map(
-        String
-      )
-      .sort(),
+    normalizeIds(
+      form.client_ids
+    ).sort(),
 
   assigned_to:
-    form.assigned_to
-      ? String(
-          form.assigned_to
-        )
-      : null,
+    normalizeId(
+      form.assigned_to
+    ) ||
+    null,
 
   status:
     form.status,
@@ -281,9 +515,14 @@ const CaseEdit = () => {
     useNavigate();
 
   const {
-    id,
+    id: idParam,
   } =
     useParams();
+
+  const id =
+    normalizeId(
+      idParam
+    );
 
   const {
     user,
@@ -342,22 +581,9 @@ const CaseEdit = () => {
     error:
       caseError,
   } =
-    useQuery({
-      queryKey: [
-        'case',
-        id,
-      ],
-
-      queryFn: () =>
-        caseApi.getOne(
-          id
-        ),
-
-      enabled:
-        Boolean(
-          id
-        ),
-    });
+    useCase(
+      id
+    );
 
   // ======================================================
   // RELATED QUERIES
@@ -409,27 +635,55 @@ const CaseEdit = () => {
   // ======================================================
 
   const caseItem =
-    caseData
-      ?.data
-      ?.data;
+    caseData?.data?.data ??
+    caseData?.data ??
+    null;
 
   const clients =
-    Array.isArray(
+    getArrayPayload(
       clientsData
-        ?.data
-        ?.data
-    )
-      ? clientsData.data.data
-      : [];
+    );
+
+  const assignableLawyers =
+    getArrayPayload(
+      lawyersData
+    );
+
+  const currentUserId =
+    normalizeId(
+      user?.id
+    );
 
   const lawyers =
-    Array.isArray(
-      lawyersData
-        ?.data
-        ?.data
+    currentUserId &&
+    !assignableLawyers.some(
+      (lawyer) =>
+        normalizeId(
+          lawyer?.id
+        ) ===
+        currentUserId
     )
-      ? lawyersData.data.data
-      : [];
+      ? [
+          {
+            id:
+              currentUserId,
+
+            first_name:
+              user?.first_name ||
+              '',
+
+            last_name:
+              user?.last_name ||
+              '',
+
+            name:
+              user?.name ||
+              user?.full_name ||
+              '',
+          },
+          ...assignableLawyers,
+        ]
+      : assignableLawyers;
 
   // ======================================================
   // FILL FORM
@@ -460,22 +714,15 @@ const CaseEdit = () => {
         '',
 
       client_ids:
-        Array.isArray(
-          caseItem.clients
-        )
-          ? caseItem.clients.map(
-              (
-                client
-              ) =>
-                client.id
-            )
-          : [],
+        getCaseClientIds(
+          caseItem
+        ),
 
       assigned_to:
-        caseItem.assigned_to ||
-        caseItem.assignee
-          ?.id ||
-        '',
+        normalizeId(
+          caseItem.assigned_to ??
+          caseItem.assignee?.id
+        ),
 
       status:
         caseItem.status ||
@@ -494,13 +741,9 @@ const CaseEdit = () => {
         '',
 
       opening_date:
-        caseItem.opening_date
-          ? String(
-              caseItem.opening_date
-            ).split(
-              'T'
-            )[0]
-          : '',
+        formatDateInput(
+          caseItem.opening_date
+        ),
     };
 
     setFormData(
@@ -522,275 +765,195 @@ const CaseEdit = () => {
   // DERIVED
   // ======================================================
 
+  const selectedClientIds =
+    normalizeIds(
+      formData.client_ids
+    );
+
   const selectedClients =
-    useMemo(() => {
-      return clients.filter(
-        (
-          client
-        ) =>
-          formData
-            .client_ids
-            .includes(
-              client.id
-            )
-      );
-    }, [
-      clients,
-      formData.client_ids,
-    ]);
+    clients.filter(
+      (client) =>
+        selectedClientIds.includes(
+          normalizeId(
+            client?.id
+          )
+        )
+    );
 
   const availableClients =
-    useMemo(() => {
-      return clients.filter(
-        (
-          client
-        ) =>
-          !formData
-            .client_ids
-            .includes(
-              client.id
-            )
-      );
-    }, [
-      clients,
-      formData.client_ids,
-    ]);
+    clients.filter(
+      (client) =>
+        !selectedClientIds.includes(
+          normalizeId(
+            client?.id
+          )
+        )
+    );
 
   const normalizedPayload =
-    useMemo(() => {
-      return normalizeFormForComparison(
-        formData
-      );
-    }, [
-      formData,
-    ]);
+    normalizeFormForComparison(
+      formData
+    );
 
   const initialNormalizedPayload =
-    useMemo(() => {
-      return normalizeFormForComparison(
-        initialFormData
-      );
-    }, [
-      initialFormData,
-    ]);
+    normalizeFormForComparison(
+      initialFormData
+    );
 
   const isDirty =
-    useMemo(() => {
-      return (
-        JSON.stringify(
-          normalizedPayload
-        ) !==
-        JSON.stringify(
-          initialNormalizedPayload
-        )
-      );
-    }, [
-      normalizedPayload,
-      initialNormalizedPayload,
-    ]);
+    JSON.stringify(
+      normalizedPayload
+    ) !==
+    JSON.stringify(
+      initialNormalizedPayload
+    );
 
   // ======================================================
   // UPDATE
   // ======================================================
 
   const mutation =
-    useMutation({
-      mutationFn: (
-        data
-      ) =>
-        caseApi.update(
-          id,
-          data
-        ),
+    useUpdateCase();
 
-      onSuccess: () => {
-        toast.success(
-          'Dava başarıyla güncellendi'
-        );
-
-        navigate(
-          `/cases/${id}`
-        );
-      },
-
-      onError: (
+  const handleMutationError =
+    (
+      error
+    ) => {
+      const message =
         error
-      ) => {
-        const backendErrors =
+          ?.response
+          ?.data
+          ?.message ||
+        error?.message ||
+        'Dava güncellenemedi';
+
+      const nextErrors =
+        getBackendFieldErrors(
           error
-            ?.response
-            ?.data
-            ?.errors;
-
-        const message =
-          error
-            ?.response
-            ?.data
-            ?.message ||
-          error
-            ?.message ||
-          'Dava güncellenemedi';
-
-        const nextErrors =
-          {};
-
-        if (
-          Array.isArray(
-            backendErrors
-          )
-        ) {
-          backendErrors.forEach(
-            (
-              item
-            ) => {
-              const field =
-                item?.path ||
-                item?.param;
-
-              if (
-                field
-              ) {
-                nextErrors[field] =
-                  item?.msg ||
-                  'Geçersiz değer';
-              }
-            }
-          );
-        }
-
-        if (
-          /yargı türü|judiciary_type/i.test(
-            message
-          )
-        ) {
-          nextErrors.judiciary_type =
-            message;
-        }
-
-        if (
-          /yargı birimi|judiciary_unit/i.test(
-            message
-          )
-        ) {
-          nextErrors.judiciary_unit =
-            message;
-        }
-
-        if (
-          /mahkeme|court_name/i.test(
-            message
-          )
-        ) {
-          nextErrors.court_name =
-            message;
-        }
-
-        if (
-          /dosya|esas|case_number/i.test(
-            message
-          )
-        ) {
-          nextErrors.case_number =
-            message;
-        }
-
-        if (
-          /müvekkil|client_ids/i.test(
-            message
-          )
-        ) {
-          nextErrors.client_ids =
-            message;
-        }
-
-        if (
-          /konu|subject/i.test(
-            message
-          )
-        ) {
-          nextErrors.subject =
-            message;
-        }
-
-        if (
-          /açıklama|description/i.test(
-            message
-          )
-        ) {
-          nextErrors.description =
-            message;
-        }
-
-        if (
-          /açılış|opening_date/i.test(
-            message
-          )
-        ) {
-          nextErrors.opening_date =
-            message;
-        }
-
-        if (
-          Object.keys(
-            nextErrors
-          ).length >
-          0
-        ) {
-          setErrors(
-            (
-              current
-            ) => ({
-              ...current,
-              ...nextErrors,
-            })
-          );
-
-          toast.error(
-            'Formdaki hatalı alanları kontrol edin'
-          );
-
-          return;
-        }
-
-        toast.error(
-          message
         );
-      },
-    });
+
+      if (
+        /yargı türü|judiciary_type/i.test(
+          message
+        )
+      ) {
+        nextErrors.judiciary_type =
+          message;
+      }
+
+      if (
+        /yargı birimi|judiciary_unit/i.test(
+          message
+        )
+      ) {
+        nextErrors.judiciary_unit =
+          message;
+      }
+
+      if (
+        /mahkeme|court_name/i.test(
+          message
+        )
+      ) {
+        nextErrors.court_name =
+          message;
+      }
+
+      if (
+        /dosya|esas|case_number/i.test(
+          message
+        )
+      ) {
+        nextErrors.case_number =
+          message;
+      }
+
+      if (
+        /müvekkil|client_ids/i.test(
+          message
+        )
+      ) {
+        nextErrors.client_ids =
+          message;
+      }
+
+      if (
+        /atanan|avukat|assigned_to/i.test(
+          message
+        )
+      ) {
+        nextErrors.assigned_to =
+          message;
+      }
+
+      if (
+        /durum|status/i.test(
+          message
+        )
+      ) {
+        nextErrors.status =
+          message;
+      }
+
+      if (
+        /öncelik|priority/i.test(
+          message
+        )
+      ) {
+        nextErrors.priority =
+          message;
+      }
+
+      if (
+        /konu|subject/i.test(
+          message
+        )
+      ) {
+        nextErrors.subject =
+          message;
+      }
+
+      if (
+        /açıklama|description/i.test(
+          message
+        )
+      ) {
+        nextErrors.description =
+          message;
+      }
+
+      if (
+        /açılış|opening_date/i.test(
+          message
+        )
+      ) {
+        nextErrors.opening_date =
+          message;
+      }
+
+      if (
+        Object.keys(
+          nextErrors
+        ).length >
+        0
+      ) {
+        setErrors(
+          (
+            current
+          ) => ({
+            ...current,
+            ...nextErrors,
+          })
+        );
+      }
+    };
 
   // ======================================================
   // DELETE
   // ======================================================
 
   const deleteMutation =
-    useMutation({
-      mutationFn: () =>
-        caseApi.delete(
-          id
-        ),
-
-      onSuccess: () => {
-        toast.success(
-          'Dava başarıyla silindi'
-        );
-
-        navigate(
-          '/cases'
-        );
-      },
-
-      onError: (
-        error
-      ) => {
-        toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
-          'Dava silinemedi'
-        );
-      },
-    });
+    useDeleteCase();
 
   const isPending =
     mutation.isPending ||
@@ -804,6 +967,12 @@ const CaseEdit = () => {
     (
       event
     ) => {
+      if (
+        isPending
+      ) {
+        return;
+      }
+
       const {
         name,
         value,
@@ -811,7 +980,12 @@ const CaseEdit = () => {
         event.target;
 
       let nextValue =
-        value;
+        name ===
+          'assigned_to'
+          ? normalizeId(
+              value
+            )
+          : value;
 
       if (
         name ===
@@ -919,12 +1093,18 @@ const CaseEdit = () => {
         return;
       }
 
+      const normalizedClientId =
+        normalizeId(
+          clientToAdd
+        );
+
       if (
-        formData
-          .client_ids
-          .includes(
-            clientToAdd
-          )
+        !normalizedClientId ||
+        normalizeIds(
+          formData.client_ids
+        ).includes(
+          normalizedClientId
+        )
       ) {
         return;
       }
@@ -935,10 +1115,11 @@ const CaseEdit = () => {
         ) => ({
           ...current,
 
-          client_ids: [
-            ...current.client_ids,
-            clientToAdd,
-          ],
+          client_ids:
+            normalizeIds([
+              ...current.client_ids,
+              normalizedClientId,
+            ]),
         })
       );
 
@@ -976,6 +1157,11 @@ const CaseEdit = () => {
         return;
       }
 
+      const normalizedClientId =
+        normalizeId(
+          clientId
+        );
+
       setFormData(
         (
           current
@@ -983,17 +1169,29 @@ const CaseEdit = () => {
           ...current,
 
           client_ids:
-            current
-              .client_ids
-              .filter(
-                (
-                  currentId
-                ) =>
-                  currentId !==
-                  clientId
-              ),
+            normalizeIds(
+              current.client_ids
+            ).filter(
+              (currentId) =>
+                currentId !==
+                normalizedClientId
+            ),
         })
       );
+
+      if (
+        errors.client_ids
+      ) {
+        setErrors(
+          (
+            current
+          ) => ({
+            ...current,
+            client_ids:
+              '',
+          })
+        );
+      }
     };
 
   // ======================================================
@@ -1041,6 +1239,16 @@ const CaseEdit = () => {
       if (
         isPending
       ) {
+        return;
+      }
+
+      if (
+        !id
+      ) {
+        toast.error(
+          'Geçerli dava kaydı bulunamadı'
+        );
+
         return;
       }
 
@@ -1140,12 +1348,83 @@ const CaseEdit = () => {
       // CLIENTS
       // ==================================================
 
+      const normalizedClientIds =
+        normalizeIds(
+          formData.client_ids
+        );
+
       if (
-        formData.client_ids.length ===
+        normalizedClientIds.length ===
         0
       ) {
         nextErrors.client_ids =
           'En az bir müvekkil seçilmelidir';
+      } else {
+        const availableClientIds =
+          new Set(
+            clients.map(
+              (client) =>
+                normalizeId(
+                  client?.id
+                )
+            )
+          );
+
+        const hasInvalidClient =
+          normalizedClientIds.some(
+            (clientId) =>
+              !availableClientIds.has(
+                clientId
+              )
+          );
+
+        if (
+          hasInvalidClient
+        ) {
+          nextErrors.client_ids =
+            'Seçili müvekkillerden biri artık erişilebilir değil';
+        }
+      }
+
+      const assignedTo =
+        normalizeId(
+          formData.assigned_to
+        );
+
+      if (
+        assignedTo &&
+        !lawyers.some(
+          (lawyer) =>
+            normalizeId(
+              lawyer?.id
+            ) ===
+            assignedTo
+        )
+      ) {
+        nextErrors.assigned_to =
+          'Seçilen avukat artık atanabilir değil';
+      }
+
+      if (
+        !STATUS_OPTIONS.some(
+          (option) =>
+            option.value ===
+            formData.status
+        )
+      ) {
+        nextErrors.status =
+          'Geçersiz dava durumu';
+      }
+
+      if (
+        !PRIORITY_OPTIONS.some(
+          (option) =>
+            option.value ===
+            formData.priority
+        )
+      ) {
+        nextErrors.priority =
+          'Geçersiz öncelik değeri';
       }
 
       // ==================================================
@@ -1210,6 +1489,11 @@ const CaseEdit = () => {
       const submitData = {
         ...formData,
 
+        client_ids:
+          normalizeIds(
+            formData.client_ids
+          ),
+
         title:
           `${judiciaryType} - ${judiciaryUnit}`,
 
@@ -1236,7 +1520,9 @@ const CaseEdit = () => {
           null,
 
         assigned_to:
-          formData.assigned_to ||
+          normalizeId(
+            formData.assigned_to
+          ) ||
           null,
 
         opening_date:
@@ -1245,7 +1531,21 @@ const CaseEdit = () => {
       };
 
       mutation.mutate(
-        submitData
+        {
+          id,
+          data:
+            submitData,
+        },
+        {
+          onSuccess: () => {
+            navigate(
+              `/cases/${id}`
+            );
+          },
+
+          onError:
+            handleMutationError,
+        }
       );
     };
 
@@ -1271,6 +1571,16 @@ const CaseEdit = () => {
         return;
       }
 
+      if (
+        !id
+      ) {
+        toast.error(
+          'Geçerli dava kaydı bulunamadı'
+        );
+
+        return;
+      }
+
       const confirmed =
         window.confirm(
           `Bu dava kaydını silmek istediğinize emin misiniz?\n\n${
@@ -1286,7 +1596,16 @@ const CaseEdit = () => {
         return;
       }
 
-      deleteMutation.mutate();
+      deleteMutation.mutate(
+        id,
+        {
+          onSuccess: () => {
+            navigate(
+              '/cases'
+            );
+          },
+        }
+      );
     };
 
   // ======================================================
@@ -1598,11 +1917,19 @@ const CaseEdit = () => {
                 }
                 onChange={(
                   event
-                ) =>
+                ) => {
+                  if (
+                    isPending
+                  ) {
+                    return;
+                  }
+
                   setClientToAdd(
-                    event.target.value
-                  )
-                }
+                    normalizeId(
+                      event.target.value
+                    )
+                  );
+                }}
                 disabled={
                   clientsLoading ||
                   isPending
@@ -1632,7 +1959,9 @@ const CaseEdit = () => {
                         client.id
                       }
                       value={
-                        client.id
+                        normalizeId(
+                          client.id
+                        )
                       }
                     >
                       {client.name}
@@ -1841,18 +2170,25 @@ const CaseEdit = () => {
                         lawyer.id
                       }
                       value={
-                        lawyer.id
+                        normalizeId(
+                          lawyer.id
+                        )
                       }
                     >
-                      {lawyer.first_name}{' '}
-                      {lawyer.last_name}
+                      {[
+                        lawyer.first_name,
+                        lawyer.last_name,
+                      ]
+                        .filter(Boolean)
+                        .join(' ') ||
+                        lawyer.name ||
+                        lawyer.email ||
+                        'Avukat'}
 
-                      {String(
+                      {normalizeId(
                         lawyer.id
                       ) ===
-                      String(
-                        user?.id
-                      )
+                      currentUserId
                         ? ' (Ben)'
                         : ''}
                     </option>
@@ -1860,6 +2196,12 @@ const CaseEdit = () => {
                 )}
 
               </select>
+
+              {errors.assigned_to && (
+                <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                  {errors.assigned_to}
+                </p>
+              )}
 
             </div>
 
@@ -1904,6 +2246,12 @@ const CaseEdit = () => {
 
                 </select>
 
+                {errors.status && (
+                  <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                    {errors.status}
+                  </p>
+                )}
+
               </div>
 
               <div>
@@ -1944,6 +2292,12 @@ const CaseEdit = () => {
                   )}
 
                 </select>
+
+                {errors.priority && (
+                  <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                    {errors.priority}
+                  </p>
+                )}
 
               </div>
 
