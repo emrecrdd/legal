@@ -122,9 +122,18 @@ const getStatusVariant = (
 const getClientTypeLabel = (
   type
 ) => {
-  return type === 'corporate'
-    ? 'Kurumsal'
-    : 'Bireysel';
+  const labels = {
+    individual:
+      'Bireysel',
+
+    corporate:
+      'Kurumsal',
+  };
+
+  return (
+    labels[type] ||
+    'Bilinmiyor'
+  );
 };
 
 const getClientTypeIcon = (
@@ -138,9 +147,21 @@ const getClientTypeIcon = (
 const getClientIconClass = (
   type
 ) => {
-  return type === 'corporate'
-    ? 'bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400'
-    : 'bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400';
+  if (
+    type ===
+    'corporate'
+  ) {
+    return 'bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400';
+  }
+
+  if (
+    type ===
+    'individual'
+  ) {
+    return 'bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400';
+  }
+
+  return 'bg-gray-50 text-gray-500 dark:bg-white/[0.05] dark:text-slate-400';
 };
 
 const getPersonName = (
@@ -149,6 +170,159 @@ const getPersonName = (
   return (
     client?.name ||
     'İsimsiz Müvekkil'
+  );
+};
+
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id ??
+      value?._id;
+
+    if (
+      objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+    ) {
+      return '';
+    }
+
+    return String(
+      objectId
+    );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getArrayPayload = (
+  response
+) => {
+  const payload =
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    [];
+
+  if (
+    Array.isArray(
+      payload
+    )
+  ) {
+    return payload;
+  }
+
+  if (
+    Array.isArray(
+      payload?.data
+    )
+  ) {
+    return payload.data;
+  }
+
+  if (
+    Array.isArray(
+      payload?.items
+    )
+  ) {
+    return payload.items;
+  }
+
+  if (
+    Array.isArray(
+      payload?.results
+    )
+  ) {
+    return payload.results;
+  }
+
+  if (
+    Array.isArray(
+      payload?.rows
+    )
+  ) {
+    return payload.rows;
+  }
+
+  return [];
+};
+
+const getPaginationPayload = (
+  response
+) => {
+  return (
+    response?.data?.pagination ??
+    response?.pagination ??
+    response?.data?.data?.pagination ??
+    null
+  );
+};
+
+const getClientCaseCount = (
+  client
+) => {
+  const value =
+    client?.case_count ??
+    client?.cases_count ??
+    client?.summary?.case_count ??
+    (
+      Array.isArray(
+        client?.cases
+      )
+        ? client.cases.length
+        : 0
+    );
+
+  const count =
+    Number(
+      value
+    );
+
+  return Number.isFinite(
+    count
+  )
+    ? Math.max(
+        0,
+        count
+      )
+    : 0;
+};
+
+const normalizePageNumber = (
+  value,
+  fallback = 1
+) => {
+  const page =
+    Number(
+      value
+    );
+
+  if (
+    !Number.isFinite(
+      page
+    ) ||
+    page < 1
+  ) {
+    return fallback;
+  }
+
+  return Math.floor(
+    page
   );
 };
 
@@ -208,6 +382,12 @@ const ClientsList = () => {
       PERMISSION_KEYS.CREATE_CLIENTS
     );
 
+  const canViewCases =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_CASES
+    );
+
   // ======================================================
   // QUERY
   // ======================================================
@@ -241,26 +421,61 @@ const ClientsList = () => {
   // ======================================================
 
   const clients =
-    Array.isArray(
-      data?.data?.data
-    )
-      ? data.data.data
-      : [];
+    getArrayPayload(
+      data
+    );
 
   const pagination =
-    data?.data
-      ?.pagination;
+    getPaginationPayload(
+      data
+    );
+
+  const currentPage =
+    normalizePageNumber(
+      pagination?.page ??
+      pagination?.current_page ??
+      pagination?.currentPage ??
+      page,
+      page
+    );
+
+  const totalPages =
+    normalizePageNumber(
+      pagination?.totalPages ??
+      pagination?.total_pages ??
+      pagination?.last_page ??
+      1
+    );
+
+  const totalClients =
+    Math.max(
+      0,
+      Number(
+        pagination?.total ??
+        pagination?.total_count ??
+        pagination?.count ??
+        clients.length
+      ) || 0
+    );
 
   // ======================================================
   // RESET PAGE
   // ======================================================
 
+  /*
+   * Filtre input handler'ları page'i anında 1'e çeker.
+   * Bu effect yalnız debounced değerlerin dışarıdan değişmesi gibi
+   * edge-case'lerde güvenlik ağı olarak kalır.
+   */
   useEffect(() => {
-    setPage(1);
+    setPage(
+      (current) =>
+        current === 1
+          ? current
+          : 1
+    );
   }, [
     debouncedSearch,
-    statusFilter,
-    clientTypeFilter,
     debouncedCity,
   ]);
 
@@ -269,14 +484,11 @@ const ClientsList = () => {
   // ======================================================
 
   useEffect(() => {
-    if (!pagination) {
+    if (
+      !pagination
+    ) {
       return;
     }
-
-    const totalPages =
-      Number(
-        pagination.totalPages
-      ) || 1;
 
     if (
       page >
@@ -289,6 +501,7 @@ const ClientsList = () => {
   }, [
     pagination,
     page,
+    totalPages,
   ]);
 
   // ======================================================
@@ -302,6 +515,88 @@ const ClientsList = () => {
       clientTypeFilter ||
       cityFilter
     );
+
+  const handleSearchChange =
+    (
+      event
+    ) => {
+      setSearch(
+        String(
+          event.target.value ??
+          ''
+        ).slice(
+          0,
+          200
+        )
+      );
+
+      setPage(1);
+    };
+
+  const handleStatusChange =
+    (
+      event
+    ) => {
+      const value =
+        event.target.value;
+
+      if (
+        !STATUS_OPTIONS.some(
+          (option) =>
+            option.value ===
+            value
+        )
+      ) {
+        return;
+      }
+
+      setStatusFilter(
+        value
+      );
+
+      setPage(1);
+    };
+
+  const handleClientTypeFilterChange =
+    (
+      event
+    ) => {
+      const value =
+        event.target.value;
+
+      if (
+        !CLIENT_TYPE_OPTIONS.some(
+          (option) =>
+            option.value ===
+            value
+        )
+      ) {
+        return;
+      }
+
+      setClientTypeFilter(
+        value
+      );
+
+      setPage(1);
+    };
+
+  const handleCityChange =
+    (
+      event
+    ) => {
+      setCityFilter(
+        String(
+          event.target.value ??
+          ''
+        ).slice(
+          0,
+          100
+        )
+      );
+
+      setPage(1);
+    };
 
   const handleClearFilters =
     () => {
@@ -412,7 +707,7 @@ const ClientsList = () => {
             >
               Toplam{' '}
               <span className="font-semibold text-gray-600 dark:text-slate-300">
-                {pagination?.total || 0}
+                {totalClients}
               </span>{' '}
               müvekkil
             </p>
@@ -462,11 +757,10 @@ const ClientsList = () => {
               <input
                 type="search"
                 value={search}
-                onChange={(event) =>
-                  setSearch(
-                    event.target.value
-                  )
+                onChange={
+                  handleSearchChange
                 }
+                maxLength={200}
                 placeholder="Ad, TCKN/VKN, e-posta veya telefon ara..."
                 className="
                   h-10
@@ -504,10 +798,8 @@ const ClientsList = () => {
 
               <select
                 value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(
-                    event.target.value
-                  )
+                onChange={
+                  handleStatusChange
                 }
                 className="
                   h-10
@@ -557,10 +849,8 @@ const ClientsList = () => {
                 value={
                   clientTypeFilter
                 }
-                onChange={(event) =>
-                  setClientTypeFilter(
-                    event.target.value
-                  )
+                onChange={
+                  handleClientTypeFilterChange
                 }
                 className="
                   h-10
@@ -622,11 +912,10 @@ const ClientsList = () => {
               <input
                 type="text"
                 value={cityFilter}
-                onChange={(event) =>
-                  setCityFilter(
-                    event.target.value
-                  )
+                onChange={
+                  handleCityChange
                 }
+                maxLength={100}
                 placeholder="Şehir"
                 className="
                   h-10
@@ -775,10 +1064,23 @@ const ClientsList = () => {
                       client.client_type
                     );
 
+                  const clientId =
+                    normalizeId(
+                      client?.id
+                    );
+
+                  const caseCount =
+                    getClientCaseCount(
+                      client
+                    );
+
                   return (
                     <Table.Row
                       key={
-                        client.id
+                        clientId ||
+                        `${getPersonName(
+                          client
+                        )}-${client?.identification_number || 'unknown'}`
                       }
                     >
 
@@ -807,29 +1109,44 @@ const ClientsList = () => {
 
                           <div className="min-w-0">
 
-                            <Link
-                              to={`/clients/${client.id}`}
-                              className="
-                                block
-                                max-w-xs
-                                truncate
-                                font-semibold
-                                text-gray-900
-                                transition
-                                hover:text-blue-600
-                                dark:text-white
-                                dark:hover:text-blue-400
-                              "
-                              title={
-                                getPersonName(
+                            {clientId ? (
+                              <Link
+                                to={`/clients/${clientId}`}
+                                className="
+                                  block
+                                  max-w-xs
+                                  truncate
+                                  font-semibold
+                                  text-gray-900
+                                  transition
+                                  hover:text-blue-600
+                                  dark:text-white
+                                  dark:hover:text-blue-400
+                                "
+                                title={
+                                  getPersonName(
+                                    client
+                                  )
+                                }
+                              >
+                                {getPersonName(
                                   client
-                                )
-                              }
-                            >
-                              {getPersonName(
-                                client
-                              )}
-                            </Link>
+                                )}
+                              </Link>
+                            ) : (
+                              <span
+                                className="block max-w-xs truncate font-semibold text-gray-900 dark:text-white"
+                                title={
+                                  getPersonName(
+                                    client
+                                  )
+                                }
+                              >
+                                {getPersonName(
+                                  client
+                                )}
+                              </span>
+                            )}
 
                             <div className="mt-1 flex items-center gap-2">
 
@@ -936,34 +1253,43 @@ const ClientsList = () => {
 
                       <Table.Cell>
 
-                        <Link
-                          to={`/clients/${client.id}`}
-                          className="
-                            inline-flex
-                            items-center
-                            gap-2
-                            rounded-lg
-                            px-2
-                            py-1
-                            text-sm
-                            font-medium
-                            text-gray-600
-                            transition
-                            hover:bg-blue-50
-                            hover:text-blue-600
-                            dark:text-slate-400
-                            dark:hover:bg-blue-500/[0.06]
-                            dark:hover:text-blue-400
-                          "
-                        >
-                          <FileText size={14} />
+                        {canViewCases &&
+                        clientId ? (
+                          <Link
+                            to={`/clients/${clientId}`}
+                            className="
+                              inline-flex
+                              items-center
+                              gap-2
+                              rounded-lg
+                              px-2
+                              py-1
+                              text-sm
+                              font-medium
+                              text-gray-600
+                              transition
+                              hover:bg-blue-50
+                              hover:text-blue-600
+                              dark:text-slate-400
+                              dark:hover:bg-blue-500/[0.06]
+                              dark:hover:text-blue-400
+                            "
+                          >
+                            <FileText size={14} />
 
-                          <span>
-                            {Number(
-                              client.case_count
-                            ) || 0}
+                            <span>
+                              {caseCount}
+                            </span>
+                          </Link>
+                        ) : (
+                          <span className="inline-flex items-center gap-2 px-2 py-1 text-sm text-gray-400 dark:text-slate-600">
+                            <FileText size={14} />
+
+                            <span>
+                              -
+                            </span>
                           </span>
-                        </Link>
+                        )}
 
                       </Table.Cell>
 
@@ -990,17 +1316,29 @@ const ClientsList = () => {
 
                       <Table.Cell className="text-right">
 
-                        <Link
-                          to={`/clients/${client.id}`}
-                        >
+                        {clientId ? (
+                          <Link
+                            to={`/clients/${clientId}`}
+                          >
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                            >
+                              İncele
+                              <ArrowRight className="h-3.5 w-3.5" />
+                            </Button>
+                          </Link>
+                        ) : (
                           <Button
                             variant="ghost"
                             size="sm"
+                            disabled
+                            title="Geçerli müvekkil kimliği bulunamadı"
                           >
                             İncele
                             <ArrowRight className="h-3.5 w-3.5" />
                           </Button>
-                        </Link>
+                        )}
 
                       </Table.Cell>
 
@@ -1018,7 +1356,7 @@ const ClientsList = () => {
           ================================================== */}
 
           {pagination &&
-            pagination.totalPages >
+            totalPages >
               1 && (
               <div
                 className="
@@ -1042,7 +1380,7 @@ const ClientsList = () => {
                 <p className="text-xs text-gray-500 dark:text-slate-400">
                   Toplam{' '}
                   <span className="font-semibold text-gray-700 dark:text-slate-300">
-                    {pagination.total}
+                    {totalClients}
                   </span>{' '}
                   müvekkil
                 </p>
@@ -1073,8 +1411,8 @@ const ClientsList = () => {
                   </Button>
 
                   <span className="min-w-[70px] text-center text-xs font-semibold text-gray-600 dark:text-slate-400">
-                    {page} /{' '}
-                    {pagination.totalPages}
+                    {currentPage} /{' '}
+                    {totalPages}
                   </span>
 
                   <Button
@@ -1082,7 +1420,7 @@ const ClientsList = () => {
                     size="sm"
                     disabled={
                       page >=
-                        pagination.totalPages ||
+                        totalPages ||
                       isFetching
                     }
                     onClick={() =>
@@ -1091,7 +1429,7 @@ const ClientsList = () => {
                           current
                         ) =>
                           Math.min(
-                            pagination.totalPages,
+                            totalPages,
                             current + 1
                           )
                       )

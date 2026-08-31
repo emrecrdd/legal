@@ -1,8 +1,4 @@
 import {
-  useMemo,
-} from 'react';
-
-import {
   Link,
   useParams,
 } from 'react-router-dom';
@@ -246,6 +242,158 @@ const normalizePhone = (
     /\D/g,
     ''
   );
+};
+
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id ??
+      value?._id;
+
+    if (
+      objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+    ) {
+      return '';
+    }
+
+    return String(
+      objectId
+    );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getArrayPayload = (
+  response
+) => {
+  const payload =
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    [];
+
+  if (
+    Array.isArray(
+      payload
+    )
+  ) {
+    return payload;
+  }
+
+  if (
+    Array.isArray(
+      payload?.data
+    )
+  ) {
+    return payload.data;
+  }
+
+  if (
+    Array.isArray(
+      payload?.items
+    )
+  ) {
+    return payload.items;
+  }
+
+  if (
+    Array.isArray(
+      payload?.results
+    )
+  ) {
+    return payload.results;
+  }
+
+  if (
+    Array.isArray(
+      payload?.rows
+    )
+  ) {
+    return payload.rows;
+  }
+
+  return [];
+};
+
+const getPaginationPayload = (
+  response
+) => {
+  return (
+    response?.data?.pagination ??
+    response?.pagination ??
+    response?.data?.data?.pagination ??
+    null
+  );
+};
+
+const normalizeWhatsAppPhone = (
+  value
+) => {
+  const digits =
+    normalizePhone(
+      value
+    );
+
+  if (!digits) {
+    return '';
+  }
+
+  /*
+   * Türkiye'deki yaygın kayıt biçimlerini wa.me'nin
+   * ülke kodlu formatına çevirir.
+   * Diğer ülke kodları olduğu gibi bırakılır.
+   */
+  if (
+    /^05\d{9}$/.test(
+      digits
+    )
+  ) {
+    return `90${digits.slice(1)}`;
+  }
+
+  if (
+    /^5\d{9}$/.test(
+      digits
+    )
+  ) {
+    return `90${digits}`;
+  }
+
+  return digits;
+};
+
+const sanitizeEmail = (
+  value
+) => {
+  const email =
+    String(
+      value ??
+      ''
+    ).trim();
+
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+    email
+  )
+    ? email
+    : '';
 };
 
 // ======================================================
@@ -496,9 +644,14 @@ const getMeetingStatusVariant = (
 
 const ClientDetail = () => {
   const {
-    id,
+    id: idParam,
   } =
     useParams();
+
+  const id =
+    normalizeId(
+      idParam
+    );
 
   const {
     user,
@@ -607,7 +760,9 @@ const ClientDetail = () => {
       casesError,
   } =
     useClientCaseHistory(
-      id
+      canViewCases
+        ? id
+        : ''
     );
 
   // ======================================================
@@ -627,7 +782,9 @@ const ClientDetail = () => {
       paymentsError,
   } =
     useClientPayments(
-      id
+      canViewPayments
+        ? id
+        : ''
     );
 
   // ======================================================
@@ -645,7 +802,9 @@ const ClientDetail = () => {
       tasksError,
   } =
     useClientTaskOverview(
-      id,
+      canViewTasks
+        ? id
+        : '',
       {
         active_limit:
           5,
@@ -670,7 +829,9 @@ const ClientDetail = () => {
       meetingsError,
   } =
     useClientMeetingTimeline(
-      id,
+      canViewMeetings
+        ? id
+        : '',
       {
         upcoming_limit:
           5,
@@ -713,10 +874,22 @@ const ClientDetail = () => {
         }),
 
       enabled:
-        Boolean(id),
+        canViewDocuments &&
+        Boolean(
+          id
+        ),
 
       staleTime:
-        2 * 60 * 1000,
+        0,
+
+      refetchOnMount:
+        'always',
+
+      refetchOnWindowFocus:
+        'always',
+
+      refetchOnReconnect:
+        'always',
     });
 
   // ======================================================
@@ -746,10 +919,22 @@ const ClientDetail = () => {
         ),
 
       enabled:
-        Boolean(id),
+        canViewPOA &&
+        Boolean(
+          id
+        ),
 
       staleTime:
-        5 * 60 * 1000,
+        0,
+
+      refetchOnMount:
+        'always',
+
+      refetchOnWindowFocus:
+        'always',
+
+      refetchOnReconnect:
+        'always',
     });
 
   // ======================================================
@@ -759,47 +944,41 @@ const ClientDetail = () => {
   const client =
     data?.data?.data ??
     data?.data ??
+    data ??
     null;
 
   const cases =
-    Array.isArray(
-      casesData?.data?.data
-    )
-      ? casesData.data.data
-      : Array.isArray(
-          casesData?.data
+    canViewCases
+      ? getArrayPayload(
+          casesData
         )
-      ? casesData.data
       : [];
 
   const payments =
-    Array.isArray(
-      paymentsData?.data?.data
-    )
-      ? paymentsData.data.data
-      : Array.isArray(
-          paymentsData?.data
+    canViewPayments
+      ? getArrayPayload(
+          paymentsData
         )
-      ? paymentsData.data
       : [];
 
   const powerOfAttorneys =
-    Array.isArray(
-      poaData?.data?.data
-    )
-      ? poaData.data.data
+    canViewPOA
+      ? getArrayPayload(
+          poaData
+        )
       : [];
 
   const documents =
-    Array.isArray(
-      documentsData?.data?.data
-    )
-      ? documentsData.data.data
+    canViewDocuments
+      ? getArrayPayload(
+          documentsData
+        )
       : [];
 
   const documentPagination =
-    documentsData?.data
-      ?.pagination;
+    getPaginationPayload(
+      documentsData
+    );
 
   const taskOverview =
     taskOverviewData
@@ -856,7 +1035,7 @@ const ClientDetail = () => {
   // ======================================================
 
   const financialSummary =
-    useMemo(() => {
+    (() => {
       let agreed =
         0;
 
@@ -879,8 +1058,15 @@ const ClientDetail = () => {
             ) || 0;
 
           if (
-            payment
-              ?.payment_type ===
+            !Number.isFinite(
+              amount
+            )
+          ) {
+            return;
+          }
+
+          if (
+            payment?.payment_type ===
             'agreed'
           ) {
             agreed +=
@@ -890,8 +1076,7 @@ const ClientDetail = () => {
           }
 
           if (
-            payment
-              ?.payment_type ===
+            payment?.payment_type ===
               'received' &&
             payment?.status ===
               'completed'
@@ -903,11 +1088,12 @@ const ClientDetail = () => {
           }
 
           if (
-            payment
-              ?.payment_type ===
+            payment?.payment_type ===
               'refund' ||
             payment?.status ===
-              'refund'
+              'refund' ||
+            payment?.status ===
+              'refunded'
           ) {
             refunded +=
               amount;
@@ -916,8 +1102,7 @@ const ClientDetail = () => {
           }
 
           if (
-            payment
-              ?.payment_type ===
+            payment?.payment_type ===
             'expense'
           ) {
             expense +=
@@ -952,24 +1137,30 @@ const ClientDetail = () => {
 
         remaining,
       };
-    }, [
-      payments,
-    ]);
+    })();
 
   // ======================================================
   // CONTACT
   // ======================================================
 
   const phone =
-    client?.phone ||
-    '';
+    String(
+      client?.phone ??
+      ''
+    ).trim();
 
   const email =
-    client?.email ||
-    '';
+    sanitizeEmail(
+      client?.email
+    );
 
   const normalizedPhone =
     normalizePhone(
+      phone
+    );
+
+  const whatsappPhone =
+    normalizeWhatsAppPhone(
       phone
     );
 
@@ -979,13 +1170,15 @@ const ClientDetail = () => {
     );
 
   const whatsappUrl =
-    normalizedPhone
-      ? `https://wa.me/${normalizedPhone}?text=${whatsappMessage}`
+    whatsappPhone
+      ? `https://wa.me/${whatsappPhone}?text=${whatsappMessage}`
       : null;
 
   const telUrl =
-    phone
-      ? `tel:${phone}`
+    normalizedPhone
+      ? `tel:${phone.startsWith('+')
+          ? '+'
+          : ''}${normalizedPhone}`
       : null;
 
   const mailUrl =
@@ -1098,7 +1291,7 @@ const ClientDetail = () => {
               <div>
 
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {client.name}
+                  {client.name || 'İsimsiz müvekkil'}
                 </h1>
 
                 <p className="mt-1 text-sm text-gray-500">
@@ -1363,9 +1556,10 @@ const ClientDetail = () => {
             0)) && (
         <div className="grid gap-4 md:grid-cols-2">
 
-          {Number(
-            taskSummary.overdue
-          ) > 0 && (
+          {canViewTasks &&
+            Number(
+              taskSummary.overdue
+            ) > 0 && (
             <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-900/10">
 
               <div className="flex items-start gap-3">
@@ -1505,7 +1699,8 @@ const ClientDetail = () => {
 
                           <p className="truncate font-semibold text-gray-900 dark:text-white">
                             {
-                              task.title
+                              task.title ||
+                              'Görev'
                             }
                           </p>
 
@@ -1628,7 +1823,8 @@ const ClientDetail = () => {
 
                           <p className="truncate font-semibold text-gray-900 dark:text-white">
                             {
-                              meeting.title
+                              meeting.title ||
+                              'Toplantı'
                             }
                           </p>
 
@@ -1958,26 +2154,48 @@ const ClientDetail = () => {
               </div>
             )}
 
-            {Array.isArray(
-              client.tags
-            ) &&
-              client.tags.length >
-                0 && (
-                <div>
+            {(() => {
+              const clientTags =
+                Array.isArray(
+                  client.tags
+                )
+                  ? client.tags
+                  : String(
+                      client.tags ??
+                      ''
+                    )
+                      .split(',')
+                      .map(
+                        (tag) =>
+                          tag.trim()
+                      )
+                      .filter(Boolean);
 
+              if (
+                clientTags.length ===
+                0
+              ) {
+                return null;
+              }
+
+              return (
+                <div>
                   <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
                     Etiketler
                   </p>
 
                   <div className="mt-2 flex flex-wrap gap-2">
-
-                    {client.tags.map(
+                    {clientTags.map(
                       (
                         tag
                       ) => (
                         <Badge
                           key={
-                            tag
+                            String(
+                              tag
+                            ).toLocaleLowerCase(
+                              'tr-TR'
+                            )
                           }
                           variant="default"
                         >
@@ -1985,11 +2203,10 @@ const ClientDetail = () => {
                         </Badge>
                       )
                     )}
-
                   </div>
-
                 </div>
-              )}
+              );
+            })()}
 
             {client.creator && (
               <div className="border-t border-gray-100 pt-4 dark:border-gray-700">
@@ -2298,7 +2515,8 @@ const ClientDetail = () => {
 
                         <p className="font-semibold text-gray-900 dark:text-white">
                           {
-                            poa.title
+                            poa.title ||
+                            'Vekâletname'
                           }
                         </p>
 
@@ -2439,7 +2657,9 @@ const ClientDetail = () => {
 
                         <p className="font-semibold text-gray-900 dark:text-white">
                           {
-                            caseItem.title
+                            caseItem.title ||
+                            caseItem.case_number ||
+                            'Dava dosyası'
                           }
                         </p>
 
