@@ -9,6 +9,213 @@ import meetingApi from './meeting.api.js';
 import toast from 'react-hot-toast';
 
 // ======================================================
+// HELPERS
+// ======================================================
+
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id ??
+      value?._id;
+
+    if (
+      objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+    ) {
+      return '';
+    }
+
+    return String(
+      objectId
+    );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getResponseItem = (
+  response
+) => {
+  return (
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    null
+  );
+};
+
+const getMeetingRelationIds = (
+  source
+) => {
+  const item =
+    getResponseItem(
+      source
+    );
+
+  return {
+    clientId:
+      normalizeId(
+        item?.client_id ??
+        item?.client?.id
+      ),
+
+    caseId:
+      normalizeId(
+        item?.case_id ??
+        item?.case?.id
+      ),
+  };
+};
+
+const getExistingMeetingRelations =
+  async (
+    queryClient,
+    id
+  ) => {
+    const cached =
+      queryClient.getQueryData(
+        MEETING_QUERY_KEYS.detail(
+          id
+        )
+      );
+
+    if (cached) {
+      return getMeetingRelationIds(
+        cached
+      );
+    }
+
+    try {
+      const response =
+        await meetingApi.getOne(
+          id
+        );
+
+      return getMeetingRelationIds(
+        response
+      );
+    } catch {
+      /*
+       * Eski ilişki okunamazsa mutation'ı engellemiyoruz.
+       * Yeni ilişki yine onSuccess içinde invalidate edilir.
+       */
+      return {
+        clientId:
+          '',
+        caseId:
+          '',
+      };
+    }
+  };
+
+const invalidateMeetingRelations =
+  async (
+    queryClient,
+    {
+      clientIds = [],
+      caseIds = [],
+    } = {}
+  ) => {
+    const normalizedClientIds = [
+      ...new Set(
+        clientIds
+          .map(
+            normalizeId
+          )
+          .filter(
+            Boolean
+          )
+      ),
+    ];
+
+    const normalizedCaseIds = [
+      ...new Set(
+        caseIds
+          .map(
+            normalizeId
+          )
+          .filter(
+            Boolean
+          )
+      ),
+    ];
+
+    const invalidations =
+      [];
+
+    normalizedClientIds.forEach(
+      (
+        clientId
+      ) => {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: [
+              'client-meetings',
+              clientId,
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'client-meeting-timeline',
+              clientId,
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'client',
+              clientId,
+            ],
+          })
+        );
+      }
+    );
+
+    normalizedCaseIds.forEach(
+      (
+        caseId
+      ) => {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: [
+              'case-meetings',
+              caseId,
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'case',
+              caseId,
+            ],
+          })
+        );
+      }
+    );
+
+    await Promise.all(
+      invalidations
+    );
+  };
+
+// ======================================================
 // QUERY KEYS
 // ======================================================
 
@@ -440,101 +647,144 @@ export const useUpdateMeeting =
             data
           ),
 
-      onSuccess: (
-        _,
+      onMutate: async (
         variables
       ) => {
-        queryClient.invalidateQueries({
-          queryKey:
-            MEETING_QUERY_KEYS.all,
-        });
+        const id =
+          normalizeId(
+            variables?.id
+          );
 
-        queryClient.invalidateQueries({
+        if (!id) {
+          return {
+            oldClientId:
+              '',
+            oldCaseId:
+              '',
+          };
+        }
+
+        await queryClient.cancelQueries({
           queryKey:
             MEETING_QUERY_KEYS.detail(
-              variables.id
+              id
             ),
+          exact:
+            true,
         });
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'my-meetings',
-          ],
-        });
+        const {
+          clientId,
+          caseId,
+        } =
+          await getExistingMeetingRelations(
+            queryClient,
+            id
+          );
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'upcoming-meetings',
-          ],
-        });
+        return {
+          oldClientId:
+            clientId,
+          oldCaseId:
+            caseId,
+        };
+      },
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'calendar-meetings',
-          ],
-        });
+      onSuccess: async (
+        response,
+        variables,
+        context
+      ) => {
+        const id =
+          normalizeId(
+            variables?.id
+          );
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'dashboard-meetings',
-          ],
-        });
+        const responseRelations =
+          getMeetingRelationIds(
+            response
+          );
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'dashboard-monthly-meetings',
-          ],
-        });
+        const newClientId =
+          normalizeId(
+            responseRelations.clientId ||
+            variables?.data?.client_id
+          );
 
-        if (
-          variables?.data
-            ?.client_id
-        ) {
+        const newCaseId =
+          normalizeId(
+            responseRelations.caseId ||
+            variables?.data?.case_id
+          );
+
+        const oldClientId =
+          normalizeId(
+            context?.oldClientId
+          );
+
+        const oldCaseId =
+          normalizeId(
+            context?.oldCaseId
+          );
+
+        await Promise.all([
           queryClient.invalidateQueries({
-            queryKey: [
-              'client-meetings',
-              variables.data
-                .client_id,
-            ],
-          });
-
-          queryClient.invalidateQueries({
-            queryKey: [
-              'client-meeting-timeline',
-              variables.data
-                .client_id,
-            ],
-          });
-
-          queryClient.invalidateQueries({
-            queryKey: [
-              'client',
-              variables.data
-                .client_id,
-            ],
-          });
-        }
-
-        if (
-          variables?.data
-            ?.case_id
-        ) {
-          queryClient.invalidateQueries({
-            queryKey: [
-              'case-meetings',
-              variables.data
-                .case_id,
-            ],
-          });
+            queryKey:
+              MEETING_QUERY_KEYS.all,
+          }),
 
           queryClient.invalidateQueries({
+            queryKey:
+              MEETING_QUERY_KEYS.detail(
+                id
+              ),
+          }),
+
+          queryClient.invalidateQueries({
             queryKey: [
-              'case',
-              variables.data
-                .case_id,
+              'my-meetings',
             ],
-          });
-        }
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'upcoming-meetings',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'calendar-meetings',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'dashboard-meetings',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'dashboard-monthly-meetings',
+            ],
+          }),
+
+          invalidateMeetingRelations(
+            queryClient,
+            {
+              clientIds: [
+                oldClientId,
+                newClientId,
+              ],
+
+              caseIds: [
+                oldCaseId,
+                newCaseId,
+              ],
+            }
+          ),
+        ]);
 
         toast.success(
           'Toplantı güncellendi'
@@ -547,7 +797,8 @@ export const useUpdateMeeting =
         toast.error(
           error?.response
             ?.data?.message ||
-            'Toplantı güncellenemedi'
+          error?.message ||
+          'Toplantı güncellenemedi'
         );
       },
     });
@@ -573,57 +824,104 @@ export const useUpdateMeetingStatus =
             status
           ),
 
-      onSuccess: (
-        _,
+      onMutate: async (
         variables
       ) => {
-        queryClient.invalidateQueries({
-          queryKey:
-            MEETING_QUERY_KEYS.all,
-        });
+        const id =
+          normalizeId(
+            variables?.id
+          );
 
-        queryClient.invalidateQueries({
+        if (!id) {
+          return {
+            clientId:
+              '',
+            caseId:
+              '',
+          };
+        }
+
+        await queryClient.cancelQueries({
           queryKey:
             MEETING_QUERY_KEYS.detail(
-              variables.id
+              id
             ),
+          exact:
+            true,
         });
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'my-meetings',
-          ],
-        });
+        return getExistingMeetingRelations(
+          queryClient,
+          id
+        );
+      },
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'upcoming-meetings',
-          ],
-        });
+      onSuccess: async (
+        _response,
+        variables,
+        context
+      ) => {
+        const id =
+          normalizeId(
+            variables?.id
+          );
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'calendar-meetings',
-          ],
-        });
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey:
+              MEETING_QUERY_KEYS.all,
+          }),
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'dashboard-meetings',
-          ],
-        });
+          queryClient.invalidateQueries({
+            queryKey:
+              MEETING_QUERY_KEYS.detail(
+                id
+              ),
+          }),
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'dashboard-monthly-meetings',
-          ],
-        });
+          queryClient.invalidateQueries({
+            queryKey: [
+              'my-meetings',
+            ],
+          }),
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'client-meeting-timeline',
-          ],
-        });
+          queryClient.invalidateQueries({
+            queryKey: [
+              'upcoming-meetings',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'calendar-meetings',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'dashboard-meetings',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'dashboard-monthly-meetings',
+            ],
+          }),
+
+          invalidateMeetingRelations(
+            queryClient,
+            {
+              clientIds: [
+                context?.clientId,
+              ],
+
+              caseIds: [
+                context?.caseId,
+              ],
+            }
+          ),
+        ]);
 
         toast.success(
           'Toplantı durumu güncellendi'
@@ -636,7 +934,8 @@ export const useUpdateMeetingStatus =
         toast.error(
           error?.response
             ?.data?.message ||
-            'Toplantı durumu güncellenemedi'
+          error?.message ||
+          'Toplantı durumu güncellenemedi'
         );
       },
     });
