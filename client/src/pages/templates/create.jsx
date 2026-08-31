@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
 } from 'react';
@@ -10,6 +11,7 @@ import {
 
 import {
   useMutation,
+  useQueryClient,
 } from '@tanstack/react-query';
 
 import {
@@ -40,6 +42,12 @@ import toast from 'react-hot-toast';
 
 const MAX_FILE_SIZE =
   10 * 1024 * 1024;
+
+const MAX_TITLE_LENGTH =
+  200;
+
+const MAX_DESCRIPTION_LENGTH =
+  2000;
 
 const ALLOWED_MIME_TYPES =
   new Set([
@@ -167,6 +175,162 @@ const getFileExtension = (
     .toLowerCase();
 };
 
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id ??
+      value?._id;
+
+    if (
+      objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+    ) {
+      return '';
+    }
+
+    return String(
+      objectId
+    );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getResponseItem = (
+  response
+) => {
+  return (
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    null
+  );
+};
+
+const getTemplateIdFromResponse = (
+  response
+) => {
+  return normalizeId(
+    getResponseItem(
+      response
+    )?.id
+  );
+};
+
+const getBackendFieldErrors = (
+  error
+) => {
+  const payload =
+    error?.response?.data;
+
+  const source =
+    payload?.errors ??
+    payload?.validation_errors ??
+    null;
+
+  if (!source) {
+    return {};
+  }
+
+  if (
+    Array.isArray(
+      source
+    )
+  ) {
+    return source.reduce(
+      (
+        result,
+        item
+      ) => {
+        const field =
+          item?.path ??
+          item?.param ??
+          item?.field;
+
+        const message =
+          item?.msg ??
+          item?.message;
+
+        if (
+          field &&
+          message
+        ) {
+          result[field] =
+            String(
+              message
+            );
+        }
+
+        return result;
+      },
+      {}
+    );
+  }
+
+  if (
+    typeof source ===
+    'object'
+  ) {
+    return Object.entries(
+      source
+    ).reduce(
+      (
+        result,
+        [field, value]
+      ) => {
+        const message =
+          Array.isArray(
+            value
+          )
+            ? value[0]
+            : value;
+
+        if (
+          message !== null &&
+          message !== undefined
+        ) {
+          result[field] =
+            String(
+              message
+            );
+        }
+
+        return result;
+      },
+      {}
+    );
+  }
+
+  return {};
+};
+
+const isAllowedOption = (
+  options,
+  value
+) => {
+  return options.some(
+    (option) =>
+      option.value ===
+      value
+  );
+};
+
 const getFileTypeLabel = (
   file
 ) => {
@@ -242,6 +406,9 @@ const TemplateCreate = () => {
   const navigate =
     useNavigate();
 
+  const queryClient =
+    useQueryClient();
+
   const fileInputRef =
     useRef(null);
 
@@ -280,6 +447,17 @@ const TemplateCreate = () => {
   ] =
     useState(false);
 
+  const isDirty =
+    Boolean(
+      formData.title.trim() ||
+      formData.description.trim() ||
+      formData.category !==
+        'dilekce' ||
+      formData.law_area !==
+        'ozel_hukuk' ||
+      file
+    );
+
   // ====================================================
   // MUTATION
   // ====================================================
@@ -293,41 +471,107 @@ const TemplateCreate = () => {
           data
         ),
 
-      onSuccess: (
+      onSuccess: async (
         response
       ) => {
-        toast.success(
-          'Şablon başarıyla oluşturuldu'
-        );
-
         const templateId =
-          response?.data
-            ?.data?.id;
+          getTemplateIdFromResponse(
+            response
+          );
 
         if (
           templateId
         ) {
-          navigate(
-            `/templates/${templateId}`
+          queryClient.setQueryData(
+            [
+              'template',
+              templateId,
+            ],
+            response
           );
 
-          return;
+          queryClient.setQueryData(
+            [
+              'templates',
+              'detail',
+              templateId,
+            ],
+            response
+          );
         }
 
+        /*
+         * Şablon liste/detail/sayaçları create sonrası F5 beklemeden
+         * güncellensin. ['templates'] prefix'i filtreli listeleri de kapsar.
+         */
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: [
+              'templates',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'template-statistics',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'dashboard-stats',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'dashboard-templates',
+            ],
+          }),
+        ]);
+
+        toast.success(
+          'Şablon başarıyla oluşturuldu'
+        );
+
         navigate(
-          '/templates'
+          templateId
+            ? `/templates/${templateId}`
+            : '/templates'
         );
       },
 
       onError: (
         error
       ) => {
+        const fieldErrors =
+          getBackendFieldErrors(
+            error
+          );
+
+        if (
+          Object.keys(
+            fieldErrors
+          ).length >
+          0
+        ) {
+          setErrors(
+            (
+              current
+            ) => ({
+              ...current,
+              ...fieldErrors,
+            })
+          );
+        }
+
         toast.error(
           error
             ?.response
             ?.data
             ?.message ||
-            'Şablon oluşturulamadı'
+          error?.message ||
+          'Şablon oluşturulamadı'
         );
       },
     });
@@ -336,15 +580,105 @@ const TemplateCreate = () => {
   // FORM HANDLERS
   // ====================================================
 
+  useEffect(() => {
+    const handleBeforeUnload =
+      (
+        event
+      ) => {
+        if (
+          !isDirty ||
+          mutation.isPending
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        event.returnValue =
+          '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+    mutation.isPending,
+  ]);
+
   const handleChange =
     (
       event
     ) => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       const {
         name,
         value,
       } =
         event.target;
+
+      let nextValue =
+        value;
+
+      if (
+        name ===
+        'title'
+      ) {
+        nextValue =
+          String(
+            value
+          ).slice(
+            0,
+            MAX_TITLE_LENGTH
+          );
+      }
+
+      if (
+        name ===
+        'description'
+      ) {
+        nextValue =
+          String(
+            value
+          ).slice(
+            0,
+            MAX_DESCRIPTION_LENGTH
+          );
+      }
+
+      if (
+        name ===
+          'category' &&
+        !isAllowedOption(
+          CATEGORY_OPTIONS,
+          nextValue
+        )
+      ) {
+        return;
+      }
+
+      if (
+        name ===
+          'law_area' &&
+        !isAllowedOption(
+          LAW_AREA_OPTIONS,
+          nextValue
+        )
+      ) {
+        return;
+      }
 
       setFormData(
         (
@@ -352,7 +686,7 @@ const TemplateCreate = () => {
         ) => ({
           ...current,
           [name]:
-            value,
+            nextValue,
         })
       );
 
@@ -380,8 +714,36 @@ const TemplateCreate = () => {
       selectedFile
     ) => {
       if (
+        mutation.isPending ||
         !selectedFile
       ) {
+        return;
+      }
+
+      const clearNativeInput =
+        () => {
+          if (
+            fileInputRef.current
+          ) {
+            fileInputRef.current.value =
+              '';
+          }
+        };
+
+      if (
+        selectedFile.size <=
+        0
+      ) {
+        setFile(
+          null
+        );
+
+        setFileError(
+          'Boş dosya yüklenemez.'
+        );
+
+        clearNativeInput();
+
         return;
       }
 
@@ -397,6 +759,8 @@ const TemplateCreate = () => {
           'Dosya boyutu 10 MB’dan büyük olamaz.'
         );
 
+        clearNativeInput();
+
         return;
       }
 
@@ -405,9 +769,15 @@ const TemplateCreate = () => {
           selectedFile.name
         );
 
+      const mimeType =
+        String(
+          selectedFile.type ||
+          ''
+        ).trim();
+
       const isAllowedMime =
         ALLOWED_MIME_TYPES.has(
-          selectedFile.type
+          mimeType
         );
 
       const isUdf =
@@ -418,12 +788,20 @@ const TemplateCreate = () => {
           extension
         );
 
+      /*
+       * Office/UDF dosyalarında bazı tarayıcılar MIME bilgisini boş bırakır.
+       * Uzantı whitelist'teyse boş MIME kabul edilir. MIME dolu fakat izinli
+       * değilse UDF hariç reddedilir. Asıl dosya doğrulaması backend'de de
+       * yapılmalıdır.
+       */
+      const hasAcceptableMime =
+        isUdf ||
+        !mimeType ||
+        isAllowedMime;
+
       if (
         !isAllowedExtension ||
-        (
-          !isAllowedMime &&
-          !isUdf
-        )
+        !hasAcceptableMime
       ) {
         setFile(
           null
@@ -432,6 +810,8 @@ const TemplateCreate = () => {
         setFileError(
           'PDF, Word, Excel, görsel, TXT veya UYAP UDF dosyası yükleyebilirsiniz.'
         );
+
+        clearNativeInput();
 
         return;
       }
@@ -469,6 +849,12 @@ const TemplateCreate = () => {
 
   const handleRemoveFile =
     () => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       setFile(
         null
       );
@@ -505,6 +891,12 @@ const TemplateCreate = () => {
     ) => {
       event.preventDefault();
 
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       setIsDragging(
         true
       );
@@ -531,6 +923,12 @@ const TemplateCreate = () => {
         false
       );
 
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       const droppedFile =
         event.dataTransfer
           ?.files?.[0];
@@ -550,14 +948,60 @@ const TemplateCreate = () => {
     ) => {
       event.preventDefault();
 
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
+      const title =
+        formData.title.trim();
+
+      const description =
+        formData.description.trim();
+
       const newErrors =
         {};
 
       if (
-        !formData.title.trim()
+        !title
       ) {
         newErrors.title =
           'Şablon başlığı gereklidir';
+      } else if (
+        title.length >
+        MAX_TITLE_LENGTH
+      ) {
+        newErrors.title =
+          `Şablon başlığı en fazla ${MAX_TITLE_LENGTH} karakter olabilir`;
+      }
+
+      if (
+        description.length >
+        MAX_DESCRIPTION_LENGTH
+      ) {
+        newErrors.description =
+          `Açıklama en fazla ${MAX_DESCRIPTION_LENGTH} karakter olabilir`;
+      }
+
+      if (
+        !isAllowedOption(
+          CATEGORY_OPTIONS,
+          formData.category
+        )
+      ) {
+        newErrors.category =
+          'Geçerli bir kategori seçin';
+      }
+
+      if (
+        !isAllowedOption(
+          LAW_AREA_OPTIONS,
+          formData.law_area
+        )
+      ) {
+        newErrors.law_area =
+          'Geçerli bir hukuk alanı seçin';
       }
 
       if (
@@ -565,6 +1009,18 @@ const TemplateCreate = () => {
       ) {
         newErrors.file =
           'Şablon dosyası seçilmelidir';
+      } else if (
+        file.size <=
+        0
+      ) {
+        newErrors.file =
+          'Boş dosya yüklenemez';
+      } else if (
+        file.size >
+        MAX_FILE_SIZE
+      ) {
+        newErrors.file =
+          'Dosya boyutu 10 MB’dan büyük olamaz';
       }
 
       if (
@@ -585,14 +1041,12 @@ const TemplateCreate = () => {
 
       submitData.append(
         'title',
-        formData.title.trim()
+        title
       );
 
       submitData.append(
         'description',
-        formData.description
-          ?.trim() ||
-          ''
+        description
       );
 
       submitData.append(
@@ -628,6 +1082,25 @@ const TemplateCreate = () => {
 
         <Link
           to="/templates"
+          onClick={(
+            event
+          ) => {
+            if (
+              mutation.isPending
+            ) {
+              event.preventDefault();
+              return;
+            }
+
+            if (
+              isDirty &&
+              !window.confirm(
+                'Kaydedilmemiş değişiklikler var. Şablon oluşturmadan çıkmak istediğinize emin misiniz?'
+              )
+            ) {
+              event.preventDefault();
+            }
+          }}
           className="
             inline-flex
             items-center
@@ -760,6 +1233,9 @@ const TemplateCreate = () => {
               error={
                 errors.title
               }
+              maxLength={
+                MAX_TITLE_LENGTH
+              }
               placeholder="Örn: İcra Takibi İtiraz Dilekçesi"
               autoFocus
             />
@@ -779,6 +1255,9 @@ const TemplateCreate = () => {
                   handleChange
                 }
                 rows={4}
+                maxLength={
+                  MAX_DESCRIPTION_LENGTH
+                }
                 placeholder="Şablonun hangi işlemlerde kullanılacağını kısaca açıklayın..."
                 className="
                   w-full
@@ -804,6 +1283,12 @@ const TemplateCreate = () => {
                   dark:placeholder:text-slate-500
                 "
               />
+
+              {errors.description && (
+                <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                  {errors.description}
+                </p>
+              )}
 
             </div>
 
@@ -862,6 +1347,12 @@ const TemplateCreate = () => {
                   )}
                 </select>
 
+                {errors.category && (
+                  <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.category}
+                  </p>
+                )}
+
               </div>
 
               {/* LAW AREA */}
@@ -916,6 +1407,12 @@ const TemplateCreate = () => {
                     )
                   )}
                 </select>
+
+                {errors.law_area && (
+                  <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.law_area}
+                  </p>
+                )}
 
               </div>
 
@@ -972,6 +1469,7 @@ const TemplateCreate = () => {
               role="button"
               tabIndex={0}
               onClick={() =>
+                !mutation.isPending &&
                 !file &&
                 fileInputRef.current?.click()
               }
@@ -979,6 +1477,7 @@ const TemplateCreate = () => {
                 event
               ) => {
                 if (
+                  !mutation.isPending &&
                   !file &&
                   (
                     event.key ===
@@ -1092,6 +1591,9 @@ const TemplateCreate = () => {
                   <Button
                     type="button"
                     variant="ghost"
+                    disabled={
+                      mutation.isPending
+                    }
                     onClick={(
                       event
                     ) => {
@@ -1175,6 +1677,9 @@ const TemplateCreate = () => {
                 }
                 type="file"
                 className="hidden"
+                disabled={
+                  mutation.isPending
+                }
                 onChange={
                   handleFileChange
                 }
@@ -1367,11 +1872,26 @@ const TemplateCreate = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={() =>
+            onClick={() => {
+              if (
+                mutation.isPending
+              ) {
+                return;
+              }
+
+              if (
+                isDirty &&
+                !window.confirm(
+                  'Kaydedilmemiş değişiklikler var. Şablon oluşturmadan çıkmak istediğinize emin misiniz?'
+                )
+              ) {
+                return;
+              }
+
               navigate(
                 '/templates'
-              )
-            }
+              );
+            }}
             disabled={
               mutation.isPending
             }
@@ -1382,6 +1902,9 @@ const TemplateCreate = () => {
           <Button
             type="submit"
             loading={
+              mutation.isPending
+            }
+            disabled={
               mutation.isPending
             }
           >

@@ -1,13 +1,18 @@
 import {
-  useParams,
   Link,
   useNavigate,
+  useParams,
 } from 'react-router-dom';
 
 import {
-  useQuery,
   useMutation,
+  useQuery,
+  useQueryClient,
 } from '@tanstack/react-query';
+
+import {
+  useState,
+} from 'react';
 
 import {
   templateApi,
@@ -61,6 +66,124 @@ const LAW_AREA_LABELS = {
 // ======================================================
 // HELPERS
 // ======================================================
+
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id ??
+      value?._id;
+
+    if (
+      objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+    ) {
+      return '';
+    }
+
+    return String(
+      objectId
+    );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getResponseItem = (
+  response
+) => {
+  return (
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    null
+  );
+};
+
+const replaceResponseItem = (
+  current,
+  nextItem
+) => {
+  if (!current) {
+    return nextItem;
+  }
+
+  if (
+    current?.data?.data !==
+    undefined
+  ) {
+    return {
+      ...current,
+      data: {
+        ...current.data,
+        data:
+          nextItem,
+      },
+    };
+  }
+
+  if (
+    current?.data !==
+    undefined
+  ) {
+    return {
+      ...current,
+      data:
+        nextItem,
+    };
+  }
+
+  return nextItem;
+};
+
+const getDownloadCount = (
+  source
+) => {
+  const item =
+    getResponseItem(
+      source
+    );
+
+  const count =
+    Number(
+      item?.download_count
+    );
+
+  return Number.isFinite(
+    count
+  )
+    ? Math.max(
+        0,
+        count
+      )
+    : 0;
+};
+
+const getErrorMessage = (
+  error,
+  fallback
+) => {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    fallback
+  );
+};
 
 const getCategoryLabel = (category) => {
   return (
@@ -182,11 +305,33 @@ const isUdfTemplate = (
 // ======================================================
 
 const TemplateDetail = () => {
-  const { id } =
+  const {
+    id: idParam,
+  } =
     useParams();
+
+  const id =
+    normalizeId(
+      idParam
+    );
 
   const navigate =
     useNavigate();
+
+  const queryClient =
+    useQueryClient();
+
+  const [
+    isDownloading,
+    setIsDownloading,
+  ] =
+    useState(false);
+
+  const [
+    isPreviewing,
+    setIsPreviewing,
+  ] =
+    useState(false);
 
   const {
     user,
@@ -212,7 +357,6 @@ const TemplateDetail = () => {
     data,
     isLoading,
     error,
-    refetch,
   } = useQuery({
     queryKey: [
       'template',
@@ -220,14 +364,169 @@ const TemplateDetail = () => {
     ],
 
     queryFn: () =>
-      templateApi.getOne(id),
+      templateApi.getOne(
+        id
+      ),
 
     enabled:
-      Boolean(id),
+      Boolean(
+        id
+      ),
+
+    staleTime:
+      0,
+
+    refetchOnMount:
+      'always',
+
+    refetchOnWindowFocus:
+      'always',
+
+    refetchOnReconnect:
+      'always',
   });
 
   const template =
-    data?.data?.data;
+    getResponseItem(
+      data
+    );
+
+  const invalidateTemplateCollections =
+    async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: [
+            'templates',
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'template-statistics',
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-stats',
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-templates',
+          ],
+        }),
+      ]);
+    };
+
+  const setTemplateDownloadCount =
+    (
+      nextCount
+    ) => {
+      if (!id) {
+        return;
+      }
+
+      queryClient.setQueryData(
+        [
+          'template',
+          id,
+        ],
+        (
+          current
+        ) => {
+          const currentItem =
+            getResponseItem(
+              current
+            );
+
+          if (
+            !currentItem ||
+            typeof currentItem !==
+              'object'
+          ) {
+            return current;
+          }
+
+          return replaceResponseItem(
+            current,
+            {
+              ...currentItem,
+              download_count:
+                Math.max(
+                  0,
+                  Number(
+                    nextCount
+                  ) || 0
+                ),
+            }
+          );
+        }
+      );
+    };
+
+  const syncDownloadCountFromServer =
+    async (
+      minimumCount,
+      attempts = 5
+    ) => {
+      if (!id) {
+        return null;
+      }
+
+      for (
+        let attempt = 0;
+        attempt < attempts;
+        attempt += 1
+      ) {
+        try {
+          const response =
+            await templateApi.getOne(
+              id
+            );
+
+          const serverCount =
+            getDownloadCount(
+              response
+            );
+
+          if (
+            serverCount >=
+            minimumCount
+          ) {
+            queryClient.setQueryData(
+              [
+                'template',
+                id,
+              ],
+              response
+            );
+
+            return response;
+          }
+        } catch {
+          // Bir sonraki denemede tekrar doğrulanır.
+        }
+
+        if (
+          attempt <
+          attempts - 1
+        ) {
+          await new Promise(
+            (resolve) => {
+              setTimeout(
+                resolve,
+                120 *
+                  (attempt + 1)
+              );
+            }
+          );
+        }
+      }
+
+      return null;
+    };
 
   // ======================================================
   // DELETE
@@ -235,10 +534,55 @@ const TemplateDetail = () => {
 
   const deleteMutation =
     useMutation({
-      mutationFn: () =>
-        templateApi.delete(id),
+      mutationFn: () => {
+        if (!id) {
+          throw new Error(
+            'Geçerli şablon kaydı bulunamadı'
+          );
+        }
 
-      onSuccess: () => {
+        return templateApi.delete(
+          id
+        );
+      },
+
+      onMutate: async () => {
+        if (!id) {
+          return;
+        }
+
+        await queryClient.cancelQueries({
+          queryKey: [
+            'template',
+            id,
+          ],
+          exact:
+            true,
+        });
+      },
+
+      onSuccess: async () => {
+        queryClient.removeQueries({
+          queryKey: [
+            'template',
+            id,
+          ],
+          exact:
+            true,
+        });
+
+        queryClient.removeQueries({
+          queryKey: [
+            'templates',
+            'detail',
+            id,
+          ],
+          exact:
+            true,
+        });
+
+        await invalidateTemplateCollections();
+
         toast.success(
           'Şablon silindi'
         );
@@ -250,8 +594,10 @@ const TemplateDetail = () => {
 
       onError: (error) => {
         toast.error(
-          error?.response?.data?.message ||
+          getErrorMessage(
+            error,
             'Silme başarısız'
+          )
         );
       },
     });
@@ -262,6 +608,34 @@ const TemplateDetail = () => {
 
   const handleDownload =
     async () => {
+      if (
+        isDownloading ||
+        deleteMutation.isPending
+      ) {
+        return;
+      }
+
+      if (!id) {
+        toast.error(
+          'Geçerli şablon kaydı bulunamadı'
+        );
+
+        return;
+      }
+
+      const previousCount =
+        getDownloadCount(
+          data
+        );
+
+      const optimisticCount =
+        previousCount +
+        1;
+
+      setIsDownloading(
+        true
+      );
+
       try {
         const response =
           await templateApi.download(
@@ -269,37 +643,45 @@ const TemplateDetail = () => {
           );
 
         const responseData =
-          response?.data?.data;
+          response?.data?.data ??
+          response?.data;
+
+        let downloadStarted =
+          false;
 
         /*
-         * Backend presigned URL döndürüyorsa
-         * direkt açıyoruz.
+         * Backend presigned URL döndürüyorsa yeni sekmede aç.
          */
         if (
           responseData?.downloadUrl
         ) {
-          window.open(
-            responseData.downloadUrl,
-            '_blank',
-            'noopener,noreferrer'
-          );
+          const openedWindow =
+            window.open(
+              responseData.downloadUrl,
+              '_blank',
+              'noopener,noreferrer'
+            );
 
-          toast.success(
-            'İndirme başlatıldı'
-          );
+          if (
+            openedWindow ===
+            null
+          ) {
+            toast.error(
+              'İndirme penceresi açılamadı. Tarayıcı pop-up engelini kontrol edin.'
+            );
 
-          refetch();
+            return;
+          }
 
-          return;
-        }
-
-        /*
-         * API doğrudan blob döndürüyorsa
-         * fallback olarak indiriyoruz.
-         */
-        if (
-          response?.data instanceof Blob
+          downloadStarted =
+            true;
+        } else if (
+          response?.data instanceof
+            Blob
         ) {
+          /*
+           * API doğrudan blob döndürüyorsa tarayıcıdan indir.
+           */
           const url =
             window.URL.createObjectURL(
               response.data
@@ -324,21 +706,56 @@ const TemplateDetail = () => {
           link.click();
           link.remove();
 
-          window.URL.revokeObjectURL(
-            url
+          window.setTimeout(
+            () => {
+              window.URL.revokeObjectURL(
+                url
+              );
+            },
+            1_000
           );
 
-          toast.success(
-            'Şablon indirildi'
-          );
+          downloadStarted =
+            true;
+        }
 
-          refetch();
+        if (
+          !downloadStarted
+        ) {
+          toast.error(
+            'İndirme bağlantısı alınamadı'
+          );
 
           return;
         }
 
-        toast.error(
-          'İndirme bağlantısı alınamadı'
+        /*
+         * Sayaç kullanıcıya anında yansır. Backend sayaç güncellemesi
+         * eventual-consistent ise server detail'i kısa süre poll ederek
+         * optimistic değeri doğrularız; eski server cevabıyla sayacı geri
+         * düşürmeyiz.
+         */
+        setTemplateDownloadCount(
+          optimisticCount
+        );
+
+        const syncedResponse =
+          await syncDownloadCountFromServer(
+            optimisticCount
+          );
+
+        if (
+          !syncedResponse
+        ) {
+          setTemplateDownloadCount(
+            optimisticCount
+          );
+        }
+
+        await invalidateTemplateCollections();
+
+        toast.success(
+          'İndirme başlatıldı'
         );
       } catch (error) {
         console.error(
@@ -347,8 +764,14 @@ const TemplateDetail = () => {
         );
 
         toast.error(
-          error?.response?.data?.message ||
+          getErrorMessage(
+            error,
             'İndirilemedi'
+          )
+        );
+      } finally {
+        setIsDownloading(
+          false
         );
       }
     };
@@ -359,16 +782,56 @@ const TemplateDetail = () => {
 
   const handlePreview =
     async () => {
+      if (
+        isPreviewing ||
+        isDownloading ||
+        deleteMutation.isPending
+      ) {
+        return;
+      }
+
+      if (!id) {
+        toast.error(
+          'Geçerli şablon kaydı bulunamadı'
+        );
+
+        return;
+      }
+
+      setIsPreviewing(
+        true
+      );
+
+      let previewWindow =
+        null;
+
       try {
+        /*
+         * Async istekten sonra window.open çağrısı bazı tarayıcılarda
+         * pop-up olarak engellenebilir. Pencereyi kullanıcı tıklaması
+         * sırasında açıp içerik geldikten sonra dolduruyoruz.
+         */
+        previewWindow =
+          window.open(
+            '',
+            '_blank'
+          );
+
+        if (
+          !previewWindow
+        ) {
+          toast.error(
+            'Önizleme penceresi açılamadı. Tarayıcı pop-up engelini kontrol edin.'
+          );
+
+          return;
+        }
+
         if (
           isUdfTemplate(
             template
           )
         ) {
-          /*
-           * UDF binary olarak browser'a verilmez.
-           * Backend parse edilmiş preview JSON döndürür.
-           */
           const response =
             await templateApi.udfPreview(
               id
@@ -388,24 +851,10 @@ const TemplateDetail = () => {
           if (
             !content
           ) {
+            previewWindow.close();
+
             toast.error(
               'UDF önizleme içeriği alınamadı'
-            );
-
-            return;
-          }
-
-          const previewWindow =
-            window.open(
-              '',
-              '_blank'
-            );
-
-          if (
-            !previewWindow
-          ) {
-            toast.error(
-              'Önizleme penceresi açılamadı. Tarayıcı pop-up engelini kontrol edin.'
             );
 
             return;
@@ -446,11 +895,6 @@ const TemplateDetail = () => {
               'UDF Önizleme'
             );
 
-          /*
-           * Backend HTML döndürüyorsa onu doğrudan
-           * çalıştırmıyoruz. Hukuki belge içeriğini
-           * güvenli biçimde metin olarak gösteriyoruz.
-           */
           const safeContent =
             escapeHtml(
               content
@@ -468,22 +912,14 @@ const TemplateDetail = () => {
                   content="width=device-width, initial-scale=1"
                 />
                 <title>${safeTitle}</title>
-
                 <style>
-                  * {
-                    box-sizing: border-box;
-                  }
-
+                  * { box-sizing: border-box; }
                   body {
                     margin: 0;
                     background: #f3f4f6;
                     color: #111827;
-                    font-family:
-                      Arial,
-                      Helvetica,
-                      sans-serif;
+                    font-family: Arial, Helvetica, sans-serif;
                   }
-
                   .toolbar {
                     position: sticky;
                     top: 0;
@@ -497,7 +933,6 @@ const TemplateDetail = () => {
                     background: rgba(255, 255, 255, 0.96);
                     backdrop-filter: blur(10px);
                   }
-
                   .title {
                     min-width: 0;
                     overflow: hidden;
@@ -506,7 +941,6 @@ const TemplateDetail = () => {
                     font-size: 14px;
                     font-weight: 600;
                   }
-
                   .badge {
                     flex: none;
                     border-radius: 999px;
@@ -516,11 +950,7 @@ const TemplateDetail = () => {
                     font-size: 11px;
                     font-weight: 700;
                   }
-
-                  .page-wrap {
-                    padding: 32px 16px 56px;
-                  }
-
+                  .page-wrap { padding: 32px 16px 56px; }
                   .page {
                     width: min(100%, 900px);
                     min-height: 1120px;
@@ -531,44 +961,26 @@ const TemplateDetail = () => {
                       0 1px 2px rgba(0, 0, 0, 0.04),
                       0 12px 32px rgba(0, 0, 0, 0.08);
                   }
-
                   .content {
                     margin: 0;
                     white-space: pre-wrap;
                     overflow-wrap: anywhere;
-                    font-family:
-                      "Times New Roman",
-                      Times,
-                      serif;
+                    font-family: "Times New Roman", Times, serif;
                     font-size: 16px;
                     line-height: 1.65;
                   }
-
                   @media (max-width: 700px) {
-                    .page-wrap {
-                      padding: 0;
-                    }
-
+                    .page-wrap { padding: 0; }
                     .page {
                       min-height: 100vh;
                       padding: 32px 22px;
                       box-shadow: none;
                     }
                   }
-
                   @media print {
-                    body {
-                      background: #ffffff;
-                    }
-
-                    .toolbar {
-                      display: none;
-                    }
-
-                    .page-wrap {
-                      padding: 0;
-                    }
-
+                    body { background: #ffffff; }
+                    .toolbar { display: none; }
+                    .page-wrap { padding: 0; }
                     .page {
                       width: 100%;
                       min-height: auto;
@@ -578,18 +990,11 @@ const TemplateDetail = () => {
                   }
                 </style>
               </head>
-
               <body>
                 <div class="toolbar">
-                  <div class="title">
-                    ${safeTitle}
-                  </div>
-
-                  <div class="badge">
-                    UDF ÖNİZLEME
-                  </div>
+                  <div class="title">${safeTitle}</div>
+                  <div class="badge">UDF ÖNİZLEME</div>
                 </div>
-
                 <main class="page-wrap">
                   <article class="page">
                     <pre class="content">${safeContent}</pre>
@@ -604,18 +1009,19 @@ const TemplateDetail = () => {
           return;
         }
 
-        /*
-         * PDF, Word, Excel, görsel ve TXT için
-         * preview endpoint'inden blob alınır.
-         */
         const response =
           await templateApi.preview(
             id
           );
 
         if (
-          !(response?.data instanceof Blob)
+          !(
+            response?.data instanceof
+            Blob
+          )
         ) {
+          previewWindow.close();
+
           toast.error(
             'Önizleme dosyası alınamadı'
           );
@@ -628,16 +1034,9 @@ const TemplateDetail = () => {
             response.data
           );
 
-        window.open(
-          url,
-          '_blank',
-          'noopener,noreferrer'
-        );
+        previewWindow.location.href =
+          url;
 
-        /*
-         * Yeni sekmenin blob'u okuyabilmesi için
-         * URL'yi hemen revoke etmiyoruz.
-         */
         window.setTimeout(
           () => {
             window.URL.revokeObjectURL(
@@ -647,14 +1046,27 @@ const TemplateDetail = () => {
           60_000
         );
       } catch (error) {
+        if (
+          previewWindow &&
+          !previewWindow.closed
+        ) {
+          previewWindow.close();
+        }
+
         console.error(
           'Template preview error:',
           error
         );
 
         toast.error(
-          error?.response?.data?.message ||
+          getErrorMessage(
+            error,
             'Önizleme açılamadı'
+          )
+        );
+      } finally {
+        setIsPreviewing(
+          false
         );
       }
     };
@@ -664,6 +1076,14 @@ const TemplateDetail = () => {
   // ======================================================
 
   const handleDelete = () => {
+    if (
+      deleteMutation.isPending ||
+      isDownloading ||
+      isPreviewing
+    ) {
+      return;
+    }
+
     if (!canDelete) {
       toast.error(
         'Bu şablonu silme yetkiniz bulunmuyor'
@@ -816,7 +1236,7 @@ const TemplateDetail = () => {
                   dark:text-white
                 "
               >
-                {template.title}
+                {template.title || 'İsimsiz şablon'}
               </h1>
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -873,6 +1293,14 @@ const TemplateDetail = () => {
               onClick={
                 handlePreview
               }
+              loading={
+                isPreviewing
+              }
+              disabled={
+                isPreviewing ||
+                isDownloading ||
+                deleteMutation.isPending
+              }
             >
               <Eye className="mr-2 h-4 w-4" />
 
@@ -884,6 +1312,14 @@ const TemplateDetail = () => {
               onClick={
                 handleDownload
               }
+              loading={
+                isDownloading
+              }
+              disabled={
+                isDownloading ||
+                isPreviewing ||
+                deleteMutation.isPending
+              }
             >
               <Download className="mr-2 h-4 w-4" />
 
@@ -892,10 +1328,29 @@ const TemplateDetail = () => {
 
             {canEdit && (
               <Link
-                to={`/templates/${template.id}/edit`}
+                to={`/templates/${normalizeId(
+                  template?.id ??
+                  id
+                )}/edit`}
+                onClick={(
+                  event
+                ) => {
+                  if (
+                    deleteMutation.isPending ||
+                    isDownloading ||
+                    isPreviewing
+                  ) {
+                    event.preventDefault();
+                  }
+                }}
               >
                 <Button
                   variant="outline"
+                  disabled={
+                    deleteMutation.isPending ||
+                    isDownloading ||
+                    isPreviewing
+                  }
                 >
                   <Edit2 className="mr-2 h-4 w-4" />
 
@@ -1009,8 +1464,9 @@ const TemplateDetail = () => {
           </div>
 
           <p className="mt-3 text-2xl font-semibold text-gray-900 dark:text-white">
-            {template.download_count ||
-              0}
+            {Number(
+              template.download_count
+            ) || 0}
           </p>
 
           <p className="mt-1 text-xs text-gray-500">
@@ -1183,7 +1639,7 @@ const TemplateDetail = () => {
                 </span>
 
                 <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {template.title}
+                  {template.title || 'İsimsiz şablon'}
                 </span>
 
               </div>
@@ -1363,8 +1819,9 @@ const TemplateDetail = () => {
                 </span>
 
                 <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {template.download_count ||
-                    0} kez
+                  {Number(
+                    template.download_count
+                  ) || 0} kez
                 </span>
 
               </div>
@@ -1429,6 +1886,14 @@ const TemplateDetail = () => {
                 onClick={
                   handlePreview
                 }
+                loading={
+                  isPreviewing
+                }
+                disabled={
+                  isPreviewing ||
+                  isDownloading ||
+                  deleteMutation.isPending
+                }
               >
                 <Eye className="mr-2 h-4 w-4" />
 
@@ -1441,6 +1906,14 @@ const TemplateDetail = () => {
                 size="sm"
                 onClick={
                   handleDownload
+                }
+                loading={
+                  isDownloading
+                }
+                disabled={
+                  isDownloading ||
+                  isPreviewing ||
+                  deleteMutation.isPending
                 }
               >
                 <Download className="mr-2 h-4 w-4" />
@@ -1572,6 +2045,11 @@ const TemplateDetail = () => {
                 }
                 loading={
                   deleteMutation.isPending
+                }
+                disabled={
+                  deleteMutation.isPending ||
+                  isDownloading ||
+                  isPreviewing
                 }
               >
                 <Trash2 className="mr-2 h-4 w-4" />
