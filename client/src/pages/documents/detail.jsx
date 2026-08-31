@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -295,7 +296,13 @@ const getPersonName = (
     ]
       .filter(Boolean)
       .join(' ')
-      .trim() || '-'
+      .trim() ||
+    String(
+      person.full_name ||
+      person.name ||
+      ''
+    ).trim() ||
+    '-'
   );
 };
 
@@ -315,6 +322,178 @@ const getExtension = (
   return value
     .slice(index)
     .toLowerCase();
+};
+
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getArrayPayload = (
+  response
+) => {
+  const payload =
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    [];
+
+  if (
+    Array.isArray(
+      payload
+    )
+  ) {
+    return payload;
+  }
+
+  if (
+    Array.isArray(
+      payload?.data
+    )
+  ) {
+    return payload.data;
+  }
+
+  if (
+    Array.isArray(
+      payload?.versions
+    )
+  ) {
+    return payload.versions;
+  }
+
+  if (
+    Array.isArray(
+      payload?.items
+    )
+  ) {
+    return payload.items;
+  }
+
+  return [];
+};
+
+const sanitizeDownloadFilename = (
+  value,
+  fallback = 'document'
+) => {
+  const normalized =
+    String(
+      value ||
+      fallback
+    )
+      .replace(
+        /[\r\n\0]/g,
+        ''
+      )
+      .replace(
+        /[\\/]+/g,
+        '_'
+      )
+      .trim();
+
+  return (
+    normalized ||
+    fallback
+  ).slice(
+    0,
+    255
+  );
+};
+
+const isSafeBrowserPreviewType = (
+  contentType
+) => {
+  const normalized =
+    String(
+      contentType ||
+      ''
+    )
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+
+  if (
+    !normalized
+  ) {
+    return false;
+  }
+
+  const blockedTypes = new Set([
+    'text/html',
+    'application/xhtml+xml',
+    'image/svg+xml',
+    'application/xml',
+    'text/xml',
+    'application/javascript',
+    'text/javascript',
+  ]);
+
+  if (
+    blockedTypes.has(
+      normalized
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    normalized ===
+      'application/pdf' ||
+    normalized ===
+      'application/octet-stream' ||
+    normalized ===
+      'text/plain'
+  ) {
+    return true;
+  }
+
+  if (
+    normalized.startsWith(
+      'image/'
+    ) ||
+    normalized.startsWith(
+      'video/'
+    )
+  ) {
+    return true;
+  }
+
+  return [
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ].includes(
+    normalized
+  );
 };
 
 const isUdfDocument = (
@@ -1651,8 +1830,15 @@ const renderUdfPreview = ({
 // ======================================================
 
 const DocumentDetail = () => {
-  const { id } =
+  const {
+    id: idParam,
+  } =
     useParams();
+
+  const id =
+    normalizeId(
+      idParam
+    );
 
   const navigate =
     useNavigate();
@@ -1662,6 +1848,16 @@ const DocumentDetail = () => {
 
   const fileInputRef =
     useRef(null);
+
+  const [
+    downloadingId,
+    setDownloadingId,
+  ] = useState('');
+
+  const [
+    previewingId,
+    setPreviewingId,
+  ] = useState('');
 
   const [
     showVersionModal,
@@ -1723,16 +1919,21 @@ const DocumentDetail = () => {
     data: versionsData,
     isLoading:
       versionsLoading,
+    isFetching:
+      versionsFetching,
+    error:
+      versionsError,
+    refetch:
+      refetchVersions,
   } =
     useDocumentVersions(
       id
     );
 
   const versions =
-    versionsData?.data
-      ?.data ??
-    versionsData?.data ??
-    [];
+    getArrayPayload(
+      versionsData
+    );
 
   // ======================================================
   // VERSION UPLOAD MUTATION
@@ -1741,53 +1942,157 @@ const DocumentDetail = () => {
   const uploadVersionMutation =
     useUploadDocumentVersion();
 
+  useEffect(() => {
+    if (
+      !showVersionModal
+    ) {
+      return undefined;
+    }
+
+    const previousOverflow =
+      window.document.body
+        .style.overflow;
+
+    window.document.body
+      .style.overflow =
+      'hidden';
+
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key ===
+            'Escape' &&
+          !uploadVersionMutation
+            .isPending
+        ) {
+          setShowVersionModal(
+            false
+          );
+
+          setVersionFile(
+            null
+          );
+
+          setVersionDescription(
+            ''
+          );
+
+          if (
+            fileInputRef.current
+          ) {
+            fileInputRef.current.value =
+              '';
+          }
+        }
+      };
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      window.document.body
+        .style.overflow =
+        previousOverflow;
+    };
+  }, [
+    showVersionModal,
+    uploadVersionMutation.isPending,
+  ]);
+
   // ======================================================
   // CURRENT / LATEST VERSION
   // ======================================================
 
-  const currentDocument =
+  const versionHistory =
     useMemo(() => {
-      if (!documentItem) {
-        return null;
-      }
-
       if (
-        !Array.isArray(
-          versions
-        ) ||
-        versions.length ===
-          0
+        !documentItem
       ) {
-        return documentItem;
+        return [];
       }
 
-      return versions.reduce(
-        (
-          currentLatest,
-          item
-        ) => {
-          const currentVersion =
-            Number(
-              currentLatest
-                ?.version
-            ) || 1;
+      const candidates = [
+        documentItem,
+        ...(
+          Array.isArray(
+            versions
+          )
+            ? versions
+            : []
+        ),
+      ];
 
-          const itemVersion =
-            Number(
-              item?.version
-            ) || 1;
+      const seen =
+        new Set();
 
-          return itemVersion >
-            currentVersion
-            ? item
-            : currentLatest;
-        },
-        documentItem
-      );
+      return candidates
+        .filter(Boolean)
+        .filter(
+          (
+            item
+          ) => {
+            const itemId =
+              normalizeId(
+                item?.id
+              );
+
+            const version =
+              Number(
+                item?.version
+              ) || 1;
+
+            const key =
+              itemId
+                ? `id:${itemId}:version:${version}`
+                : `version:${version}:${item?.original_name || ''}`;
+
+            if (
+              seen.has(
+                key
+              )
+            ) {
+              return false;
+            }
+
+            seen.add(
+              key
+            );
+
+            return true;
+          }
+        )
+        .sort(
+          (
+            a,
+            b
+          ) =>
+            (
+              Number(
+                b?.version
+              ) || 1
+            ) -
+            (
+              Number(
+                a?.version
+              ) || 1
+            )
+        );
     }, [
       documentItem,
       versions,
     ]);
+
+  const currentDocument =
+    versionHistory[0] ||
+    documentItem ||
+    null;
 
   const latestVersion =
     Number(
@@ -1797,10 +2102,50 @@ const DocumentDetail = () => {
   const hasNewerVersion =
     Boolean(
       documentItem &&
-        currentDocument &&
-        currentDocument.id !==
-          documentItem.id
+      currentDocument &&
+      (
+        Number(
+          currentDocument.version
+        ) || 1
+      ) >
+        (
+          Number(
+            documentItem.version
+          ) || 1
+        )
     );
+
+  const documentTags =
+    useMemo(() => {
+      if (
+        Array.isArray(
+          documentItem?.tags
+        )
+      ) {
+        return documentItem.tags
+          .map(
+            (tag) =>
+              String(
+                tag ||
+                ''
+              ).trim()
+          )
+          .filter(Boolean);
+      }
+
+      return String(
+        documentItem?.tags ||
+        ''
+      )
+        .split(',')
+        .map(
+          (tag) =>
+            tag.trim()
+        )
+        .filter(Boolean);
+    }, [
+      documentItem?.tags,
+    ]);
 
   // ======================================================
   // DOWNLOAD
@@ -1818,7 +2163,14 @@ const DocumentDetail = () => {
       return;
     }
 
-    if (!targetDocument?.id) {
+    const targetId =
+      normalizeId(
+        targetDocument?.id
+      );
+
+    if (
+      !targetId
+    ) {
       toast.error(
         'İndirilecek belge bulunamadı'
       );
@@ -1826,13 +2178,24 @@ const DocumentDetail = () => {
       return;
     }
 
+    if (
+      downloadingId ===
+      targetId
+    ) {
+      return;
+    }
+
     let objectUrl = null;
     let anchor = null;
+
+    setDownloadingId(
+      targetId
+    );
 
     try {
       const response =
         await documentApi.download(
-          targetDocument.id
+          targetId
         );
 
       const contentType =
@@ -1853,19 +2216,34 @@ const DocumentDetail = () => {
         );
 
       const downloadFilename =
-        serverFilename ||
-        targetDocument.original_name ||
-        targetDocument.name ||
-        'document';
+        sanitizeDownloadFilename(
+          serverFilename ||
+          targetDocument.original_name ||
+          targetDocument.name,
+          'document'
+        );
 
       const blob =
-        new Blob(
-          [response.data],
-          {
-            type:
-              contentType,
-          }
+        response.data instanceof
+          Blob
+          ? response.data
+          : new Blob(
+              [
+                response.data,
+              ],
+              {
+                type:
+                  contentType,
+              }
+            );
+
+      if (
+        blob.size <= 0
+      ) {
+        throw new Error(
+          'Sunucu boş dosya döndürdü'
         );
+      }
 
       objectUrl =
         window.URL.createObjectURL(
@@ -1904,9 +2282,13 @@ const DocumentDetail = () => {
       toast.error(
         downloadError?.response
           ?.data?.message ||
-          'Dosya indirilemedi'
+        downloadError?.message ||
+        'Dosya indirilemedi'
       );
     } finally {
+      setDownloadingId(
+        ''
+      );
       if (
         anchor?.parentNode
       ) {
@@ -1935,13 +2317,25 @@ const handlePreview = async (
   targetDocument =
     currentDocument
 ) => {
+  const targetId =
+    normalizeId(
+      targetDocument?.id
+    );
+
   if (
-    !targetDocument?.id
+    !targetId
   ) {
     toast.error(
       'Önizlenecek belge bulunamadı'
     );
 
+    return;
+  }
+
+  if (
+    previewingId ===
+    targetId
+  ) {
     return;
   }
 
@@ -1966,6 +2360,13 @@ const handlePreview = async (
 
     return;
   }
+
+  previewWindow.opener =
+    null;
+
+  setPreviewingId(
+    targetId
+  );
 
   try {
     // ==================================================
@@ -2016,7 +2417,7 @@ const handlePreview = async (
        */
       const response =
         await documentApi.udfPreview(
-          targetDocument.id
+          targetId
         );
 
       /*
@@ -2153,7 +2554,7 @@ const handlePreview = async (
      */
     const response =
       await documentApi.preview(
-        targetDocument.id
+        targetId
       );
 
     const contentType =
@@ -2162,6 +2563,16 @@ const handlePreview = async (
       ] ||
       targetDocument.mime_type ||
       'application/octet-stream';
+
+    if (
+      !isSafeBrowserPreviewType(
+        contentType
+      )
+    ) {
+      throw new Error(
+        'Bu dosya türü güvenli tarayıcı önizlemesi için desteklenmiyor'
+      );
+    }
 
     const blob =
       response.data instanceof Blob
@@ -2176,17 +2587,18 @@ const handlePreview = async (
             }
           );
 
+    if (
+      blob.size <= 0
+    ) {
+      throw new Error(
+        'Sunucu boş önizleme verisi döndürdü'
+      );
+    }
+
     const url =
       window.URL.createObjectURL(
         blob
       );
-
-    /*
-     * Yeni pencerenin opener üzerinden ana uygulamaya
-     * erişmesini engelle.
-     */
-    previewWindow.opener =
-      null;
 
     previewWindow.location.href =
       url;
@@ -2229,6 +2641,10 @@ const handlePreview = async (
       previewError?.message ||
       'Belge önizlenemedi'
     );
+  } finally {
+    setPreviewingId(
+      ''
+    );
   }
 };
 
@@ -2243,6 +2659,25 @@ const handlePreview = async (
       event.target.files?.[0];
 
     if (!file) {
+      setVersionFile(
+        null
+      );
+
+      return;
+    }
+
+    if (
+      Number(
+        file.size
+      ) <= 0
+    ) {
+      toast.error(
+        'Boş dosya yeni versiyon olarak yüklenemez'
+      );
+
+      event.target.value =
+        '';
+
       setVersionFile(
         null
       );
@@ -2311,6 +2746,23 @@ const handlePreview = async (
         return;
       }
 
+      if (
+        uploadVersionMutation
+          .isPending
+      ) {
+        return;
+      }
+
+      if (
+        !id
+      ) {
+        toast.error(
+          'Geçerli belge kaydı bulunamadı'
+        );
+
+        return;
+      }
+
       if (!versionFile) {
         toast.error(
           'Yeni versiyon dosyasını seçin'
@@ -2327,12 +2779,20 @@ const handlePreview = async (
         versionFile
       );
 
+      const normalizedDescription =
+        versionDescription
+          .trim()
+          .slice(
+            0,
+            3000
+          );
+
       if (
-        versionDescription.trim()
+        normalizedDescription
       ) {
         formData.append(
           'description',
-          versionDescription.trim()
+          normalizedDescription
         );
       }
 
@@ -2472,7 +2932,8 @@ const handlePreview = async (
           <div className="mt-2 flex flex-wrap items-center gap-2">
 
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {documentItem.name}
+              {documentItem.name ||
+                'Başlıksız Belge'}
             </h1>
 
             <Badge variant="info">
@@ -2498,13 +2959,8 @@ const handlePreview = async (
 
           <p className="mt-1 text-sm text-gray-500">
             Belge ailesi ·{' '}
-            {Array.isArray(
-              versions
-            ) &&
-            versions.length >
-              0
-              ? versions.length
-              : 1}{' '}
+            {versionHistory.length ||
+              1}{' '}
             versiyon
           </p>
 
@@ -2514,6 +2970,17 @@ const handlePreview = async (
 
           <Button
             variant="outline"
+            loading={
+              previewingId ===
+              normalizeId(
+                currentDocument?.id
+              )
+            }
+            disabled={
+              Boolean(
+                previewingId
+              )
+            }
             onClick={() =>
               handlePreview()
             }
@@ -2526,6 +2993,17 @@ const handlePreview = async (
           {canDownload && (
             <Button
               variant="outline"
+              loading={
+                downloadingId ===
+                normalizeId(
+                  currentDocument?.id
+                )
+              }
+              disabled={
+                Boolean(
+                  downloadingId
+                )
+              }
               onClick={() =>
                 handleDownload()
               }
@@ -2640,7 +3118,9 @@ const handlePreview = async (
 
               <p className="mt-1 break-all font-medium text-gray-900 dark:text-white">
                 {
-                  currentDocument?.original_name
+                  currentDocument?.original_name ||
+                  currentDocument?.name ||
+                  '-'
                 }
               </p>
 
@@ -2751,14 +3231,22 @@ const handlePreview = async (
                 İlişkili Dava
               </p>
 
-              {documentItem.case ? (
+              {normalizeId(
+                documentItem.case?.id ??
+                documentItem.case_id
+              ) ? (
                 <Link
-                  to={`/cases/${documentItem.case.id}`}
+                  to={`/cases/${normalizeId(
+                    documentItem.case?.id ??
+                    documentItem.case_id
+                  )}`}
                   className="mt-1 block font-medium text-blue-600 hover:underline"
                 >
-                  {getCaseDisplayName(
-                    documentItem.case
-                  )}
+                  {documentItem.case
+                    ? getCaseDisplayName(
+                        documentItem.case
+                      )
+                    : 'Davayı Görüntüle'}
                 </Link>
               ) : (
                 <span className="mt-1 block text-gray-400">
@@ -2774,15 +3262,19 @@ const handlePreview = async (
                 İlişkili Müvekkil
               </p>
 
-              {documentItem.client ? (
+              {normalizeId(
+                documentItem.client?.id ??
+                documentItem.client_id
+              ) ? (
                 <Link
-                  to={`/clients/${documentItem.client.id}`}
+                  to={`/clients/${normalizeId(
+                    documentItem.client?.id ??
+                    documentItem.client_id
+                  )}`}
                   className="mt-1 block font-medium text-blue-600 hover:underline"
                 >
-                  {
-                    documentItem.client
-                      .name
-                  }
+                  {documentItem.client?.name ||
+                    'Müvekkili Görüntüle'}
                 </Link>
               ) : (
                 <span className="mt-1 block text-gray-400">
@@ -2792,7 +3284,10 @@ const handlePreview = async (
 
             </div>
 
-            {documentItem.powerOfAttorney && (
+            {(
+              documentItem.powerOfAttorney ||
+              documentItem.power_of_attorney
+            ) && (
               <div>
 
                 <p className="text-sm text-gray-500">
@@ -2800,11 +3295,11 @@ const handlePreview = async (
                 </p>
 
                 <p className="mt-1 font-medium text-gray-900 dark:text-white">
-                  {
-                    documentItem
-                      .powerOfAttorney
-                      .title
-                  }
+                  {(
+                    documentItem.powerOfAttorney ||
+                    documentItem.power_of_attorney
+                  )?.title ||
+                    'Vekâletname'}
                 </p>
 
               </div>
@@ -2834,11 +3329,8 @@ const handlePreview = async (
 
           {/* TAGS */}
 
-          {Array.isArray(
-            documentItem.tags
-          ) &&
-            documentItem.tags
-              .length > 0 && (
+          {documentTags.length >
+            0 && (
               <div>
 
                 <p className="mb-2 text-sm text-gray-500">
@@ -2847,7 +3339,7 @@ const handlePreview = async (
 
                 <div className="flex flex-wrap gap-2">
 
-                  {documentItem.tags.map(
+                  {documentTags.map(
                     (tag) => (
                       <Badge
                         key={tag}
@@ -2954,10 +3446,28 @@ const handlePreview = async (
             <div className="py-8 text-center text-sm text-gray-500">
               Versiyonlar yükleniyor...
             </div>
-          ) : !Array.isArray(
-              versions
-            ) ||
-            versions.length ===
+          ) : versionsError ? (
+            <div className="py-8 text-center">
+              <p className="text-sm text-red-600 dark:text-red-400">
+                Versiyon geçmişi yüklenemedi.
+              </p>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="mt-3"
+                loading={
+                  versionsFetching
+                }
+                onClick={() =>
+                  refetchVersions()
+                }
+              >
+                Tekrar Dene
+              </Button>
+            </div>
+          ) : versionHistory.length ===
               0 ? (
             <div className="py-8 text-center">
 
@@ -2971,7 +3481,7 @@ const handlePreview = async (
           ) : (
             <div className="space-y-3">
 
-              {versions.map(
+              {versionHistory.map(
                 (version) => {
                   const isLatest =
                     Number(
@@ -2980,8 +3490,12 @@ const handlePreview = async (
                     latestVersion;
 
                   const isRoot =
-                    version.id ===
-                    documentItem.id;
+                    normalizeId(
+                      version.id
+                    ) ===
+                    normalizeId(
+                      documentItem.id
+                    );
 
                   const isUdf =
                     isUdfDocument(
@@ -3062,6 +3576,17 @@ const handlePreview = async (
                         <Button
                           size="sm"
                           variant="outline"
+                          loading={
+                            previewingId ===
+                            normalizeId(
+                              version.id
+                            )
+                          }
+                          disabled={
+                            Boolean(
+                              previewingId
+                            )
+                          }
                           onClick={() =>
                             handlePreview(
                               version
@@ -3077,6 +3602,17 @@ const handlePreview = async (
                           <Button
                             size="sm"
                             variant="outline"
+                            loading={
+                              downloadingId ===
+                              normalizeId(
+                                version.id
+                              )
+                            }
+                            disabled={
+                              Boolean(
+                                downloadingId
+                              )
+                            }
                             onClick={() =>
                               handleDownload(
                                 version
@@ -3107,15 +3643,26 @@ const handlePreview = async (
 
       {canUploadVersion &&
         showVersionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="presentation"
+        >
 
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-gray-800">
+          <div
+            className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-gray-800"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="document-version-modal-title"
+          >
 
             <div className="flex items-start justify-between gap-4">
 
               <div>
 
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h3
+                  id="document-version-modal-title"
+                  className="text-lg font-semibold text-gray-900 dark:text-white"
+                >
                   Yeni Belge Versiyonu
                 </h3>
 
@@ -3224,6 +3771,7 @@ const handlePreview = async (
                         .value
                     )
                   }
+                  maxLength={3000}
                   placeholder="Bu versiyonda ne değişti?"
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 />
