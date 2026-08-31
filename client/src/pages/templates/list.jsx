@@ -9,6 +9,7 @@ import {
 
 import {
   useQuery,
+  useQueryClient,
 } from '@tanstack/react-query';
 
 import {
@@ -102,6 +103,159 @@ const LAW_AREA_OPTIONS = [
 // HELPERS
 // ======================================================
 
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id ??
+      value?._id;
+
+    if (
+      objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+    ) {
+      return '';
+    }
+
+    return String(
+      objectId
+    );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getArrayPayload = (
+  response
+) => {
+  const candidates = [
+    response?.data?.data,
+    response?.data,
+    response,
+  ];
+
+  for (
+    const candidate of
+    candidates
+  ) {
+    if (
+      Array.isArray(
+        candidate
+      )
+    ) {
+      return candidate;
+    }
+
+    if (
+      Array.isArray(
+        candidate?.data
+      )
+    ) {
+      return candidate.data;
+    }
+
+    if (
+      Array.isArray(
+        candidate?.items
+      )
+    ) {
+      return candidate.items;
+    }
+
+    if (
+      Array.isArray(
+        candidate?.results
+      )
+    ) {
+      return candidate.results;
+    }
+
+    if (
+      Array.isArray(
+        candidate?.rows
+      )
+    ) {
+      return candidate.rows;
+    }
+  }
+
+  return [];
+};
+
+const getPaginationPayload = (
+  response
+) => {
+  return (
+    response?.data?.pagination ??
+    response?.pagination ??
+    response?.data?.data?.pagination ??
+    null
+  );
+};
+
+const normalizePageNumber = (
+  value,
+  fallback = 1
+) => {
+  const parsed =
+    Number(
+      value
+    );
+
+  return Number.isFinite(
+    parsed
+  ) &&
+    parsed > 0
+    ? Math.floor(
+        parsed
+      )
+    : fallback;
+};
+
+const getDownloadCount = (
+  value
+) => {
+  const parsed =
+    Number(
+      value
+    );
+
+  return Number.isFinite(
+    parsed
+  )
+    ? Math.max(
+        0,
+        parsed
+      )
+    : 0;
+};
+
+const getErrorMessage = (
+  error,
+  fallback
+) => {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    fallback
+  );
+};
+
 const getCategoryLabel = (
   category
 ) => {
@@ -171,6 +325,9 @@ const getLawAreaVariant = (
 // ======================================================
 
 const TemplatesList = () => {
+  const queryClient =
+    useQueryClient();
+
   const {
     user,
   } = useAuth();
@@ -254,7 +411,16 @@ const TemplatesList = () => {
         }),
 
       staleTime:
-        1000,
+        0,
+
+      refetchOnMount:
+        'always',
+
+      refetchOnWindowFocus:
+        'always',
+
+      refetchOnReconnect:
+        'always',
 
       placeholderData: (
         previousData
@@ -262,20 +428,74 @@ const TemplatesList = () => {
     });
 
   const templates =
-    Array.isArray(
-      data?.data?.data
-    )
-      ? data.data.data
-      : [];
+    getArrayPayload(
+      data
+    );
 
   const pagination =
-    data?.data
-      ?.pagination;
+    getPaginationPayload(
+      data
+    );
+
+  const currentPage =
+    normalizePageNumber(
+      pagination?.page ??
+      pagination?.current_page ??
+      pagination?.currentPage ??
+      page,
+      page
+    );
+
+  const totalTemplates =
+    Math.max(
+      0,
+      Number(
+        pagination?.total ??
+        pagination?.total_count ??
+        pagination?.count ??
+        templates.length
+      ) || 0
+    );
+
+  const totalPages =
+    Math.max(
+      1,
+      normalizePageNumber(
+        pagination?.totalPages ??
+        pagination?.total_pages ??
+        pagination?.last_page ??
+        (
+          totalTemplates > 0
+            ? Math.ceil(
+                totalTemplates /
+                10
+              )
+            : 1
+        ),
+        1
+      )
+    );
 
   useEffect(() => {
     setPage(1);
   }, [
     debouncedSearch,
+    categoryFilter,
+    lawAreaFilter,
+  ]);
+
+  useEffect(() => {
+    if (
+      page >
+      totalPages
+    ) {
+      setPage(
+        totalPages
+      );
+    }
+  }, [
+    page,
+    totalPages,
   ]);
 
   const hasFilters =
@@ -293,8 +513,22 @@ const TemplatesList = () => {
     (
       event
     ) => {
+      const nextValue =
+        event.target.value;
+
+      const allowed =
+        CATEGORY_OPTIONS.some(
+          (option) =>
+            option.value ===
+            nextValue
+        );
+
+      if (!allowed) {
+        return;
+      }
+
       setCategoryFilter(
-        event.target.value
+        nextValue
       );
 
       setPage(1);
@@ -304,8 +538,22 @@ const TemplatesList = () => {
     (
       event
     ) => {
+      const nextValue =
+        event.target.value;
+
+      const allowed =
+        LAW_AREA_OPTIONS.some(
+          (option) =>
+            option.value ===
+            nextValue
+        );
+
+      if (!allowed) {
+        return;
+      }
+
       setLawAreaFilter(
-        event.target.value
+        nextValue
       );
 
       setPage(1);
@@ -325,9 +573,14 @@ const TemplatesList = () => {
 
   const handleDownload =
     async (
-      id,
+      rawId,
       fileName
     ) => {
+      const id =
+        normalizeId(
+          rawId
+        );
+
       if (!id) {
         toast.error(
           'Şablon ID bulunamadı'
@@ -335,6 +588,43 @@ const TemplatesList = () => {
 
         return;
       }
+
+      if (
+        downloadingId
+      ) {
+        return;
+      }
+
+      const currentTemplate =
+        templates.find(
+          (item) =>
+            normalizeId(
+              item?.id
+            ) === id
+        );
+
+      const previousCount =
+        getDownloadCount(
+          currentTemplate
+            ?.download_count
+        );
+
+      const optimisticCount =
+        previousCount +
+        1;
+
+      const currentQueryKey = [
+        'templates',
+        {
+          page,
+          search:
+            debouncedSearch,
+          category:
+            categoryFilter,
+          law_area:
+            lawAreaFilter,
+        },
+      ];
 
       try {
         setDownloadingId(
@@ -346,38 +636,302 @@ const TemplatesList = () => {
             id
           );
 
-        const blob =
-          new Blob([
-            response.data,
-          ]);
+        const responseData =
+          response?.data?.data ??
+          response?.data;
 
-        const url =
-          window.URL.createObjectURL(
-            blob
+        let downloadStarted =
+          false;
+
+        if (
+          responseData?.downloadUrl
+        ) {
+          const openedWindow =
+            window.open(
+              responseData.downloadUrl,
+              '_blank',
+              'noopener,noreferrer'
+            );
+
+          if (
+            openedWindow ===
+            null
+          ) {
+            toast.error(
+              'İndirme penceresi açılamadı. Tarayıcı pop-up engelini kontrol edin.'
+            );
+
+            return;
+          }
+
+          downloadStarted =
+            true;
+        } else if (
+          response?.data instanceof
+            Blob
+        ) {
+          const url =
+            window.URL.createObjectURL(
+              response.data
+            );
+
+          const link =
+            document.createElement(
+              'a'
+            );
+
+          link.href =
+            url;
+
+          link.download =
+            fileName ||
+            'sablon';
+
+          document.body.appendChild(
+            link
           );
 
-        const link =
-          document.createElement(
-            'a'
+          link.click();
+          link.remove();
+
+          window.setTimeout(
+            () => {
+              window.URL.revokeObjectURL(
+                url
+              );
+            },
+            1_000
           );
 
-        link.href =
-          url;
+          downloadStarted =
+            true;
+        } else if (
+          response?.data
+        ) {
+          /*
+           * Bazı axios ayarlarında binary cevap Blob instance'ı olarak
+           * gelmeyebilir. Yine de gelen body'yi Blob'a çevirip indiriyoruz.
+           */
+          const blob =
+            new Blob([
+              response.data,
+            ]);
 
-        link.download =
-          fileName ||
-          'sablon';
+          const url =
+            window.URL.createObjectURL(
+              blob
+            );
 
-        document.body.appendChild(
-          link
+          const link =
+            document.createElement(
+              'a'
+            );
+
+          link.href =
+            url;
+
+          link.download =
+            fileName ||
+            'sablon';
+
+          document.body.appendChild(
+            link
+          );
+
+          link.click();
+          link.remove();
+
+          window.setTimeout(
+            () => {
+              window.URL.revokeObjectURL(
+                url
+              );
+            },
+            1_000
+          );
+
+          downloadStarted =
+            true;
+        }
+
+        if (
+          !downloadStarted
+        ) {
+          toast.error(
+            'İndirme bağlantısı alınamadı'
+          );
+
+          return;
+        }
+
+        /*
+         * Liste satırındaki download_count kullanıcıya anında +1 yansır.
+         * Backend daha sonra kesin sayıyı döndürdüğünde invalidate/refetch
+         * ile doğrulanır.
+         */
+        queryClient.setQueryData(
+          currentQueryKey,
+          (
+            current
+          ) => {
+            if (!current) {
+              return current;
+            }
+
+            const replaceInArray =
+              (
+                list
+              ) =>
+                list.map(
+                  (
+                    item
+                  ) =>
+                    normalizeId(
+                      item?.id
+                    ) === id
+                      ? {
+                          ...item,
+                          download_count:
+                            optimisticCount,
+                        }
+                      : item
+                );
+
+            if (
+              Array.isArray(
+                current
+              )
+            ) {
+              return replaceInArray(
+                current
+              );
+            }
+
+            if (
+              Array.isArray(
+                current?.data
+              )
+            ) {
+              return {
+                ...current,
+                data:
+                  replaceInArray(
+                    current.data
+                  ),
+              };
+            }
+
+            if (
+              Array.isArray(
+                current?.data?.data
+              )
+            ) {
+              return {
+                ...current,
+                data: {
+                  ...current.data,
+                  data:
+                    replaceInArray(
+                      current.data.data
+                    ),
+                },
+              };
+            }
+
+            return current;
+          }
         );
 
-        link.click();
-        link.remove();
+        queryClient.setQueryData(
+          [
+            'template',
+            id,
+          ],
+          (
+            current
+          ) => {
+            if (!current) {
+              return current;
+            }
 
-        window.URL.revokeObjectURL(
-          url
+            if (
+              current?.data?.data
+            ) {
+              return {
+                ...current,
+                data: {
+                  ...current.data,
+                  data: {
+                    ...current.data.data,
+                    download_count:
+                      optimisticCount,
+                  },
+                },
+              };
+            }
+
+            if (
+              current?.data &&
+              typeof current.data ===
+                'object'
+            ) {
+              return {
+                ...current,
+                data: {
+                  ...current.data,
+                  download_count:
+                    optimisticCount,
+                },
+              };
+            }
+
+            if (
+              typeof current ===
+              'object'
+            ) {
+              return {
+                ...current,
+                download_count:
+                  optimisticCount,
+              };
+            }
+
+            return current;
+          }
         );
+
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: [
+              'templates',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'template',
+              id,
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'template-statistics',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'dashboard-stats',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'dashboard-templates',
+            ],
+          }),
+        ]);
 
         toast.success(
           'Şablon indirildi'
@@ -391,11 +945,10 @@ const TemplatesList = () => {
         );
 
         toast.error(
-          downloadError
-            ?.response
-            ?.data
-            ?.message ||
+          getErrorMessage(
+            downloadError,
             'Şablon indirilemedi'
+          )
         );
       } finally {
         setDownloadingId(
@@ -499,8 +1052,7 @@ const TemplatesList = () => {
             <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
               Toplam{' '}
               <span className="font-semibold text-gray-600 dark:text-slate-300">
-                {pagination?.total ||
-                  0}
+                {totalTemplates}
               </span>{' '}
               şablon
             </p>
@@ -539,11 +1091,18 @@ const TemplatesList = () => {
                 }
                 onChange={(
                   event
-                ) =>
+                ) => {
                   setSearch(
-                    event.target.value
-                  )
-                }
+                    event.target.value.slice(
+                      0,
+                      200
+                    )
+                  );
+
+                  setPage(
+                    1
+                  );
+                }}
                 icon={
                   <Search size={16} />
                 }
@@ -765,11 +1324,19 @@ const TemplatesList = () => {
 
               {templates.map(
                 (
-                  template
-                ) => (
+                  template,
+                  index
+                ) => {
+                  const templateId =
+                    normalizeId(
+                      template?.id
+                    );
+
+                  return (
                   <Table.Row
                     key={
-                      template.id
+                      templateId ||
+                      `${currentPage}-${index}`
                     }
                   >
 
@@ -799,25 +1366,43 @@ const TemplatesList = () => {
 
                         <div className="min-w-0">
 
-                          <Link
-                            to={`/templates/${template.id}`}
-                            className="
-                              block
-                              max-w-sm
-                              truncate
-                              font-semibold
-                              text-gray-900
-                              transition
-                              hover:text-blue-600
-                              dark:text-white
-                              dark:hover:text-blue-400
-                            "
-                            title={
-                              template.title
-                            }
-                          >
-                            {template.title}
-                          </Link>
+                          {templateId ? (
+                            <Link
+                              to={`/templates/${templateId}`}
+                              className="
+                                block
+                                max-w-sm
+                                truncate
+                                font-semibold
+                                text-gray-900
+                                transition
+                                hover:text-blue-600
+                                dark:text-white
+                                dark:hover:text-blue-400
+                              "
+                              title={
+                                template.title ||
+                                'İsimsiz şablon'
+                              }
+                            >
+                              {template.title ||
+                                'İsimsiz şablon'}
+                            </Link>
+                          ) : (
+                            <span
+                              className="
+                                block
+                                max-w-sm
+                                truncate
+                                font-semibold
+                                text-gray-900
+                                dark:text-white
+                              "
+                            >
+                              {template.title ||
+                                'İsimsiz şablon'}
+                            </span>
+                          )}
 
                           {template.description && (
                             <p
@@ -929,39 +1514,59 @@ const TemplatesList = () => {
 
                       <div className="flex items-center justify-end gap-1">
 
-                        <Link
-                          to={`/templates/${template.id}`}
-                          className="
-                            inline-flex
-                            h-8
-                            w-8
-                            items-center
-                            justify-center
-                            rounded-lg
-                            text-gray-400
-                            transition
-                            hover:bg-blue-50
-                            hover:text-blue-600
-                            dark:text-slate-500
-                            dark:hover:bg-blue-500/[0.08]
-                            dark:hover:text-blue-400
-                          "
-                          title="Şablonu görüntüle"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Link>
+                        {templateId ? (
+                          <Link
+                            to={`/templates/${templateId}`}
+                            className="
+                              inline-flex
+                              h-8
+                              w-8
+                              items-center
+                              justify-center
+                              rounded-lg
+                              text-gray-400
+                              transition
+                              hover:bg-blue-50
+                              hover:text-blue-600
+                              dark:text-slate-500
+                              dark:hover:bg-blue-500/[0.08]
+                              dark:hover:text-blue-400
+                            "
+                            title="Şablonu görüntüle"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Link>
+                        ) : (
+                          <span
+                            className="
+                              inline-flex
+                              h-8
+                              w-8
+                              items-center
+                              justify-center
+                              rounded-lg
+                              text-gray-300
+                              dark:text-slate-700
+                            "
+                            title="Geçersiz şablon kaydı"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </span>
+                        )}
 
                         <button
                           type="button"
                           onClick={() =>
                             handleDownload(
-                              template.id,
+                              templateId,
                               template.file_name
                             )
                           }
                           disabled={
-                            downloadingId ===
-                            template.id
+                            !templateId ||
+                            Boolean(
+                              downloadingId
+                            )
                           }
                           className="
                             inline-flex
@@ -985,7 +1590,7 @@ const TemplatesList = () => {
                           <Download
                             className={`h-4 w-4 ${
                               downloadingId ===
-                              template.id
+                              templateId
                                 ? 'animate-pulse'
                                 : ''
                             }`}
@@ -997,7 +1602,8 @@ const TemplatesList = () => {
                     </Table.Cell>
 
                   </Table.Row>
-                )
+                  );
+                }
               )}
 
             </Table.Body>
@@ -1006,9 +1612,8 @@ const TemplatesList = () => {
 
           {/* PAGINATION */}
 
-          {pagination &&
-            pagination.totalPages >
-              1 && (
+          {totalPages >
+            1 && (
               <div
                 className="
                   flex
@@ -1031,7 +1636,7 @@ const TemplatesList = () => {
                 <p className="text-xs text-gray-500 dark:text-slate-400">
                   Toplam{' '}
                   <span className="font-semibold text-gray-700 dark:text-slate-300">
-                    {pagination.total}
+                    {totalTemplates}
                   </span>{' '}
                   şablon
                 </p>
@@ -1063,8 +1668,8 @@ const TemplatesList = () => {
                   </Button>
 
                   <span className="min-w-[70px] text-center text-xs font-semibold text-gray-600 dark:text-slate-400">
-                    {page} /{' '}
-                    {pagination.totalPages}
+                    {currentPage} /{' '}
+                    {totalPages}
                   </span>
 
                   <Button
@@ -1072,7 +1677,7 @@ const TemplatesList = () => {
                     size="sm"
                     disabled={
                       page >=
-                        pagination.totalPages ||
+                        totalPages ||
                       isFetching
                     }
                     onClick={() =>
@@ -1081,7 +1686,7 @@ const TemplatesList = () => {
                           current
                         ) =>
                           Math.min(
-                            pagination.totalPages,
+                            totalPages,
                             current +
                               1
                           )

@@ -56,11 +56,41 @@ import toast from 'react-hot-toast';
 const MAX_FILE_SIZE =
   10 * 1024 * 1024;
 
-const ALLOWED_TYPES = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-];
+const MAX_TITLE_LENGTH =
+  255;
+
+const MAX_DESCRIPTION_LENGTH =
+  2000;
+
+const ALLOWED_MIME_TYPES =
+  new Set([
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'text/plain',
+  ]);
+
+const ALLOWED_EXTENSIONS =
+  new Set([
+    '.pdf',
+    '.doc',
+    '.docx',
+    '.xls',
+    '.xlsx',
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.gif',
+    '.webp',
+    '.txt',
+    '.udf',
+  ]);
 
 const CATEGORY_OPTIONS = [
   {
@@ -132,6 +162,252 @@ const formatFileSize = (bytes) => {
   )} ${units[index]}`;
 };
 
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id ??
+      value?._id;
+
+    if (
+      objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+    ) {
+      return '';
+    }
+
+    return String(
+      objectId
+    );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getResponseItem = (
+  response
+) => {
+  return (
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    null
+  );
+};
+
+const replaceResponseItem = (
+  current,
+  nextItem
+) => {
+  if (!current) {
+    return nextItem;
+  }
+
+  if (
+    current?.data?.data !==
+    undefined
+  ) {
+    return {
+      ...current,
+      data: {
+        ...current.data,
+        data:
+          nextItem,
+      },
+    };
+  }
+
+  if (
+    current?.data !==
+    undefined
+  ) {
+    return {
+      ...current,
+      data:
+        nextItem,
+    };
+  }
+
+  return nextItem;
+};
+
+const getFileExtension = (
+  fileName = ''
+) => {
+  const lastDot =
+    String(
+      fileName
+    ).lastIndexOf('.');
+
+  if (
+    lastDot === -1
+  ) {
+    return '';
+  }
+
+  return String(
+    fileName
+  )
+    .slice(
+      lastDot
+    )
+    .toLowerCase();
+};
+
+const getBackendFieldErrors = (
+  error
+) => {
+  const payload =
+    error?.response?.data;
+
+  const source =
+    payload?.errors ??
+    payload?.validation_errors ??
+    null;
+
+  if (!source) {
+    return {};
+  }
+
+  if (
+    Array.isArray(
+      source
+    )
+  ) {
+    return source.reduce(
+      (
+        result,
+        item
+      ) => {
+        const field =
+          item?.path ??
+          item?.param ??
+          item?.field;
+
+        const message =
+          item?.msg ??
+          item?.message;
+
+        if (
+          field &&
+          message
+        ) {
+          result[field] =
+            String(
+              message
+            );
+        }
+
+        return result;
+      },
+      {}
+    );
+  }
+
+  if (
+    typeof source ===
+    'object'
+  ) {
+    return Object.entries(
+      source
+    ).reduce(
+      (
+        result,
+        [field, value]
+      ) => {
+        const message =
+          Array.isArray(
+            value
+          )
+            ? value[0]
+            : value;
+
+        if (
+          message !== null &&
+          message !== undefined
+        ) {
+          result[field] =
+            String(
+              message
+            );
+        }
+
+        return result;
+      },
+      {}
+    );
+  }
+
+  return {};
+};
+
+const getErrorMessage = (
+  error,
+  fallback
+) => {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    fallback
+  );
+};
+
+const isAllowedOption = (
+  options,
+  value
+) => {
+  return options.some(
+    (item) =>
+      item.value ===
+      value
+  );
+};
+
+const normalizeTemplateForm = (
+  value
+) => {
+  return {
+    title:
+      String(
+        value?.title ??
+        ''
+      ).trim(),
+
+    description:
+      String(
+        value?.description ??
+        ''
+      ).trim(),
+
+    category:
+      String(
+        value?.category ??
+        ''
+      ),
+
+    law_area:
+      String(
+        value?.law_area ??
+        ''
+      ),
+  };
+};
+
 const getCategoryLabel = (value) => {
   return (
     CATEGORY_OPTIONS.find(
@@ -162,8 +438,15 @@ const TemplateEdit = () => {
   const navigate =
     useNavigate();
 
-  const { id } =
+  const {
+    id: idParam,
+  } =
     useParams();
+
+  const id =
+    normalizeId(
+      idParam
+    );
 
   const queryClient =
     useQueryClient();
@@ -206,10 +489,8 @@ const TemplateEdit = () => {
     setErrors,
   ] = useState({});
 
-  const [
-    initializedTemplateId,
-    setInitializedTemplateId,
-  ] = useState(null);
+  const initializedTemplateIdRef =
+    useRef('');
 
   // ======================================================
   // TEMPLATE QUERY
@@ -226,14 +507,32 @@ const TemplateEdit = () => {
     ],
 
     queryFn: () =>
-      templateApi.getOne(id),
+      templateApi.getOne(
+        id
+      ),
 
     enabled:
-      Boolean(id),
+      Boolean(
+        id
+      ),
+
+    staleTime:
+      0,
+
+    refetchOnMount:
+      'always',
+
+    refetchOnWindowFocus:
+      'always',
+
+    refetchOnReconnect:
+      'always',
   });
 
   const template =
-    data?.data?.data;
+    getResponseItem(
+      data
+    );
 
   // ======================================================
   // FORM INITIALIZATION
@@ -242,35 +541,164 @@ const TemplateEdit = () => {
   useEffect(() => {
     if (
       !template ||
-      initializedTemplateId ===
-        template.id
+      !id ||
+      initializedTemplateIdRef.current ===
+        id
     ) {
       return;
     }
 
     setFormData({
       title:
-        template.title || '',
+        String(
+          template.title ??
+          ''
+        ),
 
       description:
-        template.description || '',
+        String(
+          template.description ??
+          ''
+        ),
 
       category:
-        template.category ||
-        'dilekce',
+        isAllowedOption(
+          CATEGORY_OPTIONS,
+          template.category
+        )
+          ? template.category
+          : 'dilekce',
 
       law_area:
-        template.law_area ||
-        'ozel_hukuk',
+        isAllowedOption(
+          LAW_AREA_OPTIONS,
+          template.law_area
+        )
+          ? template.law_area
+          : 'ozel_hukuk',
     });
 
-    setInitializedTemplateId(
-      template.id
+    setFile(
+      null
     );
+
+    setFileError(
+      ''
+    );
+
+    setErrors(
+      {}
+    );
+
+    initializedTemplateIdRef.current =
+      id;
   }, [
     template,
-    initializedTemplateId,
+    id,
   ]);
+
+  const normalizedForm =
+    normalizeTemplateForm(
+      formData
+    );
+
+  const initialForm =
+    normalizeTemplateForm({
+      title:
+        template?.title,
+
+      description:
+        template?.description,
+
+      category:
+        isAllowedOption(
+          CATEGORY_OPTIONS,
+          template?.category
+        )
+          ? template?.category
+          : 'dilekce',
+
+      law_area:
+        isAllowedOption(
+          LAW_AREA_OPTIONS,
+          template?.law_area
+        )
+          ? template?.law_area
+          : 'ozel_hukuk',
+    });
+
+  const isDirty =
+    Boolean(
+      file ||
+      normalizedForm.title !==
+        initialForm.title ||
+      normalizedForm.description !==
+        initialForm.description ||
+      normalizedForm.category !==
+        initialForm.category ||
+      normalizedForm.law_area !==
+        initialForm.law_area
+    );
+
+  useEffect(() => {
+    const handleBeforeUnload =
+      (
+        event
+      ) => {
+        if (
+          !isDirty
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        event.returnValue =
+          '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+  ]);
+
+  const invalidateTemplateCollections =
+    async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: [
+            'templates',
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'template-statistics',
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-stats',
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-templates',
+          ],
+        }),
+      ]);
+    };
 
   // ======================================================
   // UPDATE
@@ -278,27 +706,91 @@ const TemplateEdit = () => {
 
   const updateMutation =
     useMutation({
-      mutationFn: (payload) =>
-        templateApi.update(
+      mutationFn: (
+        payload
+      ) => {
+        if (!id) {
+          throw new Error(
+            'Geçerli şablon kaydı bulunamadı'
+          );
+        }
+
+        return templateApi.update(
           id,
           payload
-        ),
+        );
+      },
 
-      onSuccess: async () => {
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: [
-              'templates',
-            ],
-          }),
+      onMutate: async () => {
+        if (!id) {
+          return;
+        }
 
-          queryClient.invalidateQueries({
-            queryKey: [
-              'template',
-              id,
-            ],
-          }),
-        ]);
+        await queryClient.cancelQueries({
+          queryKey: [
+            'template',
+            id,
+          ],
+          exact:
+            true,
+        });
+      },
+
+      onSuccess: async (
+        response
+      ) => {
+        const responseItem =
+          getResponseItem(
+            response
+          );
+
+        queryClient.setQueryData(
+          [
+            'template',
+            id,
+          ],
+          (
+            current
+          ) => {
+            const currentItem =
+              getResponseItem(
+                current
+              );
+
+            const nextItem = {
+              ...(currentItem &&
+              typeof currentItem ===
+                'object'
+                ? currentItem
+                : {}),
+
+              ...normalizedForm,
+
+              ...(responseItem &&
+              typeof responseItem ===
+                'object'
+                ? responseItem
+                : {}),
+            };
+
+            return replaceResponseItem(
+              current ??
+              response,
+              nextItem
+            );
+          }
+        );
+
+        queryClient.setQueryData(
+          [
+            'templates',
+            'detail',
+            id,
+          ],
+          response
+        );
+
+        await invalidateTemplateCollections();
 
         toast.success(
           'Şablon başarıyla güncellendi'
@@ -309,10 +801,35 @@ const TemplateEdit = () => {
         );
       },
 
-      onError: (error) => {
+      onError: (
+        error
+      ) => {
+        const fieldErrors =
+          getBackendFieldErrors(
+            error
+          );
+
+        if (
+          Object.keys(
+            fieldErrors
+          ).length >
+          0
+        ) {
+          setErrors(
+            (
+              current
+            ) => ({
+              ...current,
+              ...fieldErrors,
+            })
+          );
+        }
+
         toast.error(
-          error?.response?.data?.message ||
+          getErrorMessage(
+            error,
             'Şablon güncellenemedi'
+          )
         );
       },
     });
@@ -323,15 +840,54 @@ const TemplateEdit = () => {
 
   const deleteMutation =
     useMutation({
-      mutationFn: () =>
-        templateApi.delete(id),
+      mutationFn: () => {
+        if (!id) {
+          throw new Error(
+            'Geçerli şablon kaydı bulunamadı'
+          );
+        }
+
+        return templateApi.delete(
+          id
+        );
+      },
+
+      onMutate: async () => {
+        if (!id) {
+          return;
+        }
+
+        await queryClient.cancelQueries({
+          queryKey: [
+            'template',
+            id,
+          ],
+          exact:
+            true,
+        });
+      },
 
       onSuccess: async () => {
-        await queryClient.invalidateQueries({
+        queryClient.removeQueries({
+          queryKey: [
+            'template',
+            id,
+          ],
+          exact:
+            true,
+        });
+
+        queryClient.removeQueries({
           queryKey: [
             'templates',
+            'detail',
+            id,
           ],
+          exact:
+            true,
         });
+
+        await invalidateTemplateCollections();
 
         toast.success(
           'Şablon silindi'
@@ -342,10 +898,14 @@ const TemplateEdit = () => {
         );
       },
 
-      onError: (error) => {
+      onError: (
+        error
+      ) => {
         toast.error(
-          error?.response?.data?.message ||
+          getErrorMessage(
+            error,
             'Şablon silinemedi'
+          )
         );
       },
     });
@@ -357,23 +917,90 @@ const TemplateEdit = () => {
   const handleChange = (
     event
   ) => {
+    if (
+      updateMutation.isPending ||
+      deleteMutation.isPending
+    ) {
+      return;
+    }
+
     const {
       name,
       value,
-    } = event.target;
+    } =
+      event.target;
+
+    let nextValue =
+      value;
+
+    if (
+      name ===
+      'title'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_TITLE_LENGTH
+        );
+    }
+
+    if (
+      name ===
+      'description'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_DESCRIPTION_LENGTH
+        );
+    }
+
+    if (
+      name ===
+        'category' &&
+      !isAllowedOption(
+        CATEGORY_OPTIONS,
+        nextValue
+      )
+    ) {
+      return;
+    }
+
+    if (
+      name ===
+        'law_area' &&
+      !isAllowedOption(
+        LAW_AREA_OPTIONS,
+        nextValue
+      )
+    ) {
+      return;
+    }
 
     setFormData(
-      (current) => ({
+      (
+        current
+      ) => ({
         ...current,
-        [name]: value,
+        [name]:
+          nextValue,
       })
     );
 
-    if (errors[name]) {
+    if (
+      errors[name]
+    ) {
       setErrors(
-        (current) => ({
+        (
+          current
+        ) => ({
           ...current,
-          [name]: '',
+          [name]:
+            '',
         })
       );
     }
@@ -386,10 +1013,40 @@ const TemplateEdit = () => {
   const handleFileChange = (
     event
   ) => {
+    if (
+      updateMutation.isPending ||
+      deleteMutation.isPending
+    ) {
+      return;
+    }
+
     const selectedFile =
       event.target.files?.[0];
 
     if (!selectedFile) {
+      return;
+    }
+
+    const clearInput =
+      () => {
+        event.target.value =
+          '';
+      };
+
+    if (
+      selectedFile.size <=
+      0
+    ) {
+      setFileError(
+        'Boş dosya yüklenemez.'
+      );
+
+      setFile(
+        null
+      );
+
+      clearInput();
+
       return;
     }
 
@@ -401,39 +1058,90 @@ const TemplateEdit = () => {
         'Dosya boyutu 10 MB’dan büyük olamaz.'
       );
 
-      setFile(null);
-
-      event.target.value =
-        '';
-
-      return;
-    }
-
-    if (
-      !ALLOWED_TYPES.includes(
-        selectedFile.type
-      )
-    ) {
-      setFileError(
-        'Sadece PDF veya Word dosyası yükleyebilirsiniz.'
+      setFile(
+        null
       );
 
-      setFile(null);
-
-      event.target.value =
-        '';
+      clearInput();
 
       return;
     }
 
-    setFileError('');
+    const extension =
+      getFileExtension(
+        selectedFile.name
+      );
+
+    const mimeType =
+      String(
+        selectedFile.type ||
+        ''
+      ).trim();
+
+    const isAllowedExtension =
+      ALLOWED_EXTENSIONS.has(
+        extension
+      );
+
+    const isAllowedMime =
+      ALLOWED_MIME_TYPES.has(
+        mimeType
+      );
+
+    const isUdf =
+      extension ===
+      '.udf';
+
+    const hasAcceptableMime =
+      isUdf ||
+      !mimeType ||
+      isAllowedMime;
+
+    if (
+      !isAllowedExtension ||
+      !hasAcceptableMime
+    ) {
+      setFileError(
+        'PDF, Word, Excel, görsel, TXT veya UYAP UDF dosyası yükleyebilirsiniz.'
+      );
+
+      setFile(
+        null
+      );
+
+      clearInput();
+
+      return;
+    }
+
+    setFileError(
+      ''
+    );
+
     setFile(
       selectedFile
+    );
+
+    setErrors(
+      (
+        current
+      ) => ({
+        ...current,
+        file:
+          '',
+      })
     );
   };
 
   const handleRemoveNewFile =
     () => {
+      if (
+        updateMutation.isPending ||
+        deleteMutation.isPending
+      ) {
+        return;
+      }
+
       setFile(null);
       setFileError('');
 
@@ -450,21 +1158,63 @@ const TemplateEdit = () => {
   // ======================================================
 
   const validateForm = () => {
-    const nextErrors = {};
+    const nextErrors =
+      {};
 
     if (
-      !formData.title.trim()
+      !normalizedForm.title
     ) {
       nextErrors.title =
         'Başlık gereklidir';
+    } else if (
+      normalizedForm.title.length >
+      MAX_TITLE_LENGTH
+    ) {
+      nextErrors.title =
+        `Başlık en fazla ${MAX_TITLE_LENGTH} karakter olabilir`;
     }
 
     if (
-      formData.title.trim()
-        .length > 255
+      normalizedForm.description.length >
+      MAX_DESCRIPTION_LENGTH
     ) {
-      nextErrors.title =
-        'Başlık en fazla 255 karakter olabilir';
+      nextErrors.description =
+        `Açıklama en fazla ${MAX_DESCRIPTION_LENGTH} karakter olabilir`;
+    }
+
+    if (
+      !isAllowedOption(
+        CATEGORY_OPTIONS,
+        normalizedForm.category
+      )
+    ) {
+      nextErrors.category =
+        'Geçerli bir kategori seçin';
+    }
+
+    if (
+      !isAllowedOption(
+        LAW_AREA_OPTIONS,
+        normalizedForm.law_area
+      )
+    ) {
+      nextErrors.law_area =
+        'Geçerli bir hukuk alanı seçin';
+    }
+
+    if (
+      file &&
+      (
+        file.size <=
+          0 ||
+        file.size >
+          MAX_FILE_SIZE
+      )
+    ) {
+      nextErrors.file =
+        file.size <= 0
+          ? 'Boş dosya yüklenemez'
+          : 'Dosya boyutu 10 MB’dan büyük olamaz';
     }
 
     setErrors(
@@ -488,7 +1238,9 @@ const TemplateEdit = () => {
     event.preventDefault();
 
     if (
-      updateMutation.isPending
+      updateMutation.isPending ||
+      deleteMutation.isPending ||
+      !id
     ) {
       return;
     }
@@ -503,33 +1255,43 @@ const TemplateEdit = () => {
       return;
     }
 
+    if (
+      !isDirty
+    ) {
+      toast(
+        'Kaydedilecek bir değişiklik yok',
+        {
+          icon:
+            'ℹ️',
+        }
+      );
+
+      return;
+    }
+
     const submitData =
       new FormData();
 
     submitData.append(
       'title',
-      formData.title.trim()
+      normalizedForm.title
     );
 
     submitData.append(
       'description',
-      formData.description.trim()
+      normalizedForm.description
     );
 
     submitData.append(
       'category',
-      formData.category
+      normalizedForm.category
     );
 
     submitData.append(
       'law_area',
-      formData.law_area
+      normalizedForm.law_area
     );
 
-    /*
-     * Yeni dosya seçildiyse gönder.
-     * Seçilmediyse backend mevcut dosyayı korur.
-     */
     if (file) {
       submitData.append(
         'file',
@@ -547,6 +1309,13 @@ const TemplateEdit = () => {
   // ======================================================
 
   const handleDelete = () => {
+    if (
+      updateMutation.isPending ||
+      deleteMutation.isPending
+    ) {
+      return;
+    }
+
     if (!canDelete) {
       toast.error(
         'Bu şablonu silme yetkiniz bulunmuyor'
@@ -609,12 +1378,10 @@ const TemplateEdit = () => {
         </h2>
 
         <p className="mt-2 text-sm text-gray-500">
-          {error
-            ?.response
-            ?.data
-            ?.message ||
-            error?.message ||
-            'Şablon bilgileri yüklenemedi'}
+          {getErrorMessage(
+            error,
+            'Şablon bilgileri yüklenemedi'
+          )}
         </p>
 
         <Link
@@ -645,6 +1412,26 @@ const TemplateEdit = () => {
 
         <Link
           to={`/templates/${id}`}
+          onClick={(
+            event
+          ) => {
+            if (
+              updateMutation.isPending ||
+              deleteMutation.isPending
+            ) {
+              event.preventDefault();
+              return;
+            }
+
+            if (
+              isDirty &&
+              !window.confirm(
+                'Kaydedilmemiş değişiklikler var. Şablon detayına dönmek istediğinize emin misiniz?'
+              )
+            ) {
+              event.preventDefault();
+            }
+          }}
           className="
             inline-flex
             items-center
@@ -775,6 +1562,9 @@ const TemplateEdit = () => {
               error={
                 errors.title
               }
+              maxLength={
+                MAX_TITLE_LENGTH
+              }
               placeholder="Örn: İcra Takibi Dilekçesi"
               disabled={
                 updateMutation.isPending
@@ -796,9 +1586,13 @@ const TemplateEdit = () => {
                   handleChange
                 }
                 disabled={
-                  updateMutation.isPending
+                  updateMutation.isPending ||
+                  deleteMutation.isPending
                 }
                 rows={4}
+                maxLength={
+                  MAX_DESCRIPTION_LENGTH
+                }
                 className="
                   w-full
                   resize-y
@@ -825,6 +1619,12 @@ const TemplateEdit = () => {
                 "
                 placeholder="Şablon hakkında kısa açıklama..."
               />
+
+              {errors.description && (
+                <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                  {errors.description}
+                </p>
+              )}
 
             </div>
 
@@ -896,7 +1696,8 @@ const TemplateEdit = () => {
                     handleChange
                   }
                   disabled={
-                    updateMutation.isPending
+                    updateMutation.isPending ||
+                    deleteMutation.isPending
                   }
                   className="
                     h-10
@@ -936,6 +1737,12 @@ const TemplateEdit = () => {
                   )}
 
                 </select>
+
+                {errors.category && (
+                  <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.category}
+                  </p>
+                )}
 
               </div>
 
@@ -996,6 +1803,12 @@ const TemplateEdit = () => {
                   )}
 
                 </select>
+
+                {errors.law_area && (
+                  <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.law_area}
+                  </p>
+                )}
 
               </div>
 
@@ -1167,7 +1980,7 @@ const TemplateEdit = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  İsteğe bağlı — yeni PDF veya Word dosyası yükleyin
+                  İsteğe bağlı — yeni PDF, Word, Excel, görsel, TXT veya UYAP UDF dosyası yükleyin
                 </p>
 
               </div>
@@ -1267,15 +2080,26 @@ const TemplateEdit = () => {
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() =>
-                  fileInputRef.current?.click()
-                }
+                onClick={() => {
+                  if (
+                    updateMutation.isPending ||
+                    deleteMutation.isPending
+                  ) {
+                    return;
+                  }
+
+                  fileInputRef.current?.click();
+                }}
                 onKeyDown={(event) => {
                   if (
-                    event.key ===
-                      'Enter' ||
-                    event.key ===
-                      ' '
+                    !updateMutation.isPending &&
+                    !deleteMutation.isPending &&
+                    (
+                      event.key ===
+                        'Enter' ||
+                      event.key ===
+                        ' '
+                    )
                   ) {
                     event.preventDefault();
 
@@ -1306,7 +2130,7 @@ const TemplateEdit = () => {
                 </p>
 
                 <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
-                  PDF veya Word · Maksimum 10 MB
+                  PDF, Word, Excel, görsel, TXT veya UYAP UDF · Maksimum 10 MB
                 </p>
 
               </div>
@@ -1324,7 +2148,7 @@ const TemplateEdit = () => {
               disabled={
                 updateMutation.isPending
               }
-              accept=".pdf,.doc,.docx"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt,.udf"
             />
 
             {fileError && (
@@ -1455,11 +2279,27 @@ const TemplateEdit = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={() =>
+            onClick={() => {
+              if (
+                updateMutation.isPending ||
+                deleteMutation.isPending
+              ) {
+                return;
+              }
+
+              if (
+                isDirty &&
+                !window.confirm(
+                  'Kaydedilmemiş değişiklikler var. İptal etmek istediğinize emin misiniz?'
+                )
+              ) {
+                return;
+              }
+
               navigate(
                 `/templates/${id}`
-              )
-            }
+              );
+            }}
             disabled={
               updateMutation.isPending
             }
@@ -1473,7 +2313,9 @@ const TemplateEdit = () => {
               updateMutation.isPending
             }
             disabled={
-              deleteMutation.isPending
+              updateMutation.isPending ||
+              deleteMutation.isPending ||
+              !isDirty
             }
           >
             <Save className="h-4 w-4" />
@@ -1524,7 +2366,8 @@ const TemplateEdit = () => {
                   deleteMutation.isPending
                 }
                 disabled={
-                  updateMutation.isPending
+                  updateMutation.isPending ||
+                  deleteMutation.isPending
                 }
               >
                 <Trash2 className="h-4 w-4" />
