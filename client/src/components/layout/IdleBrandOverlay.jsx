@@ -41,10 +41,58 @@ const IdleBrandOverlay = () => {
       ? `derkenar_screen_lock_pin_${user.id}`
       : null;
 
+  const lockStorageKey =
+    user?.id
+      ? `derkenar_screen_lock_state_${user.id}`
+      : null;
+
+  const activityStorageKey =
+    user?.id
+      ? `derkenar_screen_lock_activity_${user.id}`
+      : null;
+
   const [
     isLocked,
     setIsLocked,
-  ] = useState(false);
+  ] = useState(() => {
+    if (
+      typeof window === 'undefined' ||
+      !lockStorageKey
+    ) {
+      return false;
+    }
+
+    if (
+      localStorage.getItem(
+        lockStorageKey
+      ) === '1'
+    ) {
+      return true;
+    }
+
+    if (
+      !activityStorageKey
+    ) {
+      return false;
+    }
+
+    const savedActivity =
+      Number(
+        localStorage.getItem(
+          activityStorageKey
+        )
+      );
+
+    return (
+      Number.isFinite(
+        savedActivity
+      ) &&
+      savedActivity > 0 &&
+      Date.now() -
+        savedActivity >=
+        IDLE_TIME
+    );
+  });
 
   const [
     hasPin,
@@ -80,12 +128,69 @@ const IdleBrandOverlay = () => {
     useRef(null);
 
   const lockedRef =
-    useRef(false);
+    useRef(isLocked);
 
   const inputRef =
     useRef(null);
 
-  const startTimer = () => {
+  const lockStorageKeyRef =
+    useRef(null);
+
+  const activityStorageKeyRef =
+    useRef(null);
+
+  const persistLockState = (
+    locked
+  ) => {
+    const key =
+      lockStorageKeyRef.current;
+
+    if (
+      key
+    ) {
+      localStorage.setItem(
+        key,
+        locked ? '1' : '0'
+      );
+    }
+  };
+
+  const persistActivity = () => {
+    const key =
+      activityStorageKeyRef.current;
+
+    if (
+      key
+    ) {
+      localStorage.setItem(
+        key,
+        String(Date.now())
+      );
+    }
+  };
+
+  const lockScreen = () => {
+    if (
+      timerRef.current
+    ) {
+      clearTimeout(
+        timerRef.current
+      );
+
+      timerRef.current =
+        null;
+    }
+
+    lockedRef.current =
+      true;
+
+    persistLockState(true);
+    setIsLocked(true);
+  };
+
+  const startTimer = (
+    delay = IDLE_TIME
+  ) => {
     if (
       timerRef.current
     ) {
@@ -96,13 +201,8 @@ const IdleBrandOverlay = () => {
 
     timerRef.current =
       setTimeout(() => {
-        lockedRef.current =
-          true;
-
-        setIsLocked(
-          true
-        );
-      }, IDLE_TIME);
+        lockScreen();
+      }, Math.max(0, delay));
   };
 
   const unlockScreen =
@@ -110,6 +210,8 @@ const IdleBrandOverlay = () => {
       lockedRef.current =
         false;
 
+      persistLockState(false);
+      persistActivity();
       setIsLocked(false);
       setPin('');
       setConfirmPin('');
@@ -129,6 +231,7 @@ const IdleBrandOverlay = () => {
           return;
         }
 
+        persistActivity();
         startTimer();
       };
 
@@ -152,8 +255,6 @@ const IdleBrandOverlay = () => {
       }
     );
 
-    startTimer();
-
     return () => {
       events.forEach(
         (eventName) => {
@@ -175,26 +276,102 @@ const IdleBrandOverlay = () => {
   }, []);
 
   useEffect(() => {
-    if (!pinStorageKey) {
+    lockStorageKeyRef.current =
+      lockStorageKey;
+
+    activityStorageKeyRef.current =
+      activityStorageKey;
+
+    if (
+      !pinStorageKey ||
+      !lockStorageKey ||
+      !activityStorageKey
+    ) {
       setHasPin(false);
+      lockedRef.current =
+        false;
+      setIsLocked(false);
       setPin('');
       setConfirmPin('');
       setError('');
       return;
     }
 
-    setHasPin(
+    const savedPinExists =
       Boolean(
         localStorage.getItem(
           pinStorageKey
         )
-      )
+      );
+
+    setHasPin(
+      savedPinExists
     );
+
+    const savedLocked =
+      localStorage.getItem(
+        lockStorageKey
+      ) === '1';
+
+    const savedActivity =
+      Number(
+        localStorage.getItem(
+          activityStorageKey
+        )
+      );
+
+    const hasValidActivity =
+      Number.isFinite(
+        savedActivity
+      ) &&
+      savedActivity > 0;
+
+    const elapsed =
+      hasValidActivity
+        ? Date.now() -
+          savedActivity
+        : 0;
+
+    const idleExpired =
+      hasValidActivity &&
+      elapsed >= IDLE_TIME;
+
+    if (
+      savedLocked ||
+      idleExpired
+    ) {
+      lockScreen();
+    } else {
+      lockedRef.current =
+        false;
+
+      persistLockState(false);
+
+      if (
+        !hasValidActivity
+      ) {
+        persistActivity();
+      }
+
+      setIsLocked(false);
+
+      startTimer(
+        hasValidActivity
+          ? IDLE_TIME -
+            elapsed
+          : IDLE_TIME
+      );
+    }
 
     setPin('');
     setConfirmPin('');
     setError('');
-  }, [pinStorageKey]);
+  }, [
+    pinStorageKey,
+    lockStorageKey,
+    activityStorageKey,
+  ]);
+
 
   useEffect(() => {
     if (
