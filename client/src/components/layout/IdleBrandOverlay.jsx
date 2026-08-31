@@ -71,6 +71,11 @@ const IdleBrandOverlay = () => {
     setLoading,
   ] = useState(false);
 
+  const [
+    clock,
+    setClock,
+  ] = useState(() => new Date());
+
   const timerRef =
     useRef(null);
 
@@ -336,9 +341,40 @@ const IdleBrandOverlay = () => {
       }
     };
 
+  useEffect(() => {
+    const interval =
+      setInterval(() => {
+        setClock(new Date());
+      }, 30 * 1000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+
   if (!isLocked) {
     return null;
   }
+
+  const formattedTime =
+    new Intl.DateTimeFormat(
+      'tr-TR',
+      {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }
+    ).format(clock);
+
+  const formattedDate =
+    new Intl.DateTimeFormat(
+      'tr-TR',
+      {
+        weekday: 'long',
+        day: '2-digit',
+        month: 'long',
+      }
+    ).format(clock);
 
   const inputClassName = `
     h-14
@@ -424,6 +460,23 @@ const IdleBrandOverlay = () => {
           100% { transform: translateY(34px); }
         }
 
+        @keyframes derkenarEnter {
+          0% { opacity: 0; transform: translateY(10px) scale(.985); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        @keyframes derkenarStatusPulse {
+          0%, 100% { opacity: .55; box-shadow: 0 0 0 0 rgba(52,211,153,.12); }
+          50% { opacity: 1; box-shadow: 0 0 0 5px rgba(52,211,153,0); }
+        }
+
+        @keyframes derkenarLineSweep {
+          0% { transform: translateX(-120%); opacity: 0; }
+          18% { opacity: .7; }
+          55% { opacity: .32; }
+          100% { transform: translateX(220%); opacity: 0; }
+        }
+
         .derkenar-float-one { animation: derkenarFloatOne 15s ease-in-out infinite; }
         .derkenar-float-two { animation: derkenarFloatTwo 18s ease-in-out infinite; }
         .derkenar-pulse-ring { animation: derkenarPulseRing 4s ease-in-out infinite; }
@@ -431,6 +484,9 @@ const IdleBrandOverlay = () => {
         .derkenar-button-shine { animation: derkenarShine 4.8s ease-in-out infinite; }
         .derkenar-shake { animation: derkenarShake .36s ease-in-out; }
         .derkenar-grid-drift { animation: derkenarGridDrift 10s linear infinite; }
+        .derkenar-enter { animation: derkenarEnter .55s cubic-bezier(.16,1,.3,1) both; }
+        .derkenar-status-dot { animation: derkenarStatusPulse 3s ease-in-out infinite; }
+        .derkenar-line-sweep { animation: derkenarLineSweep 8s ease-in-out infinite; }
 
         @media (prefers-reduced-motion: reduce) {
           .derkenar-float-one,
@@ -438,7 +494,10 @@ const IdleBrandOverlay = () => {
           .derkenar-pulse-ring,
           .derkenar-logo-float,
           .derkenar-button-shine,
-          .derkenar-grid-drift {
+          .derkenar-grid-drift,
+          .derkenar-status-dot,
+          .derkenar-line-sweep,
+          .derkenar-enter {
             animation: none !important;
           }
         }
@@ -500,6 +559,33 @@ const IdleBrandOverlay = () => {
         "
       />
 
+      {/* TOP LEFT TIME / DATE */}
+      <div
+        className="
+          pointer-events-none
+          absolute
+          left-5
+          top-5
+          hidden
+          rounded-2xl
+          border
+          border-white/[0.06]
+          bg-white/[0.025]
+          px-4
+          py-3
+          text-left
+          backdrop-blur-md
+          sm:block
+        "
+      >
+        <div className="text-xl font-semibold tabular-nums tracking-tight text-white/90">
+          {formattedTime}
+        </div>
+        <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {formattedDate}
+        </div>
+      </div>
+
       {/* TOP SECURITY STATUS */}
       <div
         className="
@@ -524,16 +610,14 @@ const IdleBrandOverlay = () => {
           sm:flex
         "
       >
-        <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-30" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-        </span>
-        GÜVENLİ OTURUM
+        <span className="derkenar-status-dot relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+        OTURUM KORUMASI AKTİF
       </div>
 
       {/* CONTENT */}
       <div
         className="
+          derkenar-enter
           relative
           flex
           w-full
@@ -650,12 +734,24 @@ const IdleBrandOverlay = () => {
               inset-x-12
               top-0
               h-px
-              bg-gradient-to-r
-              from-transparent
-              via-amber-300/60
-              to-transparent
+              overflow-hidden
+              bg-white/[0.035]
             "
-          />
+          >
+            <span
+              className="
+                derkenar-line-sweep
+                absolute
+                inset-y-0
+                left-0
+                w-28
+                bg-gradient-to-r
+                from-transparent
+                via-amber-200/80
+                to-transparent
+              "
+            />
+          </div>
 
           <div
             className="
@@ -848,6 +944,33 @@ const IdleBrandOverlay = () => {
                   Devam etmek için ekran kilidi PIN&apos;inizi girin.
                 </p>
 
+                <div
+                  className="
+                    mx-auto
+                    mt-4
+                    flex
+                    w-fit
+                    items-center
+                    gap-2
+                    rounded-full
+                    border
+                    border-white/[0.055]
+                    bg-white/[0.025]
+                    px-3
+                    py-1.5
+                    text-[9px]
+                    font-semibold
+                    uppercase
+                    tracking-[0.11em]
+                    text-slate-500
+                  "
+                >
+                  <svg viewBox="0 0 24 24" fill="none" className="h-3 w-3 text-amber-300/70" aria-hidden="true">
+                    <path d="M12 3.5 19 6v5.2c0 4.4-2.9 7.6-7 9.3-4.1-1.7-7-4.9-7-9.3V6l7-2.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                  </svg>
+                  Otomatik güvenlik kilidi
+                </div>
+
                 <form
                   onSubmit={handleUnlock}
                   className="mt-6"
@@ -879,6 +1002,28 @@ const IdleBrandOverlay = () => {
                         to-transparent
                       "
                     />
+                  </div>
+
+                  <div
+                    className="mt-3 flex items-center justify-center gap-2"
+                    aria-hidden="true"
+                  >
+                    {[0, 1, 2, 3].map((index) => (
+                      <span
+                        key={index}
+                        className={`
+                          h-1.5
+                          rounded-full
+                          transition-all
+                          duration-200
+                          ${
+                            pin.length > index
+                              ? 'w-5 bg-amber-300/75 shadow-[0_0_10px_rgba(252,211,77,.16)]'
+                              : 'w-1.5 bg-white/10'
+                          }
+                        `}
+                      />
+                    ))}
                   </div>
 
                   {error && (
@@ -996,7 +1141,9 @@ const IdleBrandOverlay = () => {
                   strokeLinejoin="round"
                 />
               </svg>
-              Oturumunuz güvenle korunmaktadır
+              <span>Oturumunuz güvenle korunmaktadır</span>
+              <span className="hidden text-slate-700 sm:inline">•</span>
+              <span className="hidden sm:inline">ENTER ile devam</span>
             </div>
           </div>
         </div>
@@ -1011,7 +1158,7 @@ const IdleBrandOverlay = () => {
             text-slate-600
           "
         >
-          Derkenar Güvenli Çalışma Alanı
+          Derkenar • Güvenli Çalışma Alanı
         </p>
       </div>
     </div>
