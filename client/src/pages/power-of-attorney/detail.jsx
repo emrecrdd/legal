@@ -1,4 +1,8 @@
 import {
+  useState,
+} from 'react';
+
+import {
   Link,
   useNavigate,
   useParams,
@@ -68,6 +72,121 @@ const STATUS_OPTIONS = [
   },
 ];
 
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
+const normalizeDocuments = (
+  value
+) => {
+  if (
+    !Array.isArray(
+      value
+    )
+  ) {
+    return [];
+  }
+
+  const seen =
+    new Set();
+
+  return value
+    .map(
+      (entry) =>
+        entry?.document ||
+        entry
+    )
+    .filter(Boolean)
+    .filter(
+      (documentItem) => {
+        const id =
+          normalizeId(
+            documentItem?.id
+          );
+
+        const key =
+          id ||
+          [
+            documentItem?.original_name,
+            documentItem?.name,
+            documentItem?.created_at,
+          ]
+            .filter(Boolean)
+            .join('|');
+
+        if (
+          !key ||
+          seen.has(
+            key
+          )
+        ) {
+          return false;
+        }
+
+        seen.add(
+          key
+        );
+
+        return true;
+      }
+    );
+};
+
+const sanitizeDownloadFilename = (
+  value
+) => {
+  const normalized =
+    String(
+      value ||
+      'belge'
+    )
+      .replace(
+        /[\r\n\0]/g,
+        ''
+      )
+      .replace(
+        /[\\/]+/g,
+        '_'
+      )
+      .trim();
+
+  return (
+    normalized ||
+    'belge'
+  ).slice(
+    0,
+    255
+  );
+};
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -120,6 +239,7 @@ const getFileIcon = (
 
     case 'pdf':
     case 'word':
+    case 'udf':
       return (
         <FileText className="h-5 w-5" />
       );
@@ -267,14 +387,26 @@ const getPersonName = (
 // ======================================================
 
 const PowerOfAttorneyDetail = () => {
-  const { id } =
+  const {
+    id: idParam,
+  } =
     useParams();
+
+  const id =
+    normalizeId(
+      idParam
+    );
 
   const navigate =
     useNavigate();
 
   const queryClient =
     useQueryClient();
+
+  const [
+    downloadingId,
+    setDownloadingId,
+  ] = useState('');
 
   const {
     user,
@@ -330,7 +462,17 @@ const PowerOfAttorneyDetail = () => {
       ),
 
     enabled:
-      Boolean(id),
+      Boolean(
+        id
+      ),
+
+    // Belge yükleme ekranından geri dönünce embedded
+    // documents listesini F5 beklemeden yeniden çek.
+    staleTime: 0,
+    refetchOnMount:
+      'always',
+    refetchOnWindowFocus:
+      true,
   });
 
   const item =
@@ -342,18 +484,143 @@ const PowerOfAttorneyDetail = () => {
   // MUTATIONS
   // ======================================================
 
-  const deleteMutation =
-    useMutation({
-      mutationFn: () =>
-        powerOfAttorneyApi.delete(
-          id
-        ),
+  const refreshRelatedViews =
+    async ({
+      includeDetail = true,
+      includeDocuments = false,
+    } = {}) => {
+      const clientId =
+        normalizeId(
+          item?.client_id ??
+          item?.client?.id
+        );
 
-      onSuccess: async () => {
-        await queryClient.invalidateQueries({
+      const caseId =
+        normalizeId(
+          item?.case_id ??
+          item?.case?.id
+        );
+
+      const invalidations = [
+        queryClient.invalidateQueries({
           queryKey: [
             'powerOfAttorneys',
           ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-stats',
+          ],
+        }),
+      ];
+
+      if (
+        includeDetail &&
+        id
+      ) {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: [
+              'powerOfAttorney',
+              id,
+            ],
+          })
+        );
+      }
+
+      if (
+        includeDocuments
+      ) {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: [
+              'documents',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'case-documents',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'client-documents',
+            ],
+          })
+        );
+      }
+
+      if (
+        clientId
+      ) {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: [
+              'client',
+              clientId,
+            ],
+          })
+        );
+      }
+
+      if (
+        caseId
+      ) {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: [
+              'case',
+              caseId,
+            ],
+          })
+        );
+      }
+
+      await Promise.all(
+        invalidations
+      );
+    };
+
+  const deleteMutation =
+    useMutation({
+      mutationFn: () => {
+        if (
+          !id
+        ) {
+          throw new Error(
+            'Geçerli vekaletname kaydı bulunamadı'
+          );
+        }
+
+        return powerOfAttorneyApi.delete(
+          id
+        );
+      },
+
+      onSuccess: async () => {
+        await queryClient.cancelQueries({
+          queryKey: [
+            'powerOfAttorney',
+            id,
+          ],
+        });
+
+        queryClient.removeQueries({
+          queryKey: [
+            'powerOfAttorney',
+            id,
+          ],
+          exact: true,
+        });
+
+        await refreshRelatedViews({
+          includeDetail:
+            false,
+          includeDocuments:
+            true,
         });
 
         toast.success(
@@ -369,7 +636,8 @@ const PowerOfAttorneyDetail = () => {
         toast.error(
           error?.response
             ?.data?.message ||
-            'Silme başarısız'
+          error?.message ||
+          'Silme başarısız'
         );
       },
     });
@@ -378,27 +646,35 @@ const PowerOfAttorneyDetail = () => {
     useMutation({
       mutationFn: (
         status
-      ) =>
-        powerOfAttorneyApi.updateStatus(
+      ) => {
+        if (
+          !id
+        ) {
+          throw new Error(
+            'Geçerli vekaletname kaydı bulunamadı'
+          );
+        }
+
+        if (
+          !STATUS_OPTIONS.some(
+            (option) =>
+              option.value ===
+              status
+          )
+        ) {
+          throw new Error(
+            'Geçersiz vekaletname durumu'
+          );
+        }
+
+        return powerOfAttorneyApi.updateStatus(
           id,
           status
-        ),
+        );
+      },
 
       onSuccess: async () => {
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: [
-              'powerOfAttorney',
-              id,
-            ],
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey: [
-              'powerOfAttorneys',
-            ],
-          }),
-        ]);
+        await refreshRelatedViews();
 
         toast.success(
           'Durum güncellendi'
@@ -409,7 +685,8 @@ const PowerOfAttorneyDetail = () => {
         toast.error(
           error?.response
             ?.data?.message ||
-            'Durum güncellenemedi'
+          error?.message ||
+          'Durum güncellenemedi'
         );
       },
     });
@@ -431,7 +708,14 @@ const PowerOfAttorneyDetail = () => {
         return;
       }
 
-      if (!docId) {
+      const normalizedDocumentId =
+        normalizeId(
+          docId
+        );
+
+      if (
+        !normalizedDocumentId
+      ) {
         toast.error(
           'Belge bulunamadı'
         );
@@ -439,45 +723,79 @@ const PowerOfAttorneyDetail = () => {
         return;
       }
 
+      if (
+        downloadingId
+      ) {
+        return;
+      }
+
+      setDownloadingId(
+        normalizedDocumentId
+      );
+
+      let objectUrl = null;
+      let link = null;
+
       try {
         const response =
           await documentApi.download(
-            docId
+            normalizedDocumentId
           );
 
-        const blob =
-          new Blob([
-            response.data,
-          ]);
+        const contentType =
+          response.headers?.[
+            'content-type'
+          ] ||
+          'application/octet-stream';
 
-        const url =
+        const blob =
+          response.data instanceof
+            Blob
+            ? response.data
+            : new Blob(
+                [
+                  response.data,
+                ],
+                {
+                  type:
+                    contentType,
+                }
+              );
+
+        if (
+          blob.size <= 0
+        ) {
+          throw new Error(
+            'Sunucu boş dosya döndürdü'
+          );
+        }
+
+        objectUrl =
           window.URL.createObjectURL(
             blob
           );
 
-        const link =
-          document.createElement(
+        link =
+          window.document.createElement(
             'a'
           );
 
         link.href =
-          url;
+          objectUrl;
 
         link.download =
-          docName ||
-          'belge';
+          sanitizeDownloadFilename(
+            docName
+          );
 
-        document.body.appendChild(
+        link.style.display =
+          'none';
+
+        window.document.body.appendChild(
           link
         );
 
         link.click();
-
-        link.remove();
-
-        window.URL.revokeObjectURL(
-          url
-        );
 
         toast.success(
           'Belge indirildi'
@@ -491,17 +809,52 @@ const PowerOfAttorneyDetail = () => {
         toast.error(
           error?.response
             ?.data?.message ||
-            'Belge indirilemedi'
+          error?.message ||
+          'Belge indirilemedi'
         );
+      } finally {
+        setDownloadingId(
+          ''
+        );
+
+        if (
+          link?.parentNode
+        ) {
+          link.parentNode.removeChild(
+            link
+          );
+        }
+
+        if (
+          objectUrl
+        ) {
+          window.setTimeout(
+            () =>
+              window.URL.revokeObjectURL(
+                objectUrl
+              ),
+            1000
+          );
+        }
       }
     };
 
   // ======================================================
   // DELETE
   // ======================================================
+  // ======================================================
+  // DELETE
+  // ======================================================
 
   const handleDelete =
     () => {
+      if (
+        deleteMutation.isPending ||
+        updateStatusMutation.isPending
+      ) {
+        return;
+      }
+
       if (!canDelete) {
         toast.error(
           'Bu vekaletnameyi silme yetkiniz bulunmuyor'
@@ -588,15 +941,28 @@ const PowerOfAttorneyDetail = () => {
   // ======================================================
 
   const title =
-    item.title?.trim() ||
+    String(
+      item.title ||
+      ''
+    ).trim() ||
     `${item.client?.name || 'Müvekkil'} Vekaletnamesi`;
 
   const documents =
-    Array.isArray(
+    normalizeDocuments(
       item.documents
-    )
-      ? item.documents
-      : [];
+    );
+
+  const clientId =
+    normalizeId(
+      item.client?.id ??
+      item.client_id
+    );
+
+  const caseId =
+    normalizeId(
+      item.case?.id ??
+      item.case_id
+    );
 
   // ======================================================
   // RENDER
@@ -675,13 +1041,26 @@ const PowerOfAttorneyDetail = () => {
               value={
                 item.status
               }
-              onChange={(event) =>
+              onChange={(event) => {
+                const nextStatus =
+                  event.target.value;
+
+                if (
+                  nextStatus ===
+                    item.status ||
+                  updateStatusMutation.isPending ||
+                  deleteMutation.isPending
+                ) {
+                  return;
+                }
+
                 updateStatusMutation.mutate(
-                  event.target.value
-                )
-              }
+                  nextStatus
+                );
+              }}
               disabled={
-                updateStatusMutation.isPending
+                updateStatusMutation.isPending ||
+                deleteMutation.isPending
               }
               className="
                 rounded-md
@@ -725,7 +1104,9 @@ const PowerOfAttorneyDetail = () => {
 
           {canEdit && (
             <Link
-              to={`/power-of-attorney/${item.id}/edit`}
+              to={`/power-of-attorney/${normalizeId(
+                item.id
+              )}/edit`}
             >
               <Button
                 variant="outline"
@@ -749,7 +1130,8 @@ const PowerOfAttorneyDetail = () => {
                 deleteMutation.isPending
               }
               disabled={
-                deleteMutation.isPending
+                deleteMutation.isPending ||
+                updateStatusMutation.isPending
               }
             >
               <Trash2 className="mr-2 h-4 w-4" />
@@ -798,14 +1180,13 @@ const PowerOfAttorneyDetail = () => {
 
               </div>
 
-              {item.client ? (
+              {clientId ? (
                 <Link
-                  to={`/clients/${item.client.id || item.client_id}`}
+                  to={`/clients/${clientId}`}
                   className="font-medium text-blue-600 hover:underline dark:text-blue-400"
                 >
-                  {
-                    item.client.name
-                  }
+                  {item.client?.name ||
+                    'Müvekkili Görüntüle'}
                 </Link>
               ) : (
                 <span className="text-gray-400">
@@ -834,17 +1215,16 @@ const PowerOfAttorneyDetail = () => {
                 İlişkili Dava
               </p>
 
-              {item.case ? (
+              {caseId ? (
                 <Link
-                  to={`/cases/${item.case.id}`}
+                  to={`/cases/${caseId}`}
                   className="mt-1 inline-block font-medium text-blue-600 hover:underline dark:text-blue-400"
                 >
-                  {
-                    item.case.title
-                  }
+                  {item.case?.title ||
+                    item.case?.court_name ||
+                    'Davayı Görüntüle'}
 
-                  {item.case
-                    .case_number &&
+                  {item.case?.case_number &&
                     ` · ${item.case.case_number}`}
                 </Link>
               ) : (
@@ -1038,7 +1418,9 @@ const PowerOfAttorneyDetail = () => {
 
             {canUploadDocuments && (
               <Link
-                to={`/documents/upload?power_of_attorney_id=${item.id}`}
+                to={`/documents/upload?power_of_attorney_id=${normalizeId(
+                  item.id
+                )}`}
               >
                 <Button
                   size="sm"
@@ -1057,7 +1439,17 @@ const PowerOfAttorneyDetail = () => {
 
         <Card.Body>
 
-          {documents.length ===
+          {!canViewDocuments ? (
+            <div className="py-8 text-center">
+              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-400 dark:bg-gray-800">
+                <Inbox className="h-5 w-5" />
+              </div>
+
+              <p className="mt-3 font-medium text-gray-700 dark:text-gray-300">
+                Belgeleri görüntüleme yetkiniz bulunmuyor
+              </p>
+            </div>
+          ) : documents.length ===
           0 ? (
             <div className="py-8 text-center">
 
@@ -1075,7 +1467,9 @@ const PowerOfAttorneyDetail = () => {
 
               {canUploadDocuments && (
                 <Link
-                  to={`/documents/upload?power_of_attorney_id=${item.id}`}
+                  to={`/documents/upload?power_of_attorney_id=${normalizeId(
+                  item.id
+                )}`}
                   className="mt-3 inline-block text-sm text-blue-600 hover:underline"
                 >
                   İlk belgeyi ekle
@@ -1124,7 +1518,9 @@ const PowerOfAttorneyDetail = () => {
                       <div className="min-w-0">
 
                         <Link
-                          to={`/documents/${doc.id}`}
+                          to={`/documents/${normalizeId(
+                            doc.id
+                          )}`}
                           className="block truncate font-medium text-gray-900 hover:text-blue-600 hover:underline dark:text-white"
                         >
                           {doc.name ||
@@ -1164,7 +1560,9 @@ const PowerOfAttorneyDetail = () => {
 
                       {canViewDocuments && (
                         <Link
-                          to={`/documents/${doc.id}`}
+                          to={`/documents/${normalizeId(
+                            doc.id
+                          )}`}
                         >
                           <Button
                             size="sm"
@@ -1180,6 +1578,17 @@ const PowerOfAttorneyDetail = () => {
                           type="button"
                           size="sm"
                           variant="secondary"
+                          loading={
+                            downloadingId ===
+                            normalizeId(
+                              doc.id
+                            )
+                          }
+                          disabled={
+                            Boolean(
+                              downloadingId
+                            )
+                          }
                           onClick={() =>
                             handleDownload(
                               doc.id,
@@ -1209,7 +1618,8 @@ const PowerOfAttorneyDetail = () => {
 
       {/* LEGACY FILE */}
 
-      {item.file_url &&
+      {canViewDocuments &&
+        item.file_url &&
         documents.length ===
           0 && (
           <Card>
