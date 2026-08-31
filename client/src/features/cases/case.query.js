@@ -175,13 +175,53 @@ const findClientInCache = (
   return null;
 };
 
-const getCaseClientId = (source) => {
+const getCaseClientIds = (
+  source
+) => {
   const item =
-    getResponseItem(source);
+    getResponseItem(
+      source
+    );
 
-  return normalizeId(
-    item?.client_id ??
-    item?.client?.id
+  const candidates =
+    Array.isArray(
+      item?.client_ids
+    )
+      ? item.client_ids
+      : Array.isArray(
+          item?.clients
+        )
+      ? item.clients.map(
+          (client) =>
+            client?.id ??
+            client
+        )
+      : [
+          item?.client_id ??
+          item?.client?.id,
+        ];
+
+  return [
+    ...new Set(
+      candidates
+        .map(
+          normalizeId
+        )
+        .filter(
+          Boolean
+        )
+    ),
+  ];
+};
+
+const getCaseClientId = (
+  source
+) => {
+  return (
+    getCaseClientIds(
+      source
+    )[0] ||
+    ''
   );
 };
 
@@ -623,18 +663,30 @@ const invalidateClientCaseViews =
     const normalizedIds = [
       ...new Set(
         clientIds
-          .map(normalizeId)
-          .filter(Boolean)
+          .flatMap(
+            (value) =>
+              Array.isArray(
+                value
+              )
+                ? value
+                : [
+                    value,
+                  ]
+          )
+          .map(
+            normalizeId
+          )
+          .filter(
+            Boolean
+          )
       ),
     ];
 
-    if (
-      normalizedIds.length ===
-      0
-    ) {
-      return;
-    }
-
+    /*
+     * Müvekkil listesinde case_count liste endpoint'inden geliyor.
+     * Spesifik client ID çözülemese bile dava create/update/delete
+     * sonrası ['clients'] mutlaka invalidate edilmelidir.
+     */
     const invalidations = [
       queryClient.invalidateQueries({
         queryKey: [
@@ -1142,8 +1194,11 @@ export const useCreateCase =
             [
               normalizeMutationData(
                 variables
+              )?.client_ids,
+              normalizeMutationData(
+                variables
               )?.client_id,
-              getCaseClientId(
+              getCaseClientIds(
                 response
               ),
             ]
@@ -1202,7 +1257,7 @@ export const useUpdateCase =
         if (!caseId) {
           return {
             caseId: '',
-            oldClientId: '',
+            oldClientIds: [],
           };
         }
 
@@ -1233,8 +1288,8 @@ export const useUpdateCase =
 
         return {
           caseId,
-          oldClientId:
-            getCaseClientId(
+          oldClientIds:
+            getCaseClientIds(
               previousDetail
             ),
         };
@@ -1256,14 +1311,32 @@ export const useUpdateCase =
             variables?.data
           );
 
-        const newClientId =
-          normalizeId(
+        const submittedClientIds =
+          Array.isArray(
             submittedData
-              ?.client_id ??
-            getCaseClientId(
-              response
-            )
-          );
+              ?.client_ids
+          )
+            ? submittedData.client_ids
+            : [];
+
+        const newClientIds = [
+          ...new Set(
+            [
+              ...submittedClientIds,
+              submittedData
+                ?.client_id,
+              ...getCaseClientIds(
+                response
+              ),
+            ]
+              .map(
+                normalizeId
+              )
+              .filter(
+                Boolean
+              )
+          ),
+        ];
 
         /*
          * Önce API'nin güncel detail cevabını almaya çalış.
@@ -1294,8 +1367,8 @@ export const useUpdateCase =
           invalidateClientCaseViews(
             queryClient,
             [
-              context?.oldClientId,
-              newClientId,
+              context?.oldClientIds,
+              newClientIds,
             ]
           ),
         ]);
@@ -1374,8 +1447,8 @@ export const useDeleteCase =
 
         return {
           caseId,
-          clientId:
-            getCaseClientId(
+          clientIds:
+            getCaseClientIds(
               previousDetail
             ),
         };
@@ -1436,7 +1509,7 @@ export const useDeleteCase =
           invalidateClientCaseViews(
             queryClient,
             [
-              context?.clientId,
+              context?.clientIds,
             ]
           ),
         ]);
@@ -1513,9 +1586,24 @@ export const useUpdateCaseStatus =
           );
         }
 
-        await invalidateCaseCollections(
-          queryClient
-        );
+        const relatedClientIds =
+          getCaseClientIds(
+            syncedResponse ??
+            response
+          );
+
+        await Promise.all([
+          invalidateCaseCollections(
+            queryClient
+          ),
+
+          invalidateClientCaseViews(
+            queryClient,
+            [
+              relatedClientIds,
+            ]
+          ),
+        ]);
 
         toast.success(
           'Dava durumu güncellendi'
@@ -1779,9 +1867,15 @@ export const useBulkUpdateCaseStatus =
           }
         );
 
-        await invalidateCaseCollections(
-          queryClient
-        );
+        await Promise.all([
+          invalidateCaseCollections(
+            queryClient
+          ),
+
+          invalidateClientCaseViews(
+            queryClient
+          ),
+        ]);
 
         toast.success(
           `${normalizedIds.length} davanın durumu güncellendi`
