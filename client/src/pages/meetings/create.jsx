@@ -1,15 +1,19 @@
 import {
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
 import {
   Link,
   useNavigate,
+  useSearchParams,
 } from 'react-router-dom';
 
 import {
   useQuery,
+  useQueryClient,
 } from '@tanstack/react-query';
 
 import {
@@ -47,6 +51,24 @@ import toast from 'react-hot-toast';
 // ======================================================
 // CONSTANTS
 // ======================================================
+
+const MAX_TITLE_LENGTH =
+  255;
+
+const MAX_DESCRIPTION_LENGTH =
+  5000;
+
+const MAX_LOCATION_LENGTH =
+  500;
+
+const MAX_NOTES_LENGTH =
+  5000;
+
+const MAX_ATTENDEE_NAME_LENGTH =
+  200;
+
+const MAX_ATTENDEE_ROLE_LENGTH =
+  150;
 
 const INITIAL_FORM = {
   title: '',
@@ -105,6 +127,225 @@ const STATUS_OPTIONS = [
 // ======================================================
 // HELPERS
 // ======================================================
+
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id ??
+      value?._id;
+
+    if (
+      objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+    ) {
+      return '';
+    }
+
+    return String(
+      objectId
+    );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getArrayPayload = (
+  response
+) => {
+  const candidates = [
+    response?.data?.data,
+    response?.data,
+    response,
+  ];
+
+  for (
+    const candidate of
+    candidates
+  ) {
+    if (
+      Array.isArray(
+        candidate
+      )
+    ) {
+      return candidate;
+    }
+
+    if (
+      Array.isArray(
+        candidate?.data
+      )
+    ) {
+      return candidate.data;
+    }
+
+    if (
+      Array.isArray(
+        candidate?.items
+      )
+    ) {
+      return candidate.items;
+    }
+
+    if (
+      Array.isArray(
+        candidate?.results
+      )
+    ) {
+      return candidate.results;
+    }
+
+    if (
+      Array.isArray(
+        candidate?.rows
+      )
+    ) {
+      return candidate.rows;
+    }
+
+    if (
+      Array.isArray(
+        candidate?.cases
+      )
+    ) {
+      return candidate.cases;
+    }
+  }
+
+  return [];
+};
+
+const getResponseItem = (
+  response
+) => {
+  return (
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    null
+  );
+};
+
+const getBackendFieldErrors = (
+  error
+) => {
+  const source =
+    error?.response?.data?.errors ??
+    error?.response?.data?.validation_errors ??
+    null;
+
+  if (!source) {
+    return {};
+  }
+
+  if (
+    Array.isArray(
+      source
+    )
+  ) {
+    return source.reduce(
+      (
+        result,
+        item
+      ) => {
+        const field =
+          item?.path ??
+          item?.param ??
+          item?.field;
+
+        const message =
+          item?.msg ??
+          item?.message;
+
+        if (
+          field &&
+          message
+        ) {
+          result[field] =
+            String(
+              message
+            );
+        }
+
+        return result;
+      },
+      {}
+    );
+  }
+
+  if (
+    typeof source ===
+    'object'
+  ) {
+    return Object.entries(
+      source
+    ).reduce(
+      (
+        result,
+        [field, value]
+      ) => {
+        const message =
+          Array.isArray(
+            value
+          )
+            ? value[0]
+            : value;
+
+        if (
+          message !== null &&
+          message !== undefined
+        ) {
+          result[field] =
+            String(
+              message
+            );
+        }
+
+        return result;
+      },
+      {}
+    );
+  }
+
+  return {};
+};
+
+const getErrorMessage = (
+  error,
+  fallback
+) => {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    fallback
+  );
+};
+
+const isAllowedOption = (
+  options,
+  value
+) => {
+  return options.some(
+    (option) =>
+      option.value ===
+      value
+  );
+};
 
 const getRoleLabel = (
   role
@@ -287,17 +528,70 @@ const MeetingCreate = () => {
   const navigate =
     useNavigate();
 
+  const queryClient =
+    useQueryClient();
+
+  const [
+    searchParams,
+  ] =
+    useSearchParams();
+
+  /*
+   * ClientDetail şu URL ile gelir:
+   *   /meetings/create?client_id=<id>
+   *
+   * Eski ekran query parametresini hiç okumuyordu.
+   * Geriye dönük uyumluluk için client/clientId ve case/caseId
+   * alias'larını da kabul ediyoruz.
+   */
+  const requestedClientId =
+    normalizeId(
+      searchParams.get(
+        'client_id'
+      ) ??
+      searchParams.get(
+        'client'
+      ) ??
+      searchParams.get(
+        'clientId'
+      )
+    );
+
+  const requestedCaseId =
+    normalizeId(
+      searchParams.get(
+        'case_id'
+      ) ??
+      searchParams.get(
+        'case'
+      ) ??
+      searchParams.get(
+        'caseId'
+      )
+    );
+
   const {
     user,
   } =
     useAuth();
+
+  const prefillAppliedRef =
+    useRef(false);
 
   const [
     formData,
     setFormData,
   ] =
     useState(
-      INITIAL_FORM
+      () => ({
+        ...INITIAL_FORM,
+
+        client_id:
+          requestedClientId,
+
+        case_id:
+          requestedCaseId,
+      })
     );
 
   const [
@@ -364,6 +658,37 @@ const MeetingCreate = () => {
 
   const {
     data:
+      requestedClientData,
+    isLoading:
+      requestedClientLoading,
+    error:
+      requestedClientError,
+  } =
+    useQuery({
+      queryKey: [
+        'client',
+        requestedClientId,
+      ],
+
+      queryFn: () =>
+        clientApi.getOne(
+          requestedClientId
+        ),
+
+      enabled:
+        Boolean(
+          requestedClientId
+        ),
+
+      staleTime:
+        0,
+
+      retry:
+        false,
+    });
+
+  const {
+    data:
       clientCasesData,
     isLoading:
       clientCasesLoading,
@@ -406,61 +731,61 @@ const MeetingCreate = () => {
   // ====================================================
 
   const cases =
-    Array.isArray(
-      casesData?.data?.data
-    )
-      ? casesData.data.data
-      : [];
+    getArrayPayload(
+      casesData
+    );
+
+  const baseClients =
+    getArrayPayload(
+      clientsData
+    );
+
+  const requestedClient =
+    getResponseItem(
+      requestedClientData
+    );
 
   const clients =
-    Array.isArray(
-      clientsData?.data?.data
-    )
-      ? clientsData.data.data
-      : [];
+    useMemo(() => {
+      const result = [
+        ...baseClients,
+      ];
+
+      const requestedId =
+        normalizeId(
+          requestedClient?.id
+        );
+
+      if (
+        requestedId &&
+        !result.some(
+          (client) =>
+            normalizeId(
+              client?.id
+            ) ===
+            requestedId
+        )
+      ) {
+        result.unshift(
+          requestedClient
+        );
+      }
+
+      return result;
+    }, [
+      baseClients,
+      requestedClient,
+    ]);
 
   const users =
-    Array.isArray(
-      usersData?.data?.data
-    )
-      ? usersData.data.data
-      : [];
+    getArrayPayload(
+      usersData
+    );
 
   const clientCases =
-    useMemo(() => {
-      const payload =
-        clientCasesData?.data?.data ??
-        clientCasesData?.data ??
-        [];
-
-      if (
-        Array.isArray(
-          payload
-        )
-      ) {
-        return payload;
-      }
-
-      if (
-        Array.isArray(
-          payload?.data
-        )
-      ) {
-        return payload.data;
-      }
-
-      if (
-        Array.isArray(
-          payload?.cases
-        )
-      ) {
-        return payload.cases;
-      }
-
-      return [];
-    }, [
-      clientCasesData,
-    ]);
+    getArrayPayload(
+      clientCasesData
+    );
 
   const relationCases =
     formData.client_id
@@ -472,22 +797,59 @@ const MeetingCreate = () => {
       ? clientCasesLoading
       : casesLoading;
 
+  const clientSelectLoading =
+    clientsLoading ||
+    (
+      Boolean(
+        requestedClientId
+      ) &&
+      requestedClientLoading
+    );
+
   const assignableUsers =
     useMemo(() => {
+      const normalizedUserId =
+        normalizeId(
+          user?.id
+        );
+
       if (
         user?.role ===
         'admin'
       ) {
-        return users;
+        return users.filter(
+          (person) =>
+            person?.is_active !==
+            false
+        );
       }
 
-      return users.filter(
-        (
-          person
-        ) =>
-          person.id ===
-          user?.id
-      );
+      const currentUserInList =
+        users.find(
+          (person) =>
+            normalizeId(
+              person?.id
+            ) ===
+            normalizedUserId
+        );
+
+      if (
+        currentUserInList
+      ) {
+        return [
+          currentUserInList,
+        ];
+      }
+
+      return normalizedUserId
+        ? [
+            {
+              ...user,
+              id:
+                normalizedUserId,
+            },
+          ]
+        : [];
     }, [
       users,
       user,
@@ -499,10 +861,10 @@ const MeetingCreate = () => {
         (
           item
         ) =>
-          String(
-            item.id
+          normalizeId(
+            item?.id
           ) ===
-          String(
+          normalizeId(
             formData.case_id
           )
       );
@@ -517,10 +879,10 @@ const MeetingCreate = () => {
         (
           item
         ) =>
-          String(
-            item.id
+          normalizeId(
+            item?.id
           ) ===
-          String(
+          normalizeId(
             formData.client_id
           )
       );
@@ -528,6 +890,97 @@ const MeetingCreate = () => {
       clients,
       formData.client_id,
     ]);
+
+  useEffect(() => {
+    if (
+      prefillAppliedRef.current
+    ) {
+      return;
+    }
+
+    if (
+      requestedClientId
+    ) {
+      if (
+        requestedClientLoading
+      ) {
+        return;
+      }
+
+      if (
+        requestedClientError ||
+        !requestedClient
+      ) {
+        prefillAppliedRef.current =
+          true;
+
+        setFormData(
+          (
+            current
+          ) => ({
+            ...current,
+            client_id:
+              '',
+            case_id:
+              '',
+          })
+        );
+
+        toast.error(
+          'Bağlantıdaki müvekkil artık erişilebilir değil'
+        );
+
+        return;
+      }
+    }
+
+    if (
+      requestedClientId &&
+      normalizeId(
+        requestedClient?.id
+      ) !==
+        requestedClientId
+    ) {
+      return;
+    }
+
+    setFormData(
+      (
+        current
+      ) => ({
+        ...current,
+
+        client_id:
+          requestedClientId ||
+          current.client_id,
+
+        case_id:
+          requestedCaseId ||
+          current.case_id,
+
+        /*
+         * ClientDetail üzerinden toplantı oluşturuluyorsa toplantı tipi
+         * varsayılan olarak müvekkil görüşmesine çekilir. Kullanıcı isterse
+         * sonradan değiştirebilir.
+         */
+        meeting_type:
+          requestedClientId &&
+          current.meeting_type ===
+            'other'
+            ? 'client'
+            : current.meeting_type,
+      })
+    );
+
+    prefillAppliedRef.current =
+      true;
+  }, [
+    requestedClientId,
+    requestedCaseId,
+    requestedClient,
+    requestedClientLoading,
+    requestedClientError,
+  ]);
 
   // ====================================================
   // MUTATION
@@ -540,35 +993,225 @@ const MeetingCreate = () => {
     ...createMeeting,
 
     mutate: (
-      data
-    ) =>
-      createMeeting.mutate(
-        data,
-        {
-          onSuccess: (
-            response
-          ) => {
-            const meeting =
-              response?.data?.data ??
-              response?.data ??
-              null;
+      submitData
+    ) => {
+      if (
+        createMeeting.isPending
+      ) {
+        return;
+      }
 
-            if (
-              meeting?.id
-            ) {
-              navigate(
-                `/meetings/${meeting.id}`
+      createMeeting.mutate(
+        submitData,
+        {
+          onSuccess:
+            async (
+              response
+            ) => {
+              const meeting =
+                getResponseItem(
+                  response
+                );
+
+              const meetingId =
+                normalizeId(
+                  meeting?.id
+                );
+
+              const clientId =
+                normalizeId(
+                  meeting?.client_id ??
+                  meeting?.client?.id ??
+                  submitData?.client_id
+                );
+
+              const caseId =
+                normalizeId(
+                  meeting?.case_id ??
+                  meeting?.case?.id ??
+                  submitData?.case_id
+                );
+
+              if (
+                meetingId
+              ) {
+                queryClient.setQueryData(
+                  [
+                    'meeting',
+                    meetingId,
+                  ],
+                  response
+                );
+              }
+
+              /*
+               * Merkezi meeting hook'unun invalidation'ı ne olursa olsun,
+               * ClientDetail cockpit ve ilişkili case/client ekranlarını
+               * create -> navigate yarışına karşı burada da await ediyoruz.
+               */
+              const invalidations = [
+                queryClient.invalidateQueries({
+                  queryKey: [
+                    'meetings',
+                  ],
+                }),
+
+                queryClient.invalidateQueries({
+                  queryKey: [
+                    'calendar-meetings',
+                  ],
+                }),
+
+                queryClient.invalidateQueries({
+                  queryKey: [
+                    'calendar-events',
+                  ],
+                }),
+
+                queryClient.invalidateQueries({
+                  queryKey: [
+                    'dashboard-meetings',
+                  ],
+                }),
+
+                queryClient.invalidateQueries({
+                  queryKey: [
+                    'dashboard-stats',
+                  ],
+                }),
+
+                /*
+                 * useClientMeetingTimeline'ın kullandığı namespace sürümlerine
+                 * karşı prefix invalidation. Kullanılmayan alias zararsızdır.
+                 */
+                queryClient.invalidateQueries({
+                  queryKey: [
+                    'client-meetings',
+                  ],
+                }),
+
+                queryClient.invalidateQueries({
+                  queryKey: [
+                    'client-meeting-timeline',
+                  ],
+                }),
+
+                queryClient.invalidateQueries({
+                  queryKey: [
+                    'client-meeting-overview',
+                  ],
+                }),
+              ];
+
+              if (
+                clientId
+              ) {
+                invalidations.push(
+                  queryClient.invalidateQueries({
+                    queryKey: [
+                      'client',
+                      clientId,
+                    ],
+                  }),
+
+                  queryClient.invalidateQueries({
+                    predicate:
+                      (query) => {
+                        const key =
+                          query.queryKey;
+
+                        if (
+                          !Array.isArray(
+                            key
+                          )
+                        ) {
+                          return false;
+                        }
+
+                        return (
+                          key.some(
+                            (part) =>
+                              normalizeId(
+                                part
+                              ) ===
+                              clientId
+                          ) &&
+                          key.some(
+                            (part) =>
+                              typeof part ===
+                                'string' &&
+                              part
+                                .toLocaleLowerCase(
+                                  'en-US'
+                                )
+                                .includes(
+                                  'meeting'
+                                )
+                          )
+                        );
+                      },
+                  })
+                );
+              }
+
+              if (
+                caseId
+              ) {
+                invalidations.push(
+                  queryClient.invalidateQueries({
+                    queryKey: [
+                      'case',
+                      caseId,
+                    ],
+                  }),
+
+                  queryClient.invalidateQueries({
+                    queryKey: [
+                      'case-meetings',
+                      caseId,
+                    ],
+                  })
+                );
+              }
+
+              await Promise.all(
+                invalidations
               );
 
-              return;
-            }
+              navigate(
+                meetingId
+                  ? `/meetings/${meetingId}`
+                  : '/meetings'
+              );
+            },
 
-            navigate(
-              '/meetings'
-            );
+          onError: (
+            error
+          ) => {
+            const fieldErrors =
+              getBackendFieldErrors(
+                error
+              );
+
+            if (
+              Object.keys(
+                fieldErrors
+              ).length >
+              0
+            ) {
+              setErrors(
+                (
+                  current
+                ) => ({
+                  ...current,
+                  ...fieldErrors,
+                })
+              );
+            }
           },
         }
-      ),
+      );
+    },
   };
 
   // ====================================================
@@ -579,6 +1222,12 @@ const MeetingCreate = () => {
     (
       event
     ) => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       const {
         name,
         value,
@@ -597,10 +1246,28 @@ const MeetingCreate = () => {
               ...current,
 
               client_id:
-                value,
+                normalizeId(
+                  value
+                ),
 
               case_id:
                 '',
+            };
+          }
+
+          if (
+            name ===
+            'case_id' ||
+            name ===
+            'assigned_to'
+          ) {
+            return {
+              ...current,
+
+              [name]:
+                normalizeId(
+                  value
+                ),
             };
           }
 
@@ -634,11 +1301,27 @@ const MeetingCreate = () => {
 
   const handleAddAttendee =
     () => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       const name =
-        attendeeName.trim();
+        attendeeName
+          .trim()
+          .slice(
+            0,
+            MAX_ATTENDEE_NAME_LENGTH
+          );
 
       const role =
-        attendeeRole.trim();
+        attendeeRole
+          .trim()
+          .slice(
+            0,
+            MAX_ATTENDEE_ROLE_LENGTH
+          );
 
       if (!name) {
         return;
@@ -701,6 +1384,12 @@ const MeetingCreate = () => {
     (
       index
     ) => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       setFormData(
         (
           current
@@ -730,14 +1419,84 @@ const MeetingCreate = () => {
     ) => {
       event.preventDefault();
 
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       const newErrors =
         {};
 
+      const title =
+        formData.title
+          .trim();
+
+      const description =
+        formData.description
+          ?.trim() ||
+        '';
+
+      const location =
+        formData.location
+          ?.trim() ||
+        '';
+
+      const meetingLink =
+        formData.meeting_link
+          ?.trim() ||
+        '';
+
+      const notes =
+        formData.notes
+          ?.trim() ||
+        '';
+
+      const clientId =
+        normalizeId(
+          formData.client_id
+        );
+
+      const caseId =
+        normalizeId(
+          formData.case_id
+        );
+
       if (
-        !formData.title.trim()
+        !title
       ) {
         newErrors.title =
           'Toplantı başlığı gereklidir';
+      } else if (
+        title.length >
+        MAX_TITLE_LENGTH
+      ) {
+        newErrors.title =
+          `Toplantı başlığı en fazla ${MAX_TITLE_LENGTH} karakter olabilir`;
+      }
+
+      if (
+        description.length >
+        MAX_DESCRIPTION_LENGTH
+      ) {
+        newErrors.description =
+          `Açıklama en fazla ${MAX_DESCRIPTION_LENGTH} karakter olabilir`;
+      }
+
+      if (
+        location.length >
+        MAX_LOCATION_LENGTH
+      ) {
+        newErrors.location =
+          `Toplantı yeri en fazla ${MAX_LOCATION_LENGTH} karakter olabilir`;
+      }
+
+      if (
+        notes.length >
+        MAX_NOTES_LENGTH
+      ) {
+        newErrors.notes =
+          `Notlar en fazla ${MAX_NOTES_LENGTH} karakter olabilir`;
       }
 
       if (
@@ -749,6 +1508,24 @@ const MeetingCreate = () => {
 
       if (
         formData.start_date &&
+        !localToUTC(
+          formData.start_date
+        )
+      ) {
+        newErrors.start_date =
+          'Geçerli bir başlangıç tarihi girin';
+      }
+
+      if (
+        formData.end_date &&
+        !localToUTC(
+          formData.end_date
+        )
+      ) {
+        newErrors.end_date =
+          'Geçerli bir bitiş tarihi girin';
+      } else if (
+        formData.start_date &&
         formData.end_date &&
         formData.end_date <
           formData.start_date
@@ -758,13 +1535,114 @@ const MeetingCreate = () => {
       }
 
       if (
-        formData.meeting_link &&
+        meetingLink &&
         !isValidHttpUrl(
-          formData.meeting_link
+          meetingLink
         )
       ) {
         newErrors.meeting_link =
           'Geçerli bir toplantı bağlantısı girin';
+      }
+
+      if (
+        !isAllowedOption(
+          MEETING_TYPE_OPTIONS,
+          formData.meeting_type
+        )
+      ) {
+        newErrors.meeting_type =
+          'Geçerli bir toplantı türü seçin';
+      }
+
+      if (
+        !isAllowedOption(
+          STATUS_OPTIONS,
+          formData.status
+        )
+      ) {
+        newErrors.status =
+          'Geçerli bir toplantı durumu seçin';
+      }
+
+      /*
+       * Query parametresi veya DOM manipülasyonu ile erişilemeyen bir
+       * müvekkil ID'sinin submit edilmesini engeller.
+       */
+      if (
+        clientId
+      ) {
+        const clientExists =
+          clients.some(
+            (client) =>
+              normalizeId(
+                client?.id
+              ) ===
+              clientId
+          );
+
+        if (
+          !clientExists ||
+          requestedClientError
+        ) {
+          newErrors.client_id =
+            'Seçilen müvekkil artık erişilebilir değil';
+        }
+      }
+
+      if (
+        caseId
+      ) {
+        const caseExists =
+          clientId &&
+          clientCases.some(
+            (caseItem) =>
+              normalizeId(
+                caseItem?.id
+              ) ===
+              caseId
+          );
+
+        if (
+          !caseExists
+        ) {
+          newErrors.case_id =
+            'Seçilen dava bu müvekkile bağlı değil veya artık erişilebilir değil';
+        }
+      }
+
+      const assignedTo =
+        user?.role !==
+        'admin'
+          ? normalizeId(
+              user?.id
+            )
+          : normalizeId(
+              formData.assigned_to
+            );
+
+      if (
+        user?.role !==
+          'admin' &&
+        !assignedTo
+      ) {
+        newErrors.assigned_to =
+          'Sorumlu kullanıcı belirlenemedi';
+      }
+
+      if (
+        user?.role ===
+          'admin' &&
+        assignedTo &&
+        !assignableUsers.some(
+          (person) =>
+            normalizeId(
+              person?.id
+            ) ===
+            assignedTo
+        )
+      ) {
+        newErrors.assigned_to =
+          'Seçilen kullanıcı artık atanabilir değil';
       }
 
       if (
@@ -777,39 +1655,32 @@ const MeetingCreate = () => {
           newErrors
         );
 
+        toast.error(
+          'Formdaki eksik veya hatalı alanları kontrol edin'
+        );
+
         return;
       }
-
-      const assignedTo =
-        user?.role !==
-        'admin'
-          ? user?.id
-          : formData.assigned_to;
 
       const submitData = {
         ...formData,
 
-        title:
-          formData.title.trim(),
+        title,
 
         description:
-          formData.description
-            ?.trim() ||
+          description ||
           null,
 
         location:
-          formData.location
-            ?.trim() ||
+          location ||
           null,
 
         meeting_link:
-          formData.meeting_link
-            ?.trim() ||
+          meetingLink ||
           null,
 
         notes:
-          formData.notes
-            ?.trim() ||
+          notes ||
           null,
 
         start_date:
@@ -818,16 +1689,18 @@ const MeetingCreate = () => {
           ),
 
         end_date:
-          localToUTC(
-            formData.end_date
-          ),
+          formData.end_date
+            ? localToUTC(
+                formData.end_date
+              )
+            : null,
 
         case_id:
-          formData.case_id ||
+          caseId ||
           null,
 
         client_id:
-          formData.client_id ||
+          clientId ||
           null,
 
         assigned_to:
@@ -835,13 +1708,106 @@ const MeetingCreate = () => {
           null,
 
         attendees:
-          formData.attendees,
+          formData.attendees
+            .map(
+              (
+                attendee
+              ) => ({
+                name:
+                  String(
+                    attendee?.name ??
+                    ''
+                  )
+                    .trim()
+                    .slice(
+                      0,
+                      MAX_ATTENDEE_NAME_LENGTH
+                    ),
+
+                role:
+                  String(
+                    attendee?.role ??
+                    'Katılımcı'
+                  )
+                    .trim()
+                    .slice(
+                      0,
+                      MAX_ATTENDEE_ROLE_LENGTH
+                    ) ||
+                  'Katılımcı',
+              })
+            )
+            .filter(
+              (
+                attendee
+              ) =>
+                Boolean(
+                  attendee.name
+                )
+            ),
       };
 
       mutation.mutate(
         submitData
       );
     };
+
+  const isDirty =
+    Boolean(
+      formData.title.trim() ||
+      formData.description.trim() ||
+      formData.start_date ||
+      formData.end_date ||
+      formData.location.trim() ||
+      formData.case_id ||
+      formData.client_id ||
+      formData.assigned_to ||
+      formData.attendees.length ||
+      formData.meeting_link.trim() ||
+      formData.notes.trim() ||
+      formData.meeting_type !==
+        'other' ||
+      formData.status !==
+        'scheduled'
+    );
+
+  const cancelDestination =
+    requestedClientId
+      ? `/clients/${requestedClientId}`
+      : '/meetings';
+
+  useEffect(() => {
+    const handleBeforeUnload =
+      (
+        event
+      ) => {
+        if (
+          !isDirty ||
+          mutation.isPending
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        event.returnValue =
+          '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+    mutation.isPending,
+  ]);
 
   // ====================================================
   // RENDER
@@ -855,7 +1821,28 @@ const MeetingCreate = () => {
       <div>
 
         <Link
-          to="/meetings"
+          to={
+            cancelDestination
+          }
+          onClick={(
+            event
+          ) => {
+            if (
+              mutation.isPending
+            ) {
+              event.preventDefault();
+              return;
+            }
+
+            if (
+              isDirty &&
+              !window.confirm(
+                'Kaydedilmemiş toplantı bilgileri var. Çıkmak istediğinize emin misiniz?'
+              )
+            ) {
+              event.preventDefault();
+            }
+          }}
           className="
             inline-flex
             items-center
@@ -871,7 +1858,9 @@ const MeetingCreate = () => {
         >
           <ArrowLeft className="h-3.5 w-3.5" />
 
-          Toplantılar
+          {requestedClientId
+            ? 'Müvekkil Detayı'
+            : 'Toplantılar'}
         </Link>
 
         <div className="mt-3 flex items-start gap-3">
@@ -991,6 +1980,9 @@ const MeetingCreate = () => {
               error={
                 errors.title
               }
+              maxLength={
+                MAX_TITLE_LENGTH
+              }
               placeholder="Örn: Dava stratejisi değerlendirme toplantısı"
               autoFocus
             />
@@ -1012,6 +2004,9 @@ const MeetingCreate = () => {
                   }
                   onChange={
                     handleChange
+                  }
+                  disabled={
+                    mutation.isPending
                   }
                   className="
                     h-10
@@ -1050,6 +2045,12 @@ const MeetingCreate = () => {
                   )}
                 </select>
 
+                {errors.meeting_type && (
+                  <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.meeting_type}
+                  </p>
+                )}
+
               </div>
 
               {/* STATUS */}
@@ -1067,6 +2068,9 @@ const MeetingCreate = () => {
                   }
                   onChange={
                     handleChange
+                  }
+                  disabled={
+                    mutation.isPending
                   }
                   className="
                     h-10
@@ -1105,6 +2109,12 @@ const MeetingCreate = () => {
                   )}
                 </select>
 
+                {errors.status && (
+                  <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.status}
+                  </p>
+                )}
+
               </div>
 
             </div>
@@ -1123,7 +2133,13 @@ const MeetingCreate = () => {
                 onChange={
                   handleChange
                 }
+                disabled={
+                  mutation.isPending
+                }
                 rows={4}
+                maxLength={
+                  MAX_DESCRIPTION_LENGTH
+                }
                 placeholder="Gündem, görüşülecek konular veya toplantının amacı..."
                 className="
                   w-full
@@ -1148,6 +2164,12 @@ const MeetingCreate = () => {
                   dark:placeholder:text-slate-500
                 "
               />
+
+              {errors.description && (
+                <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                  {errors.description}
+                </p>
+              )}
 
             </div>
 
@@ -1215,6 +2237,9 @@ const MeetingCreate = () => {
                 error={
                   errors.start_date
                 }
+              disabled={
+                mutation.isPending
+              }
               />
 
               <Input
@@ -1234,6 +2259,9 @@ const MeetingCreate = () => {
                   formData.start_date ||
                   undefined
                 }
+              disabled={
+                mutation.isPending
+              }
               />
 
             </div>
@@ -1248,6 +2276,12 @@ const MeetingCreate = () => {
                 }
                 onChange={
                   handleChange
+                }
+                maxLength={
+                  MAX_LOCATION_LENGTH
+                }
+                error={
+                  errors.location
                 }
                 placeholder="Örn: Toplantı Odası 1"
                 icon={
@@ -1366,7 +2400,8 @@ const MeetingCreate = () => {
                     handleChange
                   }
                   disabled={
-                    clientsLoading
+                    clientSelectLoading ||
+                    mutation.isPending
                   }
                   className="
                     h-10
@@ -1390,7 +2425,7 @@ const MeetingCreate = () => {
                   "
                 >
                   <option value="">
-                    {clientsLoading
+                    {clientSelectLoading
                       ? 'Müvekkiller yükleniyor...'
                       : 'Müvekkil seçin (isteğe bağlı)'}
                   </option>
@@ -1415,6 +2450,12 @@ const MeetingCreate = () => {
                     )
                   )}
                 </select>
+
+                {errors.client_id && (
+                  <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.client_id}
+                  </p>
+                )}
 
                 {selectedClient && (
                   <div
@@ -1465,7 +2506,8 @@ const MeetingCreate = () => {
                   }
                   disabled={
                     relationCasesLoading ||
-                    !formData.client_id
+                    !formData.client_id ||
+                    mutation.isPending
                   }
                   className="
                     h-10
@@ -1518,6 +2560,12 @@ const MeetingCreate = () => {
                     )
                   )}
                 </select>
+
+                {errors.case_id && (
+                  <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.case_id}
+                  </p>
+                )}
 
                 {!formData.client_id && (
                   <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
@@ -1635,7 +2683,8 @@ const MeetingCreate = () => {
                     handleChange
                   }
                   disabled={
-                    usersLoading
+                    usersLoading ||
+                    mutation.isPending
                   }
                   className="
                     h-10
@@ -1686,6 +2735,12 @@ const MeetingCreate = () => {
                     )
                   )}
                 </select>
+
+                {errors.assigned_to && (
+                  <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.assigned_to}
+                  </p>
+                )}
 
               </div>
             ) : (
@@ -1816,8 +2871,17 @@ const MeetingCreate = () => {
                   event
                 ) =>
                   setAttendeeName(
-                    event.target.value
+                    event.target.value.slice(
+                      0,
+                      MAX_ATTENDEE_NAME_LENGTH
+                    )
                   )
+                }
+                maxLength={
+                  MAX_ATTENDEE_NAME_LENGTH
+                }
+                disabled={
+                  mutation.isPending
                 }
                 onKeyDown={(
                   event
@@ -1862,8 +2926,17 @@ const MeetingCreate = () => {
                   event
                 ) =>
                   setAttendeeRole(
-                    event.target.value
+                    event.target.value.slice(
+                      0,
+                      MAX_ATTENDEE_ROLE_LENGTH
+                    )
                   )
+                }
+                maxLength={
+                  MAX_ATTENDEE_ROLE_LENGTH
+                }
+                disabled={
+                  mutation.isPending
                 }
                 onKeyDown={(
                   event
@@ -1904,6 +2977,9 @@ const MeetingCreate = () => {
                 variant="secondary"
                 onClick={
                   handleAddAttendee
+                }
+                disabled={
+                  mutation.isPending
                 }
               >
                 <Plus className="h-4 w-4" />
@@ -1961,6 +3037,9 @@ const MeetingCreate = () => {
                             index
                           )
                         }
+                        disabled={
+                          mutation.isPending
+                        }
                         className="text-gray-400 transition hover:text-red-500"
                         aria-label={`${attendee.name} katılımcısını kaldır`}
                       >
@@ -2006,7 +3085,13 @@ const MeetingCreate = () => {
               onChange={
                 handleChange
               }
+              disabled={
+                mutation.isPending
+              }
               rows={4}
+              maxLength={
+                MAX_NOTES_LENGTH
+              }
               placeholder="Toplantıyla ilgili büro içi notlar, hazırlık bilgileri veya hatırlatmalar..."
               className="
                 w-full
@@ -2031,6 +3116,12 @@ const MeetingCreate = () => {
                 dark:placeholder:text-slate-500
               "
             />
+
+            {errors.notes && (
+              <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                {errors.notes}
+              </p>
+            )}
 
           </Card.Body>
 
@@ -2137,11 +3228,26 @@ const MeetingCreate = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={() =>
+            onClick={() => {
+              if (
+                mutation.isPending
+              ) {
+                return;
+              }
+
+              if (
+                isDirty &&
+                !window.confirm(
+                  'Kaydedilmemiş toplantı bilgileri var. İptal etmek istediğinize emin misiniz?'
+                )
+              ) {
+                return;
+              }
+
               navigate(
-                '/meetings'
-              )
-            }
+                cancelDestination
+              );
+            }}
             disabled={
               mutation.isPending
             }
@@ -2153,6 +3259,10 @@ const MeetingCreate = () => {
             type="submit"
             loading={
               mutation.isPending
+            }
+            disabled={
+              mutation.isPending ||
+              clientSelectLoading
             }
           >
             <Save className="h-4 w-4" />
