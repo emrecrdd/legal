@@ -1,5 +1,4 @@
 import {
-  useMemo,
   useState,
 } from 'react';
 
@@ -9,11 +8,16 @@ import {
 } from 'react-router-dom';
 
 import {
-  useMutation,
   useQuery,
+  useQueryClient,
 } from '@tanstack/react-query';
 
 import caseApi from '../../features/cases/case.api.js';
+
+import {
+  useCreateCase,
+} from '../../features/cases/case.query.js';
+
 import clientApi from '../../features/clients/client.api.js';
 
 import {
@@ -198,31 +202,241 @@ const normalizeNullable = (
   return normalized || null;
 };
 
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id ??
+      value?._id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
+const normalizeIds = (
+  values
+) => {
+  if (
+    !Array.isArray(
+      values
+    )
+  ) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      values
+        .map(
+          normalizeId
+        )
+        .filter(
+          Boolean
+        )
+    ),
+  ];
+};
+
+const getArrayPayload = (
+  response
+) => {
+  const payload =
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    [];
+
+  if (
+    Array.isArray(
+      payload
+    )
+  ) {
+    return payload;
+  }
+
+  if (
+    Array.isArray(
+      payload?.data
+    )
+  ) {
+    return payload.data;
+  }
+
+  if (
+    Array.isArray(
+      payload?.items
+    )
+  ) {
+    return payload.items;
+  }
+
+  if (
+    Array.isArray(
+      payload?.results
+    )
+  ) {
+    return payload.results;
+  }
+
+  return [];
+};
+
+const getCreatedCaseId = (
+  response
+) => {
+  const payload =
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    null;
+
+  return normalizeId(
+    payload?.id
+  );
+};
+
+const getBackendFieldErrors = (
+  error
+) => {
+  const backendErrors =
+    error?.response
+      ?.data?.errors;
+
+  const nextErrors =
+    {};
+
+  if (
+    Array.isArray(
+      backendErrors
+    )
+  ) {
+    backendErrors.forEach(
+      (item) => {
+        const field =
+          item?.path ||
+          item?.param ||
+          item?.field;
+
+        if (
+          field
+        ) {
+          nextErrors[field] =
+            item?.msg ||
+            item?.message ||
+            'Geçersiz değer';
+        }
+      }
+    );
+  } else if (
+    backendErrors &&
+    typeof backendErrors ===
+      'object'
+  ) {
+    Object.entries(
+      backendErrors
+    ).forEach(
+      ([
+        field,
+        value,
+      ]) => {
+        if (
+          Array.isArray(
+            value
+          )
+        ) {
+          nextErrors[field] =
+            value
+              .filter(Boolean)
+              .join(', ');
+        } else if (
+          value
+        ) {
+          nextErrors[field] =
+            String(
+              value
+            );
+        }
+      }
+    );
+  }
+
+  return nextErrors;
+};
+
+const getTodayInputValue =
+  () => {
+    const today =
+      new Date();
+
+    const year =
+      today.getFullYear();
+
+    const month =
+      String(
+        today.getMonth() + 1
+      ).padStart(
+        2,
+        '0'
+      );
+
+    const day =
+      String(
+        today.getDate()
+      ).padStart(
+        2,
+        '0'
+      );
+
+    return `${year}-${month}-${day}`;
+};
+
 const isFutureDate = (
   value
 ) => {
-  if (!value) {
+  if (
+    !value
+  ) {
     return false;
   }
 
-  const selected =
-    new Date(
-      `${value}T00:00:00`
-    );
+  const normalized =
+    String(
+      value
+    ).trim();
 
-  const today =
-    new Date();
-
-  today.setHours(
-    0,
-    0,
-    0,
-    0
-  );
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      normalized
+    )
+  ) {
+    return false;
+  }
 
   return (
-    selected >
-    today
+    normalized >
+    getTodayInputValue()
   );
 };
 
@@ -233,6 +447,9 @@ const isFutureDate = (
 const CaseCreate = () => {
   const navigate =
     useNavigate();
+
+  const queryClient =
+    useQueryClient();
 
   const {
     user,
@@ -302,261 +519,300 @@ const CaseCreate = () => {
   // ======================================================
 
   const clients =
-    Array.isArray(
-      clientsData?.data?.data
-    )
-      ? clientsData.data.data
-      : [];
+    getArrayPayload(
+      clientsData
+    );
+
+  const assignableLawyers =
+    getArrayPayload(
+      lawyersData
+    );
+
+  const currentUserId =
+    normalizeId(
+      user?.id
+    );
 
   const lawyers =
-    Array.isArray(
-      lawyersData?.data?.data
+    currentUserId &&
+    !assignableLawyers.some(
+      (lawyer) =>
+        normalizeId(
+          lawyer?.id
+        ) ===
+        currentUserId
     )
-      ? lawyersData.data.data
-      : [];
+      ? [
+          {
+            id:
+              currentUserId,
+
+            first_name:
+              user?.first_name ||
+              '',
+
+            last_name:
+              user?.last_name ||
+              '',
+
+            name:
+              user?.name ||
+              user?.full_name ||
+              '',
+
+            email:
+              user?.email ||
+              '',
+          },
+          ...assignableLawyers,
+        ]
+      : assignableLawyers;
+
+  const selectedClientIds =
+    normalizeIds(
+      formData.client_ids
+    );
 
   const selectedClients =
-    useMemo(() => {
-      return clients.filter(
-        (
-          client
-        ) =>
-          formData.client_ids.includes(
-            client.id
+    clients.filter(
+      (client) =>
+        selectedClientIds.includes(
+          normalizeId(
+            client?.id
           )
-      );
-    }, [
-      clients,
-      formData.client_ids,
-    ]);
+        )
+    );
 
   const availableClients =
-    useMemo(() => {
-      return clients.filter(
-        (
-          client
-        ) =>
-          !formData.client_ids.includes(
-            client.id
+    clients.filter(
+      (client) =>
+        !selectedClientIds.includes(
+          normalizeId(
+            client?.id
           )
-      );
-    }, [
-      clients,
-      formData.client_ids,
-    ]);
+        )
+    );
 
   const isDirty =
-    useMemo(() => {
-      return (
-        normalizeText(
-          formData.judiciary_type
-        ) !== '' ||
-        normalizeText(
-          formData.judiciary_unit
-        ) !== '' ||
-        normalizeText(
-          formData.court_name
-        ) !== '' ||
-        normalizeText(
-          formData.case_number
-        ) !== '' ||
-        formData.client_ids.length >
-          0 ||
-        formData.assigned_to !==
-          '' ||
-        formData.status !==
-          'preparation' ||
-        formData.priority !==
-          'normal' ||
-        normalizeText(
-          formData.subject
-        ) !== '' ||
-        normalizeText(
-          formData.description
-        ) !== '' ||
-        formData.opening_date !==
-          ''
-      );
-    }, [
-      formData,
-    ]);
+    (
+      normalizeText(
+        formData.judiciary_type
+      ) !== '' ||
+      normalizeText(
+        formData.judiciary_unit
+      ) !== '' ||
+      normalizeText(
+        formData.court_name
+      ) !== '' ||
+      normalizeText(
+        formData.case_number
+      ) !== '' ||
+      selectedClientIds.length >
+        0 ||
+      normalizeId(
+        formData.assigned_to
+      ) !== '' ||
+      formData.status !==
+        'preparation' ||
+      formData.priority !==
+        'normal' ||
+      normalizeText(
+        formData.subject
+      ) !== '' ||
+      normalizeText(
+        formData.description
+      ) !== '' ||
+      formData.opening_date !==
+        ''
+    );
 
   // ======================================================
   // MUTATION
   // ======================================================
 
   const mutation =
-    useMutation({
-      mutationFn: (
-        data
-      ) =>
-        caseApi.create(
-          data
-        ),
+    useCreateCase();
 
-      onSuccess: (
-        response
-      ) => {
-        toast.success(
-          'Dava başarıyla oluşturuldu'
+  const handleMutationError =
+    (
+      error
+    ) => {
+      const message =
+        error?.response
+          ?.data?.message ||
+        error?.message ||
+        'Dava oluşturulamadı';
+
+      const nextErrors =
+        getBackendFieldErrors(
+          error
         );
 
-        const id =
-          response?.data
-            ?.data?.id;
+      if (
+        /yargı türü|judiciary_type/i.test(
+          message
+        )
+      ) {
+        nextErrors.judiciary_type =
+          message;
+      }
 
-        if (id) {
-          navigate(
-            `/cases/${id}`
-          );
+      if (
+        /yargı birimi|judiciary_unit/i.test(
+          message
+        )
+      ) {
+        nextErrors.judiciary_unit =
+          message;
+      }
 
-          return;
-        }
+      if (
+        /mahkeme|court_name/i.test(
+          message
+        )
+      ) {
+        nextErrors.court_name =
+          message;
+      }
 
-        navigate(
-          '/cases'
+      if (
+        /dosya|esas|case_number/i.test(
+          message
+        )
+      ) {
+        nextErrors.case_number =
+          message;
+      }
+
+      if (
+        /müvekkil|client_ids/i.test(
+          message
+        )
+      ) {
+        nextErrors.client_ids =
+          message;
+      }
+
+      if (
+        /atanan|avukat|assigned_to/i.test(
+          message
+        )
+      ) {
+        nextErrors.assigned_to =
+          message;
+      }
+
+      if (
+        /durum|status/i.test(
+          message
+        )
+      ) {
+        nextErrors.status =
+          message;
+      }
+
+      if (
+        /öncelik|priority/i.test(
+          message
+        )
+      ) {
+        nextErrors.priority =
+          message;
+      }
+
+      if (
+        /konu|subject/i.test(
+          message
+        )
+      ) {
+        nextErrors.subject =
+          message;
+      }
+
+      if (
+        /açıklama|description/i.test(
+          message
+        )
+      ) {
+        nextErrors.description =
+          message;
+      }
+
+      if (
+        /açılış|opening_date/i.test(
+          message
+        )
+      ) {
+        nextErrors.opening_date =
+          message;
+      }
+
+      if (
+        Object.keys(
+          nextErrors
+        ).length >
+        0
+      ) {
+        setErrors(
+          (
+            current
+          ) => ({
+            ...current,
+            ...nextErrors,
+          })
         );
-      },
+      }
+    };
 
-      onError: (
-        error
-      ) => {
-        const backendErrors =
-          error?.response
-            ?.data?.errors;
+  const refreshCreatedCaseClientViews =
+    async (
+      clientIds
+    ) => {
+      const normalizedIds =
+        normalizeIds(
+          clientIds
+        );
 
-        const message =
-          error?.response
-            ?.data?.message ||
-          error?.message ||
-          'Dava oluşturulamadı';
+      if (
+        normalizedIds.length ===
+        0
+      ) {
+        return;
+      }
 
-        const nextErrors =
-          {};
+      const invalidations = [
+        queryClient.invalidateQueries({
+          queryKey: [
+            'clients',
+          ],
+        }),
+      ];
 
-        if (
-          Array.isArray(
-            backendErrors
-          )
-        ) {
-          backendErrors.forEach(
-            (
-              item
-            ) => {
-              const field =
-                item?.path ||
-                item?.param;
+      normalizedIds.forEach(
+        (clientId) => {
+          invalidations.push(
+            queryClient.invalidateQueries({
+              queryKey: [
+                'client',
+                clientId,
+              ],
+            }),
 
-              if (
-                field
-              ) {
-                nextErrors[field] =
-                  item?.msg ||
-                  'Geçersiz değer';
-              }
-            }
-          );
-        }
-
-        if (
-          /yargı türü|judiciary_type/i.test(
-            message
-          )
-        ) {
-          nextErrors.judiciary_type =
-            message;
-        }
-
-        if (
-          /yargı birimi|judiciary_unit/i.test(
-            message
-          )
-        ) {
-          nextErrors.judiciary_unit =
-            message;
-        }
-
-        if (
-          /mahkeme|court_name/i.test(
-            message
-          )
-        ) {
-          nextErrors.court_name =
-            message;
-        }
-
-        if (
-          /dosya|esas|case_number/i.test(
-            message
-          )
-        ) {
-          nextErrors.case_number =
-            message;
-        }
-
-        if (
-          /müvekkil|client_ids/i.test(
-            message
-          )
-        ) {
-          nextErrors.client_ids =
-            message;
-        }
-
-        if (
-          /konu|subject/i.test(
-            message
-          )
-        ) {
-          nextErrors.subject =
-            message;
-        }
-
-        if (
-          /açıklama|description/i.test(
-            message
-          )
-        ) {
-          nextErrors.description =
-            message;
-        }
-
-        if (
-          /açılış|opening_date/i.test(
-            message
-          )
-        ) {
-          nextErrors.opening_date =
-            message;
-        }
-
-        if (
-          Object.keys(
-            nextErrors
-          ).length >
-          0
-        ) {
-          setErrors(
-            (
-              current
-            ) => ({
-              ...current,
-              ...nextErrors,
+            queryClient.invalidateQueries({
+              queryKey: [
+                'clients',
+                clientId,
+                'cases',
+              ],
             })
           );
-
-          toast.error(
-            'Formdaki hatalı alanları kontrol edin'
-          );
-
-          return;
         }
+      );
 
-        toast.error(
-          message
-        );
-      },
-    });
+      await Promise.all(
+        invalidations
+      );
+    };
 
   // ======================================================
   // HANDLERS
@@ -566,6 +822,12 @@ const CaseCreate = () => {
     (
       event
     ) => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       const {
         name,
         value,
@@ -573,7 +835,12 @@ const CaseCreate = () => {
         event.target;
 
       let nextValue =
-        value;
+        name ===
+          'assigned_to'
+          ? normalizeId(
+              value
+            )
+          : value;
 
       if (
         name ===
@@ -673,14 +940,27 @@ const CaseCreate = () => {
   const handleAddClient =
     () => {
       if (
-        !clientToAdd
+        mutation.isPending
+      ) {
+        return;
+      }
+
+      const normalizedClientId =
+        normalizeId(
+          clientToAdd
+        );
+
+      if (
+        !normalizedClientId
       ) {
         return;
       }
 
       if (
-        formData.client_ids.includes(
-          clientToAdd
+        normalizeIds(
+          formData.client_ids
+        ).includes(
+          normalizedClientId
         )
       ) {
         return;
@@ -692,10 +972,11 @@ const CaseCreate = () => {
         ) => ({
           ...current,
 
-          client_ids: [
-            ...current.client_ids,
-            clientToAdd,
-          ],
+          client_ids:
+            normalizeIds([
+              ...current.client_ids,
+              normalizedClientId,
+            ]),
         })
       );
 
@@ -722,6 +1003,17 @@ const CaseCreate = () => {
     (
       id
     ) => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
+      const normalizedClientId =
+        normalizeId(
+          id
+        );
+
       setFormData(
         (
           current
@@ -729,15 +1021,29 @@ const CaseCreate = () => {
           ...current,
 
           client_ids:
-            current.client_ids.filter(
-              (
-                clientId
-              ) =>
+            normalizeIds(
+              current.client_ids
+            ).filter(
+              (clientId) =>
                 clientId !==
-                id
+                normalizedClientId
             ),
         })
       );
+
+      if (
+        errors.client_ids
+      ) {
+        setErrors(
+          (
+            current
+          ) => ({
+            ...current,
+            client_ids:
+              '',
+          })
+        );
+      }
     };
 
   // ======================================================
@@ -884,12 +1190,42 @@ const CaseCreate = () => {
       // CLIENT
       // ==================================================
 
+      const normalizedClientIds =
+        normalizeIds(
+          formData.client_ids
+        );
+
       if (
-        formData.client_ids.length ===
+        normalizedClientIds.length ===
         0
       ) {
         newErrors.client_ids =
           'En az bir müvekkil seçilmelidir';
+      } else {
+        const availableClientIds =
+          new Set(
+            clients.map(
+              (client) =>
+                normalizeId(
+                  client?.id
+                )
+            )
+          );
+
+        const hasInvalidClient =
+          normalizedClientIds.some(
+            (clientId) =>
+              !availableClientIds.has(
+                clientId
+              )
+          );
+
+        if (
+          hasInvalidClient
+        ) {
+          newErrors.client_ids =
+            'Seçili müvekkillerden biri artık erişilebilir değil';
+        }
       }
 
       // ==================================================
@@ -904,6 +1240,47 @@ const CaseCreate = () => {
       ) {
         newErrors.opening_date =
           'Dava açılış tarihi bugünden ileri bir tarih olamaz';
+      }
+
+      const assignedTo =
+        normalizeId(
+          formData.assigned_to
+        );
+
+      if (
+        assignedTo &&
+        !lawyers.some(
+          (lawyer) =>
+            normalizeId(
+              lawyer?.id
+            ) ===
+            assignedTo
+        )
+      ) {
+        newErrors.assigned_to =
+          'Seçilen avukat artık atanabilir değil';
+      }
+
+      if (
+        !STATUS_OPTIONS.some(
+          (option) =>
+            option.value ===
+            formData.status
+        )
+      ) {
+        newErrors.status =
+          'Geçersiz dava durumu';
+      }
+
+      if (
+        !PRIORITY_OPTIONS.some(
+          (option) =>
+            option.value ===
+            formData.priority
+        )
+      ) {
+        newErrors.priority =
+          'Geçersiz öncelik değeri';
       }
 
       // ==================================================
@@ -953,6 +1330,11 @@ const CaseCreate = () => {
       const submitData = {
         ...formData,
 
+        client_ids:
+          normalizeIds(
+            formData.client_ids
+          ),
+
         title,
 
         judiciary_type:
@@ -978,7 +1360,9 @@ const CaseCreate = () => {
           null,
 
         assigned_to:
-          formData.assigned_to ||
+          normalizeId(
+            formData.assigned_to
+          ) ||
           null,
 
         opening_date:
@@ -987,7 +1371,39 @@ const CaseCreate = () => {
       };
 
       mutation.mutate(
-        submitData
+        submitData,
+        {
+          onSuccess:
+            async (
+              response
+            ) => {
+              await refreshCreatedCaseClientViews(
+                submitData.client_ids
+              );
+
+              const createdId =
+                getCreatedCaseId(
+                  response
+                );
+
+              if (
+                createdId
+              ) {
+                navigate(
+                  `/cases/${createdId}`
+                );
+
+                return;
+              }
+
+              navigate(
+                '/cases'
+              );
+            },
+
+          onError:
+            handleMutationError,
+        }
       );
     };
 
@@ -1158,6 +1574,9 @@ const CaseCreate = () => {
               label="Dava Açılış Tarihi"
               name="opening_date"
               type="date"
+              max={
+                getTodayInputValue()
+              }
               value={
                 formData.opening_date
               }
@@ -1214,11 +1633,19 @@ const CaseCreate = () => {
                 }
                 onChange={(
                   event
-                ) =>
+                ) => {
+                  if (
+                    mutation.isPending
+                  ) {
+                    return;
+                  }
+
                   setClientToAdd(
-                    event.target.value
-                  )
-                }
+                    normalizeId(
+                      event.target.value
+                    )
+                  );
+                }}
                 disabled={
                   clientsLoading ||
                   mutation.isPending
@@ -1248,7 +1675,9 @@ const CaseCreate = () => {
                         client.id
                       }
                       value={
-                        client.id
+                        normalizeId(
+                          client.id
+                        )
                       }
                     >
                       {client.name}
@@ -1451,17 +1880,24 @@ const CaseCreate = () => {
                         lawyer.id
                       }
                       value={
-                        lawyer.id
+                        normalizeId(
+                          lawyer.id
+                        )
                       }
                     >
-                      {lawyer.first_name}{' '}
-                      {lawyer.last_name}
-                      {String(
+                      {[
+                        lawyer.first_name,
+                        lawyer.last_name,
+                      ]
+                        .filter(Boolean)
+                        .join(' ') ||
+                        lawyer.name ||
+                        lawyer.email ||
+                        'Avukat'}
+                      {normalizeId(
                         lawyer.id
                       ) ===
-                      String(
-                        user?.id
-                      )
+                      currentUserId
                         ? ' (Ben)'
                         : ''}
                     </option>
@@ -1469,6 +1905,12 @@ const CaseCreate = () => {
                 )}
 
               </select>
+
+              {errors.assigned_to && (
+                <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                  {errors.assigned_to}
+                </p>
+              )}
 
             </div>
 
@@ -1513,6 +1955,12 @@ const CaseCreate = () => {
 
                 </select>
 
+                {errors.status && (
+                  <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                    {errors.status}
+                  </p>
+                )}
+
               </div>
 
               <div>
@@ -1553,6 +2001,12 @@ const CaseCreate = () => {
                   )}
 
                 </select>
+
+                {errors.priority && (
+                  <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                    {errors.priority}
+                  </p>
+                )}
 
               </div>
 
