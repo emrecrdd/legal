@@ -123,6 +123,10 @@ import {
   calendarIntegrationRoutes,
 } from './modules/calendar-integration/calendar-integration.routes.js';
 
+import {
+  screenLockRoutes,
+} from './modules/screen-lock/screen-lock.routes.js';
+
 // ======================================================
 // APP
 // ======================================================
@@ -437,6 +441,11 @@ app.use(
 
 app.use(
   '/api/auth/logout',
+  requireTrustedOrigin
+);
+
+app.use(
+  '/api/screen-lock',
   requireTrustedOrigin
 );
 
@@ -1010,6 +1019,11 @@ app.get(
 app.use(
   '/api/auth',
   authRoutes
+);
+
+app.use(
+  '/api/screen-lock',
+  screenLockRoutes
 );
 
 app.use(

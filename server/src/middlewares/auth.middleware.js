@@ -22,6 +22,10 @@ import {
   isValidPermission,
 } from '../constants/roles.js';
 
+import {
+  enforceScreenLockForRequest,
+} from '../modules/screen-lock/screen-lock.guard.js';
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -366,6 +370,27 @@ export const authenticate = async (
         decoded?.exp ||
         null,
     };
+
+    // ==================================================
+    // BACKEND SCREEN LOCK ENFORCEMENT
+    // ==================================================
+
+    const screenLockResult =
+      await enforceScreenLockForRequest(
+        req
+      );
+
+    if (
+      screenLockResult
+    ) {
+      return res
+        .status(
+          screenLockResult.statusCode
+        )
+        .json(
+          screenLockResult.body
+        );
+    }
 
     return next();
   } catch (error) {
