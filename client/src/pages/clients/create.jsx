@@ -1,5 +1,4 @@
 import {
-  useMemo,
   useState,
 } from 'react';
 
@@ -45,6 +44,29 @@ const INITIAL_FORM = {
   status: 'active',
 };
 
+const CLIENT_TYPE_OPTIONS = [
+  'individual',
+  'corporate',
+];
+
+const STATUS_OPTIONS = [
+  'active',
+  'passive',
+  'archived',
+];
+
+const MAX_LENGTHS = {
+  name: 255,
+  email: 254,
+  phoneDigits: 15,
+  address: 1000,
+  city: 100,
+  district: 100,
+  postal_code: 5,
+  notes: 5000,
+  tags: 1000,
+};
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -56,16 +78,40 @@ const normalizeTags = (
     return [];
   }
 
-  return [
-    ...new Set(
-      value
-        .split(',')
-        .map((tag) =>
-          tag.trim()
-        )
-        .filter(Boolean)
-    ),
-  ];
+  const seen =
+    new Set();
+
+  return String(
+    value
+  )
+    .split(',')
+    .map(
+      (tag) =>
+        tag.trim()
+    )
+    .filter(Boolean)
+    .filter(
+      (tag) => {
+        const key =
+          tag.toLocaleLowerCase(
+            'tr-TR'
+          );
+
+        if (
+          seen.has(
+            key
+          )
+        ) {
+          return false;
+        }
+
+        seen.add(
+          key
+        );
+
+        return true;
+      }
+    );
 };
 
 const normalizePhone = (
@@ -156,13 +202,150 @@ const sanitizeDigits = (
 const sanitizePhoneInput = (
   value
 ) => {
-  const raw = String(value ?? '');
-  const hasLeadingPlus = raw.trim().startsWith('+');
-  const digits = raw.replace(/\D/g, '').slice(0, 12);
+  const raw =
+    String(
+      value ??
+      ''
+    );
+
+  const hasLeadingPlus =
+    raw
+      .trim()
+      .startsWith(
+        '+'
+      );
+
+  const digits =
+    raw
+      .replace(
+        /\D/g,
+        ''
+      )
+      .slice(
+        0,
+        MAX_LENGTHS.phoneDigits
+      );
 
   return hasLeadingPlus
     ? `+${digits}`
     : digits;
+};
+
+const getBackendFieldErrors = (
+  error
+) => {
+  const backendErrors =
+    error?.response
+      ?.data?.errors;
+
+  const result =
+    {};
+
+  if (
+    Array.isArray(
+      backendErrors
+    )
+  ) {
+    backendErrors.forEach(
+      (item) => {
+        const field =
+          item?.path ||
+          item?.param ||
+          item?.field;
+
+        if (
+          field
+        ) {
+          result[field] =
+            item?.msg ||
+            item?.message ||
+            'Geçersiz değer';
+        }
+      }
+    );
+
+    return result;
+  }
+
+  if (
+    backendErrors &&
+    typeof backendErrors ===
+      'object'
+  ) {
+    Object.entries(
+      backendErrors
+    ).forEach(
+      ([
+        field,
+        value,
+      ]) => {
+        if (
+          Array.isArray(
+            value
+          )
+        ) {
+          result[field] =
+            value
+              .filter(Boolean)
+              .join(', ');
+
+          return;
+        }
+
+        if (
+          value
+        ) {
+          result[field] =
+            String(
+              value
+            );
+        }
+      }
+    );
+  }
+
+  return result;
+};
+
+const getCreatedClientId = (
+  response
+) => {
+  const payload =
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    null;
+
+  const value =
+    payload?.id ??
+    payload?._id;
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  return String(
+    value
+  );
+};
+
+const normalizeFormForComparison = (
+  formData
+) => {
+  return JSON.stringify({
+    ...buildPayload(
+      formData
+    ),
+
+    tags:
+      normalizeTags(
+        formData.tags
+      ),
+  });
 };
 
 const buildPayload = (
@@ -270,13 +453,17 @@ const ClientCreate = () => {
     'corporate';
 
   const tagsPreview =
-    useMemo(() => {
-      return normalizeTags(
-        formData.tags
-      );
-    }, [
-      formData.tags,
-    ]);
+    normalizeTags(
+      formData.tags
+    );
+
+  const isDirty =
+    normalizeFormForComparison(
+      formData
+    ) !==
+    normalizeFormForComparison(
+      INITIAL_FORM
+    );
 
   // ======================================================
   // CHANGE
@@ -285,13 +472,20 @@ const ClientCreate = () => {
   const handleChange = (
     event
   ) => {
+    if (
+      createMutation.isPending
+    ) {
+      return;
+    }
+
     const {
       name,
       value,
     } =
       event.target;
 
-    let nextValue = value;
+    let nextValue =
+      value;
 
     if (
       name ===
@@ -316,6 +510,97 @@ const ClientCreate = () => {
       nextValue =
         sanitizePhoneInput(
           value
+        );
+    }
+
+    if (
+      name ===
+      'name'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.name
+        );
+    }
+
+    if (
+      name ===
+      'email'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.email
+        );
+    }
+
+    if (
+      name ===
+      'address'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.address
+        );
+    }
+
+    if (
+      name ===
+      'city'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.city
+        );
+    }
+
+    if (
+      name ===
+      'district'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.district
+        );
+    }
+
+    if (
+      name ===
+      'notes'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.notes
+        );
+    }
+
+    if (
+      name ===
+      'tags'
+    ) {
+      nextValue =
+        String(
+          value
+        ).slice(
+          0,
+          MAX_LENGTHS.tags
         );
     }
 
@@ -348,6 +633,14 @@ const ClientCreate = () => {
     (type) => {
       if (
         createMutation.isPending
+      ) {
+        return;
+      }
+
+      if (
+        !CLIENT_TYPE_OPTIONS.includes(
+          type
+        )
       ) {
         return;
       }
@@ -499,6 +792,72 @@ const ClientCreate = () => {
       }
 
       if (
+        email.length >
+        MAX_LENGTHS.email
+      ) {
+        nextErrors.email =
+          'E-posta adresi çok uzun';
+      }
+
+      if (
+        formData.address.length >
+        MAX_LENGTHS.address
+      ) {
+        nextErrors.address =
+          `Adres en fazla ${MAX_LENGTHS.address} karakter olabilir`;
+      }
+
+      if (
+        formData.city.length >
+        MAX_LENGTHS.city
+      ) {
+        nextErrors.city =
+          `Şehir en fazla ${MAX_LENGTHS.city} karakter olabilir`;
+      }
+
+      if (
+        formData.district.length >
+        MAX_LENGTHS.district
+      ) {
+        nextErrors.district =
+          `İlçe en fazla ${MAX_LENGTHS.district} karakter olabilir`;
+      }
+
+      if (
+        formData.notes.length >
+        MAX_LENGTHS.notes
+      ) {
+        nextErrors.notes =
+          `Notlar en fazla ${MAX_LENGTHS.notes} karakter olabilir`;
+      }
+
+      if (
+        formData.tags.length >
+        MAX_LENGTHS.tags
+      ) {
+        nextErrors.tags =
+          `Etiket alanı en fazla ${MAX_LENGTHS.tags} karakter olabilir`;
+      }
+
+      if (
+        !CLIENT_TYPE_OPTIONS.includes(
+          formData.client_type
+        )
+      ) {
+        nextErrors.client_type =
+          'Geçersiz müvekkil türü';
+      }
+
+      if (
+        !STATUS_OPTIONS.includes(
+          formData.status
+        )
+      ) {
+        nextErrors.status =
+          'Geçersiz müvekkil durumu';
+      }
+
+      if (
         formData.postal_code &&
         !/^\d{5}$/.test(
           formData.postal_code
@@ -532,7 +891,9 @@ const ClientCreate = () => {
         '';
 
       const nextErrors =
-        {};
+        getBackendFieldErrors(
+          error
+        );
 
       if (
         /TCKNO|VKN|identification_number/i.test(
@@ -567,6 +928,69 @@ const ClientCreate = () => {
         )
       ) {
         nextErrors.name =
+          message;
+      }
+
+      if (
+        /address|adres/i.test(
+          message
+        )
+      ) {
+        nextErrors.address =
+          message;
+      }
+
+      if (
+        /city|şehir|sehir/i.test(
+          message
+        )
+      ) {
+        nextErrors.city =
+          message;
+      }
+
+      if (
+        /district|ilçe|ilce/i.test(
+          message
+        )
+      ) {
+        nextErrors.district =
+          message;
+      }
+
+      if (
+        /postal|posta/i.test(
+          message
+        )
+      ) {
+        nextErrors.postal_code =
+          message;
+      }
+
+      if (
+        /tag|etiket/i.test(
+          message
+        )
+      ) {
+        nextErrors.tags =
+          message;
+      }
+
+      if (
+        /status|durum/i.test(
+          message
+        )
+      ) {
+        nextErrors.status =
+          message;
+      }
+
+      if (
+        /client_type|müvekkil türü|müvekkil tipi/i.test(
+          message
+        )
+      ) {
+        nextErrors.client_type =
           message;
       }
 
@@ -622,16 +1046,16 @@ const ClientCreate = () => {
         onSuccess: (
           response
         ) => {
-          const createdClient =
-            response?.data?.data ??
-            response?.data ??
-            null;
+          const createdId =
+            getCreatedClientId(
+              response
+            );
 
           if (
-            createdClient?.id
+            createdId
           ) {
             navigate(
-              `/clients/${createdClient.id}`
+              `/clients/${createdId}`
             );
 
             return;
@@ -780,6 +1204,12 @@ const ClientCreate = () => {
 
             </div>
 
+            {errors.client_type && (
+              <p className="mt-2 text-sm text-red-600">
+                {errors.client_type}
+              </p>
+            )}
+
           </div>
 
           {/* NAME */}
@@ -866,7 +1296,9 @@ const ClientCreate = () => {
               }
               type="tel"
               inputMode="tel"
-              maxLength={13}
+              maxLength={
+                MAX_LENGTHS.phoneDigits + 1
+              }
               placeholder="+905XXXXXXXXX"
             />
 
@@ -885,6 +1317,9 @@ const ClientCreate = () => {
               }
               disabled={
                 createMutation.isPending
+              }
+              maxLength={
+                MAX_LENGTHS.email
               }
               placeholder="ornek@domain.com"
             />
@@ -911,9 +1346,22 @@ const ClientCreate = () => {
                 createMutation.isPending
               }
               rows="3"
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              maxLength={
+                MAX_LENGTHS.address
+              }
+              className={`w-full rounded-md border bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-700 dark:text-white ${
+                errors.address
+                  ? 'border-red-500'
+                  : 'border-gray-300 dark:border-gray-600'
+              }`}
               placeholder="Açık adres..."
             />
+
+            {errors.address && (
+              <p className="mt-1 text-sm text-red-600">
+                {errors.address}
+              </p>
+            )}
 
           </div>
 
@@ -933,6 +1381,12 @@ const ClientCreate = () => {
               disabled={
                 createMutation.isPending
               }
+              maxLength={
+                MAX_LENGTHS.city
+              }
+              error={
+                errors.city
+              }
             />
 
             <Input
@@ -946,6 +1400,12 @@ const ClientCreate = () => {
               }
               disabled={
                 createMutation.isPending
+              }
+              maxLength={
+                MAX_LENGTHS.district
+              }
+              error={
+                errors.district
               }
             />
 
@@ -1005,6 +1465,12 @@ const ClientCreate = () => {
               </option>
             </select>
 
+            {errors.status && (
+              <p className="mt-1 text-sm text-red-600">
+                {errors.status}
+              </p>
+            )}
+
           </div>
 
           {/* TAGS */}
@@ -1022,6 +1488,12 @@ const ClientCreate = () => {
               }
               disabled={
                 createMutation.isPending
+              }
+              maxLength={
+                MAX_LENGTHS.tags
+              }
+              error={
+                errors.tags
               }
               placeholder="VIP, şirket, ceza, icra"
             />
@@ -1074,9 +1546,22 @@ const ClientCreate = () => {
                 createMutation.isPending
               }
               rows="5"
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              maxLength={
+                MAX_LENGTHS.notes
+              }
+              className={`w-full rounded-md border bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-700 dark:text-white ${
+                errors.notes
+                  ? 'border-red-500'
+                  : 'border-gray-300 dark:border-gray-600'
+              }`}
               placeholder="Müvekkille ilgili önemli genel bilgiler..."
             />
+
+            {errors.notes && (
+              <p className="mt-1 text-sm text-red-600">
+                {errors.notes}
+              </p>
+            )}
 
           </div>
 
@@ -1104,11 +1589,26 @@ const ClientCreate = () => {
               disabled={
                 createMutation.isPending
               }
-              onClick={() =>
+              onClick={() => {
+                if (
+                  createMutation.isPending
+                ) {
+                  return;
+                }
+
+                if (
+                  isDirty &&
+                  !window.confirm(
+                    'Kaydedilmemiş müvekkil bilgileri var. Sayfadan ayrılmak istediğinize emin misiniz?'
+                  )
+                ) {
+                  return;
+                }
+
                 navigate(
                   '/clients'
-                )
-              }
+                );
+              }}
             >
               Vazgeç
             </Button>

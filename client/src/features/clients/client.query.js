@@ -10,96 +10,86 @@ import clientApi from './client.api.js';
 import toast from 'react-hot-toast';
 
 // ======================================================
-// QUERY KEYS
-// ======================================================
-
-export const CLIENT_QUERY_KEYS = {
-  all: [
-    'clients',
-  ],
-
-  lists: () => [
-    ...CLIENT_QUERY_KEYS.all,
-    'list',
-  ],
-
-  list: (
-    params = {}
-  ) => [
-    ...CLIENT_QUERY_KEYS.lists(),
-    params,
-  ],
-
-  detail: (
-    id
-  ) => [
-    ...CLIENT_QUERY_KEYS.all,
-    'detail',
-    id,
-  ],
-
-  statistics: () => [
-    ...CLIENT_QUERY_KEYS.all,
-    'statistics',
-  ],
-
-  caseHistory: (
-    clientId
-  ) => [
-    ...CLIENT_QUERY_KEYS.all,
-    'case-history',
-    clientId,
-  ],
-
-  payments: (
-    clientId
-  ) => [
-    ...CLIENT_QUERY_KEYS.all,
-    'payments',
-    clientId,
-  ],
-
-  notes: (
-    clientId
-  ) => [
-    ...CLIENT_QUERY_KEYS.all,
-    'notes',
-    clientId,
-  ],
-
-  infinite: (
-    params = {}
-  ) => [
-    ...CLIENT_QUERY_KEYS.all,
-    'infinite',
-    params,
-  ],
-};
-
-// ======================================================
-// CACHE
-// ======================================================
-
-const CACHE = {
-  LIST:
-    2 * 60 * 1000,
-
-  DETAIL:
-    5 * 60 * 1000,
-
-  STATISTICS:
-    10 * 60 * 1000,
-
-  RELATIONS:
-    3 * 60 * 1000,
-
-  GC:
-    15 * 60 * 1000,
-};
-
-// ======================================================
 // HELPERS
 // ======================================================
+
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id ??
+      value?._id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
+const normalizeIds = (
+  values
+) => {
+  if (
+    !Array.isArray(
+      values
+    )
+  ) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      values
+        .map(
+          normalizeId
+        )
+        .filter(
+          Boolean
+        )
+    ),
+  ];
+};
+
+const getResponseItem = (
+  response
+) => {
+  return (
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    null
+  );
+};
+
+const getCreatedClientId = (
+  response
+) => {
+  return normalizeId(
+    getResponseItem(
+      response
+    )?.id
+  );
+};
 
 const getErrorMessage = (
   error,
@@ -113,55 +103,659 @@ const getErrorMessage = (
   );
 };
 
-const invalidateClientLists = (
-  queryClient
+const replaceResponseItem = (
+  current,
+  nextItem
 ) => {
-  return queryClient.invalidateQueries({
+  if (!current) {
+    return nextItem;
+  }
+
+  if (
+    current?.data?.data !==
+    undefined
+  ) {
+    return {
+      ...current,
+      data: {
+        ...current.data,
+        data:
+          nextItem,
+      },
+    };
+  }
+
+  if (
+    current?.data !==
+    undefined
+  ) {
+    return {
+      ...current,
+      data:
+        nextItem,
+    };
+  }
+
+  return nextItem;
+};
+
+const mergeClientDetailCache = (
+  queryClient,
+  id,
+  response,
+  submittedData = {}
+) => {
+  const normalizedId =
+    normalizeId(
+      id
+    );
+
+  if (!normalizedId) {
+    return;
+  }
+
+  const responseItem =
+    getResponseItem(
+      response
+    );
+
+  queryClient.setQueryData(
+    [
+      'client',
+      normalizedId,
+    ],
+    (
+      current
+    ) => {
+      const currentItem =
+        getResponseItem(
+          current
+        );
+
+      const nextItem = {
+        ...(
+          currentItem &&
+          typeof currentItem ===
+            'object'
+            ? currentItem
+            : {}
+        ),
+
+        ...(
+          submittedData &&
+          typeof submittedData ===
+            'object' &&
+          !(
+            typeof FormData !==
+              'undefined' &&
+            submittedData instanceof
+              FormData
+          )
+            ? submittedData
+            : {}
+        ),
+
+        ...(
+          responseItem &&
+          typeof responseItem ===
+            'object'
+            ? responseItem
+            : {}
+        ),
+      };
+
+      return replaceResponseItem(
+        current,
+        nextItem
+      );
+    }
+  );
+};
+
+const syncClientDetailFromServer =
+  async (
+    queryClient,
+    id
+  ) => {
+    const normalizedId =
+      normalizeId(
+        id
+      );
+
+    if (!normalizedId) {
+      return null;
+    }
+
+    try {
+      const response =
+        await clientApi.getOne(
+          normalizedId
+        );
+
+      queryClient.setQueryData(
+        [
+          'client',
+          normalizedId,
+        ],
+        response
+      );
+
+      return response;
+    } catch {
+      return null;
+    }
+  };
+
+const getPagination = (
+  response
+) => {
+  return (
+    response?.data
+      ?.pagination ??
+    response?.pagination ??
+    response?.data
+      ?.data
+      ?.pagination ??
+    null
+  );
+};
+
+// ======================================================
+// QUERY KEYS
+// ======================================================
+
+/*
+ * Uygulamanın diğer modüllerinde kullanılan cache anahtarlarıyla
+ * birebir aynı standardı kullanıyoruz:
+ *
+ *   Müvekkil detail: ['client', id]
+ *   Müvekkil davaları: ['clients', id, 'cases']
+ *   Liste: ['clients', params]
+ *
+ * Eski anahtarlar:
+ *   ['clients', 'detail', id]
+ *   ['clients', 'case-history', id]
+ *   ['clients', 'list', params]
+ *
+ * artık yeni query üretmek için kullanılmıyor. Aşağıdaki cleanup
+ * yardımcıları eski cache kalıntılarını da temizliyor.
+ */
+export const CLIENT_QUERY_KEYS = {
+  all: [
+    'clients',
+  ],
+
+  lists: () => [
+    'clients',
+  ],
+
+  list: (
+    params = {}
+  ) => [
+    'clients',
+    params,
+  ],
+
+  detail: (
+    id
+  ) => [
+    'client',
+    normalizeId(
+      id
+    ),
+  ],
+
+  details: () => [
+    'client',
+  ],
+
+  statistics: () => [
+    'clients',
+    'statistics',
+  ],
+
+  caseHistory: (
+    clientId
+  ) => [
+    'clients',
+    normalizeId(
+      clientId
+    ),
+    'cases',
+  ],
+
+  payments: (
+    clientId
+  ) => [
+    'clients',
+    normalizeId(
+      clientId
+    ),
+    'payments',
+  ],
+
+  notes: (
+    clientId
+  ) => [
+    'clients',
+    normalizeId(
+      clientId
+    ),
+    'notes',
+  ],
+
+  powerOfAttorneys: (
+    clientId
+  ) => [
+    'clients',
+    normalizeId(
+      clientId
+    ),
+    'power-of-attorneys',
+  ],
+
+  documents: (
+    clientId
+  ) => [
+    'client-documents',
+    normalizeId(
+      clientId
+    ),
+  ],
+
+  infinite: (
+    params = {}
+  ) => [
+    'clients',
+    'infinite',
+    params,
+  ],
+
+  legacy: {
+    detail: (
+      id
+    ) => [
+      'clients',
+      'detail',
+      normalizeId(
+        id
+      ),
+    ],
+
+    caseHistory: (
+      id
+    ) => [
+      'clients',
+      'case-history',
+      normalizeId(
+        id
+      ),
+    ],
+
+    lists: () => [
+      'clients',
+      'list',
+    ],
+  },
+};
+
+// ======================================================
+// CACHE
+// ======================================================
+
+const CACHE = {
+  LIST:
+    2 * 60 * 1000,
+
+  /*
+   * Relation değişiklikleri başka modüllerden yapılabiliyor.
+   * Detail sayfası bu yüzden fresh kabul edilmemeli.
+   */
+  DETAIL:
+    0,
+
+  STATISTICS:
+    10 * 60 * 1000,
+
+  RELATIONS:
+    0,
+
+  GC:
+    15 * 60 * 1000,
+};
+
+// ======================================================
+// CACHE INVALIDATION / CLEANUP
+// ======================================================
+
+const removeLegacyClientCache = (
+  queryClient,
+  id
+) => {
+  const normalizedId =
+    normalizeId(
+      id
+    );
+
+  if (!normalizedId) {
+    return;
+  }
+
+  queryClient.removeQueries({
     queryKey:
-      CLIENT_QUERY_KEYS.lists(),
+      CLIENT_QUERY_KEYS
+        .legacy
+        .detail(
+          normalizedId
+        ),
+    exact:
+      true,
+  });
+
+  queryClient.removeQueries({
+    queryKey:
+      CLIENT_QUERY_KEYS
+        .legacy
+        .caseHistory(
+          normalizedId
+        ),
+    exact:
+      true,
   });
 };
 
-const invalidateClientStatistics = (
-  queryClient
-) => {
-  return queryClient.invalidateQueries({
-    queryKey:
-      CLIENT_QUERY_KEYS.statistics(),
-  });
-};
+const invalidateClientLists =
+  async (
+    queryClient
+  ) => {
+    /*
+     * Canonical list key:
+     *   ['clients', { ...params }]
+     *
+     * Infinite ve eski ['clients','list',...] cache'leri de
+     * beraber yenilenir/temizlenir.
+     */
+    const invalidations = [
+      queryClient.invalidateQueries({
+        predicate:
+          (query) => {
+            const key =
+              query.queryKey;
+
+            if (
+              key?.[0] !==
+              'clients'
+            ) {
+              return false;
+            }
+
+            if (
+              key.length ===
+              2 &&
+              key?.[1] &&
+              typeof key[1] ===
+                'object' &&
+              !Array.isArray(
+                key[1]
+              )
+            ) {
+              return true;
+            }
+
+            return (
+              key?.[1] ===
+                'infinite' ||
+              key?.[1] ===
+                'list'
+            );
+          },
+      }),
+    ];
+
+    await Promise.all(
+      invalidations
+    );
+  };
+
+const invalidateClientStatistics =
+  (
+    queryClient
+  ) => {
+    return queryClient.invalidateQueries({
+      queryKey:
+        CLIENT_QUERY_KEYS.statistics(),
+    });
+  };
+
+const invalidateDashboardClientViews =
+  async (
+    queryClient
+  ) => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: [
+          'dashboard-stats',
+        ],
+      }),
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          'dashboard-clients',
+        ],
+      }),
+    ]);
+  };
+
+const invalidateClientRelationViews =
+  async (
+    queryClient,
+    id,
+    {
+      detail = true,
+      cases = true,
+      powerOfAttorneys = true,
+      documents = true,
+      payments = false,
+      notes = false,
+    } = {}
+  ) => {
+    const normalizedId =
+      normalizeId(
+        id
+      );
+
+    if (!normalizedId) {
+      return;
+    }
+
+    removeLegacyClientCache(
+      queryClient,
+      normalizedId
+    );
+
+    const invalidations =
+      [];
+
+    if (detail) {
+      invalidations.push(
+        queryClient.invalidateQueries({
+          queryKey:
+            CLIENT_QUERY_KEYS.detail(
+              normalizedId
+            ),
+          exact:
+            true,
+        })
+      );
+    }
+
+    if (cases) {
+      invalidations.push(
+        queryClient.invalidateQueries({
+          queryKey:
+            CLIENT_QUERY_KEYS.caseHistory(
+              normalizedId
+            ),
+          exact:
+            true,
+        }),
+
+        /*
+         * Bazı eski ekranlar prefix olarak bunu kullanıyor.
+         */
+        queryClient.invalidateQueries({
+          queryKey: [
+            'client-cases',
+            normalizedId,
+          ],
+        })
+      );
+    }
+
+    if (powerOfAttorneys) {
+      invalidations.push(
+        queryClient.invalidateQueries({
+          queryKey:
+            CLIENT_QUERY_KEYS.powerOfAttorneys(
+              normalizedId
+            ),
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'client-power-of-attorneys',
+            normalizedId,
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'powerOfAttorneys',
+          ],
+        })
+      );
+    }
+
+    if (documents) {
+      invalidations.push(
+        queryClient.invalidateQueries({
+          queryKey:
+            CLIENT_QUERY_KEYS.documents(
+              normalizedId
+            ),
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'client-documents',
+          ],
+        })
+      );
+    }
+
+    if (payments) {
+      invalidations.push(
+        queryClient.invalidateQueries({
+          queryKey:
+            CLIENT_QUERY_KEYS.payments(
+              normalizedId
+            ),
+          exact:
+            true,
+        })
+      );
+    }
+
+    if (notes) {
+      invalidations.push(
+        queryClient.invalidateQueries({
+          queryKey:
+            CLIENT_QUERY_KEYS.notes(
+              normalizedId
+            ),
+          exact:
+            true,
+        })
+      );
+    }
+
+    await Promise.all(
+      invalidations
+    );
+  };
 
 const removeClientRelatedCache = (
   queryClient,
   id
 ) => {
-  queryClient.removeQueries({
-    queryKey:
-      CLIENT_QUERY_KEYS.detail(
-        id
-      ),
-  });
+  const normalizedId =
+    normalizeId(
+      id
+    );
 
-  queryClient.removeQueries({
-    queryKey:
-      CLIENT_QUERY_KEYS.caseHistory(
-        id
-      ),
-  });
+  if (!normalizedId) {
+    return;
+  }
 
-  queryClient.removeQueries({
-    queryKey:
-      CLIENT_QUERY_KEYS.payments(
-        id
-      ),
-  });
+  const exactKeys = [
+    CLIENT_QUERY_KEYS.detail(
+      normalizedId
+    ),
 
-  queryClient.removeQueries({
-    queryKey:
-      CLIENT_QUERY_KEYS.notes(
-        id
+    CLIENT_QUERY_KEYS.caseHistory(
+      normalizedId
+    ),
+
+    CLIENT_QUERY_KEYS.payments(
+      normalizedId
+    ),
+
+    CLIENT_QUERY_KEYS.notes(
+      normalizedId
+    ),
+
+    CLIENT_QUERY_KEYS.powerOfAttorneys(
+      normalizedId
+    ),
+
+    CLIENT_QUERY_KEYS.documents(
+      normalizedId
+    ),
+
+    CLIENT_QUERY_KEYS
+      .legacy
+      .detail(
+        normalizedId
       ),
-  });
+
+    CLIENT_QUERY_KEYS
+      .legacy
+      .caseHistory(
+        normalizedId
+      ),
+
+    [
+      'client-cases',
+      normalizedId,
+    ],
+
+    [
+      'client-power-of-attorneys',
+      normalizedId,
+    ],
+  ];
+
+  exactKeys.forEach(
+    (
+      queryKey
+    ) => {
+      queryClient.removeQueries({
+        queryKey,
+        exact:
+          true,
+      });
+    }
+  );
 };
 
 // ======================================================
@@ -202,20 +796,25 @@ export const useClients = (
 export const useClient = (
   id
 ) => {
+  const normalizedId =
+    normalizeId(
+      id
+    );
+
   return useQuery({
     queryKey:
       CLIENT_QUERY_KEYS.detail(
-        id
+        normalizedId
       ),
 
     queryFn: () =>
       clientApi.getOne(
-        id
+        normalizedId
       ),
 
     enabled:
       Boolean(
-        id
+        normalizedId
       ),
 
     staleTime:
@@ -223,6 +822,20 @@ export const useClient = (
 
     gcTime:
       CACHE.GC,
+
+    /*
+     * Dava / vekaletname / belge gibi ilişkiler başka sayfalarda
+     * değiştirildiği için Müvekkil Detay'a her dönüşte server
+     * doğrulanır. Böylece F5 ihtiyacı ortadan kalkar.
+     */
+    refetchOnMount:
+      'always',
+
+    refetchOnWindowFocus:
+      'always',
+
+    refetchOnReconnect:
+      'always',
   });
 };
 
@@ -254,20 +867,25 @@ export const useClientStatistics =
 export const useClientCaseHistory = (
   clientId
 ) => {
+  const normalizedClientId =
+    normalizeId(
+      clientId
+    );
+
   return useQuery({
     queryKey:
       CLIENT_QUERY_KEYS.caseHistory(
-        clientId
+        normalizedClientId
       ),
 
     queryFn: () =>
       clientApi.getCaseHistory(
-        clientId
+        normalizedClientId
       ),
 
     enabled:
       Boolean(
-        clientId
+        normalizedClientId
       ),
 
     staleTime:
@@ -275,6 +893,15 @@ export const useClientCaseHistory = (
 
     gcTime:
       CACHE.GC,
+
+    refetchOnMount:
+      'always',
+
+    refetchOnWindowFocus:
+      'always',
+
+    refetchOnReconnect:
+      'always',
   });
 };
 
@@ -285,20 +912,25 @@ export const useClientCaseHistory = (
 export const useClientPayments = (
   clientId
 ) => {
+  const normalizedClientId =
+    normalizeId(
+      clientId
+    );
+
   return useQuery({
     queryKey:
       CLIENT_QUERY_KEYS.payments(
-        clientId
+        normalizedClientId
       ),
 
     queryFn: () =>
       clientApi.getPayments(
-        clientId
+        normalizedClientId
       ),
 
     enabled:
       Boolean(
-        clientId
+        normalizedClientId
       ),
 
     staleTime:
@@ -316,20 +948,25 @@ export const useClientPayments = (
 export const useClientNotes = (
   clientId
 ) => {
+  const normalizedClientId =
+    normalizeId(
+      clientId
+    );
+
   return useQuery({
     queryKey:
       CLIENT_QUERY_KEYS.notes(
-        clientId
+        normalizedClientId
       ),
 
     queryFn: () =>
       clientApi.getNotes(
-        clientId
+        normalizedClientId
       ),
 
     enabled:
       Boolean(
-        clientId
+        normalizedClientId
       ),
 
     staleTime:
@@ -358,13 +995,44 @@ export const useCreateClient =
         ),
 
       onSuccess:
-        async () => {
+        async (
+          response
+        ) => {
+          const createdId =
+            getCreatedClientId(
+              response
+            );
+
+          if (createdId) {
+            queryClient.setQueryData(
+              CLIENT_QUERY_KEYS.detail(
+                createdId
+              ),
+              response
+            );
+          }
+
+          /*
+           * Projede eski list cache namespace'i kalmışsa artık
+           * yanlış veri göstermesin.
+           */
+          queryClient.removeQueries({
+            queryKey:
+              CLIENT_QUERY_KEYS
+                .legacy
+                .lists(),
+          });
+
           await Promise.all([
             invalidateClientLists(
               queryClient
             ),
 
             invalidateClientStatistics(
+              queryClient
+            ),
+
+            invalidateDashboardClientViews(
               queryClient
             ),
           ]);
@@ -400,50 +1068,101 @@ export const useUpdateClient =
       mutationFn: ({
         id,
         data,
-      }) =>
-        clientApi.update(
-          id,
+      }) => {
+        const normalizedId =
+          normalizeId(
+            id
+          );
+
+        if (!normalizedId) {
+          throw new Error(
+            'Geçerli müvekkil kaydı bulunamadı'
+          );
+        }
+
+        return clientApi.update(
+          normalizedId,
           data
-        ),
+        );
+      },
+
+      onMutate:
+        async (
+          variables
+        ) => {
+          const normalizedId =
+            normalizeId(
+              variables?.id
+            );
+
+          if (!normalizedId) {
+            return {
+              id: '',
+            };
+          }
+
+          await queryClient.cancelQueries({
+            queryKey:
+              CLIENT_QUERY_KEYS.detail(
+                normalizedId
+              ),
+            exact:
+              true,
+          });
+
+          return {
+            id:
+              normalizedId,
+          };
+        },
 
       onSuccess:
         async (
           response,
-          variables
+          variables,
+          context
         ) => {
-          const updatedClient =
-            response?.data
-              ?.data ??
-            response?.data ??
-            null;
+          const normalizedId =
+            normalizeId(
+              variables?.id ??
+              context?.id
+            );
 
           /*
-           * Detail cache'i response ile doğrudan güncellenebilir.
-           * Böylece detail ekranına dönünce gereksiz network
-           * request beklemek zorunda kalmayız.
+           * Update endpoint'i yalnızca kısmi client döndürürse embedded
+           * davalar / vekaletnameler kaybolmasın diye önce merge ediyoruz.
            */
+          mergeClientDetailCache(
+            queryClient,
+            normalizedId,
+            response,
+            variables?.data
+          );
 
-          if (
-            updatedClient
-          ) {
-            queryClient.setQueryData(
-              CLIENT_QUERY_KEYS.detail(
-                variables.id
-              ),
-              response
-            );
-          }
+          /*
+           * Ardından server detail'i doğrula. Bu cevap ilişkileri de
+           * içeriyorsa canonical detail cache kesin olarak güncel olur.
+           */
+          await syncClientDetailFromServer(
+            queryClient,
+            normalizedId
+          );
+
+          removeLegacyClientCache(
+            queryClient,
+            normalizedId
+          );
 
           await Promise.all([
             invalidateClientLists(
               queryClient
             ),
 
-            /*
-             * Status veya client_type değişmiş olabilir.
-             * Statistics bundan etkilenebilir.
-             */
             invalidateClientStatistics(
+              queryClient
+            ),
+
+            invalidateDashboardClientViews(
               queryClient
             ),
           ]);
@@ -478,21 +1197,76 @@ export const useDeleteClient =
     return useMutation({
       mutationFn: (
         id
-      ) =>
-        clientApi.delete(
+      ) => {
+        const normalizedId =
+          normalizeId(
+            id
+          );
+
+        if (!normalizedId) {
+          throw new Error(
+            'Geçerli müvekkil kaydı bulunamadı'
+          );
+        }
+
+        return clientApi.delete(
+          normalizedId
+        );
+      },
+
+      onMutate:
+        async (
           id
-        ),
+        ) => {
+          const normalizedId =
+            normalizeId(
+              id
+            );
+
+          if (!normalizedId) {
+            return {
+              id: '',
+            };
+          }
+
+          await queryClient.cancelQueries({
+            queryKey:
+              CLIENT_QUERY_KEYS.detail(
+                normalizedId
+              ),
+            exact:
+              true,
+          });
+
+          return {
+            id:
+              normalizedId,
+          };
+        },
 
       onSuccess:
         async (
           _response,
-          id
+          id,
+          context
         ) => {
+          const normalizedId =
+            normalizeId(
+              id ??
+              context?.id
+            );
+
           removeClientRelatedCache(
             queryClient,
-            id
+            normalizedId
           );
 
+          /*
+           * Müvekkil silinmesi davaları / vekaletnameleri / belgeleri
+           * backend politikasına göre detach/cascade edebilir.
+           * UI eski relation göstermesin diye ilgili global cache'ler
+           * correctness-first olarak yenilenir.
+           */
           await Promise.all([
             invalidateClientLists(
               queryClient
@@ -501,6 +1275,34 @@ export const useDeleteClient =
             invalidateClientStatistics(
               queryClient
             ),
+
+            invalidateDashboardClientViews(
+              queryClient
+            ),
+
+            queryClient.invalidateQueries({
+              queryKey: [
+                'cases',
+              ],
+            }),
+
+            queryClient.invalidateQueries({
+              queryKey: [
+                'case',
+              ],
+            }),
+
+            queryClient.invalidateQueries({
+              queryKey: [
+                'powerOfAttorneys',
+              ],
+            }),
+
+            queryClient.invalidateQueries({
+              queryKey: [
+                'documents',
+              ],
+            }),
           ]);
 
           toast.success(
@@ -535,12 +1337,14 @@ export const useBulkDeleteClients =
         async (
           ids
         ) => {
-          if (
-            !Array.isArray(
+          const normalizedIds =
+            normalizeIds(
               ids
-            ) ||
-            ids.length ===
-              0
+            );
+
+          if (
+            normalizedIds.length ===
+            0
           ) {
             throw new Error(
               'Kaldırılacak müvekkil seçilmedi'
@@ -549,8 +1353,10 @@ export const useBulkDeleteClients =
 
           const results =
             await Promise.allSettled(
-              ids.map(
-                (id) =>
+              normalizedIds.map(
+                (
+                  id
+                ) =>
                   clientApi.delete(
                     id
                   )
@@ -569,7 +1375,9 @@ export const useBulkDeleteClients =
               index
             ) => {
               const id =
-                ids[index];
+                normalizedIds[
+                  index
+                ];
 
               if (
                 result.status ===
@@ -601,7 +1409,9 @@ export const useBulkDeleteClients =
           result
         ) => {
           result.succeeded.forEach(
-            (id) => {
+            (
+              id
+            ) => {
               removeClientRelatedCache(
                 queryClient,
                 id
@@ -609,15 +1419,48 @@ export const useBulkDeleteClients =
             }
           );
 
-          await Promise.all([
-            invalidateClientLists(
-              queryClient
-            ),
+          if (
+            result.succeeded.length >
+            0
+          ) {
+            await Promise.all([
+              invalidateClientLists(
+                queryClient
+              ),
 
-            invalidateClientStatistics(
-              queryClient
-            ),
-          ]);
+              invalidateClientStatistics(
+                queryClient
+              ),
+
+              invalidateDashboardClientViews(
+                queryClient
+              ),
+
+              queryClient.invalidateQueries({
+                queryKey: [
+                  'cases',
+                ],
+              }),
+
+              queryClient.invalidateQueries({
+                queryKey: [
+                  'case',
+                ],
+              }),
+
+              queryClient.invalidateQueries({
+                queryKey: [
+                  'powerOfAttorneys',
+                ],
+              }),
+
+              queryClient.invalidateQueries({
+                queryKey: [
+                  'documents',
+                ],
+              }),
+            ]);
+          }
 
           if (
             result.failed.length ===
@@ -677,7 +1520,7 @@ export const useInfiniteClients = (
       ),
 
     queryFn: ({
-      pageParam,
+      pageParam = 1,
     }) =>
       clientApi.getAll({
         ...params,
@@ -693,24 +1536,40 @@ export const useInfiniteClients = (
       lastPage
     ) => {
       const pagination =
-        lastPage?.data
-          ?.pagination;
+        getPagination(
+          lastPage
+        );
 
-      if (
-        !pagination
-      ) {
+      if (!pagination) {
         return undefined;
       }
 
       const currentPage =
         Number(
-          pagination.page
-        ) || 1;
+          pagination.page ??
+          pagination.current_page ??
+          pagination.currentPage ??
+          1
+        );
 
       const totalPages =
         Number(
-          pagination.totalPages
-        ) || 1;
+          pagination.totalPages ??
+          pagination.total_pages ??
+          pagination.last_page ??
+          currentPage
+        );
+
+      if (
+        !Number.isFinite(
+          currentPage
+        ) ||
+        !Number.isFinite(
+          totalPages
+        )
+      ) {
+        return undefined;
+      }
 
       return currentPage <
         totalPages
@@ -729,10 +1588,6 @@ export const useInfiniteClients = (
 
 // ======================================================
 // SEARCH
-//
-// Ayrı search namespace yerine aynı list cache yapısını
-// kullanıyoruz. Böylece aynı request iki ayrı cache'te
-// tutulmaz.
 // ======================================================
 
 export const useSearchClients = (
@@ -741,7 +1596,8 @@ export const useSearchClients = (
 ) => {
   const normalizedQuery =
     String(
-      query || ''
+      query ??
+      ''
     ).trim();
 
   const queryParams = {
@@ -752,6 +1608,10 @@ export const useSearchClients = (
   };
 
   return useQuery({
+    /*
+     * Search de canonical list key'i kullanır.
+     * Aynı HTTP request için ayrı search namespace yaratılmaz.
+     */
     queryKey:
       CLIENT_QUERY_KEYS.list(
         queryParams
@@ -764,7 +1624,7 @@ export const useSearchClients = (
 
     enabled:
       normalizedQuery.length >=
-      2,
+        2,
 
     staleTime:
       CACHE.LIST,
@@ -787,23 +1647,35 @@ export const prefetchClient = (
   queryClient,
   id
 ) => {
-  if (!id) {
+  const normalizedId =
+    normalizeId(
+      id
+    );
+
+  if (!normalizedId) {
     return Promise.resolve();
   }
 
   return queryClient.prefetchQuery({
     queryKey:
       CLIENT_QUERY_KEYS.detail(
-        id
+        normalizedId
       ),
 
     queryFn: () =>
       clientApi.getOne(
-        id
+        normalizedId
       ),
 
+    /*
+     * Prefetch sonrası relation değişmiş olabileceği için
+     * detail uzun süre fresh tutulmaz.
+     */
     staleTime:
       CACHE.DETAIL,
+
+    gcTime:
+      CACHE.GC,
   });
 };
 
@@ -828,5 +1700,29 @@ export const prefetchClients = (
 
     staleTime:
       CACHE.LIST,
+
+    gcTime:
+      CACHE.GC,
   });
 };
+
+// ======================================================
+// OPTIONAL CACHE REFRESH HELPER
+// ======================================================
+
+/*
+ * Dava / vekaletname / belge modülleri isterse tek noktadan
+ * müvekkilin embedded relation cache'lerini yenileyebilir.
+ */
+export const refreshClientRelations =
+  async (
+    queryClient,
+    id,
+    options = {}
+  ) => {
+    await invalidateClientRelationViews(
+      queryClient,
+      id,
+      options
+    );
+  };
