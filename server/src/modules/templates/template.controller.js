@@ -12,30 +12,6 @@ import {
   logger,
 } from '../../config/logger.js';
 
-import fs from 'fs';
-import fsPromises from 'fs/promises';
-import path from 'path';
-
-import {
-  fileURLToPath,
-} from 'url';
-
-const __filename =
-  fileURLToPath(
-    import.meta.url
-  );
-
-const __dirname =
-  path.dirname(
-    __filename
-  );
-
-const UPLOAD_DIR =
-  path.resolve(
-    __dirname,
-    '../../../uploads'
-  );
-
 const isUdfFilename = (
   filename
 ) => {
@@ -50,56 +26,45 @@ const isUdfFilename = (
   );
 };
 
-const createUniqueFilename = (
-  originalName
+const encodeFilename = (
+  filename
 ) => {
-  const extension =
-    path.extname(
-      originalName ||
-      ''
+  return encodeURIComponent(
+    filename ||
+    'template'
+  )
+    .replace(
+      /['()]/g,
+      (
+        character
+      ) =>
+        `%${character
+          .charCodeAt(0)
+          .toString(16)
+          .toUpperCase()}`
+    )
+    .replace(
+      /\*/g,
+      '%2A'
     );
-
-  return (
-    `${Date.now()}-${Math.round(
-      Math.random() *
-      1e9
-    )}${extension}`
-  );
 };
 
-const saveUploadedFile =
-  async (
-    file
-  ) => {
-    await fsPromises.mkdir(
-      UPLOAD_DIR,
-      {
-        recursive:
-          true,
-      }
+const createSafeAsciiFilename = (
+  filename
+) => {
+  return (
+    filename ||
+    'template'
+  )
+    .replace(
+      /[^\x20-\x7E]/g,
+      '_'
+    )
+    .replace(
+      /["\\]/g,
+      '_'
     );
-
-    const filename =
-      createUniqueFilename(
-        file.originalname
-      );
-
-    const filePath =
-      path.join(
-        UPLOAD_DIR,
-        filename
-      );
-
-    await fsPromises.writeFile(
-      filePath,
-      file.buffer
-    );
-
-    return {
-      filename,
-      filePath,
-    };
-  };
+};
 
 export const templateController = {
   // ====================================================
@@ -110,6 +75,9 @@ export const templateController = {
     req,
     res
   ) {
+    let uploadedFileUrl =
+      null;
+
     try {
       const data = {
         ...req.body,
@@ -121,24 +89,18 @@ export const templateController = {
       if (
         req.file
       ) {
-        const {
-          filename,
-        } =
-          await saveUploadedFile(
+        const uploaded =
+          await templateService.uploadFile(
             req.file
           );
 
-        data.file_url =
-          `/uploads/${filename}`;
+        uploadedFileUrl =
+          uploaded.file_url;
 
-        data.file_name =
-          req.file.originalname;
-
-        data.file_size =
-          req.file.size;
-
-        data.file_type =
-          req.file.mimetype;
+        Object.assign(
+          data,
+          uploaded
+        );
       }
 
       const template =
@@ -155,6 +117,14 @@ export const templateController = {
     } catch (
       error
     ) {
+      if (
+        uploadedFileUrl
+      ) {
+        await templateService.deleteUploadedFileSafely(
+          uploadedFileUrl
+        );
+      }
+
       logger.error(
         'Create template error:',
         error
@@ -259,6 +229,9 @@ export const templateController = {
     req,
     res
   ) {
+    let uploadedFileUrl =
+      null;
+
     try {
       const data = {
         ...req.body,
@@ -270,53 +243,18 @@ export const templateController = {
       if (
         req.file
       ) {
-        const existing =
-          await templateService.findOne(
-            req.params.id
-          );
-
-        const {
-          filename,
-        } =
-          await saveUploadedFile(
+        const uploaded =
+          await templateService.uploadFile(
             req.file
           );
 
-        data.file_url =
-          `/uploads/${filename}`;
+        uploadedFileUrl =
+          uploaded.file_url;
 
-        data.file_name =
-          req.file.originalname;
-
-        data.file_size =
-          req.file.size;
-
-        data.file_type =
-          req.file.mimetype;
-
-        /*
-         * Yeni dosya başarıyla yazıldıktan sonra
-         * eski dosyayı temizle.
-         */
-        if (
-          existing.file_url
-        ) {
-          const oldPath =
-            path.join(
-              UPLOAD_DIR,
-              path.basename(
-                existing.file_url
-              )
-            );
-
-          await fsPromises
-            .unlink(
-              oldPath
-            )
-            .catch(
-              () => {}
-            );
-        }
+        Object.assign(
+          data,
+          uploaded
+        );
       }
 
       const template =
@@ -324,6 +262,12 @@ export const templateController = {
           req.params.id,
           data
         );
+
+      /*
+       * Eski şablon objesini özellikle silmiyoruz.
+       * Yanlışlıkla veri kaybını önlemek için eski
+       * fiziksel dosya Neon Storage'da kalabilir.
+       */
 
       return successResponse(
         res,
@@ -333,6 +277,14 @@ export const templateController = {
     } catch (
       error
     ) {
+      if (
+        uploadedFileUrl
+      ) {
+        await templateService.deleteUploadedFileSafely(
+          uploadedFileUrl
+        );
+      }
+
       logger.error(
         'Update template error:',
         error
@@ -355,34 +307,14 @@ export const templateController = {
     res
   ) {
     try {
-      const template =
-        await templateService.findOne(
-          req.params.id
-        );
-
       await templateService.remove(
         req.params.id
       );
 
-      if (
-        template.file_url
-      ) {
-        const filePath =
-          path.join(
-            UPLOAD_DIR,
-            path.basename(
-              template.file_url
-            )
-          );
-
-        await fsPromises
-          .unlink(
-            filePath
-          )
-          .catch(
-            () => {}
-          );
-      }
+      /*
+       * Normal silmede Object Storage objesini
+       * kalıcı olarak silmiyoruz.
+       */
 
       return successResponse(
         res,
@@ -416,9 +348,9 @@ export const templateController = {
     try {
       const {
         template,
-        filePath,
+        stream,
       } =
-        await templateService.getFilePath(
+        await templateService.getFileStream(
           req.params.id
         );
 
@@ -426,9 +358,67 @@ export const templateController = {
         req.params.id
       );
 
-      return res.download(
-        filePath,
-        template.file_name
+      const filename =
+        template.file_name ||
+        'template';
+
+      const encodedFilename =
+        encodeFilename(
+          filename
+        );
+
+      const safeFilename =
+        createSafeAsciiFilename(
+          filename
+        );
+
+      res.setHeader(
+        'Cache-Control',
+        'private, no-store'
+      );
+
+      res.setHeader(
+        'Content-Type',
+        template.file_type ||
+        'application/octet-stream'
+      );
+
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodedFilename}`
+      );
+
+      res.setHeader(
+        'X-Content-Type-Options',
+        'nosniff'
+      );
+
+      stream.on(
+        'error',
+        (
+          error
+        ) => {
+          logger.error(
+            'Template download stream error:',
+            error
+          );
+
+          if (
+            !res.headersSent
+          ) {
+            res
+              .status(
+                500
+              )
+              .end();
+          } else {
+            res.destroy();
+          }
+        }
+      );
+
+      stream.pipe(
+        res
       );
     } catch (
       error
@@ -437,6 +427,12 @@ export const templateController = {
         'Download template error:',
         error
       );
+
+      if (
+        res.headersSent
+      ) {
+        return;
+      }
 
       return errorResponse(
         res,
@@ -457,9 +453,9 @@ export const templateController = {
     try {
       const {
         template,
-        filePath,
+        stream,
       } =
-        await templateService.getFilePath(
+        await templateService.getFileStream(
           req.params.id
         );
 
@@ -475,6 +471,15 @@ export const templateController = {
         );
       }
 
+      const filename =
+        template.file_name ||
+        'template';
+
+      const encodedFilename =
+        encodeFilename(
+          filename
+        );
+
       res.setHeader(
         'Cache-Control',
         'private, no-store'
@@ -488,18 +493,13 @@ export const templateController = {
 
       res.setHeader(
         'Content-Disposition',
-        'inline'
+        `inline; filename*=UTF-8''${encodedFilename}`
       );
 
       res.setHeader(
         'X-Content-Type-Options',
         'nosniff'
       );
-
-      const stream =
-        fs.createReadStream(
-          filePath
-        );
 
       stream.on(
         'error',
@@ -535,6 +535,12 @@ export const templateController = {
         'Preview template error:',
         error
       );
+
+      if (
+        res.headersSent
+      ) {
+        return;
+      }
 
       return errorResponse(
         res,

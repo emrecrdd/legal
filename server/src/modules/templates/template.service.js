@@ -2,9 +2,16 @@ import {
   Op,
 } from 'sequelize';
 
+import {
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
+
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
+import crypto from 'crypto';
 import unzipper from 'unzipper';
 import {
   fileURLToPath,
@@ -28,6 +35,11 @@ import {
   paginate,
   getPaginationData,
 } from '../../utils/paginate.js';
+
+import {
+  s3Client,
+  S3_BUCKET_NAME,
+} from '../../config/s3.js';
 
 // ======================================================
 // PATHS
@@ -105,6 +117,244 @@ const resolveTemplateFilePath = (
   return resolved;
 };
 
+const createTemplateStorageKey = (
+  originalName = ''
+) => {
+  const extension =
+    path
+      .extname(
+        originalName
+      )
+      .toLowerCase();
+
+  return (
+    `templates/${crypto.randomUUID()}${extension}`
+  );
+};
+
+const createS3Reference = (
+  key
+) => {
+  return `s3:${key}`;
+};
+
+const isS3Reference = (
+  value
+) => {
+  return (
+    typeof value ===
+      'string' &&
+    value.startsWith(
+      's3:'
+    )
+  );
+};
+
+const getS3Key = (
+  reference
+) => {
+  return reference.slice(
+    3
+  );
+};
+
+const assertS3Config = () => {
+  if (
+    !S3_BUCKET_NAME ||
+    !process.env.AWS_REGION ||
+    !process.env.AWS_ENDPOINT_URL_S3 ||
+    !process.env.AWS_ACCESS_KEY_ID ||
+    !process.env.AWS_SECRET_ACCESS_KEY
+  ) {
+    throw new Error(
+      'Object storage configuration is missing'
+    );
+  }
+};
+
+const uploadTemplateToS3 =
+  async (
+    file
+  ) => {
+    if (
+      !file?.buffer
+    ) {
+      throw new Error(
+        'Template file is required'
+      );
+    }
+
+    assertS3Config();
+
+    const key =
+      createTemplateStorageKey(
+        file.originalname
+      );
+
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket:
+          S3_BUCKET_NAME,
+
+        Key:
+          key,
+
+        Body:
+          file.buffer,
+
+        ContentType:
+          file.mimetype ||
+          'application/octet-stream',
+      })
+    );
+
+    return {
+      key,
+
+      reference:
+        createS3Reference(
+          key
+        ),
+    };
+  };
+
+const deleteS3ObjectSafely =
+  async (
+    reference
+  ) => {
+    if (
+      !isS3Reference(
+        reference
+      )
+    ) {
+      return;
+    }
+
+    try {
+      assertS3Config();
+
+      await s3Client.send(
+        new DeleteObjectCommand({
+          Bucket:
+            S3_BUCKET_NAME,
+
+          Key:
+            getS3Key(
+              reference
+            ),
+        })
+      );
+    } catch {
+      // Rollback cleanup ana hatayı ezmesin.
+    }
+  };
+
+const getS3Stream =
+  async (
+    reference
+  ) => {
+    assertS3Config();
+
+    try {
+      const response =
+        await s3Client.send(
+          new GetObjectCommand({
+            Bucket:
+              S3_BUCKET_NAME,
+
+            Key:
+              getS3Key(
+                reference
+              ),
+          })
+        );
+
+      if (
+        !response.Body
+      ) {
+        throw new Error(
+          'Template file not found'
+        );
+      }
+
+      return response.Body;
+    } catch {
+      throw new Error(
+        'Template file not found'
+      );
+    }
+  };
+
+const streamToBuffer =
+  async (
+    stream
+  ) => {
+    const chunks =
+      [];
+
+    for await (
+      const chunk of stream
+    ) {
+      chunks.push(
+        Buffer.isBuffer(
+          chunk
+        )
+          ? chunk
+          : Buffer.from(
+              chunk
+            )
+      );
+    }
+
+    return Buffer.concat(
+      chunks
+    );
+  };
+
+const readTemplateBuffer =
+  async (
+    template
+  ) => {
+    if (
+      !template?.file_url
+    ) {
+      throw new Error(
+        'Template file not found'
+      );
+    }
+
+    if (
+      isS3Reference(
+        template.file_url
+      )
+    ) {
+      const stream =
+        await getS3Stream(
+          template.file_url
+        );
+
+      return streamToBuffer(
+        stream
+      );
+    }
+
+    // Eski lokal şablonlar için fallback.
+    const filePath =
+      resolveTemplateFilePath(
+        template.file_url
+      );
+
+    try {
+      return await fsPromises.readFile(
+        filePath
+      );
+    } catch {
+      throw new Error(
+        'Template file not found'
+      );
+    }
+  };
+
 const isUdfTemplate = (
   template
 ) => {
@@ -162,6 +412,45 @@ export const templateService = {
       data
     );
   },
+
+  // ====================================================
+  // OBJECT STORAGE
+  // ====================================================
+
+  async uploadFile(
+    file
+  ) {
+    const {
+      reference,
+    } =
+      await uploadTemplateToS3(
+        file
+      );
+
+    return {
+      file_url:
+        reference,
+
+      file_name:
+        file.originalname,
+
+      file_size:
+        file.size,
+
+      file_type:
+        file.mimetype ||
+        'application/octet-stream',
+    };
+  },
+
+  async deleteUploadedFileSafely(
+    reference
+  ) {
+    await deleteS3ObjectSafely(
+      reference
+    );
+  },
+
 
   // ====================================================
   // FIND ALL
@@ -401,7 +690,7 @@ export const templateService = {
   },
 
   // ====================================================
-  // FILE PATH
+  // FILE ACCESS
   // ====================================================
 
   async getFilePath(
@@ -417,6 +706,16 @@ export const templateService = {
     ) {
       throw new Error(
         'Dosya bulunamadı'
+      );
+    }
+
+    if (
+      isS3Reference(
+        template.file_url
+      )
+    ) {
+      throw new Error(
+        'Template file is stored in object storage'
       );
     }
 
@@ -441,6 +740,63 @@ export const templateService = {
     };
   },
 
+  async getFileStream(
+    id
+  ) {
+    const template =
+      await this.findOne(
+        id
+      );
+
+    if (
+      !template.file_url
+    ) {
+      throw new Error(
+        'Dosya bulunamadı'
+      );
+    }
+
+    if (
+      isS3Reference(
+        template.file_url
+      )
+    ) {
+      const stream =
+        await getS3Stream(
+          template.file_url
+        );
+
+      return {
+        template,
+        stream,
+      };
+    }
+
+    const filePath =
+      resolveTemplateFilePath(
+        template.file_url
+      );
+
+    try {
+      await fsPromises.access(
+        filePath
+      );
+    } catch {
+      throw new Error(
+        'Dosya bulunamadı'
+      );
+    }
+
+    return {
+      template,
+
+      stream:
+        fs.createReadStream(
+          filePath
+        ),
+    };
+  },
+
   // ====================================================
   // UDF PREVIEW
   // ====================================================
@@ -448,11 +804,8 @@ export const templateService = {
   async getUdfPreview(
   id
 ) {
-  const {
-    template,
-    filePath,
-  } =
-    await this.getFilePath(
+  const template =
+    await this.findOne(
       id
     );
 
@@ -474,8 +827,8 @@ export const templateService = {
 
   try {
     udfBuffer =
-      await fsPromises.readFile(
-        filePath
+      await readTemplateBuffer(
+        template
       );
   } catch {
     throw new Error(
