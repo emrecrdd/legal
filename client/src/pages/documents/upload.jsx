@@ -267,6 +267,83 @@ const getCategoryLabel = (
 };
 
 
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getArrayPayload = (
+  response
+) => {
+  const payload =
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    [];
+
+  if (
+    Array.isArray(
+      payload
+    )
+  ) {
+    return payload;
+  }
+
+  if (
+    Array.isArray(
+      payload?.data
+    )
+  ) {
+    return payload.data;
+  }
+
+  if (
+    Array.isArray(
+      payload?.items
+    )
+  ) {
+    return payload.items;
+  }
+
+  if (
+    Array.isArray(
+      payload?.results
+    )
+  ) {
+    return payload.results;
+  }
+
+  return [];
+};
+
+
 const getCaseDisplayName = (
   caseItem
 ) => {
@@ -350,19 +427,25 @@ const DocumentUpload = () => {
       tags: '',
 
       case_id:
-        searchParams.get(
-          'case'
-        ) || '',
+        normalizeId(
+          searchParams.get(
+            'case'
+          )
+        ),
 
       client_id:
-        searchParams.get(
-          'client'
-        ) || '',
+        normalizeId(
+          searchParams.get(
+            'client'
+          )
+        ),
 
       power_of_attorney_id:
-        searchParams.get(
-          'power_of_attorney_id'
-        ) || '',
+        normalizeId(
+          searchParams.get(
+            'power_of_attorney_id'
+          )
+        ),
 
       is_public: false,
     });
@@ -504,41 +587,22 @@ const DocumentUpload = () => {
   // ======================================================
 
   const cases =
-    Array.isArray(
-      casesData?.data?.data
-    )
-      ? casesData.data.data
-      : [];
+    getArrayPayload(
+      casesData
+    );
 
   const clients =
-    Array.isArray(
-      clientsData?.data?.data
-    )
-      ? clientsData.data.data
-      : [];
+    getArrayPayload(
+      clientsData
+    );
 
   const clientCases =
     useMemo(() => {
       const payload =
         clientCasesData?.data?.data ??
         clientCasesData?.data ??
+        clientCasesData ??
         [];
-
-      if (
-        Array.isArray(
-          payload
-        )
-      ) {
-        return payload;
-      }
-
-      if (
-        Array.isArray(
-          payload?.data
-        )
-      ) {
-        return payload.data;
-      }
 
       if (
         Array.isArray(
@@ -548,7 +612,9 @@ const DocumentUpload = () => {
         return payload.cases;
       }
 
-      return [];
+      return getArrayPayload(
+        payload
+      );
     }, [
       clientCasesData,
     ]);
@@ -566,11 +632,9 @@ const DocumentUpload = () => {
   const powerOfAttorneys =
     useMemo(() => {
       const raw =
-        Array.isArray(
-          poaData?.data?.data
-        )
-          ? poaData.data.data
-          : [];
+        getArrayPayload(
+          poaData
+        );
 
       if (
         !formData.client_id
@@ -582,11 +646,11 @@ const DocumentUpload = () => {
         (
           poa
         ) =>
-          String(
-            poa.client_id ||
-            ''
+          normalizeId(
+            poa?.client_id ??
+            poa?.client?.id
           ) ===
-          String(
+          normalizeId(
             formData.client_id
           )
       );
@@ -633,10 +697,10 @@ const DocumentUpload = () => {
         (
           client
         ) =>
-          String(
+          normalizeId(
             client.id
           ) ===
-          String(
+          normalizeId(
             formData.client_id
           )
       );
@@ -651,10 +715,10 @@ const DocumentUpload = () => {
         (
           caseItem
         ) =>
-          String(
+          normalizeId(
             caseItem.id
           ) ===
-          String(
+          normalizeId(
             formData.case_id
           )
       );
@@ -669,10 +733,10 @@ const DocumentUpload = () => {
         (
           poa
         ) =>
-          String(
+          normalizeId(
             poa.id
           ) ===
-          String(
+          normalizeId(
             formData.power_of_attorney_id
           )
       );
@@ -689,6 +753,12 @@ const DocumentUpload = () => {
     (
       event
     ) => {
+      if (
+        isUploading
+      ) {
+        return;
+      }
+
       const {
         name,
         value,
@@ -701,7 +771,17 @@ const DocumentUpload = () => {
         type ===
         'checkbox'
           ? checked
-          : value;
+          : [
+              'client_id',
+              'case_id',
+              'power_of_attorney_id',
+            ].includes(
+              name
+            )
+            ? normalizeId(
+                value
+              )
+            : value;
 
       setFormData(
         (
@@ -765,6 +845,19 @@ const DocumentUpload = () => {
         selectedFiles
       ) {
         if (
+          !file ||
+          Number(
+            file.size
+          ) <= 0
+        ) {
+          toast.error(
+            `${file?.name || 'Dosya'}: boş dosya yüklenemez`
+          );
+
+          continue;
+        }
+
+        if (
           file.size >
           MAX_FILE_SIZE
         ) {
@@ -826,57 +919,75 @@ const DocumentUpload = () => {
         return;
       }
 
-      let firstAddedFile =
-        null;
+      const existingSignatures =
+        new Set(
+          files.map(
+            (
+              file
+            ) =>
+              `${file.name}-${file.size}-${file.lastModified}`
+          )
+        );
+
+      const incomingSignatures =
+        new Set();
+
+      const uniqueNewFiles =
+        validFiles.filter(
+          (
+            file
+          ) => {
+            const signature =
+              `${file.name}-${file.size}-${file.lastModified}`;
+
+            if (
+              existingSignatures.has(
+                signature
+              ) ||
+              incomingSignatures.has(
+                signature
+              )
+            ) {
+              return false;
+            }
+
+            incomingSignatures.add(
+              signature
+            );
+
+            return true;
+          }
+        );
+
+      if (
+        uniqueNewFiles.length ===
+        0
+      ) {
+        toast(
+          'Seçilen dosyalar zaten listede'
+        );
+
+        return;
+      }
+
+      const shouldAutofillName =
+        files.length ===
+          0 &&
+        uniqueNewFiles.length ===
+          1 &&
+        !formData.name.trim();
 
       setFiles(
         (
           current
-        ) => {
-          const signatures =
-            new Set(
-              current.map(
-                (
-                  file
-                ) =>
-                  `${file.name}-${file.size}-${file.lastModified}`
-              )
-            );
-
-          const uniqueNewFiles =
-            validFiles.filter(
-              (
-                file
-              ) => {
-                const signature =
-                  `${file.name}-${file.size}-${file.lastModified}`;
-
-                return !signatures.has(
-                  signature
-                );
-              }
-            );
-
-          if (
-            current.length ===
-              0 &&
-            uniqueNewFiles.length ===
-              1
-          ) {
-            firstAddedFile =
-              uniqueNewFiles[0];
-          }
-
-          return [
-            ...current,
-            ...uniqueNewFiles,
-          ];
-        }
+        ) => [
+          ...current,
+          ...uniqueNewFiles,
+        ]
       );
 
       if (
-        firstAddedFile &&
-        !formData.name.trim()
+        shouldAutofillName
       ) {
         setFormData(
           (
@@ -886,7 +997,8 @@ const DocumentUpload = () => {
 
             name:
               removeExtension(
-                firstAddedFile.name
+                uniqueNewFiles[0]
+                  .name
               ),
           })
         );
@@ -1053,29 +1165,41 @@ const DocumentUpload = () => {
       );
 
       if (
-        formData.case_id
+        normalizeId(
+          formData.case_id
+        )
       ) {
         payload.append(
           'case_id',
-          formData.case_id
+          normalizeId(
+            formData.case_id
+          )
         );
       }
 
       if (
-        formData.client_id
+        normalizeId(
+          formData.client_id
+        )
       ) {
         payload.append(
           'client_id',
-          formData.client_id
+          normalizeId(
+            formData.client_id
+          )
         );
       }
 
       if (
-        formData.power_of_attorney_id
+        normalizeId(
+          formData.power_of_attorney_id
+        )
       ) {
         payload.append(
           'power_of_attorney_id',
-          formData.power_of_attorney_id
+          normalizeId(
+            formData.power_of_attorney_id
+          )
         );
       }
 
@@ -1145,56 +1269,91 @@ const DocumentUpload = () => {
 
   const refreshRelatedQueries =
     async () => {
-      const promises =
-        [];
+      const caseId =
+        normalizeId(
+          formData.case_id
+        );
+
+      const clientId =
+        normalizeId(
+          formData.client_id
+        );
+
+      const powerOfAttorneyId =
+        normalizeId(
+          formData.power_of_attorney_id
+        );
+
+      const promises = [
+        // Belge listeleri merkezi hook tarafından da yenilenir;
+        // ilişkili ekranları burada ayrıca garanti altına alıyoruz.
+        queryClient.invalidateQueries({
+          queryKey: [
+            'case-documents',
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'client-documents',
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'powerOfAttorneys',
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-stats',
+          ],
+        }),
+      ];
 
       if (
-        formData.case_id
+        caseId
       ) {
         promises.push(
           queryClient.invalidateQueries({
             queryKey: [
               'case',
-              formData.case_id,
+              caseId,
             ],
           })
         );
       }
 
       if (
-        formData.client_id
+        clientId
       ) {
         promises.push(
           queryClient.invalidateQueries({
             queryKey: [
               'client',
-              formData.client_id,
+              clientId,
             ],
           })
         );
       }
 
       if (
-        formData.power_of_attorney_id
+        powerOfAttorneyId
       ) {
         promises.push(
           queryClient.invalidateQueries({
             queryKey: [
               'powerOfAttorney',
-              formData.power_of_attorney_id,
+              powerOfAttorneyId,
             ],
           })
         );
       }
 
-      if (
-        promises.length >
-        0
-      ) {
-        await Promise.all(
-          promises
-        );
-      }
+      await Promise.all(
+        promises
+      );
     };
 
   // ======================================================
@@ -1203,21 +1362,31 @@ const DocumentUpload = () => {
 
   const redirectAfterUpload =
     () => {
+      const caseId =
+        normalizeId(
+          formData.case_id
+        );
+
+      const clientId =
+        normalizeId(
+          formData.client_id
+        );
+
       if (
-        formData.case_id
+        caseId
       ) {
         navigate(
-          `/cases/${formData.case_id}`
+          `/cases/${caseId}`
         );
 
         return;
       }
 
       if (
-        formData.client_id
+        clientId
       ) {
         navigate(
-          `/clients/${formData.client_id}`
+          `/clients/${clientId}`
         );
 
         return;
@@ -1258,12 +1427,62 @@ const DocumentUpload = () => {
       const nextErrors =
         {};
 
+      const trimmedName =
+        formData.name.trim();
+
       if (
-        formData.name.length >
+        trimmedName.length >
         255
       ) {
         nextErrors.name =
           'Belge adı en fazla 255 karakter olabilir';
+      }
+
+      if (
+        files.length ===
+          1 &&
+        !trimmedName &&
+        !removeExtension(
+          files[0]?.name
+        ).trim()
+      ) {
+        nextErrors.name =
+          'Belge adı belirlenemedi';
+      }
+
+      const caseId =
+        normalizeId(
+          formData.case_id
+        );
+
+      const clientId =
+        normalizeId(
+          formData.client_id
+        );
+
+      const poaId =
+        normalizeId(
+          formData.power_of_attorney_id
+        );
+
+      if (
+        caseId &&
+        !selectedCase
+      ) {
+        nextErrors.case_id =
+          clientId
+            ? 'Seçilen dava bu müvekkille ilişkili değil veya artık erişilemiyor'
+            : 'Seçilen dava artık erişilemiyor';
+      }
+
+      if (
+        poaId &&
+        !selectedPowerOfAttorney
+      ) {
+        nextErrors.power_of_attorney_id =
+          clientId
+            ? 'Seçilen vekaletname bu müvekkille ilişkili değil veya artık erişilemiyor'
+            : 'Seçilen vekaletname artık erişilemiyor';
       }
 
       setErrors(
@@ -1276,6 +1495,10 @@ const DocumentUpload = () => {
         ).length >
         0
       ) {
+        toast.error(
+          'Belge bilgilerini ve ilişkili kayıtları kontrol edin'
+        );
+
         return;
       }
 
@@ -1329,21 +1552,31 @@ const DocumentUpload = () => {
         return;
       }
 
+      const caseId =
+        normalizeId(
+          formData.case_id
+        );
+
+      const clientId =
+        normalizeId(
+          formData.client_id
+        );
+
       if (
-        formData.case_id
+        caseId
       ) {
         navigate(
-          `/cases/${formData.case_id}`
+          `/cases/${caseId}`
         );
 
         return;
       }
 
       if (
-        formData.client_id
+        clientId
       ) {
         navigate(
-          `/clients/${formData.client_id}`
+          `/clients/${clientId}`
         );
 
         return;
@@ -1366,7 +1599,17 @@ const DocumentUpload = () => {
       <div>
 
         <Link
-          to="/documents"
+          to={
+            formData.case_id
+              ? `/cases/${normalizeId(
+                  formData.case_id
+                )}`
+              : formData.client_id
+                ? `/clients/${normalizeId(
+                    formData.client_id
+                  )}`
+                : '/documents'
+          }
           className="
             inline-flex
             items-center
@@ -1382,7 +1625,11 @@ const DocumentUpload = () => {
         >
           <ArrowLeft className="h-3.5 w-3.5" />
 
-          Belgeler
+          {formData.case_id
+            ? 'Davaya Dön'
+            : formData.client_id
+              ? 'Müvekkile Dön'
+              : 'Belgeler'}
         </Link>
 
         <div className="mt-3 flex items-start gap-3">
@@ -1826,6 +2073,7 @@ const DocumentUpload = () => {
                             dark:hover:text-red-400
                           "
                           aria-label={`${file.name} dosyasını kaldır`}
+                          title="Dosyayı kaldır"
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -2206,7 +2454,9 @@ const DocumentUpload = () => {
                           client.id
                         }
                         value={
-                          client.id
+                          normalizeId(
+                            client.id
+                          )
                         }
                       >
                         {client.name}
@@ -2218,6 +2468,12 @@ const DocumentUpload = () => {
                   )}
 
                 </select>
+
+                {errors.client_id && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {errors.client_id}
+                  </p>
+                )}
 
                 {selectedClient && (
                   <div
@@ -2268,8 +2524,7 @@ const DocumentUpload = () => {
                   }
                   disabled={
                     relationCasesLoading ||
-                    isUploading ||
-                    !formData.client_id
+                    isUploading
                   }
                   className="
                     h-10
@@ -2294,14 +2549,14 @@ const DocumentUpload = () => {
                 >
 
                   <option value="">
-                    {!formData.client_id
-                      ? 'Önce müvekkil seçin'
-                      : relationCasesLoading
-                        ? 'Davalar yükleniyor...'
-                        : relationCases.length >
-                            0
-                          ? 'İlişki yok'
-                          : 'Bu müvekkile ait dava bulunamadı'}
+                    {relationCasesLoading
+                      ? 'Davalar yükleniyor...'
+                      : relationCases.length >
+                          0
+                        ? 'İlişki yok'
+                        : formData.client_id
+                          ? 'Bu müvekkile ait dava bulunamadı'
+                          : 'Dava bulunamadı'}
                   </option>
 
                   {relationCases.map(
@@ -2313,7 +2568,9 @@ const DocumentUpload = () => {
                           caseItem.id
                         }
                         value={
-                          caseItem.id
+                          normalizeId(
+                            caseItem.id
+                          )
                         }
                       >
                         {getCaseDisplayName(
@@ -2325,9 +2582,15 @@ const DocumentUpload = () => {
 
                 </select>
 
+                {errors.case_id && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {errors.case_id}
+                  </p>
+                )}
+
                 {!formData.client_id && (
                   <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
-                    Dava seçebilmek için önce müvekkili seçin.
+                    Müvekkil seçmeden de doğrudan bir dava ile ilişkilendirebilirsiniz.
                   </p>
                 )}
 
@@ -2398,8 +2661,7 @@ const DocumentUpload = () => {
                 }
                 disabled={
                   poaLoading ||
-                  isUploading ||
-                  !formData.client_id
+                  isUploading
                 }
                 className="
                   h-10
@@ -2424,14 +2686,14 @@ const DocumentUpload = () => {
               >
 
                 <option value="">
-                  {!formData.client_id
-                    ? 'Önce müvekkil seçin'
-                    : poaLoading
-                      ? 'Vekaletnameler yükleniyor...'
-                      : powerOfAttorneys.length >
-                          0
-                        ? 'İlişki yok'
-                        : 'Bu müvekkile ait vekaletname bulunamadı'}
+                  {poaLoading
+                    ? 'Vekaletnameler yükleniyor...'
+                    : powerOfAttorneys.length >
+                        0
+                      ? 'İlişki yok'
+                      : formData.client_id
+                        ? 'Bu müvekkile ait vekaletname bulunamadı'
+                        : 'Vekaletname bulunamadı'}
                 </option>
 
                 {powerOfAttorneys.map(
@@ -2443,7 +2705,9 @@ const DocumentUpload = () => {
                         poa.id
                       }
                       value={
-                        poa.id
+                        normalizeId(
+                          poa.id
+                        )
                       }
                     >
                       {poa.title ||
@@ -2458,9 +2722,15 @@ const DocumentUpload = () => {
 
               </select>
 
+              {errors.power_of_attorney_id && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                  {errors.power_of_attorney_id}
+                </p>
+              )}
+
               {!formData.client_id && (
                 <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
-                  Vekaletname seçebilmek için önce müvekkili seçin.
+                  Müvekkil seçmeden de doğrudan bir vekaletname ile ilişkilendirebilirsiniz.
                 </p>
               )}
 
@@ -2674,13 +2944,20 @@ const DocumentUpload = () => {
               </p>
 
               <p className="mt-1 text-sm font-medium text-gray-700 dark:text-slate-300">
-                {formData.case_id
-                  ? 'Dava'
-                  : formData.client_id
+                {[
+                  formData.client_id
                     ? 'Müvekkil'
-                    : formData.power_of_attorney_id
-                      ? 'Vekaletname'
-                      : 'Bağımsız'}
+                    : null,
+                  formData.case_id
+                    ? 'Dava'
+                    : null,
+                  formData.power_of_attorney_id
+                    ? 'Vekaletname'
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' + ') ||
+                  'Bağımsız'}
               </p>
 
             </div>
