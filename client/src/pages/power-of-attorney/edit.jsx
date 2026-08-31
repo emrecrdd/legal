@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useState,
 } from 'react';
 
@@ -81,6 +80,175 @@ const STATUS_OPTIONS = [
   },
 ];
 
+const MAX_FILE_SIZE =
+  10 * 1024 * 1024;
+
+const ALLOWED_DOCUMENT_EXTENSIONS = [
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  '.mp4',
+  '.webm',
+  '.udf',
+];
+
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getArrayPayload = (
+  response
+) => {
+  const payload =
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    [];
+
+  if (
+    Array.isArray(
+      payload
+    )
+  ) {
+    return payload;
+  }
+
+  if (
+    Array.isArray(
+      payload?.data
+    )
+  ) {
+    return payload.data;
+  }
+
+  if (
+    Array.isArray(
+      payload?.items
+    )
+  ) {
+    return payload.items;
+  }
+
+  if (
+    Array.isArray(
+      payload?.results
+    )
+  ) {
+    return payload.results;
+  }
+
+  return [];
+};
+
+const getExtension = (
+  filename
+) => {
+  const value =
+    String(
+      filename ||
+      ''
+    );
+
+  const index =
+    value.lastIndexOf(
+      '.'
+    );
+
+  if (
+    index < 0
+  ) {
+    return '';
+  }
+
+  return value
+    .slice(
+      index
+    )
+    .toLowerCase();
+};
+
+const normalizeAuthorities = (
+  values
+) => {
+  if (
+    !Array.isArray(
+      values
+    )
+  ) {
+    return [];
+  }
+
+  const seen =
+    new Set();
+
+  return values
+    .map(
+      (value) =>
+        String(
+          value ||
+          ''
+        ).trim()
+    )
+    .filter(Boolean)
+    .filter(
+      (value) => {
+        const key =
+          value.toLocaleLowerCase(
+            'tr-TR'
+          );
+
+        if (
+          seen.has(
+            key
+          )
+        ) {
+          return false;
+        }
+
+        seen.add(
+          key
+        );
+
+        return true;
+      }
+    );
+};
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -120,13 +288,33 @@ const getStatusLabel = (
 const formatDateInput = (
   date
 ) => {
-  if (!date) {
+  if (
+    !date
+  ) {
     return '';
+  }
+
+  const raw =
+    String(
+      date
+    ).trim();
+
+  const directMatch =
+    raw.match(
+      /^(\d{4}-\d{2}-\d{2})/
+    );
+
+  if (
+    directMatch?.[1]
+  ) {
+    return directMatch[1];
   }
 
   try {
     const parsed =
-      new Date(date);
+      new Date(
+        date
+      );
 
     if (
       Number.isNaN(
@@ -136,21 +324,24 @@ const formatDateInput = (
       return '';
     }
 
-    const year =
-      parsed.getUTCFullYear();
+    const formatter =
+      new Intl.DateTimeFormat(
+        'en-CA',
+        {
+          timeZone:
+            'Europe/Istanbul',
+          year:
+            'numeric',
+          month:
+            '2-digit',
+          day:
+            '2-digit',
+        }
+      );
 
-    const month =
-      String(
-        parsed.getUTCMonth() +
-          1
-      ).padStart(2, '0');
-
-    const day =
-      String(
-        parsed.getUTCDate()
-      ).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
+    return formatter.format(
+      parsed
+    );
   } catch {
     return '';
   }
@@ -161,8 +352,15 @@ const formatDateInput = (
 // ======================================================
 
 const PowerOfAttorneyEdit = () => {
-  const { id } =
+  const {
+    id: idParam,
+  } =
     useParams();
+
+  const id =
+    normalizeId(
+      idParam
+    );
 
   const navigate =
     useNavigate();
@@ -234,7 +432,9 @@ const PowerOfAttorneyEdit = () => {
       ),
 
     enabled:
-      Boolean(id),
+      Boolean(
+        id
+      ),
   });
 
   // ======================================================
@@ -275,18 +475,24 @@ const PowerOfAttorneyEdit = () => {
   } = useQuery({
     queryKey: [
       'clients',
-      formData.client_id,
-      'power-of-attorney-edit-cases',
+      normalizeId(
+        formData.client_id
+      ),
+      'cases',
     ],
 
     queryFn: () =>
       clientApi.getCaseHistory(
-        formData.client_id
+        normalizeId(
+          formData.client_id
+        )
       ),
 
     enabled:
       Boolean(
-        formData.client_id
+        normalizeId(
+          formData.client_id
+        )
       ),
 
     staleTime:
@@ -303,71 +509,56 @@ const PowerOfAttorneyEdit = () => {
     null;
 
   const clients =
-    Array.isArray(
-      clientsData?.data?.data
-    )
-      ? clientsData.data.data
-      : [];
+    getArrayPayload(
+      clientsData
+    );
+
+  const clientCasesPayload =
+    clientCasesData?.data?.data ??
+    clientCasesData?.data ??
+    clientCasesData ??
+    [];
 
   const cases =
-    useMemo(() => {
-      const payload =
-        clientCasesData?.data?.data ??
-        clientCasesData?.data ??
-        [];
-
-      if (
-        Array.isArray(
-          payload
-        )
-      ) {
-        return payload;
-      }
-
-      if (
-        Array.isArray(
-          payload?.data
-        )
-      ) {
-        return payload.data;
-      }
-
-      if (
-        Array.isArray(
-          payload?.cases
-        )
-      ) {
-        return payload.cases;
-      }
-
-      return [];
-    }, [
-      clientCasesData,
-    ]);
+    Array.isArray(
+      clientCasesPayload?.cases
+    )
+      ? clientCasesPayload.cases
+      : getArrayPayload(
+          clientCasesPayload
+        );
 
   // ======================================================
   // INITIALIZE FORM
   // ======================================================
 
   useEffect(() => {
+    const poaId =
+      normalizeId(
+        poa?.id
+      );
+
     if (
       !poa ||
+      !poaId ||
       initializedId ===
-        poa.id
+        poaId
     ) {
       return;
     }
 
     setFormData({
       client_id:
-        poa.client_id ||
-        poa.client?.id ||
-        '',
+        normalizeId(
+          poa.client_id ??
+          poa.client?.id
+        ),
 
       case_id:
-        poa.case_id ||
-        poa.case?.id ||
-        '',
+        normalizeId(
+          poa.case_id ??
+          poa.case?.id
+        ),
 
       title:
         poa.title ||
@@ -392,11 +583,9 @@ const PowerOfAttorneyEdit = () => {
         'active',
 
       authorities:
-        Array.isArray(
+        normalizeAuthorities(
           poa.authorities
-        )
-          ? poa.authorities
-          : [],
+        ),
 
       notes:
         poa.notes ||
@@ -404,12 +593,112 @@ const PowerOfAttorneyEdit = () => {
     });
 
     setInitializedId(
-      poa.id
+      poaId
     );
   }, [
     poa,
     initializedId,
   ]);
+
+  const refreshPowerOfAttorneyViews =
+    async ({
+      includeDocuments = false,
+      clientId = '',
+      caseId = '',
+    } = {}) => {
+      const normalizedClientId =
+        normalizeId(
+          clientId
+        );
+
+      const normalizedCaseId =
+        normalizeId(
+          caseId
+        );
+
+      const invalidations = [
+        queryClient.invalidateQueries({
+          queryKey: [
+            'powerOfAttorneys',
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'powerOfAttorney',
+            id,
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'dashboard-stats',
+          ],
+        }),
+      ];
+
+      if (
+        includeDocuments
+      ) {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: [
+              'documents',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'case-documents',
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'client-documents',
+            ],
+          })
+        );
+      }
+
+      if (
+        normalizedClientId
+      ) {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: [
+              'client',
+              normalizedClientId,
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'clients',
+              normalizedClientId,
+              'cases',
+            ],
+          })
+        );
+      }
+
+      if (
+        normalizedCaseId
+      ) {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: [
+              'case',
+              normalizedCaseId,
+            ],
+          })
+        );
+      }
+
+      await Promise.all(
+        invalidations
+      );
+    };
 
   // ======================================================
   // MUTATIONS
@@ -422,6 +711,14 @@ const PowerOfAttorneyEdit = () => {
           data,
           file,
         }) => {
+          if (
+            !id
+          ) {
+            throw new Error(
+              'Geçerli vekaletname kaydı bulunamadı'
+            );
+          }
+
           const updateResponse =
             await powerOfAttorneyApi.update(
               id,
@@ -445,8 +742,8 @@ const PowerOfAttorneyEdit = () => {
 
               uploadData.append(
                 'name',
-                file.name ||
                 data.title ||
+                file.name ||
                 'Vekaletname belgesi'
               );
 
@@ -460,10 +757,14 @@ const PowerOfAttorneyEdit = () => {
                 id
               );
 
-              uploadData.append(
-                'client_id',
+              if (
                 data.client_id
-              );
+              ) {
+                uploadData.append(
+                  'client_id',
+                  data.client_id
+                );
+              }
 
               if (
                 data.case_id
@@ -511,26 +812,16 @@ const PowerOfAttorneyEdit = () => {
         async (
           result
         ) => {
-          await Promise.all([
-            queryClient.invalidateQueries({
-              queryKey: [
-                'powerOfAttorneys',
-              ],
-            }),
-
-            queryClient.invalidateQueries({
-              queryKey: [
-                'powerOfAttorney',
-                id,
-              ],
-            }),
-
-            queryClient.invalidateQueries({
-              queryKey: [
-                'documents',
-              ],
-            }),
-          ]);
+          await refreshPowerOfAttorneyViews({
+            includeDocuments:
+              Boolean(
+                selectedFile
+              ),
+            clientId:
+              formData.client_id,
+            caseId:
+              formData.case_id,
+          });
 
           if (
             result?.documentWarning
@@ -566,16 +857,43 @@ const PowerOfAttorneyEdit = () => {
 
   const deleteMutation =
     useMutation({
-      mutationFn: () =>
-        powerOfAttorneyApi.delete(
+      mutationFn: () => {
+        if (
+          !id
+        ) {
+          throw new Error(
+            'Geçerli vekaletname kaydı bulunamadı'
+          );
+        }
+
+        return powerOfAttorneyApi.delete(
           id
-        ),
+        );
+      },
 
       onSuccess: async () => {
-        await queryClient.invalidateQueries({
+        await queryClient.cancelQueries({
           queryKey: [
-            'powerOfAttorneys',
+            'powerOfAttorney',
+            id,
           ],
+        });
+
+        queryClient.removeQueries({
+          queryKey: [
+            'powerOfAttorney',
+            id,
+          ],
+          exact: true,
+        });
+
+        await refreshPowerOfAttorneyViews({
+          includeDocuments:
+            true,
+          clientId:
+            formData.client_id,
+          caseId:
+            formData.case_id,
         });
 
         toast.success(
@@ -603,10 +921,29 @@ const PowerOfAttorneyEdit = () => {
   const handleChange = (
     event
   ) => {
+    if (
+      updateMutation.isPending ||
+      deleteMutation.isPending
+    ) {
+      return;
+    }
+
     const {
       name,
       value,
     } = event.target;
+
+    const nextValue =
+      [
+        'client_id',
+        'case_id',
+      ].includes(
+        name
+      )
+        ? normalizeId(
+            value
+          )
+        : value;
 
     setFormData(
       (
@@ -620,7 +957,7 @@ const PowerOfAttorneyEdit = () => {
             ...current,
 
             client_id:
-              value,
+              nextValue,
 
             case_id:
               '',
@@ -631,7 +968,7 @@ const PowerOfAttorneyEdit = () => {
           ...current,
 
           [name]:
-            value,
+            nextValue,
         };
       }
     );
@@ -654,6 +991,13 @@ const PowerOfAttorneyEdit = () => {
 
   const handleAddAuthority =
     () => {
+      if (
+        updateMutation.isPending ||
+        deleteMutation.isPending
+      ) {
+        return;
+      }
+
       const value =
         authorityInput.trim();
 
@@ -700,6 +1044,13 @@ const PowerOfAttorneyEdit = () => {
 
   const handleRemoveAuthority =
     (index) => {
+      if (
+        updateMutation.isPending ||
+        deleteMutation.isPending
+      ) {
+        return;
+      }
+
       setFormData(
         (current) => ({
           ...current,
@@ -725,6 +1076,13 @@ const PowerOfAttorneyEdit = () => {
     (
       event
     ) => {
+      if (
+        updateMutation.isPending ||
+        deleteMutation.isPending
+      ) {
+        return;
+      }
+
       const file =
         event.target.files?.[0] ||
         null;
@@ -739,17 +1097,63 @@ const PowerOfAttorneyEdit = () => {
         return;
       }
 
-      const maxSize =
-        10 *
-        1024 *
-        1024;
+      if (
+        Number(
+          file.size
+        ) <= 0
+      ) {
+        toast.error(
+          'Boş dosya yüklenemez'
+        );
+
+        setSelectedFile(
+          null
+        );
+
+        setFileInputKey(
+          (
+            current
+          ) =>
+            current + 1
+        );
+
+        return;
+      }
 
       if (
         file.size >
-        maxSize
+        MAX_FILE_SIZE
       ) {
         toast.error(
           'Belge boyutu 10MB’dan büyük olamaz'
+        );
+
+        setSelectedFile(
+          null
+        );
+
+        setFileInputKey(
+          (
+            current
+          ) =>
+            current + 1
+        );
+
+        return;
+      }
+
+      const extension =
+        getExtension(
+          file.name
+        );
+
+      if (
+        !ALLOWED_DOCUMENT_EXTENSIONS.includes(
+          extension
+        )
+      ) {
+        toast.error(
+          'Desteklenmeyen belge türü'
         );
 
         setSelectedFile(
@@ -773,6 +1177,13 @@ const PowerOfAttorneyEdit = () => {
 
   const clearSelectedFile =
     () => {
+      if (
+        updateMutation.isPending ||
+        deleteMutation.isPending
+      ) {
+        return;
+      }
+
       setSelectedFile(
         null
       );
@@ -794,19 +1205,57 @@ const PowerOfAttorneyEdit = () => {
       const nextErrors =
         {};
 
+      const clientId =
+        normalizeId(
+          formData.client_id
+        );
+
+      const caseId =
+        normalizeId(
+          formData.case_id
+        );
+
       if (
-        !formData.client_id
+        !clientId
       ) {
         nextErrors.client_id =
           'Müvekkil seçimi zorunludur';
       }
 
+      const title =
+        formData.title.trim();
+
       if (
-        formData.title.length >
+        title.length >
         255
       ) {
         nextErrors.title =
           'Başlık en fazla 255 karakter olabilir';
+      }
+
+      if (
+        !STATUS_OPTIONS.some(
+          (item) =>
+            item.value ===
+            formData.status
+        )
+      ) {
+        nextErrors.status =
+          'Geçersiz vekaletname durumu';
+      }
+
+      if (
+        caseId &&
+        !cases.some(
+          (caseItem) =>
+            normalizeId(
+              caseItem?.id
+            ) ===
+            caseId
+        )
+      ) {
+        nextErrors.case_id =
+          'Seçilen dava bu müvekkille ilişkili değil veya artık erişilemiyor';
       }
 
       if (
@@ -840,8 +1289,19 @@ const PowerOfAttorneyEdit = () => {
     event.preventDefault();
 
     if (
-      updateMutation.isPending
+      updateMutation.isPending ||
+      deleteMutation.isPending
     ) {
+      return;
+    }
+
+    if (
+      !id
+    ) {
+      toast.error(
+        'Geçerli vekaletname kaydı bulunamadı'
+      );
+
       return;
     }
 
@@ -862,10 +1322,14 @@ const PowerOfAttorneyEdit = () => {
      */
     const submitData = {
       client_id:
-        formData.client_id,
+        normalizeId(
+          formData.client_id
+        ),
 
       case_id:
-        formData.case_id ||
+        normalizeId(
+          formData.case_id
+        ) ||
         null,
 
       title:
@@ -889,7 +1353,9 @@ const PowerOfAttorneyEdit = () => {
         formData.status,
 
       authorities:
-        formData.authorities,
+        normalizeAuthorities(
+          formData.authorities
+        ),
 
       notes:
         formData.notes
@@ -912,9 +1378,26 @@ const PowerOfAttorneyEdit = () => {
 
   const handleDelete =
     () => {
+      if (
+        updateMutation.isPending ||
+        deleteMutation.isPending
+      ) {
+        return;
+      }
+
       if (!canDelete) {
         toast.error(
           'Bu vekaletnameyi silme yetkiniz bulunmuyor'
+        );
+
+        return;
+      }
+
+      if (
+        !id
+      ) {
+        toast.error(
+          'Geçerli vekaletname kaydı bulunamadı'
         );
 
         return;
@@ -1090,20 +1573,30 @@ const PowerOfAttorneyEdit = () => {
                   {poa.documents.map(
                     (
                       document
-                    ) => (
+                    ) => {
+                      const documentItem =
+                        document?.document ||
+                        document;
+
+                      return (
                       <div
                         key={
-                          document.id
+                          normalizeId(
+                            documentItem?.id
+                          ) ||
+                          documentItem?.original_name ||
+                          documentItem?.name
                         }
                         className="rounded-lg border border-blue-200/70 bg-white/70 px-3 py-2 dark:border-blue-800 dark:bg-slate-900/30"
                       >
                         <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
-                          {document.original_name ||
-                            document.name ||
+                          {documentItem?.original_name ||
+                            documentItem?.name ||
                             'Belge'}
                         </p>
                       </div>
-                    )
+                      );
+                    }
                   )}
 
                 </div>
@@ -1124,14 +1617,17 @@ const PowerOfAttorneyEdit = () => {
                   handleFileChange
                 }
                 disabled={
-                  updateMutation.isPending
+                  updateMutation.isPending ||
+                  deleteMutation.isPending
                 }
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt,.udf"
+                accept={ALLOWED_DOCUMENT_EXTENSIONS.join(
+                  ','
+                )}
                 className="block w-full text-sm text-blue-900 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-700 disabled:opacity-60 dark:text-blue-200"
               />
 
               <p className="mt-1 text-xs text-blue-700/80 dark:text-blue-300/80">
-                PDF, Word, Excel, görsel, metin ve UDF · Maksimum 10MB
+                PDF, Word, Excel, görsel, video ve UDF · Maksimum 10MB
               </p>
 
               {selectedFile && (
@@ -1215,7 +1711,9 @@ const PowerOfAttorneyEdit = () => {
                       client.id
                     }
                     value={
-                      client.id
+                      normalizeId(
+                        client.id
+                      )
                     }
                   >
                     {
@@ -1282,7 +1780,9 @@ const PowerOfAttorneyEdit = () => {
                       caseItem.id
                     }
                     value={
-                      caseItem.id
+                      normalizeId(
+                        caseItem.id
+                      )
                     }
                   >
                     {
@@ -1296,6 +1796,12 @@ const PowerOfAttorneyEdit = () => {
               )}
 
             </select>
+
+            {errors.case_id && (
+              <p className="mt-1 text-sm text-red-600">
+                {errors.case_id}
+              </p>
+            )}
 
           </div>
 
@@ -1425,6 +1931,12 @@ const PowerOfAttorneyEdit = () => {
 
             </select>
 
+            {errors.status && (
+              <p className="mt-1 text-sm text-red-600">
+                {errors.status}
+              </p>
+            )}
+
           </div>
 
           {/* AUTHORITIES */}
@@ -1462,7 +1974,8 @@ const PowerOfAttorneyEdit = () => {
                   }
                 }}
                 disabled={
-                  updateMutation.isPending
+                  updateMutation.isPending ||
+                  deleteMutation.isPending
                 }
                 placeholder="Yetki ekle, örn: tahsilat"
                 className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
@@ -1475,7 +1988,8 @@ const PowerOfAttorneyEdit = () => {
                   handleAddAuthority
                 }
                 disabled={
-                  updateMutation.isPending
+                  updateMutation.isPending ||
+                  deleteMutation.isPending
                 }
               >
                 Ekle
@@ -1578,7 +2092,8 @@ const PowerOfAttorneyEdit = () => {
                 updateMutation.isPending
               }
               disabled={
-                updateMutation.isPending
+                updateMutation.isPending ||
+                deleteMutation.isPending
               }
             >
               <Save className="mr-2 h-4 w-4" />
@@ -1595,7 +2110,8 @@ const PowerOfAttorneyEdit = () => {
                 )
               }
               disabled={
-                updateMutation.isPending
+                updateMutation.isPending ||
+                deleteMutation.isPending
               }
             >
               Vazgeç
@@ -1612,7 +2128,8 @@ const PowerOfAttorneyEdit = () => {
                   deleteMutation.isPending
                 }
                 disabled={
-                  deleteMutation.isPending
+                  deleteMutation.isPending ||
+                  updateMutation.isPending
                 }
               >
                 <Trash2 className="mr-2 h-4 w-4" />
