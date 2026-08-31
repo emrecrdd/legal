@@ -19,6 +19,12 @@ import {
 } from 'fast-xml-parser';
 
 import {
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
+
+import {
   Document,
 } from '../../models/Document.js';
 
@@ -41,6 +47,11 @@ import {
 import {
   sequelize,
 } from '../../config/database.js';
+
+import {
+  s3Client,
+  S3_BUCKET_NAME,
+} from '../../config/s3.js';
 
 import {
   paginate,
@@ -393,6 +404,197 @@ const createStoredFilename = (
     `${crypto.randomUUID()}${extension}`
   );
 };
+
+const createStorageKey = (
+  originalName
+) => {
+  return `documents/${createStoredFilename(
+    originalName
+  )}`;
+};
+
+const createS3Reference = (
+  key
+) => {
+  return `s3:${key}`;
+};
+
+const isS3Reference = (
+  value
+) => {
+  return (
+    typeof value ===
+      'string' &&
+    value.startsWith(
+      's3:'
+    )
+  );
+};
+
+const getS3Key = (
+  reference
+) => {
+  return reference.slice(
+    3
+  );
+};
+
+const assertS3Config = () => {
+  if (
+    !S3_BUCKET_NAME ||
+    !process.env.AWS_REGION ||
+    !process.env.AWS_ENDPOINT_URL_S3 ||
+    !process.env.AWS_ACCESS_KEY_ID ||
+    !process.env.AWS_SECRET_ACCESS_KEY
+  ) {
+    throw new Error(
+      'Object storage configuration is missing'
+    );
+  }
+};
+
+const uploadToS3 =
+  async ({
+    key,
+    buffer,
+    mimeType,
+  }) => {
+    assertS3Config();
+
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket:
+          S3_BUCKET_NAME,
+
+        Key:
+          key,
+
+        Body:
+          buffer,
+
+        ContentType:
+          mimeType,
+      })
+    );
+  };
+
+const deleteFromS3Safely =
+  async (
+    key
+  ) => {
+    try {
+      assertS3Config();
+
+      await s3Client.send(
+        new DeleteObjectCommand({
+          Bucket:
+            S3_BUCKET_NAME,
+
+          Key:
+            key,
+        })
+      );
+    } catch {
+      // Rollback cleanup ana hatayı ezmesin.
+    }
+  };
+
+const getS3Stream =
+  async (
+    reference
+  ) => {
+    assertS3Config();
+
+    try {
+      const response =
+        await s3Client.send(
+          new GetObjectCommand({
+            Bucket:
+              S3_BUCKET_NAME,
+
+            Key:
+              getS3Key(
+                reference
+              ),
+          })
+        );
+
+      if (
+        !response.Body
+      ) {
+        throw new Error(
+          'File not found'
+        );
+      }
+
+      return response.Body;
+    } catch {
+      throw new Error(
+        'File not found'
+      );
+    }
+  };
+
+const streamToBuffer =
+  async (
+    stream
+  ) => {
+    const chunks = [];
+
+    for await (
+      const chunk of stream
+    ) {
+      chunks.push(
+        Buffer.isBuffer(
+          chunk
+        )
+          ? chunk
+          : Buffer.from(
+              chunk
+            )
+      );
+    }
+
+    return Buffer.concat(
+      chunks
+    );
+  };
+
+const readDocumentBuffer =
+  async (
+    document
+  ) => {
+    if (
+      isS3Reference(
+        document.file_path
+      )
+    ) {
+      const stream =
+        await getS3Stream(
+          document.file_path
+        );
+
+      return streamToBuffer(
+        stream
+      );
+    }
+
+    // Eski lokal belgeler için fallback.
+    const filePath =
+      resolveStoredFilePath(
+        document.file_path
+      );
+
+    try {
+      return await fsPromises.readFile(
+        filePath
+      );
+    } catch {
+      throw new Error(
+        'File not found'
+      );
+    }
+  };
 
 const resolveStoredFilePath = (
   storedFilename
@@ -1222,33 +1424,34 @@ export const documentService = {
         file.mimetype
       );
 
-    const storedFilename =
-      createStoredFilename(
+    const storageKey =
+      createStorageKey(
         originalName
       );
 
-    const storedPath =
-      resolveStoredFilePath(
-        storedFilename
+    const storedReference =
+      createS3Reference(
+        storageKey
       );
 
     const transaction =
       await sequelize.transaction();
 
-    let fileWritten =
+    let objectWritten =
       false;
 
     try {
-      await fsPromises.writeFile(
-        storedPath,
-        file.buffer,
-        {
-          flag:
-            'wx',
-        }
-      );
+      await uploadToS3({
+        key:
+          storageKey,
 
-      fileWritten =
+        buffer:
+          file.buffer,
+
+        mimeType,
+      });
+
+      objectWritten =
         true;
 
       const document =
@@ -1262,7 +1465,7 @@ export const documentService = {
               originalName,
 
             file_path:
-              storedFilename,
+              storedReference,
 
             file_size:
               file.size,
@@ -1338,15 +1541,11 @@ export const documentService = {
       await transaction.rollback();
 
       if (
-        fileWritten
+        objectWritten
       ) {
-        await fsPromises
-          .unlink(
-            storedPath
-          )
-          .catch(
-            () => {}
-          );
+        await deleteFromS3Safely(
+          storageKey
+        );
       }
 
       throw error;
@@ -1477,33 +1676,34 @@ export const documentService = {
         file.mimetype
       );
 
-    const storedFilename =
-      createStoredFilename(
+    const storageKey =
+      createStorageKey(
         originalName
       );
 
-    const storedPath =
-      resolveStoredFilePath(
-        storedFilename
+    const storedReference =
+      createS3Reference(
+        storageKey
       );
 
     const transaction =
       await sequelize.transaction();
 
-    let fileWritten =
+    let objectWritten =
       false;
 
     try {
-      await fsPromises.writeFile(
-        storedPath,
-        file.buffer,
-        {
-          flag:
-            'wx',
-        }
-      );
+      await uploadToS3({
+        key:
+          storageKey,
 
-      fileWritten =
+        buffer:
+          file.buffer,
+
+        mimeType,
+      });
+
+      objectWritten =
         true;
 
       const document =
@@ -1517,7 +1717,7 @@ export const documentService = {
               originalName,
 
             file_path:
-              storedFilename,
+              storedReference,
 
             file_size:
               file.size,
@@ -1608,15 +1808,11 @@ export const documentService = {
       await transaction.rollback();
 
       if (
-        fileWritten
+        objectWritten
       ) {
-        await fsPromises
-          .unlink(
-            storedPath
-          )
-          .catch(
-            () => {}
-          );
+        await deleteFromS3Safely(
+          storageKey
+        );
       }
 
       throw error;
@@ -2078,11 +2274,51 @@ export const documentService = {
     documentOrId,
     actor
   ) {
-    const filePath =
-      await this.getFilePath(
-        documentOrId,
+    const documentId =
+      typeof documentOrId ===
+      'object'
+        ? documentOrId?.id
+        : documentOrId;
+
+    if (
+      !documentId
+    ) {
+      throw new Error(
+        'Document not found'
+      );
+    }
+
+    const document =
+      await assertDocumentReadAccess(
+        documentId,
         actor
       );
+
+    if (
+      isS3Reference(
+        document.file_path
+      )
+    ) {
+      return getS3Stream(
+        document.file_path
+      );
+    }
+
+    // Eski lokal belgeler için fallback.
+    const filePath =
+      resolveStoredFilePath(
+        document.file_path
+      );
+
+    try {
+      await fsPromises.access(
+        filePath
+      );
+    } catch {
+      throw new Error(
+        'File not found'
+      );
+    }
 
     return fs.createReadStream(
       filePath
@@ -2127,21 +2363,6 @@ export const documentService = {
     );
   }
 
-  const filePath =
-    resolveStoredFilePath(
-      document.file_path
-    );
-
-  try {
-    await fsPromises.access(
-      filePath
-    );
-  } catch {
-    throw new Error(
-      'File not found'
-    );
-  }
-
   // ====================================================
   // READ UDF BUFFER
   // ====================================================
@@ -2150,8 +2371,8 @@ export const documentService = {
 
   try {
     udfBuffer =
-      await fsPromises.readFile(
-        filePath
+      await readDocumentBuffer(
+        document
       );
   } catch {
     throw new Error(
