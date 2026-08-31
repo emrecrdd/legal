@@ -13,7 +13,6 @@ import {
 
 import {
   useQuery,
-  useQueryClient,
 } from '@tanstack/react-query';
 
 import {
@@ -528,9 +527,6 @@ const MeetingCreate = () => {
   const navigate =
     useNavigate();
 
-  const queryClient =
-    useQueryClient();
-
   const [
     searchParams,
   ] =
@@ -958,17 +954,6 @@ const MeetingCreate = () => {
           requestedCaseId ||
           current.case_id,
 
-        /*
-         * ClientDetail üzerinden toplantı oluşturuluyorsa toplantı tipi
-         * varsayılan olarak müvekkil görüşmesine çekilir. Kullanıcı isterse
-         * sonradan değiştirebilir.
-         */
-        meeting_type:
-          requestedClientId &&
-          current.meeting_type ===
-            'other'
-            ? 'client'
-            : current.meeting_type,
       })
     );
 
@@ -989,6 +974,16 @@ const MeetingCreate = () => {
   const createMeeting =
     useCreateMeeting();
 
+  /*
+   * Cache invalidation meeting.query.js içinde merkezi olarak yapılıyor.
+   * Burada tekrar invalidate/setQueryData yapmıyoruz:
+   * - aynı sorguların iki kez refetch edilmesini önler,
+   * - create response'u kısmi ise detail cache'inin eksik veriyle
+   *   taze kabul edilmesi riskini ortadan kaldırır.
+   *
+   * Bu component sadece navigation ve backend field-error eşlemesini
+   * yönetir.
+   */
   const mutation = {
     ...createMeeting,
 
@@ -1004,186 +999,25 @@ const MeetingCreate = () => {
       createMeeting.mutate(
         submitData,
         {
-          onSuccess:
-            async (
-              response
-            ) => {
-              const meeting =
-                getResponseItem(
-                  response
-                );
-
-              const meetingId =
-                normalizeId(
-                  meeting?.id
-                );
-
-              const clientId =
-                normalizeId(
-                  meeting?.client_id ??
-                  meeting?.client?.id ??
-                  submitData?.client_id
-                );
-
-              const caseId =
-                normalizeId(
-                  meeting?.case_id ??
-                  meeting?.case?.id ??
-                  submitData?.case_id
-                );
-
-              if (
-                meetingId
-              ) {
-                queryClient.setQueryData(
-                  [
-                    'meeting',
-                    meetingId,
-                  ],
-                  response
-                );
-              }
-
-              /*
-               * Merkezi meeting hook'unun invalidation'ı ne olursa olsun,
-               * ClientDetail cockpit ve ilişkili case/client ekranlarını
-               * create -> navigate yarışına karşı burada da await ediyoruz.
-               */
-              const invalidations = [
-                queryClient.invalidateQueries({
-                  queryKey: [
-                    'meetings',
-                  ],
-                }),
-
-                queryClient.invalidateQueries({
-                  queryKey: [
-                    'calendar-meetings',
-                  ],
-                }),
-
-                queryClient.invalidateQueries({
-                  queryKey: [
-                    'calendar-events',
-                  ],
-                }),
-
-                queryClient.invalidateQueries({
-                  queryKey: [
-                    'dashboard-meetings',
-                  ],
-                }),
-
-                queryClient.invalidateQueries({
-                  queryKey: [
-                    'dashboard-stats',
-                  ],
-                }),
-
-                /*
-                 * useClientMeetingTimeline'ın kullandığı namespace sürümlerine
-                 * karşı prefix invalidation. Kullanılmayan alias zararsızdır.
-                 */
-                queryClient.invalidateQueries({
-                  queryKey: [
-                    'client-meetings',
-                  ],
-                }),
-
-                queryClient.invalidateQueries({
-                  queryKey: [
-                    'client-meeting-timeline',
-                  ],
-                }),
-
-                queryClient.invalidateQueries({
-                  queryKey: [
-                    'client-meeting-overview',
-                  ],
-                }),
-              ];
-
-              if (
-                clientId
-              ) {
-                invalidations.push(
-                  queryClient.invalidateQueries({
-                    queryKey: [
-                      'client',
-                      clientId,
-                    ],
-                  }),
-
-                  queryClient.invalidateQueries({
-                    predicate:
-                      (query) => {
-                        const key =
-                          query.queryKey;
-
-                        if (
-                          !Array.isArray(
-                            key
-                          )
-                        ) {
-                          return false;
-                        }
-
-                        return (
-                          key.some(
-                            (part) =>
-                              normalizeId(
-                                part
-                              ) ===
-                              clientId
-                          ) &&
-                          key.some(
-                            (part) =>
-                              typeof part ===
-                                'string' &&
-                              part
-                                .toLocaleLowerCase(
-                                  'en-US'
-                                )
-                                .includes(
-                                  'meeting'
-                                )
-                          )
-                        );
-                      },
-                  })
-                );
-              }
-
-              if (
-                caseId
-              ) {
-                invalidations.push(
-                  queryClient.invalidateQueries({
-                    queryKey: [
-                      'case',
-                      caseId,
-                    ],
-                  }),
-
-                  queryClient.invalidateQueries({
-                    queryKey: [
-                      'case-meetings',
-                      caseId,
-                    ],
-                  })
-                );
-              }
-
-              await Promise.all(
-                invalidations
+          onSuccess: (
+            response
+          ) => {
+            const meeting =
+              getResponseItem(
+                response
               );
 
-              navigate(
-                meetingId
-                  ? `/meetings/${meetingId}`
-                  : '/meetings'
+            const meetingId =
+              normalizeId(
+                meeting?.id
               );
-            },
+
+            navigate(
+              meetingId
+                ? `/meetings/${meetingId}`
+                : '/meetings'
+            );
+          },
 
           onError: (
             error
