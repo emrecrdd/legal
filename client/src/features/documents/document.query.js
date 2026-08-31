@@ -13,6 +13,38 @@ import toast from 'react-hot-toast';
 // QUERY KEYS
 // ======================================================
 
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
 export const DOCUMENT_QUERY_KEYS = {
   all: ['documents'],
 
@@ -29,7 +61,9 @@ export const DOCUMENT_QUERY_KEYS = {
   detail: (id) => [
     ...DOCUMENT_QUERY_KEYS.all,
     'detail',
-    id,
+    normalizeId(
+      id
+    ),
   ],
 
   categories: () => [
@@ -45,18 +79,28 @@ export const DOCUMENT_QUERY_KEYS = {
   versions: (documentId) => [
     ...DOCUMENT_QUERY_KEYS.all,
     'versions',
-    documentId,
+    normalizeId(
+      documentId
+    ),
+  ],
+
+  infinites: () => [
+    ...DOCUMENT_QUERY_KEYS.all,
+    'infinite',
   ],
 
   infinite: (params = {}) => [
-    ...DOCUMENT_QUERY_KEYS.all,
-    'infinite',
+    ...DOCUMENT_QUERY_KEYS.infinites(),
     params,
   ],
 
-  search: (query, params = {}) => [
+  searches: () => [
     ...DOCUMENT_QUERY_KEYS.all,
     'search',
+  ],
+
+  search: (query, params = {}) => [
+    ...DOCUMENT_QUERY_KEYS.searches(),
     query,
     params,
   ],
@@ -84,6 +128,152 @@ const getErrorMessage = (
     error?.response?.data?.message ||
     error?.message ||
     fallback
+  );
+};
+
+const invalidateDocumentCollections = async (
+  queryClient,
+  {
+    categories = true,
+    statistics = true,
+    relatedViews = true,
+  } = {}
+) => {
+  const invalidations = [
+    // Normal belge listeleri
+    queryClient.invalidateQueries({
+      queryKey:
+        DOCUMENT_QUERY_KEYS.lists(),
+    }),
+
+    // Sonsuz kaydırmalı belge listeleri
+    queryClient.invalidateQueries({
+      queryKey:
+        DOCUMENT_QUERY_KEYS.infinites(),
+    }),
+
+    // Arama sonuçları
+    queryClient.invalidateQueries({
+      queryKey:
+        DOCUMENT_QUERY_KEYS.searches(),
+    }),
+
+    // Dashboard'da belge özeti / son belgeler varsa
+    queryClient.invalidateQueries({
+      queryKey: [
+        'dashboard-documents',
+      ],
+    }),
+
+    // Dashboard toplam belge sayısı / istatistik kartları
+    queryClient.invalidateQueries({
+      queryKey: [
+        'dashboard-stats',
+      ],
+    }),
+  ];
+
+  if (
+    categories
+  ) {
+    invalidations.push(
+      queryClient.invalidateQueries({
+        queryKey:
+          DOCUMENT_QUERY_KEYS.categories(),
+      })
+    );
+  }
+
+  if (
+    statistics
+  ) {
+    invalidations.push(
+      queryClient.invalidateQueries({
+        queryKey:
+          DOCUMENT_QUERY_KEYS.statistics(),
+      })
+    );
+  }
+
+  if (
+    relatedViews
+  ) {
+    invalidations.push(
+      // Belge bir davaya bağlıysa açık dava detayını yeniler.
+      queryClient.invalidateQueries({
+        queryKey: [
+          'case',
+        ],
+      }),
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          'case-documents',
+        ],
+      }),
+
+      // Belge bir müvekkile bağlıysa açık müvekkil detayını yeniler.
+      queryClient.invalidateQueries({
+        queryKey: [
+          'client',
+        ],
+      }),
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          'client-documents',
+        ],
+      })
+    );
+  }
+
+  await Promise.all(
+    invalidations
+  );
+};
+
+const invalidateDocumentDetail = async (
+  queryClient,
+  id,
+  {
+    versions = false,
+  } = {}
+) => {
+  const normalizedId =
+    normalizeId(
+      id
+    );
+
+  if (
+    !normalizedId
+  ) {
+    return;
+  }
+
+  const invalidations = [
+    queryClient.invalidateQueries({
+      queryKey:
+        DOCUMENT_QUERY_KEYS.detail(
+          normalizedId
+        ),
+    }),
+  ];
+
+  if (
+    versions
+  ) {
+    invalidations.push(
+      queryClient.invalidateQueries({
+        queryKey:
+          DOCUMENT_QUERY_KEYS.versions(
+            normalizedId
+          ),
+      })
+    );
+  }
+
+  await Promise.all(
+    invalidations
   );
 };
 
@@ -120,16 +310,26 @@ export const useDocuments = (
 export const useDocument = (
   id
 ) => {
+  const normalizedId =
+    normalizeId(
+      id
+    );
+
   return useQuery({
     queryKey:
       DOCUMENT_QUERY_KEYS.detail(
-        id
+        normalizedId
       ),
 
     queryFn: () =>
-      documentApi.getOne(id),
+      documentApi.getOne(
+        normalizedId
+      ),
 
-    enabled: Boolean(id),
+    enabled:
+      Boolean(
+        normalizedId
+      ),
 
     staleTime: CACHE.NORMAL,
 
@@ -182,19 +382,26 @@ export const useDocumentStatistics =
 export const useDocumentVersions = (
   documentId
 ) => {
+  const normalizedDocumentId =
+    normalizeId(
+      documentId
+    );
+
   return useQuery({
     queryKey:
       DOCUMENT_QUERY_KEYS.versions(
-        documentId
+        normalizedDocumentId
       ),
 
     queryFn: () =>
       documentApi.getVersions(
-        documentId
+        normalizedDocumentId
       ),
 
     enabled:
-      Boolean(documentId),
+      Boolean(
+        normalizedDocumentId
+      ),
 
     staleTime: CACHE.NORMAL,
 
@@ -218,22 +425,9 @@ export const useUploadDocument =
         ),
 
       onSuccess: async () => {
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.lists(),
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.categories(),
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.statistics(),
-          }),
-        ]);
+        await invalidateDocumentCollections(
+          queryClient
+        );
 
         toast.success(
           'Belge başarıyla yüklendi'
@@ -269,22 +463,9 @@ export const useUploadDocuments =
       onSuccess: async (
         response
       ) => {
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.lists(),
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.categories(),
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.statistics(),
-          }),
-        ]);
+        await invalidateDocumentCollections(
+          queryClient
+        );
 
         const result =
           response?.data?.data;
@@ -301,7 +482,7 @@ export const useUploadDocuments =
           typeof failed === 'number'
         ) {
           if (failed > 0) {
-            toast.success(
+            toast.error(
               `${success} belge yüklendi, ${failed} belge yüklenemedi`
             );
           } else {
@@ -353,32 +534,25 @@ export const useUploadDocumentVersion =
         variables
       ) => {
         const documentId =
-          variables.documentId;
+          normalizeId(
+            variables.documentId
+          );
 
         await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.detail(
-                documentId
-              ),
-          }),
+          invalidateDocumentDetail(
+            queryClient,
+            documentId,
+            {
+              versions: true,
+            }
+          ),
 
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.versions(
-                documentId
-              ),
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.lists(),
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.statistics(),
-          }),
+          invalidateDocumentCollections(
+            queryClient,
+            {
+              categories: false,
+            }
+          ),
         ]);
 
         toast.success(
@@ -410,33 +584,44 @@ export const useUpdateDocument =
       mutationFn: ({
         id,
         data,
-      }) =>
-        documentApi.update(
-          id,
+      }) => {
+        const normalizedId =
+          normalizeId(
+            id
+          );
+
+        if (
+          !normalizedId
+        ) {
+          throw new Error(
+            'Geçerli belge kimliği bulunamadı'
+          );
+        }
+
+        return documentApi.update(
+          normalizedId,
           data
-        ),
+        );
+      },
 
       onSuccess: async (
         _response,
         variables
       ) => {
+        const documentId =
+          normalizeId(
+            variables.id
+          );
+
         await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.detail(
-                variables.id
-              ),
-          }),
+          invalidateDocumentDetail(
+            queryClient,
+            documentId
+          ),
 
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.lists(),
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.categories(),
-          }),
+          invalidateDocumentCollections(
+            queryClient
+          ),
         ]);
 
         toast.success(
@@ -465,43 +650,69 @@ export const useDeleteDocument =
       useQueryClient();
 
     return useMutation({
-      mutationFn: (id) =>
-        documentApi.delete(id),
+      mutationFn: (id) => {
+        const normalizedId =
+          normalizeId(
+            id
+          );
+
+        if (
+          !normalizedId
+        ) {
+          throw new Error(
+            'Geçerli belge kimliği bulunamadı'
+          );
+        }
+
+        return documentApi.delete(
+          normalizedId
+        );
+      },
 
       onSuccess: async (
         _response,
         id
       ) => {
+        const documentId =
+          normalizeId(
+            id
+          );
+
+        await Promise.all([
+          queryClient.cancelQueries({
+            queryKey:
+              DOCUMENT_QUERY_KEYS.detail(
+                documentId
+              ),
+          }),
+
+          queryClient.cancelQueries({
+            queryKey:
+              DOCUMENT_QUERY_KEYS.versions(
+                documentId
+              ),
+          }),
+        ]);
+
         queryClient.removeQueries({
           queryKey:
             DOCUMENT_QUERY_KEYS.detail(
-              id
+              documentId
             ),
+          exact: true,
         });
 
         queryClient.removeQueries({
           queryKey:
             DOCUMENT_QUERY_KEYS.versions(
-              id
+              documentId
             ),
+          exact: true,
         });
 
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.lists(),
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.categories(),
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.statistics(),
-          }),
-        ]);
+        await invalidateDocumentCollections(
+          queryClient
+        );
 
         toast.success(
           'Belge kaldırıldı'
@@ -541,12 +752,35 @@ export const useBulkDeleteDocuments =
           );
         }
 
+        const normalizedIds = [
+          ...new Set(
+            ids
+              .map(
+                (id) =>
+                  normalizeId(
+                    id
+                  )
+              )
+              .filter(Boolean)
+          ),
+        ];
+
+        if (
+          normalizedIds.length ===
+          0
+        ) {
+          throw new Error(
+            'Geçerli belge kimliği bulunamadı'
+          );
+        }
+
         const results =
           await Promise.allSettled(
-            ids.map((id) =>
-              documentApi.delete(
-                id
-              )
+            normalizedIds.map(
+              (id) =>
+                documentApi.delete(
+                  id
+                )
             )
           );
 
@@ -556,7 +790,7 @@ export const useBulkDeleteDocuments =
         results.forEach(
           (result, index) => {
             const id =
-              ids[index];
+              normalizedIds[index];
 
             if (
               result.status ===
@@ -582,6 +816,26 @@ export const useBulkDeleteDocuments =
       onSuccess: async (
         result
       ) => {
+        await Promise.all(
+          result.succeeded.flatMap(
+            (id) => [
+              queryClient.cancelQueries({
+                queryKey:
+                  DOCUMENT_QUERY_KEYS.detail(
+                    id
+                  ),
+              }),
+
+              queryClient.cancelQueries({
+                queryKey:
+                  DOCUMENT_QUERY_KEYS.versions(
+                    id
+                  ),
+              }),
+            ]
+          )
+        );
+
         result.succeeded.forEach(
           (id) => {
             queryClient.removeQueries({
@@ -589,6 +843,7 @@ export const useBulkDeleteDocuments =
                 DOCUMENT_QUERY_KEYS.detail(
                   id
                 ),
+              exact: true,
             });
 
             queryClient.removeQueries({
@@ -596,26 +851,14 @@ export const useBulkDeleteDocuments =
                 DOCUMENT_QUERY_KEYS.versions(
                   id
                 ),
+              exact: true,
             });
           }
         );
 
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.lists(),
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.categories(),
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey:
-              DOCUMENT_QUERY_KEYS.statistics(),
-          }),
-        ]);
+        await invalidateDocumentCollections(
+          queryClient
+        );
 
         if (
           result.failed.length ===
@@ -683,7 +926,12 @@ export const useInfiniteDocuments = (
     ) => {
       const pagination =
         lastPage?.data
-          ?.pagination;
+          ?.pagination ??
+        lastPage?.data
+          ?.data
+          ?.pagination ??
+        lastPage?.pagination ??
+        null;
 
       if (!pagination) {
         return undefined;
@@ -726,7 +974,10 @@ export const useSearchDocuments = (
   params = {}
 ) => {
   const normalizedQuery =
-    query?.trim() || '';
+    String(
+      query ??
+      ''
+    ).trim();
 
   return useQuery({
     queryKey:
@@ -760,18 +1011,27 @@ export const prefetchDocument = (
   queryClient,
   id
 ) => {
-  if (!id) {
+  const normalizedId =
+    normalizeId(
+      id
+    );
+
+  if (
+    !normalizedId
+  ) {
     return Promise.resolve();
   }
 
   return queryClient.prefetchQuery({
     queryKey:
       DOCUMENT_QUERY_KEYS.detail(
-        id
+        normalizedId
       ),
 
     queryFn: () =>
-      documentApi.getOne(id),
+      documentApi.getOne(
+        normalizedId
+      ),
 
     staleTime: CACHE.NORMAL,
   });
