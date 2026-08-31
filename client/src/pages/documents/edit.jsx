@@ -287,13 +287,144 @@ const getCaseSecondaryInfo = (
     .join(' · ');
 };
 
+const normalizeId = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    const objectId =
+      value?.id;
+
+    return objectId === null ||
+      objectId === undefined ||
+      objectId === ''
+      ? ''
+      : String(
+          objectId
+        );
+  }
+
+  return String(
+    value
+  );
+};
+
+const getArrayPayload = (
+  response
+) => {
+  const payload =
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    [];
+
+  if (
+    Array.isArray(
+      payload
+    )
+  ) {
+    return payload;
+  }
+
+  if (
+    Array.isArray(
+      payload?.data
+    )
+  ) {
+    return payload.data;
+  }
+
+  if (
+    Array.isArray(
+      payload?.items
+    )
+  ) {
+    return payload.items;
+  }
+
+  if (
+    Array.isArray(
+      payload?.results
+    )
+  ) {
+    return payload.results;
+  }
+
+  return [];
+};
+
+const normalizeFormForComparison = (
+  form
+) => ({
+  name:
+    String(
+      form?.name ||
+      ''
+    ).trim(),
+
+  description:
+    String(
+      form?.description ||
+      ''
+    ).trim(),
+
+  category:
+    form?.category ||
+    'general',
+
+  tags:
+    normalizeTags(
+      form?.tags ||
+      ''
+    )
+      .map(
+        (tag) =>
+          tag.toLocaleLowerCase(
+            'tr-TR'
+          )
+      )
+      .sort(),
+
+  case_id:
+    normalizeId(
+      form?.case_id
+    ),
+
+  client_id:
+    normalizeId(
+      form?.client_id
+    ),
+
+  is_public:
+    Boolean(
+      form?.is_public
+    ),
+});
+
 // ======================================================
 // COMPONENT
 // ======================================================
 
 const DocumentEdit = () => {
-  const { id } =
+  const {
+    id: idParam,
+  } =
     useParams();
+
+  const id =
+    normalizeId(
+      idParam
+    );
 
   const navigate =
     useNavigate();
@@ -301,6 +432,13 @@ const DocumentEdit = () => {
   const [
     formData,
     setFormData,
+  ] = useState(
+    INITIAL_FORM
+  );
+
+  const [
+    initialFormData,
+    setInitialFormData,
   ] = useState(
     INITIAL_FORM
   );
@@ -395,18 +533,14 @@ const DocumentEdit = () => {
     null;
 
   const cases =
-    Array.isArray(
-      casesData?.data?.data
-    )
-      ? casesData.data.data
-      : [];
+    getArrayPayload(
+      casesData
+    );
 
   const clients =
-    Array.isArray(
-      clientsData?.data?.data
-    )
-      ? clientsData.data.data
-      : [];
+    getArrayPayload(
+      clientsData
+    );
 
   // ======================================================
   // CLIENT CASES
@@ -427,18 +561,24 @@ const DocumentEdit = () => {
   } = useQuery({
     queryKey: [
       'clients',
-      formData.client_id,
-      'document-edit-cases',
+      normalizeId(
+        formData.client_id
+      ),
+      'cases',
     ],
 
     queryFn: () =>
       clientApi.getCaseHistory(
-        formData.client_id
+        normalizeId(
+          formData.client_id
+        )
       ),
 
     enabled:
       Boolean(
-        formData.client_id
+        normalizeId(
+          formData.client_id
+        )
       ),
 
     staleTime:
@@ -450,23 +590,8 @@ const DocumentEdit = () => {
       const payload =
         clientCasesData?.data?.data ??
         clientCasesData?.data ??
+        clientCasesData ??
         [];
-
-      if (
-        Array.isArray(
-          payload
-        )
-      ) {
-        return payload;
-      }
-
-      if (
-        Array.isArray(
-          payload?.data
-        )
-      ) {
-        return payload.data;
-      }
 
       if (
         Array.isArray(
@@ -476,7 +601,9 @@ const DocumentEdit = () => {
         return payload.cases;
       }
 
-      return [];
+      return getArrayPayload(
+        payload
+      );
     }, [
       clientCasesData,
     ]);
@@ -500,18 +627,23 @@ const DocumentEdit = () => {
   } = useQuery({
     queryKey: [
       'case',
-      formData.case_id,
-      'document-edit-relation',
+      normalizeId(
+        formData.case_id
+      ),
     ],
 
     queryFn: () =>
       caseApi.getOne(
-        formData.case_id
+        normalizeId(
+          formData.case_id
+        )
       ),
 
     enabled:
       Boolean(
-        formData.case_id
+        normalizeId(
+          formData.case_id
+        )
       ),
 
     staleTime:
@@ -579,10 +711,10 @@ const DocumentEdit = () => {
             (
               client
             ) =>
-              String(
+              normalizeId(
                 client.id
               ) ===
-              String(
+              normalizeId(
                 selectedCaseDetail.client_id
               )
           );
@@ -625,15 +757,21 @@ const DocumentEdit = () => {
   // ======================================================
 
   useEffect(() => {
+    const documentId =
+      normalizeId(
+        documentItem?.id
+      );
+
     if (
       !documentItem ||
+      !documentId ||
       initializedDocumentId ===
-        documentItem.id
+        documentId
     ) {
       return;
     }
 
-    setFormData({
+    const nextForm = {
       name:
         documentItem.name ||
         '',
@@ -653,26 +791,43 @@ const DocumentEdit = () => {
           ? documentItem.tags.join(
               ', '
             )
-          : '',
+          : String(
+              documentItem.tags ||
+              ''
+            ),
 
       case_id:
-        documentItem.case_id ||
-        documentItem.case?.id ||
-        '',
+        normalizeId(
+          documentItem.case_id ??
+          documentItem.case?.id
+        ),
 
       client_id:
-        documentItem.client_id ||
-        documentItem.client?.id ||
-        '',
+        normalizeId(
+          documentItem.client_id ??
+          documentItem.client?.id
+        ),
 
       is_public:
         Boolean(
           documentItem.is_public
         ),
-    });
+    };
+
+    setFormData(
+      nextForm
+    );
+
+    setInitialFormData(
+      nextForm
+    );
 
     setInitializedDocumentId(
-      documentItem.id
+      documentId
+    );
+
+    setErrors(
+      {}
     );
   }, [
     documentItem,
@@ -717,19 +872,19 @@ const DocumentEdit = () => {
           (
             item
           ) =>
-            String(
+            normalizeId(
               item.id
             ) ===
-            String(
+            normalizeId(
               formData.case_id
             )
         ) ||
         (
           selectedCaseDetail &&
-          String(
+          normalizeId(
             selectedCaseDetail.id
           ) ===
-          String(
+          normalizeId(
             formData.case_id
           )
             ? selectedCaseDetail
@@ -748,10 +903,10 @@ const DocumentEdit = () => {
         (
           item
         ) =>
-          String(
+          normalizeId(
             item.id
           ) ===
-          String(
+          normalizeId(
             formData.client_id
           )
       );
@@ -768,6 +923,72 @@ const DocumentEdit = () => {
       selectedCaseDetailError
     );
 
+  const isDirty =
+    useMemo(() => {
+      return (
+        JSON.stringify(
+          normalizeFormForComparison(
+            formData
+          )
+        ) !==
+        JSON.stringify(
+          normalizeFormForComparison(
+            initialFormData
+          )
+        )
+      );
+    }, [
+      formData,
+      initialFormData,
+    ]);
+
+  const selectedClientBelongsToCase =
+    useMemo(() => {
+      const caseId =
+        normalizeId(
+          formData.case_id
+        );
+
+      const clientId =
+        normalizeId(
+          formData.client_id
+        );
+
+      if (
+        !caseId ||
+        !clientId
+      ) {
+        return true;
+      }
+
+      return caseClients.some(
+        (
+          client
+        ) =>
+          normalizeId(
+            client?.id
+          ) ===
+          clientId
+      );
+    }, [
+      caseClients,
+      formData.case_id,
+      formData.client_id,
+    ]);
+
+  const relationDataLoading =
+    Boolean(
+      casesLoading ||
+      clientsLoading ||
+      (
+        formData.client_id &&
+        clientCasesLoading
+      ) ||
+      (
+        formData.case_id &&
+        selectedCaseDetailLoading
+      )
+    );
 
   const PhysicalFileIcon =
     getFileIcon(
@@ -781,6 +1002,12 @@ const DocumentEdit = () => {
   const handleChange = (
     event
   ) => {
+    if (
+      updateMutation.isPending
+    ) {
+      return;
+    }
+
     const {
       name,
       value,
@@ -792,7 +1019,16 @@ const DocumentEdit = () => {
       type ===
       'checkbox'
         ? checked
-        : value;
+        : [
+            'client_id',
+            'case_id',
+          ].includes(
+            name
+          )
+          ? normalizeId(
+              value
+            )
+          : value;
 
     setFormData(
       (
@@ -860,6 +1096,42 @@ const DocumentEdit = () => {
           'Belge adı en fazla 255 karakter olabilir';
       }
 
+      const caseId =
+        normalizeId(
+          formData.case_id
+        );
+
+      const clientId =
+        normalizeId(
+          formData.client_id
+        );
+
+      if (
+        caseId &&
+        !selectedCase
+      ) {
+        nextErrors.case_id =
+          'Seçilen dava artık erişilemiyor veya ilişki listesinde bulunmuyor';
+      }
+
+      if (
+        clientId &&
+        !selectedClient
+      ) {
+        nextErrors.client_id =
+          'Seçilen müvekkil artık erişilemiyor';
+      }
+
+      if (
+        caseId &&
+        clientId &&
+        selectedCaseDetail &&
+        !selectedClientBelongsToCase
+      ) {
+        nextErrors.client_id =
+          'Seçilen müvekkil bu davayla ilişkili değil';
+      }
+
       setErrors(
         nextErrors
       );
@@ -883,6 +1155,62 @@ const DocumentEdit = () => {
     if (
       updateMutation.isPending
     ) {
+      return;
+    }
+
+    if (
+      !id
+    ) {
+      toast.error(
+        'Geçerli belge kaydı bulunamadı'
+      );
+
+      return;
+    }
+
+    if (
+      !isDirty
+    ) {
+      toast(
+        'Kaydedilecek bir değişiklik bulunmuyor'
+      );
+
+      return;
+    }
+
+    const relationsChanged =
+      normalizeId(
+        formData.case_id
+      ) !==
+        normalizeId(
+          initialFormData.case_id
+        ) ||
+      normalizeId(
+        formData.client_id
+      ) !==
+        normalizeId(
+          initialFormData.client_id
+        );
+
+    if (
+      relationsChanged &&
+      relationDataLoading
+    ) {
+      toast.error(
+        'İlişkili kayıtlar yüklenirken değişiklik kaydedilemez'
+      );
+
+      return;
+    }
+
+    if (
+      relationsChanged &&
+      hasRelationLoadError
+    ) {
+      toast.error(
+        'İlişkili kayıtlar doğrulanamadı. Dava ve müvekkil bilgilerini kontrol edin.'
+      );
+
       return;
     }
 
@@ -914,11 +1242,15 @@ const DocumentEdit = () => {
         ),
 
       case_id:
-        formData.case_id ||
+        normalizeId(
+          formData.case_id
+        ) ||
         null,
 
       client_id:
-        formData.client_id ||
+        normalizeId(
+          formData.client_id
+        ) ||
         null,
 
       is_public:
@@ -935,6 +1267,10 @@ const DocumentEdit = () => {
       },
       {
         onSuccess: () => {
+          setInitialFormData(
+            formData
+          );
+
           navigate(
             `/documents/${id}`
           );
@@ -1616,7 +1952,9 @@ const DocumentEdit = () => {
                             caseItem.id
                           }
                           value={
-                            caseItem.id
+                            normalizeId(
+                              caseItem.id
+                            )
                           }
                         >
                           {getCaseDisplayName(
@@ -1629,6 +1967,12 @@ const DocumentEdit = () => {
                   </select>
 
                 </div>
+
+                {errors.case_id && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {errors.case_id}
+                  </p>
+                )}
 
                 {selectedCase && (
                   <div className="mt-2">
@@ -1720,7 +2064,9 @@ const DocumentEdit = () => {
                             client.id
                           }
                           value={
-                            client.id
+                            normalizeId(
+                              client.id
+                            )
                           }
                         >
                           {client.name}
@@ -1734,6 +2080,12 @@ const DocumentEdit = () => {
                   </select>
 
                 </div>
+
+                {errors.client_id && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {errors.client_id}
+                  </p>
+                )}
 
                 {selectedClient && (
                   <p className="mt-2 truncate text-xs text-gray-400 dark:text-slate-500">
@@ -2144,11 +2496,26 @@ const DocumentEdit = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={() =>
+            onClick={() => {
+              if (
+                isDirty
+              ) {
+                const confirmed =
+                  window.confirm(
+                    'Kaydedilmemiş belge değişiklikleri var. Sayfadan ayrılmak istediğinize emin misiniz?'
+                  );
+
+                if (
+                  !confirmed
+                ) {
+                  return;
+                }
+              }
+
               navigate(
                 `/documents/${id}`
-              )
-            }
+              );
+            }}
             disabled={
               updateMutation.isPending
             }
@@ -2162,7 +2529,8 @@ const DocumentEdit = () => {
               updateMutation.isPending
             }
             disabled={
-              updateMutation.isPending
+              updateMutation.isPending ||
+              !isDirty
             }
           >
             <Save className="h-4 w-4" />
