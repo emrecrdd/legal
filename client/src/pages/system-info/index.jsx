@@ -224,7 +224,7 @@ const SystemInfo = () => {
           />
 
           <div className="grid md:grid-cols-2 xl:grid-cols-4">
-            <ContactItem icon={Mail} label="E-posta Desteği">
+            <ContactItem icon={Mail} label="E-posta ">
               <a
                 href={`mailto:${SUPPORT_EMAIL}`}
                 className="transition-colors hover:text-amber-600 dark:hover:text-amber-300"
@@ -233,7 +233,7 @@ const SystemInfo = () => {
               </a>
             </ContactItem>
 
-            <ContactItem icon={MessageCircle} label="WhatsApp Desteği">
+            <ContactItem icon={MessageCircle} label="WhatsApp ">
               {whatsappUrl ? (
                 <a
                   href={whatsappUrl}
