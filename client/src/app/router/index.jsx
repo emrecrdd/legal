@@ -195,45 +195,27 @@ const AppRouter = () => {
           PUBLIC
       ================================================== */}
 
-      <Route
-        element={
-          <PublicRoute />
-        }
-      >
-        <Route
-          element={
-            <AuthLayout />
-          }
-        >
-          <Route
-            path="/login"
-            element={
-              <Login />
-            }
-          />
+      
+        <Route element={<PublicRoute />}>
+  <Route element={<AuthLayout />}>
+    <Route path="/login" element={<Login />} />
+    <Route path="/register" element={<Register />} />
+  </Route>
+</Route>
 
-          <Route
-            path="/register"
-            element={
-              <Register />
-            }
-          />
+{/* Şifre kurtarma: oturum açık olsa da erişilebilir */}
+<Route element={<AuthLayout />}>
+  <Route
+    path="/forgot-password"
+    element={<ForgotPassword />}
+  />
 
-          <Route
-            path="/forgot-password"
-            element={
-              <ForgotPassword />
-            }
-          />
-
-          <Route
-            path="/reset-password"
-            element={
-              <ResetPassword />
-            }
-          />
-        </Route>
-      </Route>
+  <Route
+    path="/reset-password"
+    element={<ResetPassword />}
+  />
+</Route>
+      
 
       {/* ==================================================
           AUTHENTICATED AREA
