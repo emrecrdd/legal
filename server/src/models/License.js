@@ -103,6 +103,7 @@ License.init(
     tableName: 'licenses',
     underscored: true,
     timestamps: true,
+    paranoid: false,
     createdAt: 'created_at',
     updatedAt: 'updated_at',
   }
