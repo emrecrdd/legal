@@ -454,6 +454,57 @@ const IdleBrandOverlay = () => {
   ]);
 
   useEffect(() => {
+    if (
+      !isLocked ||
+      typeof document ===
+        'undefined'
+    ) {
+      return undefined;
+    }
+
+    const body =
+      document.body;
+
+    const html =
+      document.documentElement;
+
+    const previousBodyOverflow =
+      body.style.overflow;
+
+    const previousBodyPaddingRight =
+      body.style.paddingRight;
+
+    const previousHtmlOverflow =
+      html.style.overflow;
+
+    const scrollbarWidth =
+      Math.max(
+        0,
+        window.innerWidth -
+          html.clientWidth
+      );
+
+    body.style.overflow =
+      'hidden';
+    html.style.overflow =
+      'hidden';
+
+    if (scrollbarWidth > 0) {
+      body.style.paddingRight =
+        `${scrollbarWidth}px`;
+    }
+
+    return () => {
+      body.style.overflow =
+        previousBodyOverflow;
+      body.style.paddingRight =
+        previousBodyPaddingRight;
+      html.style.overflow =
+        previousHtmlOverflow;
+    };
+  }, [isLocked]);
+
+  useEffect(() => {
     if (!user?.id) {
       setInitialized(false);
       setIsLocked(false);
@@ -1626,7 +1677,7 @@ const IdleBrandOverlay = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden bg-[#041020] px-4 py-8">
+    <div className="derkenar-overlay-scroll fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto overscroll-contain bg-[#041020] px-4 py-8">
       <style>{`
         @keyframes derkenarFloatOne {
           0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
@@ -1675,6 +1726,15 @@ const IdleBrandOverlay = () => {
         .derkenar-grid-drift { animation: derkenarGridDrift 22s ease-in-out infinite; }
         .derkenar-logo-halo { animation: derkenarHalo 5.5s ease-in-out infinite; }
         .derkenar-card-sweep { animation: derkenarSweep 8s ease-in-out infinite; }
+        .derkenar-overlay-scroll {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .derkenar-overlay-scroll::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
+        }
         .derkenar-secure-input:-webkit-autofill,
         .derkenar-secure-input:-webkit-autofill:hover,
         .derkenar-secure-input:-webkit-autofill:focus {
@@ -1717,7 +1777,7 @@ const IdleBrandOverlay = () => {
         KURUMSAL OTURUM GÜVENLİĞİ
       </div>
 
-      <main className="derkenar-enter relative z-10 w-full max-w-[430px] text-center">
+      <main className="derkenar-enter relative z-10 my-auto w-full max-w-[470px] text-center">
         <div className="relative mx-auto mb-5 h-20 w-20">
           <div className="derkenar-logo-halo pointer-events-none absolute inset-[-14px] rounded-[30px] bg-amber-300/[0.08] blur-2xl" />
           <div className="derkenar-logo-float relative flex h-20 w-20 items-center justify-center rounded-[24px] border border-amber-300/15 bg-white/[0.035] shadow-[0_20px_60px_rgba(0,0,0,.28)] backdrop-blur-xl">
@@ -1735,7 +1795,7 @@ const IdleBrandOverlay = () => {
 
         <div className="mx-auto mt-3 flex max-w-[330px] items-center gap-3">
           <span className="h-px flex-1 bg-gradient-to-r from-transparent to-amber-300/30" />
-          <span className="text-[9px] font-bold tracking-[0.24em] text-amber-200/70">
+          <span className="text-[10px] font-bold tracking-[0.18em] text-amber-100/80 sm:text-[11px]">
             HUKUK BÜRO YÖNETİM SİSTEMİ
           </span>
           <span className="h-px flex-1 bg-gradient-to-l from-transparent to-amber-300/30" />
@@ -1744,7 +1804,7 @@ const IdleBrandOverlay = () => {
         <section className="relative mt-7 overflow-hidden rounded-[26px] border border-white/[0.075] bg-[#071426]/75 p-px shadow-[0_28px_90px_rgba(0,0,0,.42)] backdrop-blur-2xl">
           <div className="derkenar-card-sweep pointer-events-none absolute -inset-y-20 left-0 w-28 rotate-12 bg-gradient-to-r from-transparent via-white/[0.035] to-transparent blur-sm" />
           <div className="pointer-events-none absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/50 to-transparent" />
-          <div className="relative rounded-[25px] bg-gradient-to-b from-white/[0.045] to-white/[0.018] px-6 py-6 sm:px-7">
+          <div className="relative rounded-[25px] bg-gradient-to-b from-white/[0.045] to-white/[0.018] px-7 py-7 sm:px-8">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] text-amber-200 shadow-[0_12px_35px_rgba(245,158,11,0.07)]">
               <svg
                 viewBox="0 0 24 24"
