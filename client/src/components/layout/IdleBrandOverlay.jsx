@@ -734,54 +734,6 @@ const IdleBrandOverlay = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (
-      !isLocked ||
-      typeof document ===
-        'undefined'
-    ) {
-      return undefined;
-    }
-
-    const body =
-      document.body;
-    const html =
-      document.documentElement;
-
-    const previous = {
-      bodyOverflow:
-        body.style.overflow,
-      bodyOverscroll:
-        body.style.overscrollBehavior,
-      htmlOverflow:
-        html.style.overflow,
-      htmlOverscroll:
-        html.style.overscrollBehavior,
-    };
-
-    body.style.overflow =
-      'hidden';
-    body.style.overscrollBehavior =
-      'none';
-    html.style.overflow =
-      'hidden';
-    html.style.overscrollBehavior =
-      'none';
-
-    return () => {
-      body.style.overflow =
-        previous.bodyOverflow;
-      body.style.overscrollBehavior =
-        previous.bodyOverscroll;
-      html.style.overflow =
-        previous.htmlOverflow;
-      html.style.overscrollBehavior =
-        previous.htmlOverscroll;
-    };
-  }, [
-    isLocked,
-  ]);
-
   const handleSetup =
     async (
       event
@@ -1674,7 +1626,7 @@ const IdleBrandOverlay = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex h-[100dvh] max-h-[100dvh] w-full items-center justify-center overflow-hidden overscroll-none bg-[#041020] px-4 py-6 pb-14">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden bg-[#041020] px-4 py-8">
       <style>{`
         @keyframes derkenarFloatOne {
           0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
@@ -1723,15 +1675,6 @@ const IdleBrandOverlay = () => {
         .derkenar-grid-drift { animation: derkenarGridDrift 22s ease-in-out infinite; }
         .derkenar-logo-halo { animation: derkenarHalo 5.5s ease-in-out infinite; }
         .derkenar-card-sweep { animation: derkenarSweep 8s ease-in-out infinite; }
-        html, body {
-          scrollbar-width: none;
-        }
-        html::-webkit-scrollbar,
-        body::-webkit-scrollbar {
-          display: none;
-          width: 0;
-          height: 0;
-        }
         .derkenar-secure-input:-webkit-autofill,
         .derkenar-secure-input:-webkit-autofill:hover,
         .derkenar-secure-input:-webkit-autofill:focus {
@@ -1829,26 +1772,23 @@ const IdleBrandOverlay = () => {
           </div>
         </section>
 
-      </main>
-
-      <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-white/[0.04] bg-[#041020]/70 px-3 py-1.5 text-[10px] font-medium tracking-wide text-slate-500 backdrop-blur-md sm:bottom-4">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          className="h-3.5 w-3.5 shrink-0 text-emerald-400/65"
-          aria-hidden="true"
-        >
-          <path
-            d="M12 3 5.5 5.5v5.3c0 4.3 2.6 8.2 6.5 10.2 3.9-2 6.5-5.9 6.5-10.2V5.5L12 3Z"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinejoin="round"
-          />
-        </svg>
-        <span className="max-w-[calc(100vw-4rem)] overflow-hidden text-ellipsis">
+        <div className="mt-5 flex items-center justify-center gap-2 text-[10px] font-medium tracking-wide text-slate-600">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            className="h-3.5 w-3.5 text-emerald-400/65"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 3 5.5 5.5v5.3c0 4.3 2.6 8.2 6.5 10.2 3.9-2 6.5-5.9 6.5-10.2V5.5L12 3Z"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+          </svg>
           Oturumunuz Derkenar güvenlik politikalarıyla korunur
-        </span>
-      </div>
+        </div>
+      </main>
     </div>
   );
 };
