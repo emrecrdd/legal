@@ -40,6 +40,10 @@ import {
   requireTrustedOrigin,
 } from './middlewares/origin.middleware.js';
 
+
+import {
+  enforceLicense,
+} from './middlewares/license.middleware.js';
 // ======================================================
 // ROUTES
 // ======================================================
@@ -126,7 +130,9 @@ import {
 import {
   screenLockRoutes,
 } from './modules/screen-lock/screen-lock.routes.js';
-
+import {
+  licenseRoutes,
+} from './modules/license/license.routes.js';
 // ======================================================
 // APP
 // ======================================================
@@ -1012,6 +1018,10 @@ app.get(
   }
 );
 
+app.use(
+  '/api',
+  enforceLicense
+);
 // ======================================================
 // API ROUTES
 // ======================================================
@@ -1019,6 +1029,10 @@ app.get(
 app.use(
   '/api/auth',
   authRoutes
+);
+app.use(
+  '/api/license',
+  licenseRoutes
 );
 
 app.use(

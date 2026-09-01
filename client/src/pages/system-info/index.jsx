@@ -1,4 +1,11 @@
 import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
+import {
+  AlertTriangle,
   BadgeCheck,
   Building2,
   CalendarDays,
@@ -10,63 +17,194 @@ import {
   Mail,
   MessageCircle,
   Phone,
+  RefreshCw,
   Server,
   ShieldCheck,
   Sparkles,
+  Users,
 } from 'lucide-react';
 
 import Card from '../../components/ui/Card.jsx';
+import useAuth from '../../hooks/useAuth.js';
+
+import {
+  licenseApi,
+} from '../../services/licenseApi.js';
 
 const APP_VERSION =
-  import.meta.env.VITE_APP_VERSION || '1.0.0';
-
-const OFFICE_NAME =
-  import.meta.env.VITE_OFFICE_NAME || 'Derkenar Demo Hukuk Bürosu';
-
-const LICENSE_TYPE =
-  import.meta.env.VITE_LICENSE_TYPE || 'Yıllık Kurumsal Lisans';
-
-const LICENSE_STATUS =
-  import.meta.env.VITE_LICENSE_STATUS || 'Aktif';
-
-const LICENSE_ID =
-  import.meta.env.VITE_LICENSE_ID || 'DRK-KURUMSAL';
-
-const LICENSE_END_DATE =
-  import.meta.env.VITE_LICENSE_END_DATE || '';
-
-const LICENSE_USER_LIMIT =
-  import.meta.env.VITE_LICENSE_USER_LIMIT || '';
+  import.meta.env.VITE_APP_VERSION ||
+  '1.0.0';
 
 const SUPPORT_EMAIL =
-  import.meta.env.VITE_SUPPORT_EMAIL || 'destek@derkenar.com';
+  import.meta.env.VITE_SUPPORT_EMAIL ||
+  'destek@derkenar.com';
 
 const SUPPORT_PHONE =
-  import.meta.env.VITE_SUPPORT_PHONE;
+  import.meta.env.VITE_SUPPORT_PHONE ||
+  '+90 5XX XXX XX XX';
 
 const SUPPORT_PHONE_LINK =
-  import.meta.env.VITE_SUPPORT_PHONE_LINK ;
+  import.meta.env.VITE_SUPPORT_PHONE_LINK ||
+  '+905XXXXXXXXX';
 
 const SUPPORT_WHATSAPP =
-  import.meta.env.VITE_SUPPORT_WHATSAPP || SUPPORT_PHONE_LINK;
+  import.meta.env.VITE_SUPPORT_WHATSAPP ||
+  SUPPORT_PHONE_LINK;
 
 const SUPPORT_HOURS =
-  import.meta.env.VITE_SUPPORT_HOURS || 'Hafta içi 09:00 – 18:00';
+  import.meta.env.VITE_SUPPORT_HOURS ||
+  'Hafta içi 09:00 – 18:00';
 
-const whatsappNumber = String(SUPPORT_WHATSAPP || '').replace(/\D/g, '');
+const formatDate = (
+  value
+) => {
+  if (!value) {
+    return '—';
+  }
 
-const whatsappText = encodeURIComponent(
-  `Merhaba, ${OFFICE_NAME} adına Derkenar desteği almak istiyorum.`
-);
+  const date =
+    new Date(value);
 
-const whatsappUrl = whatsappNumber
-  ? `https://wa.me/${whatsappNumber}?text=${whatsappText}`
-  : null;
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return '—';
+  }
+
+  return new Intl.DateTimeFormat(
+    'tr-TR',
+    {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }
+  ).format(date);
+};
+
+const getStatusTone = (
+  status
+) => {
+  if (status === 'active') {
+    return {
+      badge:
+        'border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300',
+      icon:
+        'bg-emerald-50 text-emerald-600 dark:bg-emerald-400/[0.08] dark:text-emerald-300',
+      dot:
+        'bg-emerald-500',
+    };
+  }
+
+  if (
+    status === 'expired' ||
+    status === 'suspended' ||
+    status === 'scheduled'
+  ) {
+    return {
+      badge:
+        'border-amber-400/20 bg-amber-400/[0.08] text-amber-300',
+      icon:
+        'bg-amber-50 text-amber-600 dark:bg-amber-400/[0.08] dark:text-amber-300',
+      dot:
+        'bg-amber-500',
+    };
+  }
+
+  return {
+    badge:
+      'border-red-400/20 bg-red-400/[0.08] text-red-300',
+    icon:
+      'bg-red-50 text-red-600 dark:bg-red-400/[0.08] dark:text-red-300',
+    dot:
+      'bg-red-500',
+  };
+};
 
 const SystemInfo = () => {
+  const auth =
+    useAuth();
+
+  const token =
+    auth?.accessToken ||
+    auth?.access_token ||
+    auth?.token ||
+    null;
+
+  const [license, setLicense] =
+    useState(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState('');
+
+  const loadLicense =
+    async () => {
+      try {
+        setLoading(true);
+        setError('');
+
+        const result =
+          await licenseApi
+            .current(token);
+
+        setLicense(result);
+      } catch (apiError) {
+        setLicense(null);
+        setError(
+          apiError?.message ||
+            'Lisans bilgisi alınamadı.'
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+  useEffect(() => {
+    void loadLicense();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const officeName =
+    license?.officeName ||
+    'Lisans bilgisi bekleniyor';
+
+  const whatsappUrl =
+    useMemo(() => {
+      const number =
+        String(
+          SUPPORT_WHATSAPP ||
+            ''
+        ).replace(/\D/g, '');
+
+      if (!number) {
+        return null;
+      }
+
+      const text =
+        encodeURIComponent(
+          `Merhaba, ${officeName} adına Derkenar desteği almak istiyorum.`
+        );
+
+      return `https://wa.me/${number}?text=${text}`;
+    }, [officeName]);
+
+  const statusTone =
+    getStatusTone(
+      license?.effectiveStatus
+    );
+
+  const statusLabel =
+    loading
+      ? 'Doğrulanıyor'
+      : license?.statusLabel ||
+        'Bilgi Alınamadı';
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-8">
-      {/* HEADER */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex items-start gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-slate-600 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-slate-300">
@@ -77,20 +215,43 @@ const SystemInfo = () => {
             <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
               Sistem ve Lisans Bilgileri
             </h1>
-
             <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-slate-400">
-              Derkenar kurulumunuza ait ürün, lisans, destek ve sistem bilgilerini görüntüleyin.
+              Bu Derkenar kurulumuna ait doğrulanmış lisans, destek ve ürün bilgileri.
             </p>
           </div>
         </div>
 
-        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:border-emerald-400/15 dark:bg-emerald-400/[0.07] dark:text-emerald-300">
-          <span className="h-2 w-2 rounded-full bg-emerald-500" />
-          Sistem kullanıma hazır
-        </div>
+        <button
+          type="button"
+          onClick={() => void loadLicense()}
+          disabled={loading}
+          className="inline-flex w-fit items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300 dark:hover:bg-white/[0.06]"
+        >
+          <RefreshCw
+            size={14}
+            className={loading ? 'animate-spin' : ''}
+          />
+          Lisansı Doğrula
+        </button>
       </div>
 
-      {/* PRODUCT HERO */}
+      {error && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/15 dark:bg-red-400/[0.06] dark:text-red-300">
+          <AlertTriangle
+            size={18}
+            className="mt-0.5 shrink-0"
+          />
+          <div>
+            <p className="font-semibold">
+              Lisans bilgisi doğrulanamadı
+            </p>
+            <p className="mt-0.5 text-xs opacity-80">
+              {error}
+            </p>
+          </div>
+        </div>
+      )}
+
       <Card>
         <Card.Body className="p-0">
           <div className="overflow-hidden rounded-xl">
@@ -113,7 +274,6 @@ const SystemInfo = () => {
                       <p className="text-2xl font-bold uppercase tracking-[0.08em] text-white">
                         Derkenar
                       </p>
-
                       <span className="rounded-full border border-amber-300/20 bg-amber-300/[0.08] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-200">
                         v{APP_VERSION}
                       </span>
@@ -124,96 +284,160 @@ const SystemInfo = () => {
                     </p>
 
                     <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300/80">
-                      Hukuk bürolarının dosya, görev, belge, finans ve operasyon süreçlerini tek merkezden yönetmesi için geliştirilmiş kurumsal çalışma platformu.
+                      Hukuk bürolarının operasyonlarını tek merkezden yönetmesi için geliştirilmiş kurumsal çalışma platformu.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/[0.08] px-3.5 py-2 text-xs font-semibold text-emerald-300">
-                    <BadgeCheck size={16} />
-                    Lisans {LICENSE_STATUS}
+                  <div className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-semibold ${statusTone.badge}`}>
+                    <span className={`h-2 w-2 rounded-full ${statusTone.dot}`} />
+                    Lisans {statusLabel}
                   </div>
 
                   <p className="text-[11px] text-slate-400">
-                    Lisanslı kullanım · {OFFICE_NAME}
+                    {loading
+                      ? 'Sunucudan lisans bilgisi alınıyor…'
+                      : officeName}
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="grid md:grid-cols-2 xl:grid-cols-4">
-              <InfoItem icon={Building2} label="Lisanslı Büro" value={OFFICE_NAME} />
-              <InfoItem icon={CalendarDays} label="Lisans Modeli" value={LICENSE_TYPE} />
-              <InfoItem icon={KeyRound} label="Lisans Kimliği" value={LICENSE_ID} mono />
-              <InfoItem icon={ShieldCheck} label="Ürün Sürümü" value={`v${APP_VERSION}`} />
+              <InfoItem
+                icon={Building2}
+                label="Lisanslı Büro"
+                value={officeName}
+              />
+              <InfoItem
+                icon={CalendarDays}
+                label="Lisans Modeli"
+                value={license?.licenseType || '—'}
+              />
+              <InfoItem
+                icon={KeyRound}
+                label="Lisans Kimliği"
+                value={license?.licenseKey || '—'}
+                mono
+              />
+              <InfoItem
+                icon={ShieldCheck}
+                label="Ürün Sürümü"
+                value={`v${APP_VERSION}`}
+              />
             </div>
           </div>
         </Card.Body>
       </Card>
 
-      {/* LICENSE */}
       <Card>
         <Card.Body className="p-0">
           <SectionHeader
             icon={ShieldCheck}
             title="Lisans Durumu"
-            description="Kurumsal kullanım hakkınız ve lisans kapsamınıza ilişkin bilgiler."
-            tone="emerald"
+            description="Kullanım hakkı ve kapasite bilgileri doğrudan sunucu tarafından doğrulanır."
+            tone={license?.effectiveStatus === 'active' ? 'emerald' : 'amber'}
           />
 
-          <div className="grid lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="grid lg:grid-cols-[1.05fr_0.95fr]">
             <div className="border-b border-gray-100 px-6 py-6 lg:border-b-0 lg:border-r dark:border-white/[0.06]">
               <div className="flex items-start gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-400/[0.08] dark:text-emerald-300">
-                  <CheckCircle2 size={21} />
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${statusTone.icon}`}>
+                  {license?.effectiveStatus === 'active'
+                    ? <CheckCircle2 size={21} />
+                    : <AlertTriangle size={21} />}
                 </div>
 
                 <div>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    Kurumsal lisans etkin
+                    {license?.effectiveStatus === 'active'
+                      ? 'Kurumsal lisans etkin'
+                      : `Lisans durumu: ${statusLabel}`}
                   </p>
 
                   <p className="mt-1.5 max-w-xl text-xs leading-5 text-gray-500 dark:text-slate-400">
-                    Bu Derkenar kurulumu, lisanslı büro adına tanımlanan kullanım kapsamı içerisinde çalışmaktadır.
+                    {license?.effectiveStatus === 'active'
+                      ? 'Bu kurulum, lisanslı büro adına tanımlanan kullanım kapsamı içerisinde çalışmaktadır.'
+                      : 'Lisans durumu kullanım koşullarını karşılamıyor. Yenileme veya lisans işlemleri için Derkenar desteğiyle iletişime geçin.'}
                   </p>
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <LicensePill>Kurumsal kullanım</LicensePill>
-                    <LicensePill>Güncelleme erişimi</LicensePill>
-                    <LicensePill>Teknik destek</LicensePill>
-                    <LicensePill>Güvenlik güncellemeleri</LicensePill>
+                    <LicensePill>
+                      Kurumsal kullanım
+                    </LicensePill>
+                    {license?.updatesIncluded && (
+                      <LicensePill>
+                        Güncellemeler dahil
+                      </LicensePill>
+                    )}
+                    {license?.supportIncluded && (
+                      <LicensePill>
+                        Teknik destek dahil
+                      </LicensePill>
+                    )}
+                    {license?.enforcementEnabled && (
+                      <LicensePill>
+                        Sunucu doğrulaması etkin
+                      </LicensePill>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="grid sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+            <div className="grid sm:grid-cols-2">
               <SystemItem
-                label="Lisans Durumu"
-                value={LICENSE_STATUS}
+                label="Başlangıç"
+                value={formatDate(license?.startsAt)}
               />
-
               <SystemItem
                 label="Geçerlilik"
-                value={LICENSE_END_DATE || 'Lisans planına göre'}
+                value={formatDate(license?.expiresAt)}
               />
-
               <SystemItem
-                label="Kullanıcı Limiti"
-                value={LICENSE_USER_LIMIT || 'Kurumsal plana göre'}
+                label="Kalan Süre"
+                value={
+                  Number.isFinite(Number(license?.daysRemaining))
+                    ? `${license.daysRemaining} gün`
+                    : '—'
+                }
               />
-
               <SystemItem
-                label="Güncellemeler"
-                value="Lisans süresince dahil"
+                label="Doğrulama"
+                value={license?.enforcementEnabled ? 'Etkin' : 'Hazırlık Modu'}
               />
             </div>
           </div>
         </Card.Body>
       </Card>
 
-      {/* SUPPORT */}
+      <Card>
+        <Card.Body className="p-0">
+          <SectionHeader
+            icon={Users}
+            title="Kullanıcı Kapasitesi"
+            description="Aktif kullanıcı sayısı lisans kapasitesiyle birlikte takip edilir."
+            tone="slate"
+          />
+
+          <div className="grid md:grid-cols-3">
+            <SystemItem
+              label="Aktif Kullanıcı"
+              value={license?.activeUsers ?? '—'}
+            />
+            <SystemItem
+              label="Lisans Kapasitesi"
+              value={license?.maxUsers ?? '—'}
+            />
+            <SystemItem
+              label="Kalan Kullanıcı Hakkı"
+              value={license?.availableSeats ?? '—'}
+            />
+          </div>
+        </Card.Body>
+      </Card>
+
       <Card>
         <Card.Body className="p-0">
           <SectionHeader
@@ -224,7 +448,7 @@ const SystemInfo = () => {
           />
 
           <div className="grid md:grid-cols-2 xl:grid-cols-4">
-            <ContactItem icon={Mail} label="E-posta ">
+            <ContactItem icon={Mail} label="E-posta Desteği">
               <a
                 href={`mailto:${SUPPORT_EMAIL}`}
                 className="transition-colors hover:text-amber-600 dark:hover:text-amber-300"
@@ -233,7 +457,7 @@ const SystemInfo = () => {
               </a>
             </ContactItem>
 
-            <ContactItem icon={MessageCircle} label="WhatsApp ">
+            <ContactItem icon={MessageCircle} label="WhatsApp Desteği">
               {whatsappUrl ? (
                 <a
                   href={whatsappUrl}
@@ -241,8 +465,7 @@ const SystemInfo = () => {
                   rel="noreferrer"
                   className="inline-flex items-center gap-1.5 transition-colors hover:text-emerald-600 dark:hover:text-emerald-300"
                 >
-                  Mesaj gönder
-                  <span aria-hidden="true">↗</span>
+                  Mesaj gönder ↗
                 </a>
               ) : (
                 'Tanımlanmadı'
@@ -265,7 +488,6 @@ const SystemInfo = () => {
         </Card.Body>
       </Card>
 
-      {/* SYSTEM */}
       <Card>
         <Card.Body className="p-0">
           <SectionHeader
@@ -279,12 +501,14 @@ const SystemInfo = () => {
             <SystemItem label="Kurulum Tipi" value="Kurumsal Büro Kurulumu" />
             <SystemItem label="Ortam" value="Production" />
             <SystemItem label="Ürün Kanalı" value="Kararlı Sürüm" />
-            <SystemItem label="Destek Kapsamı" value="Aktif lisans süresince" />
+            <SystemItem
+              label="Destek Kapsamı"
+              value={license?.supportIncluded ? 'Lisans süresince dahil' : 'Lisans planına göre'}
+            />
           </div>
         </Card.Body>
       </Card>
 
-      {/* LEGAL */}
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/[0.07] dark:bg-white/[0.025]">
         <div className="flex flex-col gap-5 px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
@@ -298,7 +522,7 @@ const SystemInfo = () => {
               </p>
 
               <p className="mt-1.5 max-w-3xl text-xs leading-5 text-gray-500 dark:text-slate-500">
-                Derkenar, lisanslı müşteri tarafından ilgili lisans sözleşmesi ve kullanım koşulları kapsamında kullanılmaktadır. Yazılımın fikri hakları, aksi yazılı olarak kararlaştırılmadıkça, hak sahibine aittir. Lisans; yazılımın mülkiyetinin devri değil, belirlenen kapsam ve süre dahilinde kullanım hakkı sağlar.
+                Derkenar, lisanslı müşteri tarafından ilgili lisans sözleşmesi ve kullanım koşulları kapsamında kullanılmaktadır. Lisans, yazılımın mülkiyetinin devri değil; belirlenen kapsam ve süre dahilinde kullanım hakkı sağlar.
               </p>
 
               <p className="mt-3 text-[11px] text-gray-400 dark:text-slate-600">
@@ -309,7 +533,7 @@ const SystemInfo = () => {
 
           <div className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-500">
             <Sparkles size={14} />
-            Kurumsal ürün lisansı
+            Sunucu doğrulamalı lisans
           </div>
         </div>
       </div>
@@ -323,19 +547,19 @@ const SectionHeader = ({
   description,
   tone = 'slate',
 }) => {
-  const toneClass = {
+  const tones = {
     amber:
       'bg-amber-50 text-amber-600 dark:bg-amber-400/[0.08] dark:text-amber-300',
     emerald:
       'bg-emerald-50 text-emerald-600 dark:bg-emerald-400/[0.08] dark:text-emerald-300',
     slate:
       'bg-slate-100 text-slate-600 dark:bg-white/[0.05] dark:text-slate-300',
-  }[tone];
+  };
 
   return (
     <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
       <div className="flex items-center gap-3">
-        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${toneClass}`}>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${tones[tone] || tones.slate}`}>
           <Icon size={19} />
         </div>
 
@@ -343,8 +567,7 @@ const SectionHeader = ({
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
             {title}
           </h2>
-
-          <p className="mt-0.5 text-xs leading-5 text-gray-500 dark:text-slate-400">
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
             {description}
           </p>
         </div>
@@ -358,78 +581,61 @@ const InfoItem = ({
   label,
   value,
   mono = false,
-}) => {
-  return (
-    <div className="flex gap-3 border-b border-gray-100 px-6 py-5 md:border-r md:[&:nth-child(2n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(2n)]:border-r xl:last:border-r-0 dark:border-white/[0.06]">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">
-        <Icon size={17} />
-      </div>
-
-      <div className="min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
-          {label}
-        </p>
-
-        <p
-          className={`mt-1 break-words text-sm font-semibold text-gray-900 dark:text-white ${
-            mono ? 'font-mono text-[13px]' : ''
-          }`}
-        >
-          {value}
-        </p>
-      </div>
+}) => (
+  <div className="flex gap-3 border-b border-gray-100 px-6 py-5 md:[&:nth-child(odd)]:border-r xl:border-b-0 xl:border-r xl:last:border-r-0 dark:border-white/[0.06]">
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">
+      <Icon size={17} />
     </div>
-  );
-};
+    <div className="min-w-0">
+      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+        {label}
+      </p>
+      <p className={`mt-1 break-words text-sm font-semibold text-gray-900 dark:text-white ${mono ? 'font-mono text-[12px]' : ''}`}>
+        {value}
+      </p>
+    </div>
+  </div>
+);
 
 const ContactItem = ({
   icon: Icon,
   label,
   children,
-}) => {
-  return (
-    <div className="flex gap-3 border-b border-gray-100 px-6 py-5 md:border-r md:[&:nth-child(2n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(2n)]:border-r xl:last:border-r-0 dark:border-white/[0.06]">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">
-        <Icon size={17} />
-      </div>
-
-      <div className="min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
-          {label}
-        </p>
-
-        <div className="mt-1 break-words text-sm font-semibold text-gray-900 dark:text-white">
-          {children}
-        </div>
+}) => (
+  <div className="flex gap-3 border-b border-gray-100 px-6 py-5 md:border-r xl:border-b-0 xl:last:border-r-0 dark:border-white/[0.06]">
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">
+      <Icon size={17} />
+    </div>
+    <div className="min-w-0">
+      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+        {label}
+      </p>
+      <div className="mt-1 break-words text-sm font-semibold text-gray-900 dark:text-white">
+        {children}
       </div>
     </div>
-  );
-};
+  </div>
+);
 
 const SystemItem = ({
   label,
   value,
-}) => {
-  return (
-    <div className="border-b border-gray-100 px-6 py-5 md:border-r md:[&:nth-child(2n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(2n)]:border-r xl:last:border-r-0 dark:border-white/[0.06]">
-      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
-        {label}
-      </p>
+}) => (
+  <div className="border-b border-gray-100 px-6 py-5 md:border-r md:last:border-r-0 dark:border-white/[0.06]">
+    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+      {label}
+    </p>
+    <p className="mt-1.5 text-sm font-semibold text-gray-900 dark:text-white">
+      {value}
+    </p>
+  </div>
+);
 
-      <p className="mt-1.5 text-sm font-semibold text-gray-900 dark:text-white">
-        {value}
-      </p>
-    </div>
-  );
-};
-
-const LicensePill = ({ children }) => {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-semibold text-gray-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
-      <CheckCircle2 size={12} className="text-emerald-500" />
-      {children}
-    </span>
-  );
-};
+const LicensePill = ({ children }) => (
+  <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-semibold text-gray-600 dark:border-white/[0.07] dark:bg-white/[0.035] dark:text-slate-300">
+    <BadgeCheck size={12} />
+    {children}
+  </span>
+);
 
 export default SystemInfo;
