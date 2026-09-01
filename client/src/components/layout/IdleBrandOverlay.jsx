@@ -734,57 +734,6 @@ const IdleBrandOverlay = () => {
     };
   }, []);
 
-  // Kilit ekranı açıkken arka sayfa sabit kalır; scroll ve yatay kayma oluşmaz.
-  useEffect(() => {
-    if (
-      !isLocked ||
-      typeof document === 'undefined' ||
-      typeof window === 'undefined'
-    ) {
-      return undefined;
-    }
-
-    const body = document.body;
-    const html = document.documentElement;
-    const scrollY = window.scrollY;
-
-    const previous = {
-      bodyOverflow: body.style.overflow,
-      bodyPosition: body.style.position,
-      bodyTop: body.style.top,
-      bodyLeft: body.style.left,
-      bodyRight: body.style.right,
-      bodyWidth: body.style.width,
-      bodyOverscrollBehavior: body.style.overscrollBehavior,
-      htmlOverflow: html.style.overflow,
-      htmlOverscrollBehavior: html.style.overscrollBehavior,
-    };
-
-    html.style.overflow = 'hidden';
-    html.style.overscrollBehavior = 'none';
-
-    body.style.overflow = 'hidden';
-    body.style.overscrollBehavior = 'none';
-    body.style.position = 'fixed';
-    body.style.top = `-${scrollY}px`;
-    body.style.left = '0';
-    body.style.right = '0';
-    body.style.width = '100%';
-
-    return () => {
-      body.style.overflow = previous.bodyOverflow;
-      body.style.position = previous.bodyPosition;
-      body.style.top = previous.bodyTop;
-      body.style.left = previous.bodyLeft;
-      body.style.right = previous.bodyRight;
-      body.style.width = previous.bodyWidth;
-      body.style.overscrollBehavior = previous.bodyOverscrollBehavior;
-      html.style.overflow = previous.htmlOverflow;
-      html.style.overscrollBehavior = previous.htmlOverscrollBehavior;
-      window.scrollTo(0, scrollY);
-    };
-  }, [isLocked]);
-
   const handleSetup =
     async (
       event
@@ -1677,7 +1626,7 @@ const IdleBrandOverlay = () => {
   };
 
   return (
-    <div className="derkenar-lock-root fixed inset-0 z-[9999] h-[100dvh] w-[100vw] overflow-hidden bg-[#041020]">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden bg-[#041020] px-4 py-8">
       <style>{`
         @keyframes derkenarFloatOne {
           0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
@@ -1696,16 +1645,21 @@ const IdleBrandOverlay = () => {
           58%, 100% { transform: translateX(260%) skewX(-18deg); }
         }
         @keyframes derkenarEnter {
-          0% { opacity: 0; transform: translate(-50%, calc(-50% + 10px)) scale(var(--fit-scale)); }
-          100% { opacity: 1; transform: translate(-50%, -50%) scale(var(--fit-scale)); }
+          0% { opacity: 0; transform: translateY(8px) scale(.988); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
         }
         @keyframes derkenarStatusPulse {
-          0%, 100% { opacity: .62; box-shadow: 0 0 0 0 rgba(52,211,153,.10); }
+          0%, 100% { opacity: .6; box-shadow: 0 0 0 0 rgba(52,211,153,.10); }
           50% { opacity: 1; box-shadow: 0 0 0 5px rgba(52,211,153,0); }
         }
+        .derkenar-float-one { animation: derkenarFloatOne 17s ease-in-out infinite; }
+        .derkenar-float-two { animation: derkenarFloatTwo 20s ease-in-out infinite; }
+        .derkenar-logo-float { animation: derkenarLogoFloat 6s ease-in-out infinite; }
+        .derkenar-button-shine { animation: derkenarShine 5.2s ease-in-out infinite; }
+        .derkenar-enter { animation: derkenarEnter .5s cubic-bezier(.16,1,.3,1) both; }
         @keyframes derkenarGridDrift {
           0% { transform: translate3d(0, 0, 0); opacity: .18; }
-          50% { transform: translate3d(18px, 10px, 0); opacity: .27; }
+          50% { transform: translate3d(18px, 10px, 0); opacity: .28; }
           100% { transform: translate3d(0, 0, 0); opacity: .18; }
         }
         @keyframes derkenarHalo {
@@ -1714,30 +1668,9 @@ const IdleBrandOverlay = () => {
         }
         @keyframes derkenarSweep {
           0% { transform: translateX(-140%); opacity: 0; }
-          16% { opacity: .48; }
+          16% { opacity: .55; }
           42%, 100% { transform: translateX(240%); opacity: 0; }
         }
-        .derkenar-lock-root {
-          overscroll-behavior: none;
-          touch-action: none;
-          isolation: isolate;
-        }
-        .derkenar-stage {
-          --fit-scale: 1;
-          position: absolute;
-          left: 50%;
-          top: 50%;
-          width: min(430px, calc(100vw - 32px));
-          transform: translate(-50%, -50%) scale(var(--fit-scale));
-          transform-origin: center center;
-          will-change: transform, opacity;
-          animation: derkenarEnter .5s cubic-bezier(.16,1,.3,1) both;
-        }
-        .derkenar-stage--recovery { --fit-scale: .96; }
-        .derkenar-float-one { animation: derkenarFloatOne 17s ease-in-out infinite; }
-        .derkenar-float-two { animation: derkenarFloatTwo 20s ease-in-out infinite; }
-        .derkenar-logo-float { animation: derkenarLogoFloat 6s ease-in-out infinite; }
-        .derkenar-button-shine { animation: derkenarShine 5.2s ease-in-out infinite; }
         .derkenar-status-dot { animation: derkenarStatusPulse 3s ease-in-out infinite; }
         .derkenar-grid-drift { animation: derkenarGridDrift 22s ease-in-out infinite; }
         .derkenar-logo-halo { animation: derkenarHalo 5.5s ease-in-out infinite; }
@@ -1750,37 +1683,12 @@ const IdleBrandOverlay = () => {
           box-shadow: 0 0 0 1000px #0a1a30 inset !important;
           transition: background-color 9999s ease-out 0s;
         }
-        @media (max-height: 820px) {
-          .derkenar-stage { --fit-scale: .92; }
-          .derkenar-stage--recovery { --fit-scale: .88; }
-        }
-        @media (max-height: 750px) {
-          .derkenar-stage { --fit-scale: .84; }
-          .derkenar-stage--recovery { --fit-scale: .79; }
-          .derkenar-corner-info { opacity: .65; }
-        }
-        @media (max-height: 680px) {
-          .derkenar-stage { --fit-scale: .76; }
-          .derkenar-stage--recovery { --fit-scale: .70; }
-          .derkenar-corner-info { display: none !important; }
-        }
-        @media (max-height: 610px) {
-          .derkenar-stage { --fit-scale: .68; }
-          .derkenar-stage--recovery { --fit-scale: .62; }
-        }
-        @media (max-height: 540px) {
-          .derkenar-stage { --fit-scale: .60; }
-          .derkenar-stage--recovery { --fit-scale: .54; }
-        }
-        @media (max-width: 380px) {
-          .derkenar-stage { width: calc(100vw - 24px); }
-        }
         @media (prefers-reduced-motion: reduce) {
-          .derkenar-stage,
           .derkenar-float-one,
           .derkenar-float-two,
           .derkenar-logo-float,
           .derkenar-button-shine,
+          .derkenar-enter,
           .derkenar-status-dot,
           .derkenar-grid-drift,
           .derkenar-logo-halo,
@@ -1790,12 +1698,12 @@ const IdleBrandOverlay = () => {
         }
       `}</style>
 
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_14%,rgba(30,64,175,0.20),transparent_34%),radial-gradient(circle_at_50%_88%,rgba(245,158,11,0.075),transparent_28%),linear-gradient(145deg,#020817_0%,#06152e_50%,#020b18_100%)]" />
-      <div className="derkenar-grid-drift pointer-events-none absolute inset-[-48px] bg-[linear-gradient(rgba(255,255,255,0.017)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.017)_1px,transparent_1px)] bg-[size:44px_44px] [mask-image:radial-gradient(circle_at_center,black,transparent_72%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_16%,rgba(30,64,175,0.18),transparent_34%),radial-gradient(circle_at_50%_86%,rgba(245,158,11,0.07),transparent_28%),linear-gradient(145deg,#020817_0%,#06152e_50%,#020b18_100%)]" />
+      <div className="derkenar-grid-drift pointer-events-none absolute inset-[-40px] bg-[linear-gradient(rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.018)_1px,transparent_1px)] bg-[size:42px_42px] [mask-image:radial-gradient(circle_at_center,black,transparent_72%)]" />
       <div className="derkenar-float-one pointer-events-none absolute -left-24 top-[8%] h-72 w-72 rounded-full bg-blue-500/[0.08] blur-3xl" />
       <div className="derkenar-float-two pointer-events-none absolute -right-24 bottom-[5%] h-80 w-80 rounded-full bg-amber-400/[0.065] blur-3xl" />
 
-      <div className="derkenar-corner-info pointer-events-none absolute left-5 top-5 hidden rounded-2xl border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-left backdrop-blur-md sm:block">
+      <div className="pointer-events-none absolute left-5 top-5 hidden rounded-2xl border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-left backdrop-blur-md sm:block">
         <div className="text-xl font-semibold tabular-nums tracking-tight text-white/90">
           {formattedTime}
         </div>
@@ -1804,24 +1712,20 @@ const IdleBrandOverlay = () => {
         </div>
       </div>
 
-      <div className="derkenar-corner-info absolute right-5 top-5 hidden items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-[10px] font-semibold tracking-[0.16em] text-slate-400 backdrop-blur-md sm:flex">
+      <div className="absolute right-5 top-5 hidden items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-[10px] font-semibold tracking-[0.16em] text-slate-400 backdrop-blur-md sm:flex">
         <span className="derkenar-status-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />
         KURUMSAL OTURUM GÜVENLİĞİ
       </div>
 
-      <main className={`derkenar-stage ${
-        mode === MODE.RECOVERY_CODES
-          ? 'derkenar-stage--recovery'
-          : ''
-      } text-center`}>
+      <main className="derkenar-enter relative z-10 w-full max-w-[430px] text-center">
         <div className="relative mx-auto mb-5 h-20 w-20">
           <div className="derkenar-logo-halo pointer-events-none absolute inset-[-14px] rounded-[30px] bg-amber-300/[0.08] blur-2xl" />
           <div className="derkenar-logo-float relative flex h-20 w-20 items-center justify-center rounded-[24px] border border-amber-300/15 bg-white/[0.035] shadow-[0_20px_60px_rgba(0,0,0,.28)] backdrop-blur-xl">
-            <img
-              src="/favicon.svg"
-              alt="Derkenar"
-              className="h-12 w-12 object-contain"
-            />
+          <img
+            src="/favicon.svg"
+            alt="Derkenar"
+            className="h-12 w-12 object-contain"
+          />
           </div>
         </div>
 
@@ -1829,18 +1733,18 @@ const IdleBrandOverlay = () => {
           DERKENAR
         </h1>
 
-        <div className="mx-auto mt-3 flex max-w-[350px] items-center gap-3">
+        <div className="mx-auto mt-3 flex max-w-[330px] items-center gap-3">
           <span className="h-px flex-1 bg-gradient-to-r from-transparent to-amber-300/30" />
-          <span className="whitespace-nowrap text-[10px] font-bold tracking-[0.18em] text-amber-100/80">
+          <span className="text-[9px] font-bold tracking-[0.24em] text-amber-200/70">
             HUKUK BÜRO YÖNETİM SİSTEMİ
           </span>
           <span className="h-px flex-1 bg-gradient-to-l from-transparent to-amber-300/30" />
         </div>
 
-        <section className="relative mt-7 overflow-hidden rounded-[28px] border border-white/[0.08] bg-[#071426]/78 p-px shadow-[0_30px_100px_rgba(0,0,0,.46)] backdrop-blur-2xl">
+        <section className="relative mt-7 overflow-hidden rounded-[26px] border border-white/[0.075] bg-[#071426]/75 p-px shadow-[0_28px_90px_rgba(0,0,0,.42)] backdrop-blur-2xl">
           <div className="derkenar-card-sweep pointer-events-none absolute -inset-y-20 left-0 w-28 rotate-12 bg-gradient-to-r from-transparent via-white/[0.035] to-transparent blur-sm" />
-          <div className="pointer-events-none absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/55 to-transparent" />
-          <div className="relative rounded-[27px] bg-gradient-to-b from-white/[0.05] to-white/[0.018] px-7 py-7">
+          <div className="pointer-events-none absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/50 to-transparent" />
+          <div className="relative rounded-[25px] bg-gradient-to-b from-white/[0.045] to-white/[0.018] px-6 py-6 sm:px-7">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] text-amber-200 shadow-[0_12px_35px_rgba(245,158,11,0.07)]">
               <svg
                 viewBox="0 0 24 24"
@@ -1868,7 +1772,7 @@ const IdleBrandOverlay = () => {
           </div>
         </section>
 
-        <div className="mt-5 flex items-center justify-center gap-2 text-[10px] font-medium tracking-wide text-slate-500">
+        <div className="mt-5 flex items-center justify-center gap-2 text-[10px] font-medium tracking-wide text-slate-600">
           <svg
             viewBox="0 0 24 24"
             fill="none"
