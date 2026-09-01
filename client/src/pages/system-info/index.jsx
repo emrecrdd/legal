@@ -42,10 +42,10 @@ const SUPPORT_EMAIL =
   import.meta.env.VITE_SUPPORT_EMAIL || 'destek@derkenar.com';
 
 const SUPPORT_PHONE =
-  import.meta.env.VITE_SUPPORT_PHONE || '+90 5XX XXX XX XX';
+  import.meta.env.VITE_SUPPORT_PHONE;
 
 const SUPPORT_PHONE_LINK =
-  import.meta.env.VITE_SUPPORT_PHONE_LINK || '+905XXXXXXXXX';
+  import.meta.env.VITE_SUPPORT_PHONE_LINK ;
 
 const SUPPORT_WHATSAPP =
   import.meta.env.VITE_SUPPORT_WHATSAPP || SUPPORT_PHONE_LINK;
