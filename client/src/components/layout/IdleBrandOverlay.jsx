@@ -1128,12 +1128,12 @@ const IdleBrandOverlay = () => {
   }
 
   const inputClassName = `
-    h-14 w-full rounded-2xl border bg-[#071426]/80 px-4
+    h-14 w-full rounded-2xl border bg-[#0a1a30]/95 px-4
     text-center text-xl font-semibold tracking-[0.35em] text-white
     outline-none transition-all duration-300
     placeholder:text-sm placeholder:font-medium placeholder:tracking-normal
-    placeholder:text-slate-600 focus:-translate-y-0.5
-    focus:border-amber-300/60 focus:bg-[#091a31]/95
+    placeholder:text-slate-500 focus:-translate-y-0.5
+    focus:border-amber-300/60 focus:bg-[#0d223d]
     focus:shadow-[0_0_0_4px_rgba(251,191,36,0.08),0_12px_35px_rgba(0,0,0,0.28)]
     ${
       error
@@ -1143,10 +1143,12 @@ const IdleBrandOverlay = () => {
   `;
 
   const normalInputClassName = `
-    h-12 w-full rounded-xl border border-white/10 bg-[#071426]/80 px-4
-    text-sm text-white outline-none transition focus:border-amber-300/50
-    focus:shadow-[0_0_0_3px_rgba(251,191,36,0.07)]
-    placeholder:text-slate-600
+    h-12 w-full rounded-xl border border-white/10 bg-[#0a1a30]/95 px-4
+    text-sm font-medium text-slate-100 caret-amber-300 outline-none
+    transition-all duration-300 placeholder:text-slate-500
+    hover:border-white/15 hover:bg-[#0c1f39]
+    focus:-translate-y-0.5 focus:border-amber-300/55 focus:bg-[#0d223d]
+    focus:text-white focus:shadow-[0_0_0_3px_rgba(251,191,36,0.08),0_14px_36px_rgba(0,0,0,0.22)]
   `;
 
   const renderAlert = () => {
@@ -1182,7 +1184,7 @@ const IdleBrandOverlay = () => {
             Kurtarma Kodlarınızı Kaydedin
           </h2>
           <p className="mx-auto mt-2 max-w-[340px] text-xs leading-5 text-slate-400">
-            Bu kodlar yalnızca bir kez gösterilir. PIN ve hesap şifrenize erişemediğiniz acil durumda kullanabilirsiniz.
+            Bu kodlar yalnızca bir kez görüntülenir. Hesabınıza erişimi geri kazanmanız gereken durumlar için güvenli bir yerde saklayın.
           </p>
 
           <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1231,7 +1233,7 @@ const IdleBrandOverlay = () => {
             Ekran Kilidi PIN’i Oluştur
           </h2>
           <p className="mx-auto mt-2 max-w-[300px] text-xs leading-5 text-slate-400">
-            Kurumsal oturum güvenliği için 4 haneli kişisel ekran kilidinizi belirleyin.
+            Çalışma alanınızı korumak için 4 haneli kişisel erişim PIN’inizi belirleyin.
           </p>
 
           <form
@@ -1256,7 +1258,7 @@ const IdleBrandOverlay = () => {
               }}
               placeholder="Yeni PIN"
               maxLength={4}
-              className={inputClassName}
+              className={`derkenar-secure-input ${inputClassName}`}
               aria-label="Yeni PIN"
             />
 
@@ -1277,7 +1279,7 @@ const IdleBrandOverlay = () => {
               }}
               placeholder="PIN Tekrar"
               maxLength={4}
-              className={`mt-3 ${inputClassName}`}
+              className={`derkenar-secure-input mt-3 ${inputClassName}`}
               aria-label="PIN tekrar"
             />
 
@@ -1307,7 +1309,7 @@ const IdleBrandOverlay = () => {
             PIN’i Güvenle Sıfırla
           </h2>
           <p className="mx-auto mt-2 max-w-[330px] text-xs leading-5 text-slate-400">
-            Hesap şifrenizi doğrulayın ve yeni ekran kilidi PIN’inizi oluşturun.
+            Kimliğinizi hesap şifrenizle doğrulayın ve yeni kişisel erişim PIN’inizi belirleyin.
           </p>
 
           {pinBlocked && (
@@ -1334,7 +1336,7 @@ const IdleBrandOverlay = () => {
                 setError('');
               }}
               placeholder="Hesap şifreniz"
-              className={normalInputClassName}
+              className={`derkenar-secure-input ${normalInputClassName}`}
             />
 
             <input
@@ -1353,7 +1355,7 @@ const IdleBrandOverlay = () => {
               }
               placeholder="Yeni 4 haneli PIN"
               maxLength={4}
-              className={`mt-3 ${normalInputClassName}`}
+              className={`derkenar-secure-input mt-3 ${normalInputClassName}`}
             />
 
             <input
@@ -1372,7 +1374,7 @@ const IdleBrandOverlay = () => {
               }
               placeholder="Yeni PIN tekrar"
               maxLength={4}
-              className={`mt-3 ${normalInputClassName}`}
+              className={`derkenar-secure-input mt-3 ${normalInputClassName}`}
             />
 
             {renderAlert()}
@@ -1423,7 +1425,7 @@ const IdleBrandOverlay = () => {
             Acil Kurtarma Kodu
           </h2>
           <p className="mx-auto mt-2 max-w-[330px] text-xs leading-5 text-slate-400">
-            Daha önce güvenli bir yerde sakladığınız tek kullanımlık Derkenar kurtarma kodunu girin.
+            Daha önce güvenli biçimde sakladığınız tek kullanımlık kurtarma kodunuzu girin.
           </p>
 
           <form
@@ -1446,7 +1448,7 @@ const IdleBrandOverlay = () => {
                 setError('');
               }}
               placeholder="DRK-XXXX-XXXX-XXXX-XXXX"
-              className={`${normalInputClassName} text-center font-mono tracking-wider`}
+              className={`derkenar-secure-input ${normalInputClassName} text-center font-mono tracking-wider`}
             />
 
             <input
@@ -1465,7 +1467,7 @@ const IdleBrandOverlay = () => {
               }
               placeholder="Yeni 4 haneli PIN"
               maxLength={4}
-              className={`mt-3 ${normalInputClassName}`}
+              className={`derkenar-secure-input mt-3 ${normalInputClassName}`}
             />
 
             <input
@@ -1484,7 +1486,7 @@ const IdleBrandOverlay = () => {
               }
               placeholder="Yeni PIN tekrar"
               maxLength={4}
-              className={`mt-3 ${normalInputClassName}`}
+              className={`derkenar-secure-input mt-3 ${normalInputClassName}`}
             />
 
             {renderAlert()}
@@ -1522,7 +1524,7 @@ const IdleBrandOverlay = () => {
           Ekran Kilitli
         </h2>
         <p className="mx-auto mt-2 max-w-[300px] text-xs leading-5 text-slate-400">
-          Devam etmek için ekran kilidi PIN’inizi girin.
+          Güvenli çalışma alanınıza devam etmek için kişisel PIN’inizi girin.
         </p>
 
         <form
@@ -1547,7 +1549,7 @@ const IdleBrandOverlay = () => {
             }}
             placeholder="••••"
             maxLength={4}
-            className={inputClassName}
+            className={`derkenar-secure-input ${inputClassName}`}
             aria-label="Ekran kilidi PIN"
           />
 
@@ -1655,20 +1657,49 @@ const IdleBrandOverlay = () => {
         .derkenar-logo-float { animation: derkenarLogoFloat 6s ease-in-out infinite; }
         .derkenar-button-shine { animation: derkenarShine 5.2s ease-in-out infinite; }
         .derkenar-enter { animation: derkenarEnter .5s cubic-bezier(.16,1,.3,1) both; }
+        @keyframes derkenarGridDrift {
+          0% { transform: translate3d(0, 0, 0); opacity: .18; }
+          50% { transform: translate3d(18px, 10px, 0); opacity: .28; }
+          100% { transform: translate3d(0, 0, 0); opacity: .18; }
+        }
+        @keyframes derkenarHalo {
+          0%, 100% { transform: scale(.96); opacity: .32; }
+          50% { transform: scale(1.08); opacity: .62; }
+        }
+        @keyframes derkenarSweep {
+          0% { transform: translateX(-140%); opacity: 0; }
+          16% { opacity: .55; }
+          42%, 100% { transform: translateX(240%); opacity: 0; }
+        }
         .derkenar-status-dot { animation: derkenarStatusPulse 3s ease-in-out infinite; }
+        .derkenar-grid-drift { animation: derkenarGridDrift 22s ease-in-out infinite; }
+        .derkenar-logo-halo { animation: derkenarHalo 5.5s ease-in-out infinite; }
+        .derkenar-card-sweep { animation: derkenarSweep 8s ease-in-out infinite; }
+        .derkenar-secure-input:-webkit-autofill,
+        .derkenar-secure-input:-webkit-autofill:hover,
+        .derkenar-secure-input:-webkit-autofill:focus {
+          -webkit-text-fill-color: #f8fafc !important;
+          caret-color: #fcd34d !important;
+          box-shadow: 0 0 0 1000px #0a1a30 inset !important;
+          transition: background-color 9999s ease-out 0s;
+        }
         @media (prefers-reduced-motion: reduce) {
           .derkenar-float-one,
           .derkenar-float-two,
           .derkenar-logo-float,
           .derkenar-button-shine,
           .derkenar-enter,
-          .derkenar-status-dot {
+          .derkenar-status-dot,
+          .derkenar-grid-drift,
+          .derkenar-logo-halo,
+          .derkenar-card-sweep {
             animation: none !important;
           }
         }
       `}</style>
 
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_16%,rgba(30,64,175,0.18),transparent_34%),radial-gradient(circle_at_50%_86%,rgba(245,158,11,0.07),transparent_28%),linear-gradient(145deg,#020817_0%,#06152e_50%,#020b18_100%)]" />
+      <div className="derkenar-grid-drift pointer-events-none absolute inset-[-40px] bg-[linear-gradient(rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.018)_1px,transparent_1px)] bg-[size:42px_42px] [mask-image:radial-gradient(circle_at_center,black,transparent_72%)]" />
       <div className="derkenar-float-one pointer-events-none absolute -left-24 top-[8%] h-72 w-72 rounded-full bg-blue-500/[0.08] blur-3xl" />
       <div className="derkenar-float-two pointer-events-none absolute -right-24 bottom-[5%] h-80 w-80 rounded-full bg-amber-400/[0.065] blur-3xl" />
 
@@ -1683,16 +1714,19 @@ const IdleBrandOverlay = () => {
 
       <div className="absolute right-5 top-5 hidden items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-[10px] font-semibold tracking-[0.16em] text-slate-400 backdrop-blur-md sm:flex">
         <span className="derkenar-status-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />
-        BACKEND KORUMASI AKTİF
+        KURUMSAL OTURUM GÜVENLİĞİ
       </div>
 
       <main className="derkenar-enter relative z-10 w-full max-w-[430px] text-center">
-        <div className="derkenar-logo-float mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-[24px] border border-amber-300/15 bg-white/[0.035] shadow-[0_20px_60px_rgba(0,0,0,.28)] backdrop-blur-xl">
+        <div className="relative mx-auto mb-5 h-20 w-20">
+          <div className="derkenar-logo-halo pointer-events-none absolute inset-[-14px] rounded-[30px] bg-amber-300/[0.08] blur-2xl" />
+          <div className="derkenar-logo-float relative flex h-20 w-20 items-center justify-center rounded-[24px] border border-amber-300/15 bg-white/[0.035] shadow-[0_20px_60px_rgba(0,0,0,.28)] backdrop-blur-xl">
           <img
             src="/favicon.svg"
             alt="Derkenar"
             className="h-12 w-12 object-contain"
           />
+          </div>
         </div>
 
         <h1 className="bg-gradient-to-b from-white via-slate-100 to-slate-400 bg-clip-text text-3xl font-bold tracking-[0.18em] text-transparent sm:text-4xl">
@@ -1708,6 +1742,7 @@ const IdleBrandOverlay = () => {
         </div>
 
         <section className="relative mt-7 overflow-hidden rounded-[26px] border border-white/[0.075] bg-[#071426]/75 p-px shadow-[0_28px_90px_rgba(0,0,0,.42)] backdrop-blur-2xl">
+          <div className="derkenar-card-sweep pointer-events-none absolute -inset-y-20 left-0 w-28 rotate-12 bg-gradient-to-r from-transparent via-white/[0.035] to-transparent blur-sm" />
           <div className="pointer-events-none absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/50 to-transparent" />
           <div className="relative rounded-[25px] bg-gradient-to-b from-white/[0.045] to-white/[0.018] px-6 py-6 sm:px-7">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] text-amber-200 shadow-[0_12px_35px_rgba(245,158,11,0.07)]">
@@ -1751,7 +1786,7 @@ const IdleBrandOverlay = () => {
               strokeLinejoin="round"
             />
           </svg>
-          PIN yalnızca sunucuda bcrypt hash olarak saklanır
+          Oturumunuz Derkenar güvenlik politikalarıyla korunur
         </div>
       </main>
     </div>
