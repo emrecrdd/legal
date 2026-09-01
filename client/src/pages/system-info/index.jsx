@@ -448,7 +448,7 @@ const SystemInfo = () => {
           />
 
           <div className="grid md:grid-cols-2 xl:grid-cols-4">
-            <ContactItem icon={Mail} label="E-posta Desteği">
+            <ContactItem icon={Mail} label="E-posta ">
               <a
                 href={`mailto:${SUPPORT_EMAIL}`}
                 className="transition-colors hover:text-amber-600 dark:hover:text-amber-300"
@@ -457,7 +457,7 @@ const SystemInfo = () => {
               </a>
             </ContactItem>
 
-            <ContactItem icon={MessageCircle} label="WhatsApp Desteği">
+            <ContactItem icon={MessageCircle} label="WhatsApp ">
               {whatsappUrl ? (
                 <a
                   href={whatsappUrl}
@@ -481,7 +481,7 @@ const SystemInfo = () => {
               </a>
             </ContactItem>
 
-            <ContactItem icon={Clock3} label="Destek Saatleri">
+            <ContactItem icon={Clock3} label="Mesai Saatleri">
               {SUPPORT_HOURS}
             </ContactItem>
           </div>
@@ -533,7 +533,7 @@ const SystemInfo = () => {
 
           <div className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-500">
             <Sparkles size={14} />
-            Sunucu doğrulamalı lisans
+            Doğrulanmış Lisans
           </div>
         </div>
       </div>
