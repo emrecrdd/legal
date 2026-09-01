@@ -454,57 +454,6 @@ const IdleBrandOverlay = () => {
   ]);
 
   useEffect(() => {
-    if (
-      !isLocked ||
-      typeof document ===
-        'undefined'
-    ) {
-      return undefined;
-    }
-
-    const body =
-      document.body;
-
-    const html =
-      document.documentElement;
-
-    const previousBodyOverflow =
-      body.style.overflow;
-
-    const previousBodyPaddingRight =
-      body.style.paddingRight;
-
-    const previousHtmlOverflow =
-      html.style.overflow;
-
-    const scrollbarWidth =
-      Math.max(
-        0,
-        window.innerWidth -
-          html.clientWidth
-      );
-
-    body.style.overflow =
-      'hidden';
-    html.style.overflow =
-      'hidden';
-
-    if (scrollbarWidth > 0) {
-      body.style.paddingRight =
-        `${scrollbarWidth}px`;
-    }
-
-    return () => {
-      body.style.overflow =
-        previousBodyOverflow;
-      body.style.paddingRight =
-        previousBodyPaddingRight;
-      html.style.overflow =
-        previousHtmlOverflow;
-    };
-  }, [isLocked]);
-
-  useEffect(() => {
     if (!user?.id) {
       setInitialized(false);
       setIsLocked(false);
@@ -784,6 +733,49 @@ const IdleBrandOverlay = () => {
       );
     };
   }, []);
+
+  // Kilit ekranı açıkken arka sayfanın hiçbir yönde hareket etmesine izin verme.
+  useEffect(() => {
+    if (
+      !isLocked ||
+      typeof document === 'undefined'
+    ) {
+      return undefined;
+    }
+
+    const body = document.body;
+    const html = document.documentElement;
+    const scrollY = window.scrollY;
+
+    const previous = {
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyWidth: body.style.width,
+      bodyOverscrollBehavior: body.style.overscrollBehavior,
+      htmlOverflow: html.style.overflow,
+      htmlOverscrollBehavior: html.style.overscrollBehavior,
+    };
+
+    html.style.overflow = 'hidden';
+    html.style.overscrollBehavior = 'none';
+    body.style.overflow = 'hidden';
+    body.style.overscrollBehavior = 'none';
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.width = '100%';
+
+    return () => {
+      body.style.overflow = previous.bodyOverflow;
+      body.style.position = previous.bodyPosition;
+      body.style.top = previous.bodyTop;
+      body.style.width = previous.bodyWidth;
+      body.style.overscrollBehavior = previous.bodyOverscrollBehavior;
+      html.style.overflow = previous.htmlOverflow;
+      html.style.overscrollBehavior = previous.htmlOverscrollBehavior;
+      window.scrollTo(0, scrollY);
+    };
+  }, [isLocked]);
 
   const handleSetup =
     async (
@@ -1238,12 +1230,12 @@ const IdleBrandOverlay = () => {
             Bu kodlar yalnızca bir kez görüntülenir. Hesabınıza erişimi geri kazanmanız gereken durumlar için güvenli bir yerde saklayın.
           </p>
 
-          <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="mt-3 grid grid-cols-2 gap-1.5">
             {recoveryCodes.map(
               (code) => (
                 <div
                   key={code}
-                  className="rounded-xl border border-white/[0.07] bg-black/15 px-3 py-2.5 font-mono text-xs tracking-wide text-amber-100"
+                  className="rounded-lg border border-white/[0.07] bg-black/15 px-2 py-2 font-mono text-[10px] tracking-[0.06em] text-amber-100"
                 >
                   {code}
                 </div>
@@ -1289,7 +1281,7 @@ const IdleBrandOverlay = () => {
 
           <form
             onSubmit={handleSetup}
-            className="mt-6"
+            className="derkenar-compact-form mt-4"
           >
             <input
               ref={inputRef}
@@ -1371,7 +1363,7 @@ const IdleBrandOverlay = () => {
 
           <form
             onSubmit={handlePasswordRecovery}
-            className="mt-5"
+            className="derkenar-compact-form mt-4"
           >
             <input
               ref={inputRef}
@@ -1481,7 +1473,7 @@ const IdleBrandOverlay = () => {
 
           <form
             onSubmit={handleCodeRecovery}
-            className="mt-5"
+            className="derkenar-compact-form mt-4"
           >
             <input
               ref={inputRef}
@@ -1580,7 +1572,7 @@ const IdleBrandOverlay = () => {
 
         <form
           onSubmit={handleUnlock}
-          className="mt-6"
+          className="derkenar-compact-form mt-4"
         >
           <input
             ref={inputRef}
@@ -1677,7 +1669,7 @@ const IdleBrandOverlay = () => {
   };
 
   return (
-    <div className="derkenar-overlay-scroll fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto overscroll-contain bg-[#041020] px-4 py-8">
+    <div className="derkenar-lock-root fixed inset-0 z-[9999] flex h-[100dvh] w-full max-w-full items-center justify-center overflow-hidden overscroll-none bg-[#041020] p-3 sm:p-4">
       <style>{`
         @keyframes derkenarFloatOne {
           0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
@@ -1726,15 +1718,6 @@ const IdleBrandOverlay = () => {
         .derkenar-grid-drift { animation: derkenarGridDrift 22s ease-in-out infinite; }
         .derkenar-logo-halo { animation: derkenarHalo 5.5s ease-in-out infinite; }
         .derkenar-card-sweep { animation: derkenarSweep 8s ease-in-out infinite; }
-        .derkenar-overlay-scroll {
-          scrollbar-width: none;
-          -ms-overflow-style: none;
-        }
-        .derkenar-overlay-scroll::-webkit-scrollbar {
-          width: 0;
-          height: 0;
-          display: none;
-        }
         .derkenar-secure-input:-webkit-autofill,
         .derkenar-secure-input:-webkit-autofill:hover,
         .derkenar-secure-input:-webkit-autofill:focus {
@@ -1742,6 +1725,63 @@ const IdleBrandOverlay = () => {
           caret-color: #fcd34d !important;
           box-shadow: 0 0 0 1000px #0a1a30 inset !important;
           transition: background-color 9999s ease-out 0s;
+        }
+        .derkenar-lock-root {
+          touch-action: none;
+          contain: layout paint size;
+        }
+        .derkenar-panel,
+        .derkenar-main {
+          max-width: 100%;
+        }
+        .derkenar-panel-inner {
+          max-height: calc(100dvh - 210px);
+          overflow: hidden;
+        }
+        @media (max-height: 720px) {
+          .derkenar-corner-info { display: none !important; }
+          .derkenar-brand-wrap {
+            width: 3.25rem !important;
+            height: 3.25rem !important;
+            margin-bottom: .45rem !important;
+          }
+          .derkenar-brand-wrap > div:last-child {
+            width: 3.25rem !important;
+            height: 3.25rem !important;
+            border-radius: 1rem !important;
+          }
+          .derkenar-brand-wrap img { width: 1.9rem !important; height: 1.9rem !important; }
+          .derkenar-title { font-size: 1.45rem !important; line-height: 1.7rem !important; }
+          .derkenar-subtitle { margin-top: .3rem !important; }
+          .derkenar-panel { margin-top: .65rem !important; }
+          .derkenar-panel-inner {
+            padding: .7rem .9rem !important;
+            max-height: calc(100dvh - 128px);
+          }
+          .derkenar-panel-icon {
+            width: 2rem !important;
+            height: 2rem !important;
+            margin-bottom: .4rem !important;
+          }
+          .derkenar-panel-inner h2 { font-size: .98rem !important; line-height: 1.2rem !important; }
+          .derkenar-panel-inner p {
+            margin-top: .3rem !important;
+            line-height: 1rem !important;
+          }
+          .derkenar-compact-form { margin-top: .65rem !important; }
+          .derkenar-panel-inner input { height: 2.55rem !important; }
+          .derkenar-panel-inner form > input + input { margin-top: .45rem !important; }
+          .derkenar-panel-inner form > button[type="submit"] {
+            height: 2.55rem !important;
+            margin-top: .65rem !important;
+          }
+          .derkenar-footer { margin-top: .45rem !important; }
+        }
+        @media (max-height: 610px) {
+          .derkenar-brand-wrap, .derkenar-subtitle, .derkenar-footer { display: none !important; }
+          .derkenar-panel { margin-top: 0 !important; }
+          .derkenar-panel-inner { max-height: calc(100dvh - 24px); padding: .6rem .8rem !important; }
+          .derkenar-panel-icon { display: none !important; }
         }
         @media (prefers-reduced-motion: reduce) {
           .derkenar-float-one,
@@ -1763,7 +1803,7 @@ const IdleBrandOverlay = () => {
       <div className="derkenar-float-one pointer-events-none absolute -left-24 top-[8%] h-72 w-72 rounded-full bg-blue-500/[0.08] blur-3xl" />
       <div className="derkenar-float-two pointer-events-none absolute -right-24 bottom-[5%] h-80 w-80 rounded-full bg-amber-400/[0.065] blur-3xl" />
 
-      <div className="pointer-events-none absolute left-5 top-5 hidden rounded-2xl border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-left backdrop-blur-md sm:block">
+      <div className="derkenar-corner-info pointer-events-none absolute left-5 top-5 hidden rounded-2xl border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-left backdrop-blur-md sm:block">
         <div className="text-xl font-semibold tabular-nums tracking-tight text-white/90">
           {formattedTime}
         </div>
@@ -1772,40 +1812,40 @@ const IdleBrandOverlay = () => {
         </div>
       </div>
 
-      <div className="absolute right-5 top-5 hidden items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-[10px] font-semibold tracking-[0.16em] text-slate-400 backdrop-blur-md sm:flex">
+      <div className="derkenar-corner-info absolute right-5 top-5 hidden items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-[10px] font-semibold tracking-[0.16em] text-slate-400 backdrop-blur-md sm:flex">
         <span className="derkenar-status-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />
         KURUMSAL OTURUM GÜVENLİĞİ
       </div>
 
-      <main className="derkenar-enter relative z-10 my-auto w-full max-w-[470px] text-center">
-        <div className="relative mx-auto mb-5 h-20 w-20">
-          <div className="derkenar-logo-halo pointer-events-none absolute inset-[-14px] rounded-[30px] bg-amber-300/[0.08] blur-2xl" />
-          <div className="derkenar-logo-float relative flex h-20 w-20 items-center justify-center rounded-[24px] border border-amber-300/15 bg-white/[0.035] shadow-[0_20px_60px_rgba(0,0,0,.28)] backdrop-blur-xl">
+      <main className="derkenar-main derkenar-enter relative z-10 w-full max-w-[410px] text-center">
+        <div className="derkenar-brand-wrap relative mx-auto mb-3 h-16 w-16">
+          <div className="derkenar-logo-halo pointer-events-none absolute inset-[-10px] rounded-[26px] bg-amber-300/[0.08] blur-2xl" />
+          <div className="derkenar-logo-float relative flex h-16 w-16 items-center justify-center rounded-[20px] border border-amber-300/15 bg-white/[0.035] shadow-[0_16px_45px_rgba(0,0,0,.28)] backdrop-blur-xl">
           <img
             src="/favicon.svg"
             alt="Derkenar"
-            className="h-12 w-12 object-contain"
+            className="h-9 w-9 object-contain"
           />
           </div>
         </div>
 
-        <h1 className="bg-gradient-to-b from-white via-slate-100 to-slate-400 bg-clip-text text-3xl font-bold tracking-[0.18em] text-transparent sm:text-4xl">
+        <h1 className="derkenar-title bg-gradient-to-b from-white via-slate-100 to-slate-400 bg-clip-text text-3xl font-bold tracking-[0.16em] text-transparent">
           DERKENAR
         </h1>
 
-        <div className="mx-auto mt-3 flex max-w-[330px] items-center gap-3">
+        <div className="derkenar-subtitle mx-auto mt-2 flex max-w-[330px] items-center gap-2.5">
           <span className="h-px flex-1 bg-gradient-to-r from-transparent to-amber-300/30" />
-          <span className="text-[10px] font-bold tracking-[0.18em] text-amber-100/80 sm:text-[11px]">
+          <span className="text-[10px] font-bold tracking-[0.16em] text-amber-100/80">
             HUKUK BÜRO YÖNETİM SİSTEMİ
           </span>
           <span className="h-px flex-1 bg-gradient-to-l from-transparent to-amber-300/30" />
         </div>
 
-        <section className="relative mt-7 overflow-hidden rounded-[26px] border border-white/[0.075] bg-[#071426]/75 p-px shadow-[0_28px_90px_rgba(0,0,0,.42)] backdrop-blur-2xl">
+        <section className="derkenar-panel relative mt-4 overflow-hidden rounded-[24px] border border-white/[0.075] bg-[#071426]/75 p-px shadow-[0_24px_70px_rgba(0,0,0,.4)] backdrop-blur-2xl">
           <div className="derkenar-card-sweep pointer-events-none absolute -inset-y-20 left-0 w-28 rotate-12 bg-gradient-to-r from-transparent via-white/[0.035] to-transparent blur-sm" />
           <div className="pointer-events-none absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/50 to-transparent" />
-          <div className="relative rounded-[25px] bg-gradient-to-b from-white/[0.045] to-white/[0.018] px-7 py-7 sm:px-8">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] text-amber-200 shadow-[0_12px_35px_rgba(245,158,11,0.07)]">
+          <div className="derkenar-panel-inner relative rounded-[23px] bg-gradient-to-b from-white/[0.045] to-white/[0.018] px-5 py-4 sm:px-6">
+            <div className="derkenar-panel-icon mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-amber-300/15 bg-amber-300/[0.06] text-amber-200 shadow-[0_10px_28px_rgba(245,158,11,0.07)]">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -1832,7 +1872,7 @@ const IdleBrandOverlay = () => {
           </div>
         </section>
 
-        <div className="mt-5 flex items-center justify-center gap-2 text-[10px] font-medium tracking-wide text-slate-600">
+        <div className="derkenar-footer mt-3 flex items-center justify-center gap-2 text-[10px] font-medium tracking-wide text-slate-500">
           <svg
             viewBox="0 0 24 24"
             fill="none"
