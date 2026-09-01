@@ -38,7 +38,9 @@ import {
   PERMISSION_KEYS,
   getEffectivePermissions,
 } from '../../constants/roles.js';
-
+import {
+  CASE_STATUS,
+} from '../../constants/caseStatus.js';
 // ======================================================
 // CONSTANTS
 // ======================================================
@@ -1898,20 +1900,162 @@ export const clientService = {
   // REMOVE
   // ====================================================
 
-  async remove(
-    id,
-    actor
-  ) {
+  // ====================================================
+// REMOVE
+// ====================================================
+
+async remove(
+  id,
+  actor
+) {
+  const transaction =
+    await sequelize.transaction();
+
+  try {
     const client =
       await assertClientAccess(
         id,
-        actor
+        actor,
+        {
+          transaction,
+        }
       );
 
-    await client.destroy();
+    // ==================================================
+    // MÜVEKKİLİN BAĞLI OLDUĞU DAVALARI BUL
+    // ==================================================
+
+    const linkedCases =
+      await sequelize.query(
+        `
+          SELECT
+            c.id,
+            c.status
+          FROM cases c
+          INNER JOIN case_clients cc
+            ON cc.case_id = c.id
+          WHERE
+            cc.client_id = :clientId
+            AND c.deleted_at IS NULL
+        `,
+        {
+          replacements: {
+            clientId: id,
+          },
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction,
+        }
+      );
+
+    // ==================================================
+    // MÜVEKKİLİ SOFT DELETE ET
+    // ==================================================
+
+    await client.destroy({
+      transaction,
+    });
+
+    // ==================================================
+    // AKTİF MÜVEKKİLİ KALMAYAN DAVALARI BUL
+    // ==================================================
+
+    if (
+      linkedCases.length >
+      0
+    ) {
+      const linkedCaseIds =
+        linkedCases.map(
+          (caseItem) =>
+            caseItem.id
+        );
+
+      const casesWithoutClients =
+        await sequelize.query(
+          `
+            SELECT
+              c.id
+            FROM cases c
+            WHERE
+              c.id IN (:caseIds)
+              AND c.deleted_at IS NULL
+
+              AND NOT EXISTS (
+                SELECT 1
+                FROM case_clients cc
+
+                INNER JOIN clients cl
+                  ON cl.id = cc.client_id
+                  AND cl.deleted_at IS NULL
+
+                WHERE
+                  cc.case_id = c.id
+              )
+          `,
+          {
+            replacements: {
+              caseIds:
+                linkedCaseIds,
+            },
+
+            type:
+              QueryTypes.SELECT,
+
+            transaction,
+          }
+        );
+
+      const caseIdsToSuspend =
+        casesWithoutClients.map(
+          (caseItem) =>
+            caseItem.id
+        );
+
+      // ==================================================
+      // SONUÇLANMIŞ / ARŞİVLENMİŞ DAVALARA DOKUNMA
+      // ==================================================
+
+      if (
+        caseIdsToSuspend.length >
+        0
+      ) {
+        await Case.update(
+          {
+            status:
+              CASE_STATUS.SUSPENDED,
+          },
+          {
+            where: {
+              id: {
+                [Op.in]:
+                  caseIdsToSuspend,
+              },
+
+              status: {
+                [Op.notIn]: [
+                  CASE_STATUS.CONCLUDED,
+                  CASE_STATUS.ARCHIVED,
+                  CASE_STATUS.SUSPENDED,
+                ],
+              },
+            },
+
+            transaction,
+          }
+        );
+      }
+    }
+
+    await transaction.commit();
 
     return client;
-  },
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+},
 
   // ====================================================
   // STATISTICS
