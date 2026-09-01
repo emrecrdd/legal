@@ -48,7 +48,7 @@ const isExemptPath = (
   // yaşansa bile kullanıcıyı güvenli biçimde oturumdan çıkarabilmeli.
   if (
     path.startsWith(
-      '/auth/screen-lock'
+      '/screen-lock'
     )
   ) {
     return true;
