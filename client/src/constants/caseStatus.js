@@ -4,6 +4,7 @@ export const CASE_STATUS = {
   HEARING: 'hearing',
   APPEAL: 'appeal',
   CASSATION: 'cassation',
+   SUSPENDED: 'suspended',
   CONCLUDED: 'concluded',
   ARCHIVED: 'archived',
 };
@@ -33,6 +34,8 @@ export const CASE_STATUS_LABELS = {
 
   [CASE_STATUS.ARCHIVED]:
     'Arşivlendi',
+    [CASE_STATUS.SUSPENDED]:
+  'Durduruldu',
 };
 
 // ======================================================
@@ -61,6 +64,8 @@ export const CASE_STATUS_BADGE_VARIANTS = {
 
   [CASE_STATUS.ARCHIVED]:
     'danger',
+    [CASE_STATUS.SUSPENDED]:
+  'warning',
 };
 
 // ======================================================
@@ -86,7 +91,8 @@ export const CASE_STATUS_COLORS = {
 
   [CASE_STATUS.CONCLUDED]:
     'border-gray-200 bg-gray-50 text-gray-700 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-slate-300',
-
+[CASE_STATUS.SUSPENDED]:
+  'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/15 dark:bg-orange-500/[0.08] dark:text-orange-300',
   [CASE_STATUS.ARCHIVED]:
     'border-red-200 bg-red-50 text-red-700 dark:border-red-500/15 dark:bg-red-500/[0.08] dark:text-red-300',
 };
