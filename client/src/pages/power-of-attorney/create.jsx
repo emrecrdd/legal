@@ -203,6 +203,165 @@ const getFileTypeLabel = (
   return 'Dosya';
 };
 
+const getPowerOfAttorneyErrorMessage = (
+  error,
+  fallback
+) => {
+  const responseData =
+    error?.response?.data;
+
+  const rawMessage =
+    String(
+      responseData?.message ||
+      error?.message ||
+      ''
+    ).trim();
+
+  const validationMessages =
+    Array.isArray(
+      responseData?.errors
+    )
+      ? responseData.errors
+          .map(
+            (item) =>
+              String(
+                item?.message ||
+                item?.msg ||
+                ''
+              ).trim()
+          )
+          .filter(Boolean)
+      : [];
+
+  const technicalMessage =
+    [
+      rawMessage,
+      ...validationMessages,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+  if (
+    !technicalMessage
+  ) {
+    return fallback;
+  }
+
+  if (
+    /validation failed|validation error|sequelizevalidationerror|notnull violation|cannot be null|must not be null|invalid input syntax|invalid date/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Vekaletname bilgileri doğrulanamadı. Zorunlu ve geçerli alanları kontrol edin.';
+  }
+
+  if (
+    /power[\s_-]*of[\s_-]*attorney.*not found|powerofattorney.*not found/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Vekaletname kaydı bulunamadı.';
+  }
+
+  if (
+    /client.*not found/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Seçilen müvekkil bulunamadı veya bu kayda erişim yetkiniz yok.';
+  }
+
+  if (
+    /case.*not found/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Seçilen dava bulunamadı veya bu kayda erişim yetkiniz yok.';
+  }
+
+  if (
+    /forbidden|permission denied|not authorized|unauthorized|access denied/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Bu işlem için yetkiniz bulunmuyor.';
+  }
+
+  if (
+    /invalid.*status/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Geçersiz vekaletname durumu.';
+  }
+
+  if (
+    /document.*not found/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Belge bulunamadı.';
+  }
+
+  if (
+    /file.*too large|payload too large/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Belge boyutu izin verilen sınırı aşıyor.';
+  }
+
+  if (
+    /unsupported.*file|invalid.*file|file type|mime type/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Desteklenmeyen belge türü.';
+  }
+
+  if (
+    /network error|failed to fetch|timeout|econnrefused|enotfound/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Sunucuya bağlanılamadı. Lütfen tekrar deneyin.';
+  }
+
+  const looksTurkish =
+    /[çğıöşüÇĞİÖŞÜ]|bulunamadı|geçersiz|zorunlu|yetkiniz|başarısız|yüklenemedi|güncellenemedi|oluşturulamadı|silinemedi|hata/i.test(
+      rawMessage
+    );
+
+  return looksTurkish
+    ? rawMessage
+    : fallback;
+};
+
+const appendOptionalFormData = (
+  formData,
+  key,
+  value
+) => {
+  const normalizedValue =
+    typeof value ===
+    'string'
+      ? value.trim()
+      : value;
+
+  if (
+    normalizedValue === '' ||
+    normalizedValue === null ||
+    normalizedValue === undefined
+  ) {
+    return;
+  }
+
+  formData.append(
+    key,
+    normalizedValue
+  );
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -472,11 +631,10 @@ const PowerOfAttorneyCreate = () => {
         error
       ) => {
         toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
+          getPowerOfAttorneyErrorMessage(
+            error,
             'Vekaletname oluşturulamadı'
+          )
         );
       },
     });
@@ -773,6 +931,12 @@ const PowerOfAttorneyCreate = () => {
     ) => {
       event.preventDefault();
 
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       const newErrors =
         {};
 
@@ -781,6 +945,48 @@ const PowerOfAttorneyCreate = () => {
       ) {
         newErrors.client_id =
           'Müvekkil seçimi zorunludur';
+      }
+
+      const title =
+        String(
+          formData.title ||
+          ''
+        ).trim();
+
+      if (
+        title.length >
+        255
+      ) {
+        newErrors.title =
+          'Başlık en fazla 255 karakter olabilir';
+      }
+
+      if (
+        !STATUS_OPTIONS.some(
+          (item) =>
+            item.value ===
+            formData.status
+        )
+      ) {
+        newErrors.status =
+          'Geçersiz vekaletname durumu';
+      }
+
+      if (
+        formData.case_id &&
+        !cases.some(
+          (caseItem) =>
+            String(
+              caseItem?.id ||
+              ''
+            ) ===
+            String(
+              formData.case_id
+            )
+        )
+      ) {
+        newErrors.case_id =
+          'Seçilen dava bu müvekkille ilişkili değil veya artık erişilemiyor';
       }
 
       if (
@@ -803,8 +1009,16 @@ const PowerOfAttorneyCreate = () => {
           newErrors
         );
 
+        toast.error(
+          'Formdaki alanları kontrol edin'
+        );
+
         return;
       }
+
+      setErrors(
+        {}
+      );
 
       const submitData =
         new FormData();
@@ -814,36 +1028,34 @@ const PowerOfAttorneyCreate = () => {
         formData.client_id
       );
 
-      submitData.append(
+      appendOptionalFormData(
+        submitData,
         'case_id',
-        formData.case_id ||
-          ''
+        formData.case_id
       );
 
-      submitData.append(
+      appendOptionalFormData(
+        submitData,
         'title',
         formData.title
-          ?.trim() ||
-          ''
       );
 
-      submitData.append(
+      appendOptionalFormData(
+        submitData,
         'description',
         formData.description
-          ?.trim() ||
-          ''
       );
 
-      submitData.append(
+      appendOptionalFormData(
+        submitData,
         'start_date',
-        formData.start_date ||
-          ''
+        formData.start_date
       );
 
-      submitData.append(
+      appendOptionalFormData(
+        submitData,
         'end_date',
-        formData.end_date ||
-          ''
+        formData.end_date
       );
 
       submitData.append(
@@ -858,11 +1070,10 @@ const PowerOfAttorneyCreate = () => {
         )
       );
 
-      submitData.append(
+      appendOptionalFormData(
+        submitData,
         'notes',
         formData.notes
-          ?.trim() ||
-          ''
       );
 
       if (
@@ -1197,6 +1408,12 @@ const PowerOfAttorneyCreate = () => {
                   )}
                 </select>
 
+                {errors.case_id && (
+                  <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                    {errors.case_id}
+                  </p>
+                )}
+
                 {selectedCase && (
                   <div
                     className="
@@ -1295,6 +1512,9 @@ const PowerOfAttorneyCreate = () => {
               }
               onChange={
                 handleChange
+              }
+              error={
+                errors.title
               }
               placeholder="Örn: Taşınmaz Davası Vekaleti"
             />
@@ -1472,6 +1692,12 @@ const PowerOfAttorneyCreate = () => {
                     )
                   )}
                 </select>
+
+                {errors.status && (
+                  <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                    {errors.status}
+                  </p>
+                )}
 
               </div>
 
