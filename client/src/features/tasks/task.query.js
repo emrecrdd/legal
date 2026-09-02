@@ -326,16 +326,157 @@ const success = (
   );
 };
 
+const isLikelyTechnicalTaskMessage = (
+  message
+) => {
+  const value =
+    String(
+      message ||
+      ''
+    ).trim();
+
+  if (!value) {
+    return false;
+  }
+
+  return /sequelize|validation error|constraint|foreign key|unique constraint|notnull|invalid input syntax|uuid|database|sql|column|relation .* does not exist|syntax error|axioserror|network error|request failed with status code|econn|etimedout|timeout|cannot read properties|typeerror|referenceerror|stack trace/i.test(
+    value
+  );
+};
+
+const isSafeTurkishTaskMessage = (
+  message
+) => {
+  const value =
+    String(
+      message ||
+      ''
+    ).trim();
+
+  if (
+    !value ||
+    isLikelyTechnicalTaskMessage(
+      value
+    )
+  ) {
+    return false;
+  }
+
+  return /[çğıöşüÇĞİÖŞÜ]|görev|kullanıcı|müvekkil|dava|atan|sorumlu|tarih|süre|not|durum|ilerleme|erişim|yetki|işlem|bulunamadı|gereklidir|geçersiz/i.test(
+    value
+  );
+};
+
+const getTaskErrorMessage = (
+  error,
+  fallback
+) => {
+  const status =
+    Number(
+      error?.response
+        ?.status
+    ) ||
+    null;
+
+  const backendMessage =
+    String(
+      error?.response
+        ?.data
+        ?.message ||
+      ''
+    ).trim();
+
+  /*
+   * Backend business-rule mesajları Türkçe ve güvenliyse
+   * aynen kullanıcıya taşınır. Örn:
+   * - Görev en az 1 kişiye atanmalıdır
+   * - Görevin son tarihi geçmiş bir tarih olamaz
+   */
+  if (
+    isSafeTurkishTaskMessage(
+      backendMessage
+    )
+  ) {
+    return backendMessage;
+  }
+
+  if (
+    backendMessage
+      .toLowerCase() ===
+    'task not found'
+  ) {
+    return 'Görev bulunamadı veya artık erişilebilir değil';
+  }
+
+  if (status === 401) {
+    return 'Oturumunuz sona ermiş olabilir. Lütfen yeniden giriş yapın.';
+  }
+
+  if (status === 403) {
+    return 'Bu işlem için gerekli yetkiye sahip değilsiniz';
+  }
+
+  if (status === 404) {
+    return 'Görev bulunamadı veya artık erişilebilir değil';
+  }
+
+  if (status === 409) {
+    return 'Bu işlem mevcut görev durumu nedeniyle tamamlanamadı';
+  }
+
+  if (status === 429) {
+    return 'Çok fazla istek gönderildi. Lütfen kısa bir süre sonra tekrar deneyin.';
+  }
+
+  if (
+    status &&
+    status >= 500
+  ) {
+    return 'Sunucu tarafında geçici bir sorun oluştu. Lütfen tekrar deneyin.';
+  }
+
+  if (
+    !error?.response &&
+    (
+      error?.code ===
+        'ERR_NETWORK' ||
+      /network|failed to fetch|econn|timeout/i.test(
+        String(
+          error?.message ||
+          ''
+        )
+      )
+    )
+  ) {
+    return 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+  }
+
+  const localMessage =
+    String(
+      error?.message ||
+      ''
+    ).trim();
+
+  if (
+    isSafeTurkishTaskMessage(
+      localMessage
+    )
+  ) {
+    return localMessage;
+  }
+
+  return fallback;
+};
+
 const failure = (
   error,
   fallback
 ) => {
   toast.error(
-    error?.response
-      ?.data
-      ?.message ||
-      error?.message ||
+    getTaskErrorMessage(
+      error,
       fallback
+    )
   );
 };
 

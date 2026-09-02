@@ -640,6 +640,61 @@ const localToUTC = (
   }
 };
 
+const getTurkeyDateTimeLocalNow = () => {
+  const now =
+    new Date();
+
+  const turkeyTime =
+    new Date(
+      now.getTime() +
+      (
+        3 *
+        60 *
+        60 *
+        1000
+      )
+    );
+
+  return turkeyTime
+    .toISOString()
+    .slice(
+      0,
+      16
+    );
+};
+
+const isMeetingDateInPast = (
+  isoValue
+) => {
+  if (!isoValue) {
+    return false;
+  }
+
+  const timestamp =
+    new Date(
+      isoValue
+    ).getTime();
+
+  if (
+    Number.isNaN(
+      timestamp
+    )
+  ) {
+    return false;
+  }
+
+  /*
+   * datetime-local dakika hassasiyetinde çalışıyor.
+   * Kullanıcı mevcut dakikayı seçtiğinde saniye farkı
+   * nedeniyle yanlışlıkla "geçmiş" sayılmasını önlüyoruz.
+   */
+  return timestamp <
+    (
+      Date.now() -
+      60 * 1000
+    );
+};
+
 const isValidHttpUrl = (
   value
 ) => {
@@ -1687,36 +1742,54 @@ const MeetingCreate = () => {
           `Notlar en fazla ${MAX_NOTES_LENGTH} karakter olabilir`;
       }
 
+      const startDateUtc =
+        formData.start_date
+          ? localToUTC(
+              formData.start_date
+            )
+          : null;
+
+      const endDateUtc =
+        formData.end_date
+          ? localToUTC(
+              formData.end_date
+            )
+          : null;
+
       if (
         !formData.start_date
       ) {
         newErrors.start_date =
           'Başlangıç tarihi gereklidir';
-      }
-
-      if (
-        formData.start_date &&
-        !localToUTC(
-          formData.start_date
-        )
+      } else if (
+        !startDateUtc
       ) {
         newErrors.start_date =
           'Geçerli bir başlangıç tarihi girin';
+      } else if (
+        isMeetingDateInPast(
+          startDateUtc
+        )
+      ) {
+        newErrors.start_date =
+          'Toplantı başlangıç tarihi geçmiş bir tarih olamaz';
       }
 
       if (
         formData.end_date &&
-        !localToUTC(
-          formData.end_date
-        )
+        !endDateUtc
       ) {
         newErrors.end_date =
           'Geçerli bir bitiş tarihi girin';
       } else if (
-        formData.start_date &&
-        formData.end_date &&
-        formData.end_date <
-          formData.start_date
+        startDateUtc &&
+        endDateUtc &&
+        new Date(
+          endDateUtc
+        ).getTime() <
+          new Date(
+            startDateUtc
+          ).getTime()
       ) {
         newErrors.end_date =
           'Bitiş tarihi başlangıç tarihinden önce olamaz';
@@ -1830,14 +1903,18 @@ const MeetingCreate = () => {
 
       if (
         user?.role ===
-          'admin' &&
-        assignedTo
+          'admin'
       ) {
         if (
           usersError
         ) {
           newErrors.assigned_to =
             'Kullanıcı listesi yüklenemedi. Listeyi yenileyip tekrar deneyin.';
+        } else if (
+          !assignedTo
+        ) {
+          newErrors.assigned_to =
+            'Toplantı için sorumlu kişi seçilmelidir';
         } else if (
           !assignableUsers.some(
             (person) =>
@@ -2724,6 +2801,9 @@ const MeetingCreate = () => {
                 error={
                   errors.start_date
                 }
+                min={
+                  getTurkeyDateTimeLocalNow()
+                }
               disabled={
                 mutation.isPending
               }
@@ -3216,7 +3296,7 @@ const MeetingCreate = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Toplantının takibinden sorumlu kullanıcı
+                  Toplantının takibinden sorumlu kullanıcı zorunludur
                 </p>
 
               </div>
@@ -3232,7 +3312,7 @@ const MeetingCreate = () => {
               <div>
 
                 <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Atanan Kişi
+                  Atanan Kişi *
                 </label>
 
                 <select
@@ -3829,7 +3909,12 @@ const MeetingCreate = () => {
             }
             disabled={
               mutation.isPending ||
-              clientSelectLoading
+              clientSelectLoading ||
+              (
+                user?.role ===
+                  'admin' &&
+                usersLoading
+              )
             }
           >
             <Save className="h-4 w-4" />

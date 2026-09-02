@@ -177,21 +177,36 @@ const parseDate = (
   return parsed;
 };
 
+const PAST_DATE_TOLERANCE_MS =
+  60 * 1000;
+
 const validateMeetingDates = ({
   startDate,
   endDate,
+  rejectPastStart = false,
 }) => {
   if (!startDate) {
     throw new Error(
-      'Meeting start date is required'
+      'Toplantı başlangıç tarihi gereklidir'
     );
   }
 
   const parsedStart =
     parseDate(
       startDate,
-      'Invalid meeting start date'
+      'Geçerli bir toplantı başlangıç tarihi girilmelidir'
     );
+
+  if (
+    rejectPastStart &&
+    parsedStart.getTime() <
+      Date.now() -
+        PAST_DATE_TOLERANCE_MS
+  ) {
+    throw new Error(
+      'Toplantı başlangıç tarihi geçmiş bir tarih olamaz'
+    );
+  }
 
   if (!endDate) {
     return;
@@ -200,7 +215,7 @@ const validateMeetingDates = ({
   const parsedEnd =
     parseDate(
       endDate,
-      'Invalid meeting end date'
+      'Geçerli bir toplantı bitiş tarihi girilmelidir'
     );
 
   if (
@@ -208,7 +223,67 @@ const validateMeetingDates = ({
     parsedStart
   ) {
     throw new Error(
-      'Meeting end date cannot be before start date'
+      'Toplantı bitiş tarihi başlangıç tarihinden önce olamaz'
+    );
+  }
+};
+
+const hasMeetingStartDateChanged = (
+  nextStartDate,
+  currentStartDate
+) => {
+  if (
+    nextStartDate ===
+    undefined
+  ) {
+    return false;
+  }
+
+  const next =
+    new Date(
+      nextStartDate
+    );
+
+  const current =
+    currentStartDate
+      ? new Date(
+          currentStartDate
+        )
+      : null;
+
+  if (
+    Number.isNaN(
+      next.getTime()
+    )
+  ) {
+    /*
+     * Geçersiz tarih asıl tarih doğrulamasında
+     * anlaşılır hata ile reddedilir.
+     */
+    return true;
+  }
+
+  if (
+    !current ||
+    Number.isNaN(
+      current.getTime()
+    )
+  ) {
+    return true;
+  }
+
+  return (
+    next.getTime() !==
+    current.getTime()
+  );
+};
+
+const assertMeetingAssigneeRequired = (
+  assignedTo
+) => {
+  if (!assignedTo) {
+    throw new Error(
+      'Toplantı için sorumlu kişi seçilmelidir'
     );
   }
 };
@@ -1221,7 +1296,14 @@ export const meetingService = {
 
       endDate:
         preparedData.end_date,
+
+      rejectPastStart:
+        true,
     });
+
+    assertMeetingAssigneeRequired(
+      preparedData.assigned_to
+    );
 
     const transaction =
       await sequelize.transaction();
@@ -1611,6 +1693,12 @@ export const meetingService = {
        */
       delete preparedData.status;
 
+      const startDateChanged =
+        hasMeetingStartDateChanged(
+          preparedData.start_date,
+          meeting.start_date
+        );
+
       validateMeetingDates({
         startDate:
           preparedData.start_date ??
@@ -1621,7 +1709,27 @@ export const meetingService = {
           undefined
             ? preparedData.end_date
             : meeting.end_date,
+
+        /*
+         * Zaten geçmişte kalmış eski bir toplantının başlık/not
+         * gibi başka alanlarını düzenlemeyi engellemiyoruz.
+         * Sadece başlangıç tarihi gerçekten değiştiriliyorsa
+         * geçmişe çekilmesine izin vermiyoruz.
+         */
+        rejectPastStart:
+          startDateChanged,
       });
+
+      if (
+        Object.prototype.hasOwnProperty.call(
+          preparedData,
+          'assigned_to'
+        )
+      ) {
+        assertMeetingAssigneeRequired(
+          preparedData.assigned_to
+        );
+      }
 
       const effectiveCaseId =
         preparedData.case_id !==
