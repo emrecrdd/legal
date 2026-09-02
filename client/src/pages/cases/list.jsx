@@ -76,6 +76,10 @@ const STATUSES = [
     label: 'Temyiz',
   },
   {
+    value: 'suspended',
+    label: 'Durduruldu',
+  },
+  {
     value: 'concluded',
     label: 'Sonuçlandı',
   },
@@ -142,6 +146,9 @@ const getStatusVariant = (
 
     cassation:
       'default',
+
+    suspended:
+      'warning',
 
     concluded:
       'default',
