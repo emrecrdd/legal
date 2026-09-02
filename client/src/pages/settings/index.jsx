@@ -27,8 +27,10 @@ import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Badge from '../../components/ui/Badge.jsx';
+import Modal from '../../components/ui/Modal.jsx';
 
 import {
+  AlertTriangle,
   CalendarDays,
   CheckCircle2,
   Eye,
@@ -177,6 +179,105 @@ const validatePasswordStrength = (
   return '';
 };
 
+const getSettingsErrorMessage = (
+  error,
+  fallback
+) => {
+  const rawMessage =
+    String(
+      error?.response?.data?.message ||
+      error?.message ||
+      ''
+    ).trim();
+
+  if (!rawMessage) {
+    return fallback;
+  }
+
+  if (
+    /network|fetch|timeout|err_network|econn|socket/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+  }
+
+  if (
+    /unauthorized|forbidden|permission|not authorized|access denied/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Bu işlem için yetkiniz bulunmuyor.';
+  }
+
+  if (
+    /validation failed|sequelize|notnull|null violation|invalid value/i.test(
+      rawMessage
+    )
+  ) {
+    return fallback;
+  }
+
+  if (
+    /[çğıöşüİĞÜŞÖÇ]/.test(
+      rawMessage
+    ) ||
+    /\b(gerekli|geçersiz|bulunamadı|şifre|bağlantı|yetki|kullanıcı|profil|takvim|google|hata)\b/i.test(
+      rawMessage
+    )
+  ) {
+    return rawMessage;
+  }
+
+  return fallback;
+};
+
+const getSettingsFieldErrorMessage = (
+  field,
+  message
+) => {
+  const rawMessage =
+    String(
+      message || ''
+    ).trim();
+
+  if (
+    rawMessage &&
+    (
+      /[çğıöşüİĞÜŞÖÇ]/.test(
+        rawMessage
+      ) ||
+      /\b(gerekli|geçersiz|yanlış|eşleşmiyor|olmalıdır)\b/i.test(
+        rawMessage
+      )
+    )
+  ) {
+    return rawMessage;
+  }
+
+  const fallbacks = {
+    first_name:
+      'Ad alanını kontrol edin',
+    last_name:
+      'Soyad alanını kontrol edin',
+    phone:
+      'Telefon numarasını kontrol edin',
+    title:
+      'Ünvan alanını kontrol edin',
+    bio:
+      'Biyografi alanını kontrol edin',
+    currentPassword:
+      'Mevcut şifrenizi kontrol edin',
+    newPassword:
+      'Yeni şifrenizi kontrol edin',
+  };
+
+  return (
+    fallbacks[field] ||
+    'Geçersiz değer'
+  );
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -211,6 +312,22 @@ const Settings = () => {
   const [
     isGoogleConnecting,
     setIsGoogleConnecting,
+  ] =
+    useState(
+      false
+    );
+
+  const [
+    googleDisconnectDialogOpen,
+    setGoogleDisconnectDialogOpen,
+  ] =
+    useState(
+      false
+    );
+
+  const [
+    logoutDialogOpen,
+    setLogoutDialogOpen,
   ] =
     useState(
       false
@@ -590,8 +707,10 @@ const Settings = () => {
                 field
               ) {
                 nextErrors[field] =
-                  item?.msg ||
-                  'Geçersiz değer';
+                  getSettingsFieldErrorMessage(
+                    field,
+                    item?.msg
+                  );
               }
             }
           );
@@ -615,7 +734,10 @@ const Settings = () => {
         }
 
         toast.error(
-          message
+          getSettingsErrorMessage(
+            error,
+            'Profil güncellenemedi'
+          )
         );
       },
     });
@@ -679,8 +801,10 @@ const Settings = () => {
                 item?.param;
 
               const fieldMessage =
-                item?.msg ||
-                'Geçersiz değer';
+                getSettingsFieldErrorMessage(
+                  field,
+                  item?.msg
+                );
 
               if (
                 field ===
@@ -760,7 +884,10 @@ const Settings = () => {
         }
 
         toast.error(
-          message
+          getSettingsErrorMessage(
+            error,
+            'Şifre değiştirilemedi'
+          )
         );
       },
     });
@@ -866,11 +993,10 @@ const Settings = () => {
         error
       ) => {
         toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
+          getSettingsErrorMessage(
+            error,
             'Google Calendar bağlantısı başlatılamadı'
+          )
         );
       },
     });
@@ -886,6 +1012,10 @@ const Settings = () => {
           .disconnectGoogle(),
 
       onSuccess: async () => {
+        setGoogleDisconnectDialogOpen(
+          false
+        );
+
         setIsGoogleConnecting(
           false
         );
@@ -917,14 +1047,46 @@ const Settings = () => {
         error
       ) => {
         toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
+          getSettingsErrorMessage(
+            error,
             'Google Calendar bağlantısı kaldırılamadı'
+          )
         );
       },
     });
+
+  useEffect(() => {
+    const handleBeforeUnload =
+      (
+        event
+      ) => {
+        if (
+          !isProfileDirty ||
+          updateProfile.isPending
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        event.returnValue =
+          '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isProfileDirty,
+    updateProfile.isPending,
+  ]);
 
   // ====================================================
   // PROFILE CHANGE
@@ -1274,12 +1436,36 @@ const Settings = () => {
 
   const handleGoogleDisconnect =
     () => {
-      const confirmed =
-        window.confirm(
-          'Google Calendar bağlantısını kaldırmak istediğinize emin misiniz? Takvim senkronizasyonu durdurulacaktır.'
-        );
+      if (
+        disconnectGoogle.isPending
+      ) {
+        return;
+      }
 
-      if (!confirmed) {
+      setGoogleDisconnectDialogOpen(
+        true
+      );
+    };
+
+  const handleCloseGoogleDisconnectDialog =
+    () => {
+      if (
+        disconnectGoogle.isPending
+      ) {
+        return;
+      }
+
+      setGoogleDisconnectDialogOpen(
+        false
+      );
+    };
+
+  const handleConfirmGoogleDisconnect =
+    () => {
+      if (
+        !googleDisconnectDialogOpen ||
+        disconnectGoogle.isPending
+      ) {
         return;
       }
 
@@ -1295,17 +1481,28 @@ const Settings = () => {
       if (
         isProfileDirty
       ) {
-        const confirmed =
-          window.confirm(
-            'Kaydedilmemiş profil değişiklikleriniz var. Yine de çıkış yapmak istiyor musunuz?'
-          );
+        setLogoutDialogOpen(
+          true
+        );
 
-        if (
-          !confirmed
-        ) {
-          return;
-        }
+        return;
       }
+
+      logout();
+    };
+
+  const handleCloseLogoutDialog =
+    () => {
+      setLogoutDialogOpen(
+        false
+      );
+    };
+
+  const handleConfirmLogout =
+    () => {
+      setLogoutDialogOpen(
+        false
+      );
 
       logout();
     };
@@ -1956,6 +2153,134 @@ const Settings = () => {
 
         </Card>
       )}
+
+      <Modal
+        isOpen={
+          googleDisconnectDialogOpen
+        }
+        onClose={
+          handleCloseGoogleDisconnectDialog
+        }
+        title="Google Calendar Bağlantısını Kes"
+        size="md"
+        closeOnBackdrop={
+          !disconnectGoogle.isPending
+        }
+      >
+        <div className="space-y-5">
+
+          <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+
+            <div>
+
+              <p className="text-sm font-semibold text-amber-950 dark:text-amber-200">
+                Takvim senkronizasyonu durdurulacak
+              </p>
+
+              <p className="mt-1 text-sm leading-6 text-amber-900/80 dark:text-amber-200/80">
+                Google Calendar bağlantısı kaldırıldığında Derkenar ile Google Takvim arasındaki otomatik senkronizasyon durur.
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 dark:border-white/[0.06] sm:flex-row sm:justify-end">
+
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={
+                disconnectGoogle.isPending
+              }
+              onClick={
+                handleCloseGoogleDisconnectDialog
+              }
+            >
+              Vazgeç
+            </Button>
+
+            <Button
+              type="button"
+              variant="danger"
+              loading={
+                disconnectGoogle.isPending
+              }
+              disabled={
+                disconnectGoogle.isPending
+              }
+              onClick={
+                handleConfirmGoogleDisconnect
+              }
+            >
+              <Unlink2 className="h-4 w-4" />
+              Bağlantıyı Kes
+            </Button>
+
+          </div>
+
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={
+          logoutDialogOpen
+        }
+        onClose={
+          handleCloseLogoutDialog
+        }
+        title="Kaydedilmemiş Değişiklik"
+        size="md"
+      >
+        <div className="space-y-5">
+
+          <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+
+            <div>
+
+              <p className="text-sm font-semibold text-amber-950 dark:text-amber-200">
+                Profil değişiklikleri kaydedilmedi
+              </p>
+
+              <p className="mt-1 text-sm leading-6 text-amber-900/80 dark:text-amber-200/80">
+                Çıkış yaparsanız profil formundaki kaydedilmemiş değişiklikler silinir.
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 dark:border-white/[0.06] sm:flex-row sm:justify-end">
+
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={
+                handleCloseLogoutDialog
+              }
+            >
+              Düzenlemeye Devam Et
+            </Button>
+
+            <Button
+              type="button"
+              variant="danger"
+              onClick={
+                handleConfirmLogout
+              }
+            >
+              <LogOut className="h-4 w-4" />
+              Değişiklikleri At ve Çık
+            </Button>
+
+          </div>
+
+        </div>
+      </Modal>
 
     </div>
   );
