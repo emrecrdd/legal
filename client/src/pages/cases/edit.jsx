@@ -134,6 +134,7 @@ const getStatusVariant = (
     hearing: 'info',
     appeal: 'warning',
     cassation: 'default',
+    suspended: 'warning',
     concluded: 'default',
     archived: 'danger',
   };
@@ -147,6 +148,13 @@ const getStatusVariant = (
 const getStatusLabel = (
   status
 ) => {
+  if (
+    status ===
+    'suspended'
+  ) {
+    return 'Durduruldu';
+  }
+
   return (
     STATUS_OPTIONS.find(
       (
@@ -1405,12 +1413,19 @@ const CaseEdit = () => {
           'Seçilen avukat artık atanabilir değil';
       }
 
+      const isCurrentSuspendedStatus =
+        formData.status ===
+          'suspended' &&
+        caseItem.status ===
+          'suspended';
+
       if (
         !STATUS_OPTIONS.some(
           (option) =>
             option.value ===
             formData.status
-        )
+        ) &&
+        !isCurrentSuspendedStatus
       ) {
         nextErrors.status =
           'Geçersiz dava durumu';
@@ -2226,6 +2241,16 @@ const CaseEdit = () => {
                   }
                   className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
                 >
+
+                  {formData.status ===
+                    'suspended' && (
+                    <option
+                      value="suspended"
+                      disabled
+                    >
+                      Durduruldu
+                    </option>
+                  )}
 
                   {STATUS_OPTIONS.map(
                     (
