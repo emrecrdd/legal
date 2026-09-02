@@ -5,7 +5,6 @@ import {
 } from 'react-router-dom';
 
 import {
-  useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
@@ -40,7 +39,6 @@ import {
   FileText,
   FolderOpen,
   Scale,
-  Trash2,
   UserRound,
 } from 'lucide-react';
 
@@ -343,12 +341,6 @@ const TemplateDetail = () => {
       PERMISSION_KEYS.EDIT_TEMPLATES
     );
 
-  const canDelete =
-    hasPermission(
-      user,
-      PERMISSION_KEYS.DELETE_TEMPLATES
-    );
-
   // ======================================================
   // QUERY
   // ======================================================
@@ -529,88 +521,13 @@ const TemplateDetail = () => {
     };
 
   // ======================================================
-  // DELETE
-  // ======================================================
-
-  const deleteMutation =
-    useMutation({
-      mutationFn: () => {
-        if (!id) {
-          throw new Error(
-            'Geçerli şablon kaydı bulunamadı'
-          );
-        }
-
-        return templateApi.delete(
-          id
-        );
-      },
-
-      onMutate: async () => {
-        if (!id) {
-          return;
-        }
-
-        await queryClient.cancelQueries({
-          queryKey: [
-            'template',
-            id,
-          ],
-          exact:
-            true,
-        });
-      },
-
-      onSuccess: async () => {
-        queryClient.removeQueries({
-          queryKey: [
-            'template',
-            id,
-          ],
-          exact:
-            true,
-        });
-
-        queryClient.removeQueries({
-          queryKey: [
-            'templates',
-            'detail',
-            id,
-          ],
-          exact:
-            true,
-        });
-
-        await invalidateTemplateCollections();
-
-        toast.success(
-          'Şablon silindi'
-        );
-
-        navigate(
-          '/templates'
-        );
-      },
-
-      onError: (error) => {
-        toast.error(
-          getErrorMessage(
-            error,
-            'Silme başarısız'
-          )
-        );
-      },
-    });
-
-  // ======================================================
   // DOWNLOAD
   // ======================================================
 
   const handleDownload =
     async () => {
       if (
-        isDownloading ||
-        deleteMutation.isPending
+        isDownloading
       ) {
         return;
       }
@@ -784,8 +701,7 @@ const TemplateDetail = () => {
     async () => {
       if (
         isPreviewing ||
-        isDownloading ||
-        deleteMutation.isPending
+        isDownloading
       ) {
         return;
       }
@@ -1072,39 +988,6 @@ const TemplateDetail = () => {
     };
 
   // ======================================================
-  // DELETE HANDLER
-  // ======================================================
-
-  const handleDelete = () => {
-    if (
-      deleteMutation.isPending ||
-      isDownloading ||
-      isPreviewing
-    ) {
-      return;
-    }
-
-    if (!canDelete) {
-      toast.error(
-        'Bu şablonu silme yetkiniz bulunmuyor'
-      );
-
-      return;
-    }
-
-    const confirmed =
-      window.confirm(
-        `"${template?.title || 'Bu şablon'}" şablonunu silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
-    deleteMutation.mutate();
-  };
-
-  // ======================================================
   // LOADING
   // ======================================================
 
@@ -1298,8 +1181,7 @@ const TemplateDetail = () => {
               }
               disabled={
                 isPreviewing ||
-                isDownloading ||
-                deleteMutation.isPending
+                isDownloading
               }
             >
               <Eye className="mr-2 h-4 w-4" />
@@ -1317,8 +1199,7 @@ const TemplateDetail = () => {
               }
               disabled={
                 isDownloading ||
-                isPreviewing ||
-                deleteMutation.isPending
+                isPreviewing
               }
             >
               <Download className="mr-2 h-4 w-4" />
@@ -1336,7 +1217,6 @@ const TemplateDetail = () => {
                   event
                 ) => {
                   if (
-                    deleteMutation.isPending ||
                     isDownloading ||
                     isPreviewing
                   ) {
@@ -1347,7 +1227,6 @@ const TemplateDetail = () => {
                 <Button
                   variant="outline"
                   disabled={
-                    deleteMutation.isPending ||
                     isDownloading ||
                     isPreviewing
                   }
@@ -1891,8 +1770,7 @@ const TemplateDetail = () => {
                 }
                 disabled={
                   isPreviewing ||
-                  isDownloading ||
-                  deleteMutation.isPending
+                  isDownloading
                 }
               >
                 <Eye className="mr-2 h-4 w-4" />
@@ -1912,8 +1790,7 @@ const TemplateDetail = () => {
                 }
                 disabled={
                   isDownloading ||
-                  isPreviewing ||
-                  deleteMutation.isPending
+                  isPreviewing
                 }
               >
                 <Download className="mr-2 h-4 w-4" />
@@ -2008,61 +1885,6 @@ const TemplateDetail = () => {
 
       </Card>
 
-      {/* ==================================================
-          DANGER ZONE
-      ================================================== */}
-
-      {canDelete && (
-        <Card className="border border-red-200 shadow-none dark:border-red-500/20">
-
-          <Card.Body>
-
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
-              <div>
-
-                <div className="flex items-center gap-2">
-
-                  <Trash2 className="h-5 w-5 text-red-500" />
-
-                  <h2 className="font-semibold text-red-600 dark:text-red-400">
-                    Tehlikeli Bölge
-                  </h2>
-
-                </div>
-
-                <p className="mt-2 max-w-xl text-sm text-gray-500 dark:text-slate-400">
-                  Bu şablon kaydını silmek geri alınamaz. Silmeden önce dosyanın artık kullanılmadığından emin olun.
-                </p>
-
-              </div>
-
-              <Button
-                type="button"
-                variant="danger"
-                onClick={
-                  handleDelete
-                }
-                loading={
-                  deleteMutation.isPending
-                }
-                disabled={
-                  deleteMutation.isPending ||
-                  isDownloading ||
-                  isPreviewing
-                }
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-
-                Şablonu Sil
-              </Button>
-
-            </div>
-
-          </Card.Body>
-
-        </Card>
-      )}
 
     </div>
   );
