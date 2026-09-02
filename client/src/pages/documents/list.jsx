@@ -34,6 +34,7 @@ import Error from '../../components/shared/Error.jsx';
 import Empty from '../../components/shared/Empty.jsx';
 
 import {
+  AlertTriangle,
   Archive,
   ArrowLeft,
   ArrowRight,
@@ -389,6 +390,12 @@ const DocumentsList = () => {
   ] =
     useState([]);
 
+  const [
+    deleteDialog,
+    setDeleteDialog,
+  ] =
+    useState(null);
+
   const debouncedSearch =
     useDebounce(
       search,
@@ -599,37 +606,13 @@ const DocumentsList = () => {
         return;
       }
 
-      const confirmed =
-        window.confirm(
-          `"${doc.name}" belgesini kayıt listesinden kaldırmak istediğinize emin misiniz?\n\nBelge fiziksel depolamadan hemen silinmez; kayıt soft-delete olarak işaretlenir.`
-        );
+      setDeleteDialog({
+        type:
+          'single',
 
-      if (
-        !confirmed
-      ) {
-        return;
-      }
-
-      deleteMutation.mutate(
-        doc.id,
-        {
-          onSuccess:
-            () => {
-              setSelectedDocs(
-                (
-                  current
-                ) =>
-                  current.filter(
-                    (
-                      id
-                    ) =>
-                      id !==
-                      doc.id
-                  )
-              );
-            },
-        }
-      );
+        document:
+          doc,
+      });
     };
 
   const handleBulkDelete =
@@ -642,29 +625,177 @@ const DocumentsList = () => {
         return;
       }
 
-      const confirmed =
-        window.confirm(
-          `${selectedDocs.length} belgeyi kayıt listesinden kaldırmak istediğinize emin misiniz?\n\nBelgeler fiziksel depolamadan hemen silinmez.`
-        );
+      setDeleteDialog({
+        type:
+          'bulk',
 
+        ids: [
+          ...selectedDocs,
+        ],
+      });
+    };
+
+  const isDeletePending =
+    deleteMutation.isPending ||
+    bulkDeleteMutation.isPending;
+
+  const handleCloseDeleteDialog =
+    () => {
       if (
-        !confirmed
+        isDeletePending
       ) {
         return;
       }
 
+      setDeleteDialog(
+        null
+      );
+    };
+
+  const handleConfirmDelete =
+    () => {
+      if (
+        !deleteDialog ||
+        isDeletePending
+      ) {
+        return;
+      }
+
+      if (
+        deleteDialog.type ===
+        'single'
+      ) {
+        const documentId =
+          deleteDialog
+            ?.document
+            ?.id;
+
+        if (
+          !documentId
+        ) {
+          setDeleteDialog(
+            null
+          );
+
+          toast.error(
+            'Geçersiz belge kaydı'
+          );
+
+          return;
+        }
+
+        deleteMutation.mutate(
+          documentId,
+          {
+            onSuccess:
+              () => {
+                setSelectedDocs(
+                  (
+                    current
+                  ) =>
+                    current.filter(
+                      (
+                        id
+                      ) =>
+                        id !==
+                        documentId
+                    )
+                );
+
+                setDeleteDialog(
+                  null
+                );
+              },
+          }
+        );
+
+        return;
+      }
+
+      const documentIds =
+        Array.isArray(
+          deleteDialog.ids
+        )
+          ? deleteDialog.ids.filter(
+              Boolean
+            )
+          : [];
+
+      if (
+        documentIds.length ===
+        0
+      ) {
+        setDeleteDialog(
+          null
+        );
+
+        return;
+      }
+
       bulkDeleteMutation.mutate(
-        selectedDocs,
+        documentIds,
         {
           onSuccess:
             () => {
               setSelectedDocs(
                 []
               );
+
+              setDeleteDialog(
+                null
+              );
             },
         }
       );
     };
+
+  useEffect(() => {
+    if (
+      !deleteDialog
+    ) {
+      return undefined;
+    }
+
+    const previousOverflow =
+      document.body.style
+        .overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const handleKeyDown =
+      (
+        event
+      ) => {
+        if (
+          event.key ===
+            'Escape' &&
+          !isDeletePending
+        ) {
+          setDeleteDialog(
+            null
+          );
+        }
+      };
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+    };
+  }, [
+    deleteDialog,
+    isDeletePending,
+  ]);
 
   const toggleSelect =
     (
@@ -1669,6 +1800,178 @@ const DocumentsList = () => {
 
         </>
       )}
+
+
+      {deleteDialog && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
+          onMouseDown={(
+            event
+          ) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              handleCloseDeleteDialog();
+            }
+          }}
+        >
+          <div
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"
+            aria-hidden="true"
+          />
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="document-delete-dialog-title"
+            aria-describedby="document-delete-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+
+              <div className="flex items-start gap-4">
+
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-500/[0.10] dark:text-red-400">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Belge kaldırma onayı
+                  </p>
+
+                  <h2
+                    id="document-delete-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    {deleteDialog.type ===
+                    'bulk'
+                      ? 'Seçili belgeleri kaldır'
+                      : 'Belge kaydını kaldır'}
+                  </h2>
+
+                  <p
+                    id="document-delete-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    {deleteDialog.type ===
+                    'bulk' ? (
+                      <>
+                        <span className="font-medium text-gray-700 dark:text-slate-200">
+                          {deleteDialog.ids?.length ||
+                            0} belge
+                        </span>{' '}
+                        için bu işlemi onaylayın.
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-medium text-gray-700 dark:text-slate-200">
+                          {deleteDialog.document?.name ||
+                            'Seçili belge'}
+                        </span>{' '}
+                        için bu işlemi onaylayın.
+                      </>
+                    )}
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+
+              <div className="rounded-xl border border-red-200 bg-red-50/70 p-4 dark:border-red-500/20 dark:bg-red-500/[0.07]">
+
+                <div className="flex items-start gap-3">
+
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+
+                  <div>
+
+                    <p className="text-sm font-semibold text-red-950 dark:text-red-200">
+                      {deleteDialog.type ===
+                      'bulk'
+                        ? `${deleteDialog.ids?.length || 0} belge kaydı kaldırılacak`
+                        : 'Belge kaydı kaldırılacak'}
+                    </p>
+
+                    <p className="mt-1 text-sm leading-6 text-red-900/80 dark:text-red-200/80">
+                      {deleteDialog.type ===
+                      'bulk'
+                        ? 'Seçili belgeler normal belge listelerinden kaldırılacaktır.'
+                        : 'Bu belge normal belge listelerinden kaldırılacaktır.'}
+                    </p>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
+
+                <p className="text-sm leading-6 text-gray-600 dark:text-slate-300">
+                  {deleteDialog.type ===
+                  'bulk'
+                    ? 'Belge kayıtları soft-delete olarak işaretlenir. Dosyalar fiziksel depolamadan hemen silinmez.'
+                    : 'Belge kaydı soft-delete olarak işaretlenir. Dosya fiziksel depolamadan hemen silinmez.'}
+                </p>
+
+              </div>
+
+              <p className="text-xs leading-5 text-gray-400 dark:text-slate-500">
+                Devam etmeden önce doğru belge kaydını seçtiğinizden emin olun.
+              </p>
+
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  isDeletePending
+                }
+                onClick={
+                  handleCloseDeleteDialog
+                }
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                loading={
+                  isDeletePending
+                }
+                disabled={
+                  isDeletePending
+                }
+                onClick={
+                  handleConfirmDelete
+                }
+              >
+                <Trash2 className="h-4 w-4" />
+
+                {deleteDialog.type ===
+                'bulk'
+                  ? 'Belgeleri Kaldır'
+                  : 'Belgeyi Kaldır'}
+              </Button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
 
     </div>
   );
