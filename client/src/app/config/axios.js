@@ -1,6 +1,4 @@
 import axios from 'axios';
-import toast from 'react-hot-toast';
-
 const API_URL =
   import.meta.env.VITE_API_URL ||
   'http://localhost:5000/api';
@@ -578,26 +576,17 @@ axiosInstance.interceptors.response.use(
     }
 
     // ==================================================
-    // API ERROR TOAST
+    // API ERROR OWNERSHIP
     // ==================================================
 
-    const message =
-      error.response
-        ?.data
-        ?.message;
-
     /*
-     * 401 mesajlarını burada toastlamıyoruz.
-     * Auth akışı redirect / refresh yönetiyor.
+     * Bu katman yalnız HTTP / auth taşıma sorumluluğunu yönetir.
+     * Kullanıcıya gösterilecek hata mesajı ilgili query / mutation /
+     * sayfa tarafından semantik olarak ele alınır.
+     *
+     * Böylece aynı hata hem Axios interceptor hem de feature hook
+     * tarafından ikinci kez toast olarak gösterilmez.
      */
-    if (
-      message &&
-      status !== 401
-    ) {
-      toast.error(
-        message
-      );
-    }
 
     return Promise.reject(
       error
