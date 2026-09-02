@@ -146,6 +146,106 @@ const getRequestedAssigneeIds = (
   return [];
 };
 
+const assertAtLeastOneTaskAssignee = (
+  assigneeIds
+) => {
+  const ids =
+    normalizeAssigneeIds(
+      assigneeIds
+    );
+
+  if (
+    ids.length === 0
+  ) {
+    throw new Error(
+      'Görev en az 1 kişiye atanmalıdır'
+    );
+  }
+
+  return ids;
+};
+
+const getTaskDueDateTime = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return null;
+  }
+
+  const date =
+    value instanceof Date
+      ? new Date(
+          value.getTime()
+        )
+      : new Date(
+          value
+        );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    throw new Error(
+      'Geçerli bir görev son tarihi girilmelidir'
+    );
+  }
+
+  return date;
+};
+
+/*
+ * datetime-local alanı dakika hassasiyetinde çalıştığı için
+ * aynı dakika içindeki saniye farkını geçmiş tarih saymıyoruz.
+ */
+const isTaskDueDateInPast = (
+  value
+) => {
+  const date =
+    getTaskDueDateTime(
+      value
+    );
+
+  if (!date) {
+    return false;
+  }
+
+  const dueMinute =
+    Math.floor(
+      date.getTime() /
+        60000
+    );
+
+  const currentMinute =
+    Math.floor(
+      Date.now() /
+        60000
+    );
+
+  return (
+    dueMinute <
+    currentMinute
+  );
+};
+
+const assertTaskDueDateNotPast = (
+  value
+) => {
+  if (
+    isTaskDueDateInPast(
+      value
+    )
+  ) {
+    throw new Error(
+      'Görevin son tarihi geçmiş bir tarih olamaz'
+    );
+  }
+};
+
 const validateAssignees =
   async (
     assigneeIds,
@@ -1469,9 +1569,15 @@ export const taskService = {
 
   try {
     const assigneeIds =
-      getRequestedAssigneeIds(
-        data
+      assertAtLeastOneTaskAssignee(
+        getRequestedAssigneeIds(
+          data
+        )
       );
+
+    assertTaskDueDateNotPast(
+      data?.due_date
+    );
 
     assignees =
       await validateAssignees(
@@ -2250,6 +2356,41 @@ if (
   );
 }
 
+      if (
+        Object.prototype.hasOwnProperty.call(
+          safeData,
+          'due_date'
+        )
+      ) {
+        const nextDueDate =
+          getTaskDueDateTime(
+            safeData.due_date
+          );
+
+        const currentDueDate =
+          getTaskDueDateTime(
+            task.due_date
+          );
+
+        const dueDateChanged =
+          (
+            nextDueDate
+              ?.getTime() ??
+            null
+          ) !==
+          (
+            currentDueDate
+              ?.getTime() ??
+            null
+          );
+
+        if (dueDateChanged) {
+          assertTaskDueDateNotPast(
+            safeData.due_date
+          );
+        }
+      }
+
       const previousValues = {
         dueDate:
           task.due_date
@@ -2683,7 +2824,7 @@ if (
       }
 
       const normalizedIds =
-        normalizeAssigneeIds(
+        assertAtLeastOneTaskAssignee(
           assigneeIds
         );
 

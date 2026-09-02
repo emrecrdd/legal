@@ -260,6 +260,67 @@ const localToUTC = (
 };
 
 
+const getCurrentDateTimeLocal =
+  () => {
+    const now =
+      new Date();
+
+    now.setSeconds(
+      0,
+      0
+    );
+
+    const pad =
+      (value) =>
+        String(value).padStart(
+          2,
+          '0'
+        );
+
+    return `${now.getFullYear()}-${pad(
+      now.getMonth() + 1
+    )}-${pad(
+      now.getDate()
+    )}T${pad(
+      now.getHours()
+    )}:${pad(
+      now.getMinutes()
+    )}`;
+  };
+
+const isPastTaskDueDate = (
+  value
+) => {
+  if (!value) {
+    return false;
+  }
+
+  const parsed =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
+    return false;
+  }
+
+  const currentMinute =
+    new Date();
+
+  currentMinute.setSeconds(
+    0,
+    0
+  );
+
+  return (
+    parsed.getTime() <
+    currentMinute.getTime()
+  );
+};
+
+
 const normalizeTaskCreateForm = (
   form
 ) => ({
@@ -1445,6 +1506,14 @@ const TaskCreate = () => {
       ) {
         newErrors.due_date =
           'Geçerli bir son tarih girin';
+      } else if (
+        formData.due_date &&
+        isPastTaskDueDate(
+          formData.due_date
+        )
+      ) {
+        newErrors.due_date =
+          'Görevin son tarihi geçmiş bir tarih olamaz';
       }
 
       if (
@@ -1515,6 +1584,21 @@ const TaskCreate = () => {
           formData.client_id
             ? 'Seçilen dava bu müvekkille ilişkili değil veya artık erişilebilir değil'
             : 'Seçilen dava artık erişilebilir değil';
+      }
+
+      if (
+        canAssignTasks &&
+        formData.assignee_ids.length ===
+          0
+      ) {
+        newErrors.assignee_ids =
+          'Görev en az 1 kişiye atanmalıdır';
+      } else if (
+        !canAssignTasks &&
+        !user?.id
+      ) {
+        newErrors.assignee_ids =
+          'Görev sorumlusu belirlenemedi. Oturumunuzu yenileyip tekrar deneyin.';
       }
 
       if (
@@ -2103,6 +2187,9 @@ const TaskCreate = () => {
                   value={
                     formData.due_date
                   }
+                  min={
+                    getCurrentDateTimeLocal()
+                  }
                   onChange={
                     handleChange
                   }
@@ -2584,7 +2671,7 @@ const TaskCreate = () => {
                   !assignableUsersLoading &&
                   !assignableUsersError && (
                     <div className="rounded-lg bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-700 dark:bg-amber-500/[0.06] dark:text-amber-300">
-                      Henüz sorumlu seçilmedi. Görev sorumlusuz olarak oluşturulabilir ve daha sonra kullanıcı atanabilir.
+                      Henüz sorumlu seçilmedi. Görevi oluşturmak için en az 1 sorumlu seçmelisiniz.
                     </div>
                   )}
 
