@@ -1,7 +1,12 @@
 import {
+  useEffect,
+} from 'react';
+
+import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from 'react-router-dom';
 
 import {
@@ -172,6 +177,80 @@ import PowerOfAttorneyCreate from '../../pages/power-of-attorney/create.jsx';
 import PowerOfAttorneyEdit from '../../pages/power-of-attorney/edit.jsx';
 
 // ======================================================
+// GLOBAL ROUTE SCROLL
+// ======================================================
+
+const ScrollToTop = () => {
+  const {
+    pathname,
+  } = useLocation();
+
+  useEffect(() => {
+    const scrollToTop =
+      () => {
+        /*
+         * Normal document scroll'u.
+         */
+        window.scrollTo({
+          top:
+            0,
+
+          left:
+            0,
+
+          behavior:
+            'auto',
+        });
+
+        /*
+         * Bazı layout'larda kaydırma window yerine <main>
+         * üzerinde olabilir. Böyle bir yapı varsa onu da
+         * merkezi olarak en üste al.
+         */
+        const mainElement =
+          document.querySelector(
+            'main'
+          );
+
+        if (
+          mainElement &&
+          typeof mainElement.scrollTo ===
+            'function'
+        ) {
+          mainElement.scrollTo({
+            top:
+              0,
+
+            left:
+              0,
+
+            behavior:
+              'auto',
+          });
+        }
+      };
+
+    /*
+     * Yeni route DOM'a işlendiğinde scroll'u uygula.
+     */
+    const frame =
+      window.requestAnimationFrame(
+        scrollToTop
+      );
+
+    return () => {
+      window.cancelAnimationFrame(
+        frame
+      );
+    };
+  }, [
+    pathname,
+  ]);
+
+  return null;
+};
+
+// ======================================================
 // ROUTER
 // ======================================================
 
@@ -189,7 +268,10 @@ const AppRouter = () => {
   }
 
   return (
-    <Routes>
+    <>
+      <ScrollToTop />
+
+      <Routes>
 
       {/* ==================================================
           PUBLIC
@@ -1115,7 +1197,8 @@ const AppRouter = () => {
         }
       />
 
-    </Routes>
+      </Routes>
+    </>
   );
 };
 
