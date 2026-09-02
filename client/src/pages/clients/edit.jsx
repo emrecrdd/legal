@@ -498,6 +498,231 @@ const normalizeFormForComparison = (
     form.status,
 });
 
+const CLIENT_FIELD_ERROR_MESSAGES = {
+  name: 'Geçerli bir müvekkil adı giriniz',
+  identification_number: 'Geçerli bir kimlik numarası giriniz',
+  email: 'Geçerli bir e-posta adresi giriniz',
+  phone: 'Geçerli bir telefon numarası giriniz',
+  address: 'Adres bilgisini kontrol edin',
+  city: 'Şehir bilgisini kontrol edin',
+  district: 'İlçe bilgisini kontrol edin',
+  postal_code: 'Posta kodunu kontrol edin',
+  tags: 'Etiket bilgilerini kontrol edin',
+  status: 'Geçersiz müvekkil durumu',
+  client_type: 'Geçersiz müvekkil türü',
+  notes: 'Genel not alanını kontrol edin',
+};
+
+const looksTurkish = (
+  value
+) =>
+  /[çğıöşüÇĞİÖŞÜ]|müvekkil|geçersiz|zorunlu|bulunamadı|yetki|kayıt|telefon|adres|şehir|ilçe|posta|etiket|durum|not|kimlik|e-posta/i.test(
+    String(
+      value ||
+      ''
+    )
+  );
+
+const isTechnicalValidationMessage = (
+  value
+) =>
+  /validation failed|validation error|sequelizevalidationerror|notnull violation|cannot be null|must not be null|invalid input syntax|invalid value|constraint|violates|typeerror|referenceerror/i.test(
+    String(
+      value ||
+      ''
+    )
+  );
+
+const getClientFieldErrorMessage = (
+  field,
+  value
+) => {
+  const fallback =
+    CLIENT_FIELD_ERROR_MESSAGES[
+      field
+    ] ||
+    'Geçersiz değer';
+
+  const message =
+    String(
+      value ||
+      ''
+    ).trim();
+
+  if (!message) {
+    return fallback;
+  }
+
+  if (
+    isTechnicalValidationMessage(
+      message
+    )
+  ) {
+    return fallback;
+  }
+
+  if (
+    field ===
+      'identification_number'
+  ) {
+    if (
+      /already|exists|unique|duplicate/i.test(
+        message
+      )
+    ) {
+      return 'Bu kimlik numarası başka bir müvekkil kaydında kullanılıyor';
+    }
+
+    if (
+      /vkn|tax/i.test(
+        message
+      )
+    ) {
+      return 'Geçerli bir Vergi Kimlik Numarası giriniz';
+    }
+
+    if (
+      /tckn|tc kimlik|identity/i.test(
+        message
+      )
+    ) {
+      return 'Geçerli bir T.C. Kimlik Numarası giriniz';
+    }
+  }
+
+  if (
+    field === 'email' &&
+    /already|exists|unique|duplicate/i.test(
+      message
+    )
+  ) {
+    return 'Bu e-posta adresi başka bir müvekkil kaydında kullanılıyor';
+  }
+
+  if (
+    looksTurkish(
+      message
+    )
+  ) {
+    return message;
+  }
+
+  return fallback;
+};
+
+const getClientErrorMessage = (
+  errorOrMessage,
+  fallback =
+    'İşlem tamamlanamadı. Lütfen tekrar deneyin.'
+) => {
+  const responseData =
+    errorOrMessage?.response?.data;
+
+  const messages = [];
+
+  if (
+    typeof errorOrMessage ===
+    'string'
+  ) {
+    messages.push(
+      errorOrMessage
+    );
+  }
+
+  if (
+    responseData?.message
+  ) {
+    messages.push(
+      responseData.message
+    );
+  }
+
+  if (
+    errorOrMessage?.message
+  ) {
+    messages.push(
+      errorOrMessage.message
+    );
+  }
+
+  if (
+    Array.isArray(
+      responseData?.errors
+    )
+  ) {
+    responseData.errors.forEach(
+      (item) => {
+        const itemMessage =
+          item?.msg ||
+          item?.message;
+
+        if (itemMessage) {
+          messages.push(
+            itemMessage
+          );
+        }
+      }
+    );
+  }
+
+  const message =
+    messages
+      .map((item) =>
+        String(
+          item ||
+          ''
+        ).trim()
+      )
+      .filter(Boolean)
+      .join(' · ');
+
+  if (!message) {
+    return fallback;
+  }
+
+  if (
+    /client not found|müvekkil.*bulunamadı/i.test(
+      message
+    )
+  ) {
+    return 'Müvekkil kaydı bulunamadı.';
+  }
+
+  if (
+    /unauthorized|forbidden|permission|access denied|not allowed/i.test(
+      message
+    )
+  ) {
+    return 'Bu işlem için yetkiniz bulunmuyor.';
+  }
+
+  if (
+    /network|failed to fetch|timeout|econnrefused|enotfound/i.test(
+      message
+    )
+  ) {
+    return 'Sunucuya bağlanılamadı. Lütfen tekrar deneyin.';
+  }
+
+  if (
+    isTechnicalValidationMessage(
+      message
+    )
+  ) {
+    return 'Müvekkil bilgileri doğrulanamadı. Form alanlarını kontrol edin.';
+  }
+
+  if (
+    looksTurkish(
+      message
+    )
+  ) {
+    return message;
+  }
+
+  return fallback;
+};
+
 const getBackendFieldErrors = (
   mutationError
 ) => {
@@ -526,9 +751,11 @@ const getBackendFieldErrors = (
           field
         ) {
           result[field] =
-            item?.msg ||
-            item?.message ||
-            'Geçersiz değer';
+            getClientFieldErrorMessage(
+              field,
+              item?.msg ||
+                item?.message
+            );
         }
       }
     );
@@ -554,9 +781,12 @@ const getBackendFieldErrors = (
           )
         ) {
           result[field] =
-            value
-              .filter(Boolean)
-              .join(', ');
+            getClientFieldErrorMessage(
+              field,
+              value
+                .filter(Boolean)
+                .join(', ')
+            );
 
           return;
         }
@@ -565,7 +795,8 @@ const getBackendFieldErrors = (
           value
         ) {
           result[field] =
-            String(
+            getClientFieldErrorMessage(
+              field,
               value
             );
         }
@@ -653,6 +884,24 @@ const ClientEdit = () => {
   ] =
     useState(false);
 
+  const [
+    leaveDialogOpen,
+    setLeaveDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingNavigationTarget,
+    setPendingNavigationTarget,
+  ] =
+    useState('');
+
+  const deleteDialogRef =
+    useRef(null);
+
+  const leaveDialogRef =
+    useRef(null);
+
   // ======================================================
   // DATA
   // ======================================================
@@ -698,24 +947,124 @@ const ClientEdit = () => {
     );
 
   useEffect(() => {
-    if (
-      !deleteDialogOpen
-    ) {
+    const activeDialogRef =
+      leaveDialogOpen
+        ? leaveDialogRef
+        : deleteDialogOpen
+          ? deleteDialogRef
+          : null;
+
+    if (!activeDialogRef) {
       return undefined;
     }
 
     const previousOverflow =
       document.body.style.overflow;
 
+    const previousActiveElement =
+      document.activeElement;
+
+    const getFocusableElements =
+      () => {
+        const dialog =
+          activeDialogRef.current;
+
+        if (!dialog) {
+          return [];
+        }
+
+        return Array.from(
+          dialog.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        );
+      };
+
+    const focusDialog =
+      window.requestAnimationFrame(
+        () => {
+          const focusableElements =
+            getFocusableElements();
+
+          if (
+            focusableElements.length >
+            0
+          ) {
+            focusableElements[0].focus();
+          } else {
+            activeDialogRef.current?.focus();
+          }
+        }
+      );
+
     const handleKeyDown =
       (event) => {
         if (
-          event.key === 'Escape' &&
-          !deleteMutation.isPending
+          event.key === 'Escape'
         ) {
-          setDeleteDialogOpen(
-            false
-          );
+          if (
+            deleteDialogOpen &&
+            deleteMutation.isPending
+          ) {
+            return;
+          }
+
+          if (leaveDialogOpen) {
+            setLeaveDialogOpen(
+              false
+            );
+
+            setPendingNavigationTarget(
+              ''
+            );
+          } else {
+            setDeleteDialogOpen(
+              false
+            );
+          }
+
+          return;
+        }
+
+        if (
+          event.key !== 'Tab'
+        ) {
+          return;
+        }
+
+        const focusableElements =
+          getFocusableElements();
+
+        if (
+          focusableElements.length ===
+          0
+        ) {
+          event.preventDefault();
+          return;
+        }
+
+        const firstElement =
+          focusableElements[0];
+
+        const lastElement =
+          focusableElements[
+            focusableElements.length - 1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            firstElement
+        ) {
+          event.preventDefault();
+          lastElement.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            lastElement
+        ) {
+          event.preventDefault();
+          firstElement.focus();
         }
       };
 
@@ -728,6 +1077,10 @@ const ClientEdit = () => {
     );
 
     return () => {
+      window.cancelAnimationFrame(
+        focusDialog
+      );
+
       document.body.style.overflow =
         previousOverflow;
 
@@ -735,9 +1088,20 @@ const ClientEdit = () => {
         'keydown',
         handleKeyDown
       );
+
+      if (
+        previousActiveElement instanceof
+          HTMLElement &&
+        document.contains(
+          previousActiveElement
+        )
+      ) {
+        previousActiveElement.focus();
+      }
     };
   }, [
     deleteDialogOpen,
+    leaveDialogOpen,
     deleteMutation.isPending,
   ]);
 
@@ -818,6 +1182,37 @@ const ClientEdit = () => {
     JSON.stringify(
       initialNormalizedPayload
     );
+
+
+  useEffect(() => {
+    if (
+      !isDirty ||
+      isPending
+    ) {
+      return undefined;
+    }
+
+    const handleBeforeUnload =
+      (event) => {
+        event.preventDefault();
+        event.returnValue = '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+    isPending,
+  ]);
 
   // ======================================================
   // CHANGE
@@ -1311,7 +1706,7 @@ const ClientEdit = () => {
     (
       mutationError
     ) => {
-      const message =
+      const rawMessage =
         mutationError?.response
           ?.data?.message ||
         mutationError?.message ||
@@ -1322,112 +1717,133 @@ const ClientEdit = () => {
           mutationError
         );
 
+      const setMappedFieldError =
+        (field) => {
+          nextErrors[field] =
+            getClientFieldErrorMessage(
+              field,
+              rawMessage
+            );
+        };
+
       if (
         /TCKNO|T\.C\.|VKN|kimlik|identification_number/i.test(
-          message
+          rawMessage
         )
       ) {
-        nextErrors.identification_number =
-          message;
+        setMappedFieldError(
+          'identification_number'
+        );
       }
 
       if (
         /email|e-posta/i.test(
-          message
+          rawMessage
         )
       ) {
-        nextErrors.email =
-          message;
+        setMappedFieldError(
+          'email'
+        );
       }
 
       if (
         /phone|telefon/i.test(
-          message
+          rawMessage
         )
       ) {
-        nextErrors.phone =
-          message;
+        setMappedFieldError(
+          'phone'
+        );
       }
 
       if (
         /name|ad soyad|unvan|müvekkil adı/i.test(
-          message
+          rawMessage
         )
       ) {
-        nextErrors.name =
-          message;
+        setMappedFieldError(
+          'name'
+        );
       }
 
       if (
         /posta kodu|postal/i.test(
-          message
+          rawMessage
         )
       ) {
-        nextErrors.postal_code =
-          message;
+        setMappedFieldError(
+          'postal_code'
+        );
       }
 
       if (
         /address|adres/i.test(
-          message
+          rawMessage
         )
       ) {
-        nextErrors.address =
-          message;
+        setMappedFieldError(
+          'address'
+        );
       }
 
       if (
         /city|şehir|sehir/i.test(
-          message
+          rawMessage
         )
       ) {
-        nextErrors.city =
-          message;
+        setMappedFieldError(
+          'city'
+        );
       }
 
       if (
         /district|ilçe|ilce/i.test(
-          message
+          rawMessage
         )
       ) {
-        nextErrors.district =
-          message;
+        setMappedFieldError(
+          'district'
+        );
       }
 
       if (
         /tag|etiket/i.test(
-          message
+          rawMessage
         )
       ) {
-        nextErrors.tags =
-          message;
+        setMappedFieldError(
+          'tags'
+        );
       }
 
       if (
         /status|durum/i.test(
-          message
+          rawMessage
         )
       ) {
-        nextErrors.status =
-          message;
+        setMappedFieldError(
+          'status'
+        );
       }
 
       if (
         /client_type|müvekkil türü|müvekkil tipi/i.test(
-          message
+          rawMessage
         )
       ) {
-        nextErrors.client_type =
-          message;
+        setMappedFieldError(
+          'client_type'
+        );
       }
 
       if (
         /note|not/i.test(
-          message
+          rawMessage
         )
       ) {
-        nextErrors.notes =
-          message;
+        setMappedFieldError(
+          'notes'
+        );
       }
 
       if (
@@ -1538,8 +1954,10 @@ const ClientEdit = () => {
   // CANCEL
   // ======================================================
 
-  const handleCancel =
-    () => {
+  const requestNavigation =
+    (
+      target
+    ) => {
       if (
         isPending
       ) {
@@ -1549,22 +1967,87 @@ const ClientEdit = () => {
       if (
         isDirty
       ) {
-        const confirmed =
-          window.confirm(
-            'Kaydedilmemiş değişiklikleriniz var. Sayfadan ayrılmak istediğinize emin misiniz?'
-          );
+        setPendingNavigationTarget(
+          target
+        );
 
-        if (
-          !confirmed
-        ) {
-          return;
-        }
+        setLeaveDialogOpen(
+          true
+        );
+
+        return;
       }
 
       navigate(
+        target
+      );
+    };
+
+  const handleCancel =
+    () => {
+      requestNavigation(
         id
           ? `/clients/${id}`
           : '/clients'
+      );
+    };
+
+  const handleGuardedDetailLink =
+    (event) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      if (
+        isPending ||
+        isDirty
+      ) {
+        event.preventDefault();
+
+        requestNavigation(
+          id
+            ? `/clients/${id}`
+            : '/clients'
+        );
+      }
+    };
+
+  const handleCloseLeaveDialog =
+    () => {
+      setLeaveDialogOpen(
+        false
+      );
+
+      setPendingNavigationTarget(
+        ''
+      );
+    };
+
+  const handleConfirmLeave =
+    () => {
+      const target =
+        pendingNavigationTarget ||
+        (id
+          ? `/clients/${id}`
+          : '/clients');
+
+      setLeaveDialogOpen(
+        false
+      );
+
+      setPendingNavigationTarget(
+        ''
+      );
+
+      navigate(
+        target
       );
     };
 
@@ -1692,9 +2175,10 @@ const ClientEdit = () => {
         </h2>
 
         <p className="mt-2 text-sm text-gray-500">
-          {error?.response?.data?.message ||
-            error?.message ||
-            'Bu kayıt silinmiş olabilir veya görüntüleme yetkiniz bulunmayabilir.'}
+          {getClientErrorMessage(
+            error,
+            'Bu kayıt silinmiş olabilir veya görüntüleme yetkiniz bulunmayabilir.'
+          )}
         </p>
 
         <Link
@@ -1762,6 +2246,12 @@ const ClientEdit = () => {
             id
               ? `/clients/${id}`
               : '/clients'
+          }
+          onClick={
+            handleGuardedDetailLink
+          }
+          aria-disabled={
+            isPending
           }
           className="inline-flex items-center gap-1 text-blue-600 hover:underline"
         >
@@ -2274,23 +2764,108 @@ const ClientEdit = () => {
         </form>
       </Card>
 
-      {deleteDialogOpen && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
-          onMouseDown={(event) => {
-            if (
-              event.target === event.currentTarget
-            ) {
-              handleCloseDeleteDialog();
+      {leaveDialogOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Kaydedilmemiş değişiklik penceresini kapat"
+            onClick={
+              handleCloseLeaveDialog
             }
-          }}
-        >
-          <div
-            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"
-            aria-hidden="true"
           />
 
           <div
+            ref={
+              leaveDialogRef
+            }
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="client-leave-dialog-title"
+            aria-describedby="client-leave-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.10] dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Kaydedilmemiş değişiklik
+                  </p>
+
+                  <h2
+                    id="client-leave-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Değişiklikleri kaydetmeden çıkmak üzeresiniz
+                  </h2>
+
+                  <p
+                    id="client-leave-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    Formda henüz kaydedilmemiş değişiklikler var. Çıkarsanız bu değişiklikler uygulanmayacaktır.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+                <p className="text-sm leading-6 text-amber-950 dark:text-amber-200">
+                  Düzenlemeye devam ederek formdaki bilgileri kontrol edebilir veya değişiklikleri atıp müvekkil detayına dönebilirsiniz.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  handleCloseLeaveDialog
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  handleConfirmLeave
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteDialogOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Kayıt kaldırma penceresini kapat"
+            disabled={
+              deleteMutation.isPending
+            }
+            onClick={
+              handleCloseDeleteDialog
+            }
+          />
+
+          <div
+            ref={
+              deleteDialogRef
+            }
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-labelledby="client-delete-dialog-title"
@@ -2364,7 +2939,7 @@ const ClientEdit = () => {
               )}
 
               <p className="text-xs leading-5 text-gray-400 dark:text-slate-500">
-                Bu işlem müvekkil kaydı için geri alınamaz niteliktedir. Devam etmeden önce doğru kaydı seçtiğinizden emin olun.
+                Devam etmeden önce doğru müvekkil kaydını seçtiğinizden emin olun.
               </p>
             </div>
 
