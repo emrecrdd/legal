@@ -647,6 +647,12 @@ const ClientEdit = () => {
   ] =
     useState({});
 
+  const [
+    deleteDialogOpen,
+    setDeleteDialogOpen,
+  ] =
+    useState(false);
+
   // ======================================================
   // DATA
   // ======================================================
@@ -676,6 +682,64 @@ const ClientEdit = () => {
   const isPending =
     updateMutation.isPending ||
     deleteMutation.isPending;
+
+  const deleteCaseCount =
+    Number(
+      client?.summary?.case_count ??
+      client?.case_count ??
+      client?.cases?.length ??
+      0
+    ) || 0;
+
+  const deleteClientName =
+    String(
+      client?.name ||
+      'Seçili müvekkil'
+    );
+
+  useEffect(() => {
+    if (
+      !deleteDialogOpen
+    ) {
+      return undefined;
+    }
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key === 'Escape' &&
+          !deleteMutation.isPending
+        ) {
+          setDeleteDialogOpen(
+            false
+          );
+        }
+      };
+
+    document.body.style.overflow =
+      'hidden';
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      document.body.style.overflow =
+        previousOverflow;
+
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+    };
+  }, [
+    deleteDialogOpen,
+    deleteMutation.isPending,
+  ]);
 
   // ======================================================
   // FORM INITIALIZATION
@@ -1534,33 +1598,38 @@ const ClientEdit = () => {
         return;
       }
 
-      const caseCount =
-        Number(
-          client?.summary?.case_count ??
-          client?.case_count ??
-          client?.cases?.length ??
-          0
-        ) || 0;
+      setDeleteDialogOpen(
+        true
+      );
+    };
 
-      const clientName =
-        String(
-          client?.name ||
-          'Seçili müvekkil'
-        );
-
-      const confirmMessage =
-        caseCount > 0
-          ? `"${clientName}" müvekkil kaydı ${caseCount} dava dosyasına bağlı.\n\nMüvekkil kaydı kaldırılırsa dava dosyalarının durumu backend silme politikasına göre güncellenecektir. Dava kayıtlarının kaldırılmadığını doğrulamadan bu metinde kesin davranış sözü verilmez.\n\nDevam etmek istiyor musunuz?`
-          : `"${clientName}" müvekkil kaydını kaldırmak istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`;
-
-      const confirmed =
-        window.confirm(
-          confirmMessage
-        );
-
+  const handleCloseDeleteDialog =
+    () => {
       if (
-        !confirmed
+        deleteMutation.isPending
       ) {
+        return;
+      }
+
+      setDeleteDialogOpen(
+        false
+      );
+    };
+
+  const handleConfirmDelete =
+    () => {
+      if (
+        !canDelete ||
+        deleteMutation.isPending
+      ) {
+        return;
+      }
+
+      if (!id) {
+        toast.error(
+          'Geçerli müvekkil kaydı bulunamadı'
+        );
+
         return;
       }
 
@@ -1572,6 +1641,10 @@ const ClientEdit = () => {
            * sonra listeye dönülür.
            */
           onSuccess: () => {
+            setDeleteDialogOpen(
+              false
+            );
+
             navigate(
               '/clients'
             );
@@ -2200,6 +2273,136 @@ const ClientEdit = () => {
           </div>
         </form>
       </Card>
+
+      {deleteDialogOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget
+            ) {
+              handleCloseDeleteDialog();
+            }
+          }}
+        >
+          <div
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"
+            aria-hidden="true"
+          />
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="client-delete-dialog-title"
+            aria-describedby="client-delete-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-500/[0.10] dark:text-red-400">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Kayıt kaldırma onayı
+                  </p>
+
+                  <h2
+                    id="client-delete-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Müvekkil kaydını kaldır
+                  </h2>
+
+                  <p
+                    id="client-delete-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    <span className="font-medium text-gray-700 dark:text-slate-200">
+                      {deleteClientName}
+                    </span>{' '}
+                    için bu işlemi onaylayın.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              {deleteCaseCount > 0 ? (
+                <>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+
+                      <div>
+                        <p className="text-sm font-semibold text-amber-950 dark:text-amber-200">
+                          {deleteCaseCount} dava dosyasına bağlı
+                        </p>
+
+                        <p className="mt-1 text-sm leading-6 text-amber-900/80 dark:text-amber-200/80">
+                          Müvekkil kaldırıldığında aktif müvekkili kalmayan dava dosyaları{' '}
+                          <span className="font-semibold">Durduruldu</span>{' '}
+                          durumuna alınır.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
+                    <p className="text-sm leading-6 text-gray-600 dark:text-slate-300">
+                      Dava kayıtları ve geçmiş veriler silinmez. Müvekkilin başka aktif müvekkille birlikte bağlı olduğu dava dosyalarının durumu değişmez.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
+                  <p className="text-sm leading-6 text-gray-600 dark:text-slate-300">
+                    Bu müvekkil kaydı sistemden kaldırılacaktır. İşlem tamamlandıktan sonra kayıt normal ekranlardan erişilebilir olmayacaktır.
+                  </p>
+                </div>
+              )}
+
+              <p className="text-xs leading-5 text-gray-400 dark:text-slate-500">
+                Bu işlem müvekkil kaydı için geri alınamaz niteliktedir. Devam etmeden önce doğru kaydı seçtiğinizden emin olun.
+              </p>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  deleteMutation.isPending
+                }
+                onClick={
+                  handleCloseDeleteDialog
+                }
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                loading={
+                  deleteMutation.isPending
+                }
+                disabled={
+                  deleteMutation.isPending
+                }
+                onClick={
+                  handleConfirmDelete
+                }
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+
+                Kaydı Kaldır
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
