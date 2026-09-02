@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -411,6 +412,55 @@ const normalizeFormForComparison = (
     ),
 });
 
+const getDocumentErrorMessage = (
+  error,
+  fallback
+) => {
+  const rawMessage =
+    String(
+      error?.response?.data?.message ||
+      error?.message ||
+      ''
+    ).trim();
+
+  if (!rawMessage) {
+    return fallback;
+  }
+
+  if (
+    /document.*not found|belge.*bulunamad/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Belge kaydı bulunamadı.';
+  }
+
+  if (
+    /forbidden|permission denied|not authorized|unauthorized|access denied/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Bu belgeyi görüntüleme yetkiniz bulunmuyor.';
+  }
+
+  if (
+    /network error|failed to fetch|timeout|econnrefused|enotfound/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Sunucuya bağlanılamadı. Lütfen tekrar deneyin.';
+  }
+
+  const looksTurkish =
+    /[çğıöşüÇĞİÖŞÜ]|bulunamadı|geçersiz|zorunlu|yetkiniz|başarısız|yüklenemedi|hata/i.test(
+      rawMessage
+    );
+
+  return looksTurkish
+    ? rawMessage
+    : fallback;
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -452,6 +502,25 @@ const DocumentEdit = () => {
     initializedDocumentId,
     setInitializedDocumentId,
   ] = useState(null);
+
+  const [
+    leaveDialogOpen,
+    setLeaveDialogOpen,
+  ] = useState(false);
+
+  const [
+    leaveDestination,
+    setLeaveDestination,
+  ] = useState('');
+
+  const leaveDialogRef =
+    useRef(null);
+
+  const leavePrimaryButtonRef =
+    useRef(null);
+
+  const restoreFocusRef =
+    useRef(null);
 
   // ======================================================
   // DOCUMENT
@@ -942,6 +1011,110 @@ const DocumentEdit = () => {
       initialFormData,
     ]);
 
+  useEffect(() => {
+    if (!isDirty) {
+      return undefined;
+    }
+
+    const handleBeforeUnload =
+      (event) => {
+        event.preventDefault();
+        event.returnValue = '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [isDirty]);
+
+  useEffect(() => {
+    if (!leaveDialogOpen) {
+      return undefined;
+    }
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    restoreFocusRef.current =
+      document.activeElement;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const focusTimer =
+      window.setTimeout(() => {
+        leavePrimaryButtonRef.current?.focus();
+      }, 0);
+
+    const handleKeyDown =
+      (event) => {
+        if (event.key === 'Escape') {
+          setLeaveDialogOpen(false);
+          return;
+        }
+
+        if (event.key !== 'Tab') {
+          return;
+        }
+
+        const focusable =
+          leaveDialogRef.current?.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          );
+
+        if (!focusable?.length) {
+          return;
+        }
+
+        const first = focusable[0];
+        const last =
+          focusable[focusable.length - 1];
+
+        if (
+          event.shiftKey &&
+          document.activeElement === first
+        ) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement === last
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      };
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.clearTimeout(
+        focusTimer
+      );
+
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+
+      restoreFocusRef.current?.focus?.();
+    };
+  }, [leaveDialogOpen]);
+
   const selectedClientBelongsToCase =
     useMemo(() => {
       const caseId =
@@ -1071,6 +1244,54 @@ const DocumentEdit = () => {
       );
     }
   };
+
+  const requestLeave =
+    (destination) => {
+      if (
+        updateMutation.isPending
+      ) {
+        return;
+      }
+
+      if (!isDirty) {
+        navigate(
+          destination
+        );
+        return;
+      }
+
+      setLeaveDestination(
+        destination
+      );
+
+      setLeaveDialogOpen(
+        true
+      );
+    };
+
+  const handleCloseLeaveDialog =
+    () => {
+      setLeaveDialogOpen(
+        false
+      );
+    };
+
+  const handleConfirmLeave =
+    () => {
+      const destination =
+        leaveDestination ||
+        `/documents/${id}`;
+
+      setLeaveDialogOpen(
+        false
+      );
+
+      setLeaveDestination('');
+
+      navigate(
+        destination
+      );
+    };
 
   // ======================================================
   // VALIDATION
@@ -1323,13 +1544,10 @@ const DocumentEdit = () => {
         </h2>
 
         <p className="mt-2 text-sm text-gray-500">
-          {documentError
-            ?.response
-            ?.data
-            ?.message ||
-            documentError
-              ?.message ||
-            'Belge detayları yüklenemedi'}
+          {getDocumentErrorMessage(
+            documentError,
+            'Belge detayları yüklenemedi'
+          )}
         </p>
 
         <Link
@@ -1358,6 +1576,21 @@ const DocumentEdit = () => {
 
         <Link
           to={`/documents/${id}`}
+          onClick={(event) => {
+            if (
+              updateMutation.isPending
+            ) {
+              event.preventDefault();
+              return;
+            }
+
+            if (isDirty) {
+              event.preventDefault();
+              requestLeave(
+                `/documents/${id}`
+              );
+            }
+          }}
           className="
             inline-flex
             items-center
@@ -1398,17 +1631,27 @@ const DocumentEdit = () => {
 
           <div className="min-w-0">
 
-            <h1
-              className="
-                text-2xl
-                font-semibold
-                tracking-[-0.035em]
-                text-gray-900
-                dark:text-white
-              "
-            >
-              Belge Bilgilerini Düzenle
-            </h1>
+            <div className="flex flex-wrap items-center gap-3">
+
+              <h1
+                className="
+                  text-2xl
+                  font-semibold
+                  tracking-[-0.035em]
+                  text-gray-900
+                  dark:text-white
+                "
+              >
+                Belge Bilgilerini Düzenle
+              </h1>
+
+              {isDirty && (
+                <Badge variant="warning">
+                  Kaydedilmemiş değişiklik
+                </Badge>
+              )}
+
+            </div>
 
             <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400">
               Belge ailesinin adı, sınıflandırması, ilişkileri ve erişim bilgilerini güncelleyin.
@@ -2496,26 +2739,11 @@ const DocumentEdit = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={() => {
-              if (
-                isDirty
-              ) {
-                const confirmed =
-                  window.confirm(
-                    'Kaydedilmemiş belge değişiklikleri var. Sayfadan ayrılmak istediğinize emin misiniz?'
-                  );
-
-                if (
-                  !confirmed
-                ) {
-                  return;
-                }
-              }
-
-              navigate(
+            onClick={() =>
+              requestLeave(
                 `/documents/${id}`
-              );
-            }}
+              )
+            }
             disabled={
               updateMutation.isPending
             }
@@ -2541,6 +2769,103 @@ const DocumentEdit = () => {
         </div>
 
       </form>
+
+      {leaveDialogOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Kaydedilmemiş değişiklik penceresini kapat"
+            onClick={
+              handleCloseLeaveDialog
+            }
+          />
+
+          <div
+            ref={leaveDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="document-leave-dialog-title"
+            aria-describedby="document-leave-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+
+              <div className="flex items-start gap-4">
+
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.10] dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Kaydedilmemiş değişiklik
+                  </p>
+
+                  <h2
+                    id="document-leave-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Düzenleme ekranından çıkılsın mı?
+                  </h2>
+
+                  <p
+                    id="document-leave-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    Belge üzerinde yaptığınız değişiklikler henüz kaydedilmedi. Çıkarsanız bu değişiklikler kaybolacaktır.
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="px-6 py-5">
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+
+                <p className="text-sm leading-6 text-amber-900 dark:text-amber-200">
+                  Düzenlemeye devam ederek bilgileri kaydedebilir veya değişiklikleri atıp belge detayına dönebilirsiniz.
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+
+              <Button
+                ref={leavePrimaryButtonRef}
+                type="button"
+                variant="secondary"
+                onClick={
+                  handleCloseLeaveDialog
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  handleConfirmLeave
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
 
     </div>
   );

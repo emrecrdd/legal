@@ -308,8 +308,18 @@ const getBackendFieldErrors = (
           message
         ) {
           result[field] =
-            String(
-              message
+            getErrorMessage(
+              {
+                response: {
+                  data: {
+                    message:
+                      String(
+                        message
+                      ),
+                  },
+                },
+              },
+              'Geçersiz değer'
             );
         }
 
@@ -342,8 +352,18 @@ const getBackendFieldErrors = (
           message !== undefined
         ) {
           result[field] =
-            String(
-              message
+            getErrorMessage(
+              {
+                response: {
+                  data: {
+                    message:
+                      String(
+                        message
+                      ),
+                  },
+                },
+              },
+              'Geçersiz değer'
             );
         }
 
@@ -360,11 +380,73 @@ const getErrorMessage = (
   error,
   fallback
 ) => {
-  return (
-    error?.response?.data?.message ||
-    error?.message ||
-    fallback
-  );
+  const rawMessage =
+    String(
+      error?.response?.data?.message ||
+      error?.message ||
+      ''
+    ).trim();
+
+  if (!rawMessage) {
+    return fallback;
+  }
+
+  if (
+    /validation failed|validation error|sequelizevalidationerror|notnull violation|cannot be null|must not be null|invalid input syntax/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Şablon bilgileri doğrulanamadı. Zorunlu ve geçerli alanları kontrol edin.';
+  }
+
+  if (
+    /template.*not found|not found.*template/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Şablon kaydı bulunamadı.';
+  }
+
+  if (
+    /forbidden|permission denied|not authorized|unauthorized|access denied/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Bu işlem için yetkiniz bulunmuyor.';
+  }
+
+  if (
+    /file.*too large|payload too large/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Dosya boyutu izin verilen sınırı aşıyor.';
+  }
+
+  if (
+    /unsupported.*file|invalid.*file|file type|mime type/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Desteklenmeyen dosya türü.';
+  }
+
+  if (
+    /network error|failed to fetch|timeout|econnrefused|enotfound/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Sunucuya bağlanılamadı. Lütfen tekrar deneyin.';
+  }
+
+  const looksTurkish =
+    /[çğıöşüÇĞİÖŞÜ]|bulunamadı|geçersiz|zorunlu|yetkiniz|başarısız|yüklenemedi|güncellenemedi|silinemedi|hata/i.test(
+      rawMessage
+    );
+
+  return looksTurkish
+    ? rawMessage
+    : fallback;
 };
 
 const isAllowedOption = (
@@ -475,6 +557,16 @@ const TemplateEdit = () => {
   });
 
   const [
+    initialFormData,
+    setInitialFormData,
+  ] = useState({
+    title: '',
+    description: '',
+    category: 'dilekce',
+    law_area: 'ozel_hukuk',
+  });
+
+  const [
     file,
     setFile,
   ] = useState(null);
@@ -494,8 +586,27 @@ const TemplateEdit = () => {
     setDeleteDialogOpen,
   ] = useState(false);
 
+  const [
+    leaveDialogOpen,
+    setLeaveDialogOpen,
+  ] = useState(false);
+
+  const [
+    pendingNavigationPath,
+    setPendingNavigationPath,
+  ] = useState('');
+
   const initializedTemplateIdRef =
     useRef('');
+
+  const leaveDialogRef =
+    useRef(null);
+
+  const deleteDialogRef =
+    useRef(null);
+
+  const dialogReturnFocusRef =
+    useRef(null);
 
   // ======================================================
   // TEMPLATE QUERY
@@ -553,7 +664,7 @@ const TemplateEdit = () => {
       return;
     }
 
-    setFormData({
+    const nextForm = {
       title:
         String(
           template.title ??
@@ -581,7 +692,15 @@ const TemplateEdit = () => {
         )
           ? template.law_area
           : 'ozel_hukuk',
-    });
+    };
+
+    setFormData(
+      nextForm
+    );
+
+    setInitialFormData(
+      nextForm
+    );
 
     setFile(
       null
@@ -608,29 +727,9 @@ const TemplateEdit = () => {
     );
 
   const initialForm =
-    normalizeTemplateForm({
-      title:
-        template?.title,
-
-      description:
-        template?.description,
-
-      category:
-        isAllowedOption(
-          CATEGORY_OPTIONS,
-          template?.category
-        )
-          ? template?.category
-          : 'dilekce',
-
-      law_area:
-        isAllowedOption(
-          LAW_AREA_OPTIONS,
-          template?.law_area
-        )
-          ? template?.law_area
-          : 'ozel_hukuk',
-    });
+    normalizeTemplateForm(
+      initialFormData
+    );
 
   const isDirty =
     Boolean(
@@ -1310,6 +1409,82 @@ const TemplateEdit = () => {
   };
 
   // ======================================================
+  // UNSAVED CHANGES
+  // ======================================================
+
+  const handleAttemptLeave =
+    (
+      path,
+      event = null
+    ) => {
+      if (
+        updateMutation.isPending ||
+        deleteMutation.isPending
+      ) {
+        event?.preventDefault?.();
+        return;
+      }
+
+      if (!isDirty) {
+        if (event) {
+          return;
+        }
+
+        navigate(path);
+        return;
+      }
+
+      event?.preventDefault?.();
+
+      dialogReturnFocusRef.current =
+        document.activeElement;
+
+      setPendingNavigationPath(
+        path
+      );
+
+      setLeaveDialogOpen(
+        true
+      );
+    };
+
+  const handleContinueEditing =
+    () => {
+      setLeaveDialogOpen(
+        false
+      );
+
+      setPendingNavigationPath(
+        ''
+      );
+
+      requestAnimationFrame(
+        () => {
+          dialogReturnFocusRef.current?.focus?.();
+        }
+      );
+    };
+
+  const handleDiscardAndLeave =
+    () => {
+      const targetPath =
+        pendingNavigationPath ||
+        `/templates/${id}`;
+
+      setLeaveDialogOpen(
+        false
+      );
+
+      setPendingNavigationPath(
+        ''
+      );
+
+      navigate(
+        targetPath
+      );
+    };
+
+  // ======================================================
   // DELETE HANDLER
   // ======================================================
 
@@ -1361,17 +1536,33 @@ const TemplateEdit = () => {
 
   useEffect(() => {
     if (
-      !deleteDialogOpen
+      !leaveDialogOpen
     ) {
       return undefined;
     }
 
     const previousOverflow =
-      document.body.style
-        .overflow;
+      document.body.style.overflow;
 
     document.body.style.overflow =
       'hidden';
+
+    const dialog =
+      leaveDialogRef.current;
+
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const focusableElements =
+      dialog
+        ? Array.from(
+            dialog.querySelectorAll(
+              focusableSelector
+            )
+          )
+        : [];
+
+    focusableElements[0]?.focus?.();
 
     const handleKeyDown =
       (
@@ -1379,12 +1570,45 @@ const TemplateEdit = () => {
       ) => {
         if (
           event.key ===
-            'Escape' &&
-          !deleteMutation.isPending
+          'Escape'
         ) {
-          setDeleteDialogOpen(
-            false
-          );
+          event.preventDefault();
+          handleContinueEditing();
+          return;
+        }
+
+        if (
+          event.key !==
+            'Tab' ||
+          focusableElements.length ===
+            0
+        ) {
+          return;
+        }
+
+        const firstElement =
+          focusableElements[0];
+
+        const lastElement =
+          focusableElements[
+            focusableElements.length -
+              1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            firstElement
+        ) {
+          event.preventDefault();
+          lastElement.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            lastElement
+        ) {
+          event.preventDefault();
+          firstElement.focus();
         }
       };
 
@@ -1401,6 +1625,114 @@ const TemplateEdit = () => {
 
       document.body.style.overflow =
         previousOverflow;
+    };
+  }, [
+    leaveDialogOpen,
+  ]);
+
+  useEffect(() => {
+    if (
+      !deleteDialogOpen
+    ) {
+      return undefined;
+    }
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    dialogReturnFocusRef.current =
+      document.activeElement;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const dialog =
+      deleteDialogRef.current;
+
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const focusableElements =
+      dialog
+        ? Array.from(
+            dialog.querySelectorAll(
+              focusableSelector
+            )
+          )
+        : [];
+
+    focusableElements[0]?.focus?.();
+
+    const handleKeyDown =
+      (
+        event
+      ) => {
+        if (
+          event.key ===
+            'Escape' &&
+          !deleteMutation.isPending
+        ) {
+          event.preventDefault();
+          setDeleteDialogOpen(
+            false
+          );
+          return;
+        }
+
+        if (
+          event.key !==
+            'Tab' ||
+          focusableElements.length ===
+            0
+        ) {
+          return;
+        }
+
+        const firstElement =
+          focusableElements[0];
+
+        const lastElement =
+          focusableElements[
+            focusableElements.length -
+              1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            firstElement
+        ) {
+          event.preventDefault();
+          lastElement.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            lastElement
+        ) {
+          event.preventDefault();
+          firstElement.focus();
+        }
+      };
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+
+      requestAnimationFrame(
+        () => {
+          dialogReturnFocusRef.current?.focus?.();
+        }
+      );
     };
   }, [
     deleteDialogOpen,
@@ -1485,24 +1817,12 @@ const TemplateEdit = () => {
           to={`/templates/${id}`}
           onClick={(
             event
-          ) => {
-            if (
-              updateMutation.isPending ||
-              deleteMutation.isPending
-            ) {
-              event.preventDefault();
-              return;
-            }
-
-            if (
-              isDirty &&
-              !window.confirm(
-                'Kaydedilmemiş değişiklikler var. Şablon detayına dönmek istediğinize emin misiniz?'
-              )
-            ) {
-              event.preventDefault();
-            }
-          }}
+          ) =>
+            handleAttemptLeave(
+              `/templates/${id}`,
+              event
+            )
+          }
           className="
             inline-flex
             items-center
@@ -1543,17 +1863,25 @@ const TemplateEdit = () => {
 
           <div className="min-w-0">
 
-            <h1
-              className="
-                text-2xl
-                font-semibold
-                tracking-[-0.035em]
-                text-gray-900
-                dark:text-white
-              "
-            >
-              Şablon Düzenle
-            </h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1
+                className="
+                  text-2xl
+                  font-semibold
+                  tracking-[-0.035em]
+                  text-gray-900
+                  dark:text-white
+                "
+              >
+                Şablon Düzenle
+              </h1>
+
+              {isDirty && (
+                <Badge variant="warning">
+                  Kaydedilmemiş değişiklik
+                </Badge>
+              )}
+            </div>
 
             <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400">
               Şablonun sınıflandırmasını, açıklamasını ve gerektiğinde dosyasını güncelleyin.
@@ -1638,7 +1966,8 @@ const TemplateEdit = () => {
               }
               placeholder="Örn: İcra Takibi Dilekçesi"
               disabled={
-                updateMutation.isPending
+                updateMutation.isPending ||
+                deleteMutation.isPending
               }
             />
 
@@ -1834,7 +2163,8 @@ const TemplateEdit = () => {
                     handleChange
                   }
                   disabled={
-                    updateMutation.isPending
+                    updateMutation.isPending ||
+                    deleteMutation.isPending
                   }
                   className="
                     h-10
@@ -2121,7 +2451,8 @@ const TemplateEdit = () => {
                     handleRemoveNewFile
                   }
                   disabled={
-                    updateMutation.isPending
+                    updateMutation.isPending ||
+                    deleteMutation.isPending
                   }
                   className="
                     inline-flex
@@ -2217,7 +2548,8 @@ const TemplateEdit = () => {
                 handleFileChange
               }
               disabled={
-                updateMutation.isPending
+                updateMutation.isPending ||
+                deleteMutation.isPending
               }
               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt,.udf"
             />
@@ -2350,27 +2682,11 @@ const TemplateEdit = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={() => {
-              if (
-                updateMutation.isPending ||
-                deleteMutation.isPending
-              ) {
-                return;
-              }
-
-              if (
-                isDirty &&
-                !window.confirm(
-                  'Kaydedilmemiş değişiklikler var. İptal etmek istediğinize emin misiniz?'
-                )
-              ) {
-                return;
-              }
-
-              navigate(
+            onClick={() =>
+              handleAttemptLeave(
                 `/templates/${id}`
-              );
-            }}
+              )
+            }
             disabled={
               updateMutation.isPending
             }
@@ -2422,7 +2738,7 @@ const TemplateEdit = () => {
                 </div>
 
                 <p className="mt-2 max-w-xl text-sm text-gray-500 dark:text-slate-400">
-                  Şablon kaydını silmek geri alınamaz. İşleme devam etmeden önce bu şablonun artık gerekli olmadığından emin olun.
+                  Şablon kaydı normal şablon ekranlarından kaldırılacaktır. Devam etmeden önce doğru kaydı seçtiğinizden emin olun.
                 </p>
 
               </div>
@@ -2454,26 +2770,106 @@ const TemplateEdit = () => {
       )}
 
 
-      {deleteDialogOpen && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
-          onMouseDown={(
-            event
-          ) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              handleCloseDeleteDialog();
+      {leaveDialogOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Kaydedilmemiş değişiklik penceresini kapat"
+            onClick={
+              handleContinueEditing
             }
-          }}
-        >
-          <div
-            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"
-            aria-hidden="true"
           />
 
           <div
+            ref={
+              leaveDialogRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="template-leave-dialog-title"
+            aria-describedby="template-leave-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.10] dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Kaydedilmemiş değişiklik
+                  </p>
+
+                  <h2
+                    id="template-leave-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Değişiklikler kaydedilmedi
+                  </h2>
+
+                  <p
+                    id="template-leave-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    Bu sayfadan ayrılırsanız şablonda yaptığınız kaydedilmemiş değişiklikler silinecek.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-5">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+                <p className="text-sm leading-6 text-amber-900 dark:text-amber-200">
+                  Düzenlemeye devam edebilir veya değişiklikleri kaydetmeden şablon detayına dönebilirsiniz.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  handleContinueEditing
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  handleDiscardAndLeave
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteDialogOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Silme penceresini kapat"
+            disabled={
+              deleteMutation.isPending
+            }
+            onClick={
+              handleCloseDeleteDialog
+            }
+          />
+
+          <div
+            ref={
+              deleteDialogRef
+            }
             role="dialog"
             aria-modal="true"
             aria-labelledby="template-delete-dialog-title"
@@ -2545,7 +2941,7 @@ const TemplateEdit = () => {
               <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
 
                 <p className="text-sm leading-6 text-gray-600 dark:text-slate-300">
-                  Silme işlemi geri alınamaz. Devam etmeden önce doğru şablonu seçtiğinizden emin olun.
+                  Devam etmeden önce doğru şablonu seçtiğinizden ve silme işlemini gerçekten yapmak istediğinizden emin olun.
                 </p>
 
               </div>

@@ -28,6 +28,7 @@
   import Empty from '../../components/shared/Empty.jsx';
 
   import {
+    AlertTriangle,
     ArrowLeft,
     ArrowRight,
     KeyRound,
@@ -523,6 +524,138 @@ view_team_performance:
       );
   };
 
+  const normalizeUserEditForm = (
+    value
+  ) => ({
+    first_name:
+      String(
+        value?.first_name ||
+        ''
+      ).trim(),
+
+    last_name:
+      String(
+        value?.last_name ||
+        ''
+      ).trim(),
+
+    email:
+      String(
+        value?.email ||
+        ''
+      )
+        .trim()
+        .toLowerCase(),
+
+    role:
+      String(
+        value?.role ||
+        ''
+      ),
+
+    is_active:
+      Boolean(
+        value?.is_active
+      ),
+  });
+
+  const normalizePermissionOverrides = (
+    value
+  ) => {
+    const source =
+      value &&
+      typeof value ===
+        'object' &&
+      !Array.isArray(
+        value
+      )
+        ? value
+        : {};
+
+    return Object.keys(
+      source
+    )
+      .sort()
+      .reduce(
+        (
+          result,
+          permission
+        ) => {
+          if (
+            typeof source[
+              permission
+            ] ===
+            'boolean'
+          ) {
+            result[
+              permission
+            ] =
+              source[
+                permission
+              ];
+          }
+
+          return result;
+        },
+        {}
+      );
+  };
+
+  const getUserErrorMessage = (
+    error,
+    fallback
+  ) => {
+    const status =
+      error?.response?.status;
+
+    const rawMessage =
+      String(
+        error?.response?.data
+          ?.message ||
+        error?.message ||
+        ''
+      ).trim();
+
+    const normalized =
+      rawMessage
+        .toLocaleLowerCase(
+          'tr-TR'
+        );
+
+    if (status === 401) {
+      return 'Oturumunuz sona ermiş olabilir. Lütfen yeniden giriş yapın.';
+    }
+
+    if (status === 403) {
+      return 'Bu işlem için yetkiniz bulunmuyor.';
+    }
+
+    if (status === 404) {
+      return 'Kullanıcı kaydı bulunamadı veya artık erişilemiyor.';
+    }
+
+    if (
+      /email.*(exists|use|taken)|duplicate|unique/.test(
+        normalized
+      )
+    ) {
+      return 'Bu e-posta adresi başka bir kullanıcı tarafından kullanılıyor.';
+    }
+
+    if (
+      /validation failed|invalid|must be|required|not found|unauthorized|forbidden|failed/.test(
+        normalized
+      )
+    ) {
+      return fallback;
+    }
+
+    return (
+      rawMessage ||
+      fallback
+    );
+  };
+
   // ======================================================
   // COMPONENT
   // ======================================================
@@ -562,6 +695,36 @@ view_team_performance:
     ] =
       useState(false);
 
+    const [
+      editFormData,
+      setEditFormData,
+    ] =
+      useState({
+        first_name: '',
+        last_name: '',
+        email: '',
+        role: '',
+        is_active: true,
+      });
+
+    const [
+      initialEditFormData,
+      setInitialEditFormData,
+    ] =
+      useState({
+        first_name: '',
+        last_name: '',
+        email: '',
+        role: '',
+        is_active: true,
+      });
+
+    const [
+      discardDialogTarget,
+      setDiscardDialogTarget,
+    ] =
+      useState(null);
+
     // ====================================================
     // PERMISSIONS
     // ====================================================
@@ -583,6 +746,18 @@ view_team_performance:
       setPermissionOverrides,
     ] =
       useState({});
+
+    const [
+      initialPermissionOverrides,
+      setInitialPermissionOverrides,
+    ] =
+      useState({});
+
+    const [
+      resetPermissionDialogOpen,
+      setResetPermissionDialogOpen,
+    ] =
+      useState(false);
 
     const [
       selectedPreset,
@@ -805,26 +980,43 @@ view_team_performance:
         return;
       }
 
-      const overrides =
-        permissionData
-          .overrides;
+      const currentNormalized =
+        normalizePermissionOverrides(
+          permissionOverrides
+        );
+
+      const initialNormalized =
+        normalizePermissionOverrides(
+          initialPermissionOverrides
+        );
+
+      const hasUnsavedPermissionChanges =
+        JSON.stringify(
+          currentNormalized
+        ) !==
+        JSON.stringify(
+          initialNormalized
+        );
 
       if (
-        overrides &&
-        typeof overrides ===
-          'object' &&
-        !Array.isArray(
-          overrides
-        )
+        hasUnsavedPermissionChanges
       ) {
-        setPermissionOverrides({
-          ...overrides,
-        });
-      } else {
-        setPermissionOverrides(
-          {}
-        );
+        return;
       }
+
+      const nextOverrides =
+        normalizePermissionOverrides(
+          permissionData
+            .overrides
+        );
+
+      setPermissionOverrides(
+        nextOverrides
+      );
+
+      setInitialPermissionOverrides(
+        nextOverrides
+      );
     }, [
       permissionData,
     ]);
@@ -848,11 +1040,10 @@ view_team_performance:
           requestError
         ) => {
           toast.error(
-            requestError
-              ?.response
-              ?.data
-              ?.message ||
+            getUserErrorMessage(
+              requestError,
               'Kullanıcı bilgileri güncellenemedi'
+            )
           );
         },
       });
@@ -876,11 +1067,10 @@ view_team_performance:
           requestError
         ) => {
           toast.error(
-            requestError
-              ?.response
-              ?.data
-              ?.message ||
+            getUserErrorMessage(
+              requestError,
               'Kullanıcı rolü değiştirilemedi'
+            )
           );
         },
       });
@@ -902,11 +1092,10 @@ view_team_performance:
           requestError
         ) => {
           toast.error(
-            requestError
-              ?.response
-              ?.data
-              ?.message ||
+            getUserErrorMessage(
+              requestError,
               'Hesap durumu değiştirilemedi'
+            )
           );
         },
       });
@@ -945,11 +1134,10 @@ view_team_performance:
           requestError
         ) => {
           toast.error(
-            requestError
-              ?.response
-              ?.data
-              ?.message ||
-              'Silme başarısız'
+            getUserErrorMessage(
+              requestError,
+              'Kullanıcı silinemedi'
+            )
           );
         },
       });
@@ -995,11 +1183,10 @@ view_team_performance:
           requestError
         ) => {
           toast.error(
-            requestError
-              ?.response
-              ?.data
-              ?.message ||
+            getUserErrorMessage(
+              requestError,
               'Yetkiler güncellenemedi'
+            )
           );
         },
       });
@@ -1051,11 +1238,10 @@ view_team_performance:
           requestError
         ) => {
           toast.error(
-            requestError
-              ?.response
-              ?.data
-              ?.message ||
+            getUserErrorMessage(
+              requestError,
               'Yetkiler sıfırlanamadı'
+            )
           );
         },
       });
@@ -1105,11 +1291,10 @@ view_team_performance:
           requestError
         ) => {
           toast.error(
-            requestError
-              ?.response
-              ?.data
-              ?.message ||
+            getUserErrorMessage(
+              requestError,
               'Yetki şablonu uygulanamadı'
+            )
           );
         },
       });
@@ -1127,6 +1312,90 @@ view_team_performance:
       permissionMutation.isPending ||
       resetPermissionMutation.isPending ||
       presetMutation.isPending;
+
+    const normalizedEditForm =
+      normalizeUserEditForm(
+        editFormData
+      );
+
+    const normalizedInitialEditForm =
+      normalizeUserEditForm(
+        initialEditFormData
+      );
+
+    const isEditDirty =
+      Boolean(
+        editingUser &&
+        JSON.stringify(
+          normalizedEditForm
+        ) !==
+          JSON.stringify(
+            normalizedInitialEditForm
+          )
+      );
+
+    const normalizedPermissionOverrides =
+      normalizePermissionOverrides(
+        permissionOverrides
+      );
+
+    const normalizedInitialPermissionOverrides =
+      normalizePermissionOverrides(
+        initialPermissionOverrides
+      );
+
+    const isPermissionDirty =
+      Boolean(
+        permissionUser &&
+        JSON.stringify(
+          normalizedPermissionOverrides
+        ) !==
+          JSON.stringify(
+            normalizedInitialPermissionOverrides
+          )
+      );
+
+    useEffect(() => {
+      const hasUnsavedChanges =
+        (
+          isModalOpen &&
+          isEditDirty
+        ) ||
+        (
+          isPermissionModalOpen &&
+          isPermissionDirty
+        );
+
+      if (
+        !hasUnsavedChanges
+      ) {
+        return undefined;
+      }
+
+      const handleBeforeUnload =
+        (event) => {
+          event.preventDefault();
+          event.returnValue =
+            '';
+        };
+
+      window.addEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+
+      return () => {
+        window.removeEventListener(
+          'beforeunload',
+          handleBeforeUnload
+        );
+      };
+    }, [
+      isModalOpen,
+      isEditDirty,
+      isPermissionModalOpen,
+      isPermissionDirty,
+    ]);
 
     // ====================================================
     // FILTER HANDLERS
@@ -1217,14 +1486,58 @@ view_team_performance:
     const handleEdit = (
       user
     ) => {
+      const nextForm =
+        normalizeUserEditForm(
+          user
+        );
+
       setEditingUser(
         user
+      );
+
+      setEditFormData(
+        nextForm
+      );
+
+      setInitialEditFormData(
+        nextForm
+      );
+
+      setDiscardDialogTarget(
+        null
       );
 
       setIsModalOpen(
         true
       );
     };
+
+    const forceCloseEditModal =
+      () => {
+        setIsModalOpen(
+          false
+        );
+
+        setEditingUser(
+          null
+        );
+
+        setEditFormData({
+          first_name: '',
+          last_name: '',
+          email: '',
+          role: '',
+          is_active: true,
+        });
+
+        setInitialEditFormData({
+          first_name: '',
+          last_name: '',
+          email: '',
+          role: '',
+          is_active: true,
+        });
+      };
 
     const closeModal =
       () => {
@@ -1234,12 +1547,41 @@ view_team_performance:
           return;
         }
 
-        setIsModalOpen(
-          false
-        );
+        if (
+          isEditDirty
+        ) {
+          setDiscardDialogTarget(
+            'edit'
+          );
+          return;
+        }
 
-        setEditingUser(
-          null
+        forceCloseEditModal();
+      };
+
+    const handleEditFieldChange =
+      (event) => {
+        if (
+          isUpdating
+        ) {
+          return;
+        }
+
+        const {
+          name,
+          value,
+        } = event.target;
+
+        setEditFormData(
+          (current) => ({
+            ...current,
+            [name]:
+              name ===
+              'is_active'
+                ? value ===
+                  'true'
+                : value,
+          })
         );
       };
 
@@ -1258,8 +1600,20 @@ view_team_performance:
         {}
       );
 
+      setInitialPermissionOverrides(
+        {}
+      );
+
       setSelectedPreset(
         ''
+      );
+
+      setDiscardDialogTarget(
+        null
+      );
+
+      setResetPermissionDialogOpen(
+        false
       );
 
       setIsPermissionModalOpen(
@@ -1267,14 +1621,8 @@ view_team_performance:
       );
     };
 
-    const closePermissionModal =
+    const forceClosePermissionModal =
       () => {
-        if (
-          isPermissionUpdating
-        ) {
-          return;
-        }
-
         setIsPermissionModalOpen(
           false
         );
@@ -1287,9 +1635,69 @@ view_team_performance:
           {}
         );
 
+        setInitialPermissionOverrides(
+          {}
+        );
+
         setSelectedPreset(
           ''
         );
+
+        setResetPermissionDialogOpen(
+          false
+        );
+      };
+
+    const closePermissionModal =
+      () => {
+        if (
+          isPermissionUpdating
+        ) {
+          return;
+        }
+
+        if (
+          isPermissionDirty
+        ) {
+          setDiscardDialogTarget(
+            'permissions'
+          );
+          return;
+        }
+
+        forceClosePermissionModal();
+      };
+
+    const closeDiscardDialog =
+      () => {
+        setDiscardDialogTarget(
+          null
+        );
+      };
+
+    const confirmDiscardChanges =
+      () => {
+        const target =
+          discardDialogTarget;
+
+        setDiscardDialogTarget(
+          null
+        );
+
+        if (
+          target ===
+          'edit'
+        ) {
+          forceCloseEditModal();
+          return;
+        }
+
+        if (
+          target ===
+          'permissions'
+        ) {
+          forceClosePermissionModal();
+        }
       };
 
     // ====================================================
@@ -1339,6 +1747,15 @@ view_team_performance:
           return;
         }
 
+        if (
+          !isPermissionDirty
+        ) {
+          toast(
+            'Kaydedilecek bir yetki değişikliği bulunmuyor'
+          );
+          return;
+        }
+
         try {
           await permissionMutation.mutateAsync({
             id:
@@ -1348,6 +1765,12 @@ view_team_performance:
               permissionOverrides,
           });
 
+          setInitialPermissionOverrides(
+            normalizePermissionOverrides(
+              permissionOverrides
+            )
+          );
+
           await refetchPermissions?.();
         } catch {
           // Mutation onError mesajı gösteriyor.
@@ -1355,6 +1778,20 @@ view_team_performance:
       };
 
     const handleResetPermissions =
+      () => {
+        if (
+          !permissionUser?.id ||
+          isPermissionUpdating
+        ) {
+          return;
+        }
+
+        setResetPermissionDialogOpen(
+          true
+        );
+      };
+
+    const handleConfirmResetPermissions =
       async () => {
         if (
           !permissionUser?.id ||
@@ -1363,20 +1800,21 @@ view_team_performance:
           return;
         }
 
-        const confirmed =
-          window.confirm(
-            'Bu kullanıcının tüm özel yetkileri kaldırılacak ve rol varsayılanlarına dönülecek. Devam edilsin mi?'
-          );
-
-        if (
-          !confirmed
-        ) {
-          return;
-        }
-
         try {
           await resetPermissionMutation.mutateAsync(
             permissionUser.id
+          );
+
+          setPermissionOverrides(
+            {}
+          );
+
+          setInitialPermissionOverrides(
+            {}
+          );
+
+          setResetPermissionDialogOpen(
+            false
           );
 
           await refetchPermissions?.();
@@ -1390,7 +1828,8 @@ view_team_performance:
         if (
           !permissionUser?.id ||
           !selectedPreset ||
-          isPermissionUpdating
+          isPermissionUpdating ||
+          isPermissionDirty
         ) {
           return;
         }
@@ -1403,6 +1842,14 @@ view_team_performance:
             preset:
               selectedPreset,
           });
+
+          setPermissionOverrides(
+            {}
+          );
+
+          setInitialPermissionOverrides(
+            {}
+          );
 
           await refetchPermissions?.();
         } catch {
@@ -1427,45 +1874,34 @@ view_team_performance:
           return;
         }
 
-        const formData =
-          new FormData(
-            event.currentTarget
+        if (
+          !isEditDirty
+        ) {
+          toast(
+            'Kaydedilecek bir değişiklik bulunmuyor'
           );
+          return;
+        }
 
         const firstName =
-          String(
-            formData.get(
-              'first_name'
-            ) || ''
-          ).trim();
+          normalizedEditForm
+            .first_name;
 
         const lastName =
-          String(
-            formData.get(
-              'last_name'
-            ) || ''
-          ).trim();
+          normalizedEditForm
+            .last_name;
 
         const email =
-          String(
-            formData.get(
-              'email'
-            ) || ''
-          )
-            .trim()
-            .toLowerCase();
+          normalizedEditForm
+            .email;
 
         const role =
-          String(
-            formData.get(
-              'role'
-            ) || ''
-          );
+          normalizedEditForm
+            .role;
 
         const requestedActive =
-          formData.get(
-            'is_active'
-          ) === 'true';
+          normalizedEditForm
+            .is_active;
 
         if (
           !firstName
@@ -1575,13 +2011,11 @@ view_team_performance:
             'Kullanıcı başarıyla güncellendi'
           );
 
-          setIsModalOpen(
-            false
+          setInitialEditFormData(
+            normalizedEditForm
           );
 
-          setEditingUser(
-            null
-          );
+          forceCloseEditModal();
         } catch {
           // Mutation hata mesajlarını gösteriyor.
         }
@@ -2350,7 +2784,7 @@ view_team_performance:
               >
 
                 <p className="text-sm leading-6 text-gray-600 dark:text-slate-300">
-                  Bu işlem geri alınamaz. Devam etmeden önce doğru kullanıcı hesabını seçtiğinizden emin olun.
+                  Devam etmeden önce doğru kullanıcı hesabını seçtiğinizden emin olun. Silinen hesap normal kullanıcı listelerinde artık görüntülenmeyecektir.
                 </p>
 
               </div>
@@ -2481,6 +2915,14 @@ view_team_performance:
                     Profil, rol ve hesap durumunu yönetin.
                   </p>
 
+                  {isEditDirty && (
+                    <div className="mt-2">
+                      <Badge variant="warning">
+                        Kaydedilmemiş değişiklik
+                      </Badge>
+                    </div>
+                  )}
+
                 </div>
 
               </div>
@@ -2490,8 +2932,11 @@ view_team_performance:
                 <Input
                   label="Ad"
                   name="first_name"
-                  defaultValue={
-                    editingUser.first_name
+                  value={
+                    editFormData.first_name
+                  }
+                  onChange={
+                    handleEditFieldChange
                   }
                   disabled={
                     isUpdating
@@ -2502,8 +2947,11 @@ view_team_performance:
                 <Input
                   label="Soyad"
                   name="last_name"
-                  defaultValue={
-                    editingUser.last_name
+                  value={
+                    editFormData.last_name
+                  }
+                  onChange={
+                    handleEditFieldChange
                   }
                   disabled={
                     isUpdating
@@ -2517,8 +2965,11 @@ view_team_performance:
                 label="E-posta"
                 name="email"
                 type="email"
-                defaultValue={
-                  editingUser.email
+                value={
+                  editFormData.email
+                }
+                onChange={
+                  handleEditFieldChange
                 }
                 disabled={
                   isUpdating
@@ -2534,8 +2985,11 @@ view_team_performance:
 
                 <select
                   name="role"
-                  defaultValue={
-                    editingUser.role
+                  value={
+                    editFormData.role
+                  }
+                  onChange={
+                    handleEditFieldChange
                   }
                   disabled={
                     isUpdating
@@ -2589,10 +3043,13 @@ view_team_performance:
 
                 <select
                   name="is_active"
-                  defaultValue={
-                    editingUser.is_active
+                  value={
+                    editFormData.is_active
                       ? 'true'
                       : 'false'
+                  }
+                  onChange={
+                    handleEditFieldChange
                   }
                   disabled={
                     isUpdating
@@ -2651,10 +3108,12 @@ view_team_performance:
                     isUpdating
                   }
                   disabled={
-                    isUpdating
+                    isUpdating ||
+                    !isEditDirty
                   }
                 >
-                  Güncelle
+                  <Save className="h-4 w-4" />
+                  Değişiklikleri Kaydet
                 </Button>
 
               </div>
@@ -2758,18 +3217,26 @@ view_team_performance:
 
                 </div>
 
-                <Badge
-                  variant={
-                    permissionUser.is_active
-                      ? 'success'
-                      : 'danger'
-                  }
-                  dot
-                >
-                  {permissionUser.is_active
-                    ? 'Aktif'
-                    : 'Pasif'}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  {isPermissionDirty && (
+                    <Badge variant="warning">
+                      Kaydedilmemiş değişiklik
+                    </Badge>
+                  )}
+
+                  <Badge
+                    variant={
+                      permissionUser.is_active
+                        ? 'success'
+                        : 'danger'
+                    }
+                    dot
+                  >
+                    {permissionUser.is_active
+                      ? 'Aktif'
+                      : 'Pasif'}
+                  </Badge>
+                </div>
 
               </div>
 
@@ -2856,7 +3323,8 @@ view_team_performance:
                       variant="secondary"
                       disabled={
                         !selectedPreset ||
-                        isPermissionUpdating
+                        isPermissionUpdating ||
+                        isPermissionDirty
                       }
                       loading={
                         presetMutation.isPending
@@ -3162,7 +3630,8 @@ view_team_performance:
                           permissionMutation.isPending
                         }
                         disabled={
-                          isPermissionUpdating
+                          isPermissionUpdating ||
+                          !isPermissionDirty
                         }
                         onClick={
                           handleSavePermissions
@@ -3181,6 +3650,148 @@ view_team_performance:
 
             </div>
           )}
+
+        </Modal>
+
+        {/* ==================================================
+            UNSAVED CHANGES MODAL
+        ================================================== */}
+
+        <Modal
+          isOpen={
+            Boolean(
+              discardDialogTarget
+            )
+          }
+          onClose={
+            closeDiscardDialog
+          }
+          title="Kaydedilmemiş Değişiklik"
+          size="md"
+          closeOnBackdrop
+        >
+
+          <div className="space-y-5">
+
+            <div className="flex items-start gap-4 rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 shadow-sm dark:bg-white/[0.05] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold text-amber-950 dark:text-amber-200">
+                  Değişiklikler henüz kaydedilmedi
+                </p>
+
+                <p className="mt-1 text-sm leading-6 text-amber-900/80 dark:text-amber-200/80">
+                  Bu pencereyi kapatırsanız yaptığınız değişiklikler kaydedilmeden silinecektir.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 dark:border-white/[0.06] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  closeDiscardDialog
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  confirmDiscardChanges
+                }
+              >
+                Değişiklikleri At ve Kapat
+              </Button>
+            </div>
+
+          </div>
+
+        </Modal>
+
+        {/* ==================================================
+            RESET PERMISSIONS CONFIRMATION
+        ================================================== */}
+
+        <Modal
+          isOpen={
+            resetPermissionDialogOpen
+          }
+          onClose={() => {
+            if (
+              !resetPermissionMutation.isPending
+            ) {
+              setResetPermissionDialogOpen(
+                false
+              );
+            }
+          }}
+          title="Rol Varsayılanlarına Dön"
+          size="md"
+          closeOnBackdrop={
+            !resetPermissionMutation.isPending
+          }
+        >
+
+          <div className="space-y-5">
+
+            <div className="flex items-start gap-4 rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 shadow-sm dark:bg-white/[0.05] dark:text-amber-400">
+                <RotateCcw className="h-5 w-5" />
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold text-amber-950 dark:text-amber-200">
+                  Özel yetkiler kaldırılacak
+                </p>
+
+                <p className="mt-1 text-sm leading-6 text-amber-900/80 dark:text-amber-200/80">
+                  Kullanıcının özel yetki seçimleri temizlenecek ve erişim kapsamı rol varsayılanlarına dönecektir.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 dark:border-white/[0.06] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  resetPermissionMutation.isPending
+                }
+                onClick={() =>
+                  setResetPermissionDialogOpen(
+                    false
+                  )
+                }
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                loading={
+                  resetPermissionMutation.isPending
+                }
+                disabled={
+                  resetPermissionMutation.isPending
+                }
+                onClick={
+                  handleConfirmResetPermissions
+                }
+              >
+                <RotateCcw className="h-4 w-4" />
+                Varsayılanlara Dön
+              </Button>
+            </div>
+
+          </div>
 
         </Modal>
 

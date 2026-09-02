@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -30,6 +31,7 @@ import {
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
+import Badge from '../../components/ui/Badge.jsx';
 
 import {
   AlertTriangle,
@@ -91,6 +93,24 @@ const ROLE_OPTIONS = [
   { value: 'gözlemci', label: 'Gözlemci' },
   { value: 'diger', label: 'Diğer' },
 ];
+
+const INITIAL_FORM = {
+  title: '',
+  description: '',
+  hearing_type: 'other',
+  last_hearing_result: '',
+  opposing_counsel: '',
+  expense_status: 'pending',
+  start_date: '',
+  end_date: '',
+  location: '',
+  court_room: '',
+  judge_name: '',
+  status: 'scheduled',
+  case_id: '',
+  assigned_to: '',
+  is_all_day: false,
+};
 
 // ======================================================
 // HELPERS
@@ -203,6 +223,227 @@ const getRoleIcon = (role) => {
   }
 };
 
+const normalizeFormForComparison = (
+  form
+) => ({
+  title:
+    String(
+      form?.title ??
+      ''
+    ).trim(),
+
+  description:
+    normalizeNullable(
+      form?.description
+    ),
+
+  hearing_type:
+    String(
+      form?.hearing_type ||
+      'other'
+    ),
+
+  last_hearing_result:
+    normalizeNullable(
+      form?.last_hearing_result
+    ),
+
+  opposing_counsel:
+    normalizeNullable(
+      form?.opposing_counsel
+    ),
+
+  expense_status:
+    String(
+      form?.expense_status ||
+      'pending'
+    ),
+
+  start_date:
+    String(
+      form?.start_date ||
+      ''
+    ),
+
+  end_date:
+    String(
+      form?.end_date ||
+      ''
+    ),
+
+  location:
+    normalizeNullable(
+      form?.location
+    ),
+
+  court_room:
+    normalizeNullable(
+      form?.court_room
+    ),
+
+  judge_name:
+    normalizeNullable(
+      form?.judge_name
+    ),
+
+  status:
+    String(
+      form?.status ||
+      'scheduled'
+    ),
+
+  case_id:
+    normalizeId(
+      form?.case_id
+    ) || null,
+
+  assigned_to:
+    normalizeId(
+      form?.assigned_to
+    ) || null,
+
+  is_all_day:
+    Boolean(
+      form?.is_all_day
+    ),
+});
+
+const normalizeAttendeesForComparison = (
+  values
+) => {
+  if (
+    !Array.isArray(
+      values
+    )
+  ) {
+    return [];
+  }
+
+  return values
+    .map(
+      (item) => ({
+        name:
+          String(
+            item?.name ||
+            ''
+          ).trim(),
+
+        role:
+          String(
+            item?.role ||
+            'diger'
+          ),
+      })
+    )
+    .filter(
+      (item) =>
+        Boolean(
+          item.name
+        )
+    )
+    .sort(
+      (a, b) =>
+        `${a.role}|${a.name.toLocaleLowerCase('tr-TR')}`.localeCompare(
+          `${b.role}|${b.name.toLocaleLowerCase('tr-TR')}`,
+          'tr-TR'
+        )
+    );
+};
+
+const getEventErrorMessage = (
+  error,
+  fallback
+) => {
+  const responseData =
+    error?.response?.data;
+
+  const rawMessage =
+    String(
+      responseData?.message ||
+      error?.message ||
+      ''
+    ).trim();
+
+  const validationMessages =
+    Array.isArray(
+      responseData?.errors
+    )
+      ? responseData.errors
+          .map(
+            (item) =>
+              String(
+                item?.message ||
+                item?.msg ||
+                ''
+              ).trim()
+          )
+          .filter(Boolean)
+      : [];
+
+  const technicalMessage =
+    [
+      rawMessage,
+      ...validationMessages,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+  if (
+    !technicalMessage
+  ) {
+    return fallback;
+  }
+
+  if (
+    /validation failed|validation error|sequelizevalidationerror|notnull violation|cannot be null|must not be null|invalid input syntax|invalid date/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Duruşma bilgileri doğrulanamadı. Zorunlu ve geçerli alanları kontrol edin.';
+  }
+
+  if (
+    /event.*not found|hearing.*not found/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Duruşma kaydı bulunamadı.';
+  }
+
+  if (
+    /case.*not found/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'İlişkili dava bulunamadı veya bu kayda erişim yetkiniz yok.';
+  }
+
+  if (
+    /forbidden|permission denied|not authorized|unauthorized|access denied/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Bu işlem için yetkiniz bulunmuyor.';
+  }
+
+  if (
+    /network error|failed to fetch|timeout|econnrefused|enotfound/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Sunucuya bağlanılamadı. Lütfen tekrar deneyin.';
+  }
+
+  const looksTurkish =
+    /[çğıöşüÇĞİÖŞÜ]|bulunamadı|geçersiz|zorunlu|yetkiniz|başarısız|güncellenemedi|silinemedi|hata/i.test(
+      rawMessage
+    );
+
+  return looksTurkish
+    ? rawMessage
+    : fallback;
+};
+
 // ======================================================
 // CACHE INVALIDATION
 // ======================================================
@@ -290,23 +531,18 @@ const EventEdit = () => {
       PERMISSION_KEYS.DELETE_EVENTS
     );
 
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    hearing_type: 'other',
-    last_hearing_result: '',
-    opposing_counsel: '',
-    expense_status: 'pending',
-    start_date: '',
-    end_date: '',
-    location: '',
-    court_room: '',
-    judge_name: '',
-    status: 'scheduled',
-    case_id: '',
-    assigned_to: '',
-    is_all_day: false,
-  });
+  const [formData, setFormData] =
+    useState(
+      INITIAL_FORM
+    );
+
+  const [
+    initialFormData,
+    setInitialFormData,
+  ] =
+    useState(
+      INITIAL_FORM
+    );
 
   const [attendeeName, setAttendeeName] =
     useState('');
@@ -317,6 +553,12 @@ const EventEdit = () => {
   const [attendees, setAttendees] =
     useState([]);
 
+  const [
+    initialAttendees,
+    setInitialAttendees,
+  ] =
+    useState([]);
+
   const [errors, setErrors] =
     useState({});
 
@@ -325,6 +567,30 @@ const EventEdit = () => {
     setDeleteDialogOpen,
   ] =
     useState(false);
+
+  const [
+    leaveDialogOpen,
+    setLeaveDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingExitTarget,
+    setPendingExitTarget,
+  ] =
+    useState('');
+
+  const initializedEventIdRef =
+    useRef('');
+
+  const deleteDialogRef =
+    useRef(null);
+
+  const leaveDialogRef =
+    useRef(null);
+
+  const previousFocusRef =
+    useRef(null);
 
   // ======================================================
   // EVENT
@@ -359,7 +625,21 @@ const EventEdit = () => {
       return;
     }
 
-    setFormData({
+    const eventId =
+      normalizeId(
+        event?.id ??
+        id
+      );
+
+    if (
+      !eventId ||
+      initializedEventIdRef.current ===
+        eventId
+    ) {
+      return;
+    }
+
+    const nextForm = {
       title:
         event.title || '',
 
@@ -416,17 +696,38 @@ const EventEdit = () => {
         Boolean(
           event.is_all_day
         ),
-    });
+    };
 
-    setAttendees(
+    const nextAttendees =
       Array.isArray(
         event.attendees
       )
         ? event.attendees
-        : []
+        : [];
+
+    setFormData(
+      nextForm
     );
+
+    setInitialFormData(
+      nextForm
+    );
+
+    setAttendees(
+      nextAttendees
+    );
+
+    setInitialAttendees(
+      nextAttendees
+    );
+
+    setErrors({});
+
+    initializedEventIdRef.current =
+      eventId;
   }, [
     event,
+    id,
   ]);
 
   // ======================================================
@@ -449,12 +750,86 @@ const EventEdit = () => {
       5 * 60 * 1000,
   });
 
-  const assignableUsers =
+  const assignableUsersRaw =
     Array.isArray(
       lawyersData?.data?.data
     )
       ? lawyersData.data.data
       : [];
+
+  const currentUserId =
+    normalizeId(
+      user?.id
+    );
+
+  const assignableUsers =
+    currentUserId &&
+    !assignableUsersRaw.some(
+      (person) =>
+        normalizeId(
+          person?.id
+        ) ===
+        currentUserId
+    )
+      ? [
+          {
+            id:
+              currentUserId,
+
+            first_name:
+              user?.first_name ||
+              '',
+
+            last_name:
+              user?.last_name ||
+              '',
+
+            name:
+              user?.name ||
+              user?.full_name ||
+              '',
+
+            role:
+              user?.role ||
+              'lawyer',
+          },
+          ...assignableUsersRaw,
+        ]
+      : assignableUsersRaw;
+
+  const normalizedForm =
+    normalizeFormForComparison(
+      formData
+    );
+
+  const normalizedInitialForm =
+    normalizeFormForComparison(
+      initialFormData
+    );
+
+  const normalizedAttendees =
+    normalizeAttendeesForComparison(
+      attendees
+    );
+
+  const normalizedInitialAttendees =
+    normalizeAttendeesForComparison(
+      initialAttendees
+    );
+
+  const isDirty =
+    JSON.stringify(
+      normalizedForm
+    ) !==
+      JSON.stringify(
+        normalizedInitialForm
+      ) ||
+    JSON.stringify(
+      normalizedAttendees
+    ) !==
+      JSON.stringify(
+        normalizedInitialAttendees
+      );
 
   // ======================================================
   // MUTATIONS
@@ -502,12 +877,10 @@ const EventEdit = () => {
 
       onError: (error) => {
         toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
-          error?.message ||
-          'Duruşma güncellenemedi'
+          getEventErrorMessage(
+            error,
+            'Duruşma güncellenemedi'
+          )
         );
       },
     });
@@ -561,12 +934,10 @@ const EventEdit = () => {
 
       onError: (error) => {
         toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
-          error?.message ||
-          'Duruşma silinemedi'
+          getEventErrorMessage(
+            error,
+            'Duruşma silinemedi'
+          )
         );
       },
     });
@@ -580,7 +951,10 @@ const EventEdit = () => {
   // ======================================================
 
   const handleChange = (e) => {
-    if (!canEdit) {
+    if (
+      !canEdit ||
+      isPending
+    ) {
       return;
     }
 
@@ -766,6 +1140,58 @@ const EventEdit = () => {
       }
     }
 
+    if (
+      !HEARING_TYPES.some(
+        (option) =>
+          option.value ===
+          formData.hearing_type
+      )
+    ) {
+      nextErrors.hearing_type =
+        'Geçersiz duruşma türü';
+    }
+
+    if (
+      !STATUS_OPTIONS.some(
+        (option) =>
+          option.value ===
+          formData.status
+      )
+    ) {
+      nextErrors.status =
+        'Geçersiz duruşma durumu';
+    }
+
+    if (
+      !EXPENSE_OPTIONS.some(
+        (option) =>
+          option.value ===
+          formData.expense_status
+      )
+    ) {
+      nextErrors.expense_status =
+        'Geçersiz masraf durumu';
+    }
+
+    const assignedTo =
+      normalizeId(
+        formData.assigned_to
+      );
+
+    if (
+      assignedTo &&
+      !assignableUsers.some(
+        (person) =>
+          normalizeId(
+            person?.id
+          ) ===
+          assignedTo
+      )
+    ) {
+      nextErrors.assigned_to =
+        'Seçilen avukat artık atanabilir değil';
+    }
+
     setErrors(
       nextErrors
     );
@@ -808,6 +1234,16 @@ const EventEdit = () => {
     ) {
       toast.error(
         'Formdaki eksik veya hatalı alanları kontrol edin'
+      );
+
+      return;
+    }
+
+    if (
+      !isDirty
+    ) {
+      toast(
+        'Kaydedilecek bir değişiklik bulunmuyor'
       );
 
       return;
@@ -913,6 +1349,111 @@ const EventEdit = () => {
   };
 
   // ======================================================
+  // LEAVE / UNSAVED CHANGES
+  // ======================================================
+
+  const handleRequestExit = (
+    target
+  ) => {
+    if (
+      isPending
+    ) {
+      return;
+    }
+
+    if (
+      !isDirty
+    ) {
+      navigate(
+        target
+      );
+
+      return;
+    }
+
+    setPendingExitTarget(
+      target
+    );
+
+    setLeaveDialogOpen(
+      true
+    );
+  };
+
+  const handleCloseLeaveDialog =
+    () => {
+      if (
+        isPending
+      ) {
+        return;
+      }
+
+      setLeaveDialogOpen(
+        false
+      );
+
+      setPendingExitTarget(
+        ''
+      );
+    };
+
+  const handleConfirmLeave =
+    () => {
+      if (
+        isPending
+      ) {
+        return;
+      }
+
+      const target =
+        pendingExitTarget ||
+        `/events/${id}`;
+
+      setLeaveDialogOpen(
+        false
+      );
+
+      setPendingExitTarget(
+        ''
+      );
+
+      navigate(
+        target
+      );
+    };
+
+  useEffect(() => {
+    if (
+      !isDirty ||
+      mutation.isPending
+    ) {
+      return undefined;
+    }
+
+    const handleBeforeUnload =
+      (event) => {
+        event.preventDefault();
+        event.returnValue =
+          '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+    mutation.isPending,
+  ]);
+
+  // ======================================================
   // DELETE
   // ======================================================
 
@@ -964,11 +1505,21 @@ const EventEdit = () => {
     };
 
   useEffect(() => {
+    const activeDialog =
+      leaveDialogOpen
+        ? leaveDialogRef.current
+        : deleteDialogOpen
+          ? deleteDialogRef.current
+          : null;
+
     if (
-      !deleteDialogOpen
+      !activeDialog
     ) {
       return undefined;
     }
+
+    previousFocusRef.current =
+      document.activeElement;
 
     const previousOverflow =
       document.body.style
@@ -977,18 +1528,99 @@ const EventEdit = () => {
     document.body.style.overflow =
       'hidden';
 
+    const focusableSelector =
+      [
+        'button:not([disabled])',
+        '[href]',
+        'input:not([disabled])',
+        'select:not([disabled])',
+        'textarea:not([disabled])',
+        '[tabindex]:not([tabindex="-1"])',
+      ].join(',');
+
+    const focusFirst =
+      () => {
+        const focusable =
+          activeDialog.querySelectorAll(
+            focusableSelector
+          );
+
+        focusable?.[0]?.focus();
+      };
+
+    const timer =
+      window.setTimeout(
+        focusFirst,
+        0
+      );
+
     const handleKeyDown =
-      (
-        event
-      ) => {
+      (event) => {
         if (
           event.key ===
-            'Escape' &&
-          !deleteMutation.isPending
+          'Escape'
         ) {
-          setDeleteDialogOpen(
-            false
+          if (
+            leaveDialogOpen &&
+            !isPending
+          ) {
+            handleCloseLeaveDialog();
+          } else if (
+            deleteDialogOpen &&
+            !deleteMutation.isPending
+          ) {
+            handleCloseDeleteDialog();
+          }
+
+          return;
+        }
+
+        if (
+          event.key !==
+          'Tab'
+        ) {
+          return;
+        }
+
+        const focusable =
+          Array.from(
+            activeDialog.querySelectorAll(
+              focusableSelector
+            )
           );
+
+        if (
+          focusable.length ===
+          0
+        ) {
+          event.preventDefault();
+
+          return;
+        }
+
+        const first =
+          focusable[0];
+
+        const last =
+          focusable[
+            focusable.length -
+            1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
         }
       };
 
@@ -998,6 +1630,10 @@ const EventEdit = () => {
     );
 
     return () => {
+      window.clearTimeout(
+        timer
+      );
+
       window.removeEventListener(
         'keydown',
         handleKeyDown
@@ -1005,10 +1641,27 @@ const EventEdit = () => {
 
       document.body.style.overflow =
         previousOverflow;
+
+      const previousFocus =
+        previousFocusRef.current;
+
+      if (
+        previousFocus &&
+        typeof previousFocus.focus ===
+          'function'
+      ) {
+        window.setTimeout(
+          () =>
+            previousFocus.focus(),
+          0
+        );
+      }
     };
   }, [
+    leaveDialogOpen,
     deleteDialogOpen,
     deleteMutation.isPending,
+    isPending,
   ]);
 
   // ======================================================
@@ -1068,6 +1721,17 @@ const EventEdit = () => {
 
         <Link
           to={`/events/${id}`}
+          onClick={(event) => {
+            if (
+              isDirty
+            ) {
+              event.preventDefault();
+
+              handleRequestExit(
+                `/events/${id}`
+              );
+            }
+          }}
           className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-blue-600"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -1081,9 +1745,19 @@ const EventEdit = () => {
           </div>
 
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Duruşmayı Düzenle
-            </h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Duruşmayı Düzenle
+              </h1>
+
+              {isDirty && (
+                <Badge
+                  variant="warning"
+                >
+                  Kaydedilmemiş değişiklik
+                </Badge>
+              )}
+            </div>
 
             <p className="mt-1 text-sm text-gray-500">
               Duruşma bilgilerini, sorumlu avukatı ve katılımcıları güncelleyin.
@@ -1297,8 +1971,15 @@ const EventEdit = () => {
                         key={person.id}
                         value={normalizeId(person.id)}
                       >
-                        {person.first_name}{' '}
-                        {person.last_name}
+                        {[
+                          person.first_name,
+                          person.last_name,
+                        ]
+                          .filter(Boolean)
+                          .join(' ') ||
+                          person.name ||
+                          person.email ||
+                          'Avukat'}
                         {user?.id !==
                           null &&
                         user?.id !==
@@ -1474,7 +2155,11 @@ const EventEdit = () => {
               <Button
                 type="submit"
                 loading={mutation.isPending}
-                disabled={isPending || !canEdit}
+                disabled={
+                  isPending ||
+                  !canEdit ||
+                  !isDirty
+                }
               >
                 <Save className="mr-2 h-4 w-4" />
                 Değişiklikleri Kaydet
@@ -1484,9 +2169,9 @@ const EventEdit = () => {
             <Button
               type="button"
               variant="secondary"
-              disabled={isPending || !canEdit}
+              disabled={isPending}
               onClick={() =>
-                navigate(
+                handleRequestExit(
                   `/events/${id}`
                 )
               }
@@ -1499,7 +2184,7 @@ const EventEdit = () => {
                 type="button"
                 variant="danger"
                 loading={deleteMutation.isPending}
-                disabled={isPending || !canEdit}
+                disabled={isPending}
                 onClick={handleDelete}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -1511,6 +2196,98 @@ const EventEdit = () => {
 
         </form>
       </Card>
+
+      {leaveDialogOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
+
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Kaydedilmemiş değişiklik penceresini kapat"
+            disabled={
+              isPending
+            }
+            onClick={
+              handleCloseLeaveDialog
+            }
+          />
+
+          <div
+            ref={
+              leaveDialogRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="event-leave-dialog-title"
+            aria-describedby="event-leave-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.10] dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Kaydedilmemiş değişiklik
+                  </p>
+
+                  <h2
+                    id="event-leave-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Değişiklikleri kaydetmeden çık?
+                  </h2>
+
+                  <p
+                    id="event-leave-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    Duruşma üzerinde yaptığınız değişiklikler henüz kaydedilmedi.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-5">
+              <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
+                <p className="text-sm leading-6 text-gray-600 dark:text-slate-300">
+                  Düzenlemeye devam edebilir veya kaydedilmemiş değişiklikleri atarak duruşma detayına dönebilirsiniz.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  isPending
+                }
+                onClick={
+                  handleCloseLeaveDialog
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                disabled={
+                  isPending
+                }
+                onClick={
+                  handleConfirmLeave
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deleteDialogOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
@@ -1528,6 +2305,9 @@ const EventEdit = () => {
           />
 
           <div
+            ref={
+              deleteDialogRef
+            }
             role="dialog"
             aria-modal="true"
             aria-labelledby="event-delete-dialog-title"

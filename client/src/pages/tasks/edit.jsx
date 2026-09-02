@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -535,6 +536,153 @@ const getPriorityVariant = (
   }
 };
 
+
+const normalizeTaskFormForComparison = (
+  value
+) => {
+  const estimatedHoursRaw =
+    value?.estimated_hours;
+
+  let estimatedHours =
+    null;
+
+  if (
+    estimatedHoursRaw !== '' &&
+    estimatedHoursRaw !== null &&
+    estimatedHoursRaw !== undefined
+  ) {
+    const numericValue =
+      Number(
+        estimatedHoursRaw
+      );
+
+    estimatedHours =
+      Number.isFinite(
+        numericValue
+      )
+        ? numericValue
+        : String(
+            estimatedHoursRaw
+          ).trim();
+  }
+
+  return {
+    title:
+      String(
+        value?.title ||
+        ''
+      ).trim(),
+
+    description:
+      String(
+        value?.description ||
+        ''
+      ).trim(),
+
+    priority:
+      value?.priority ||
+      'normal',
+
+    due_date:
+      value?.due_date ||
+      '',
+
+    assignee_ids:
+      normalizeIds(
+        value?.assignee_ids
+      ).sort(),
+
+    case_id:
+      normalizeId(
+        value?.case_id
+      ),
+
+    client_id:
+      normalizeId(
+        value?.client_id
+      ),
+
+    estimated_hours:
+      estimatedHours,
+  };
+};
+
+const getTaskErrorMessage = (
+  error,
+  fallback
+) => {
+  const rawMessage =
+    String(
+      error?.response?.data?.message ||
+      error?.message ||
+      ''
+    ).trim();
+
+  if (!rawMessage) {
+    return fallback;
+  }
+
+  if (
+    /task.*not found|not found.*task/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Görev kaydı bulunamadı.';
+  }
+
+  if (
+    /forbidden|permission denied|not authorized|unauthorized|access denied/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Bu görev için erişim yetkiniz bulunmuyor.';
+  }
+
+  if (
+    /validation failed|validation error|sequelizevalidationerror|invalid input|cannot be null|must not be null/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Görev bilgileri doğrulanamadı. Alanları kontrol edin.';
+  }
+
+  if (
+    /network error|failed to fetch|timeout|econnrefused|enotfound/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Sunucuya bağlanılamadı. Lütfen tekrar deneyin.';
+  }
+
+  const looksTurkish =
+    /[çğıöşüÇĞİÖŞÜ]|bulunamadı|geçersiz|zorunlu|yetkiniz|başarısız|yüklenemedi|güncellenemedi|silinemedi|hata/i.test(
+      rawMessage
+    );
+
+  return looksTurkish
+    ? rawMessage
+    : fallback;
+};
+
+const getFocusableElements = (
+  container
+) => {
+  if (!container) {
+    return [];
+  }
+
+  return Array.from(
+    container.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+  ).filter(
+    (element) =>
+      !element.hasAttribute(
+        'aria-hidden'
+      )
+  );
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -562,6 +710,17 @@ const TaskEdit = () => {
     );
 
   const [
+    initialFormData,
+    setInitialFormData,
+  ] =
+    useState(
+      INITIAL_FORM
+    );
+
+  const initializedTaskIdRef =
+    useRef('');
+
+  const [
     errors,
     setErrors,
   ] =
@@ -572,6 +731,24 @@ const TaskEdit = () => {
     setDeleteDialogOpen,
   ] =
     useState(false);
+
+  const [
+    leaveDialogOpen,
+    setLeaveDialogOpen,
+  ] =
+    useState(false);
+
+  const deleteDialogRef =
+    useRef(null);
+
+  const leaveDialogRef =
+    useRef(null);
+
+  const deletePreviousFocusRef =
+    useRef(null);
+
+  const leavePreviousFocusRef =
+    useRef(null);
 
   // ====================================================
   // BASE PERMISSIONS
@@ -1037,11 +1214,22 @@ const TaskEdit = () => {
 
   useEffect(
     () => {
-      if (!task) {
+      const taskId =
+        normalizeId(
+          task?.id ??
+          id
+        );
+
+      if (
+        !task ||
+        !taskId ||
+        initializedTaskIdRef.current ===
+          taskId
+      ) {
         return;
       }
 
-      setFormData({
+      const nextForm = {
         title:
           task.title ||
           '',
@@ -1077,12 +1265,117 @@ const TaskEdit = () => {
         estimated_hours:
           task.estimated_hours ??
           '',
-      });
+      };
+
+      setFormData(
+        nextForm
+      );
+
+      setInitialFormData(
+        nextForm
+      );
+
+      setErrors({});
+
+      initializedTaskIdRef.current =
+        taskId;
     },
     [
       task,
+      id,
     ]
   );
+
+  const normalizedForm =
+    useMemo(
+      () =>
+        normalizeTaskFormForComparison(
+          formData
+        ),
+      [
+        formData,
+      ]
+    );
+
+  const initialNormalizedForm =
+    useMemo(
+      () =>
+        normalizeTaskFormForComparison(
+          initialFormData
+        ),
+      [
+        initialFormData,
+      ]
+    );
+
+  const assignmentChanged =
+    canChangeAssignee &&
+    !arraysHaveSameValues(
+      normalizedForm.assignee_ids,
+      initialNormalizedForm.assignee_ids
+    );
+
+  const generalChanged =
+    canEdit &&
+    (
+      normalizedForm.title !==
+        initialNormalizedForm.title ||
+      normalizedForm.description !==
+        initialNormalizedForm.description ||
+      normalizedForm.priority !==
+        initialNormalizedForm.priority ||
+      normalizedForm.due_date !==
+        initialNormalizedForm.due_date ||
+      normalizedForm.estimated_hours !==
+        initialNormalizedForm.estimated_hours ||
+      (
+        canViewCases &&
+        normalizedForm.case_id !==
+          initialNormalizedForm.case_id
+      ) ||
+      (
+        canViewClients &&
+        normalizedForm.client_id !==
+          initialNormalizedForm.client_id
+      )
+    );
+
+  const isDirty =
+    Boolean(
+      generalChanged ||
+      assignmentChanged
+    );
+
+  const isPending =
+    updateMutation.isPending ||
+    assignMutation.isPending ||
+    deleteMutation.isPending;
+
+  useEffect(() => {
+    const handleBeforeUnload =
+      (event) => {
+        if (!isDirty) {
+          return;
+        }
+
+        event.preventDefault();
+        event.returnValue = '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+  ]);
 
   // ====================================================
   // SELECTED ASSIGNEES
@@ -1344,6 +1637,73 @@ const TaskEdit = () => {
     };
 
   // ====================================================
+  // LEAVE PROTECTION
+  // ====================================================
+
+  const requestLeave =
+    () => {
+      if (isPending) {
+        return;
+      }
+
+      if (!isDirty) {
+        navigate(
+          `/tasks/${id}`
+        );
+
+        return;
+      }
+
+      setLeaveDialogOpen(
+        true
+      );
+    };
+
+  const handleProtectedDetailLink =
+    (event) => {
+      if (isPending) {
+        event.preventDefault();
+        return;
+      }
+
+      if (!isDirty) {
+        return;
+      }
+
+      event.preventDefault();
+
+      setLeaveDialogOpen(
+        true
+      );
+    };
+
+  const handleCloseLeaveDialog =
+    () => {
+      if (isPending) {
+        return;
+      }
+
+      setLeaveDialogOpen(
+        false
+      );
+    };
+
+  const handleDiscardAndLeave =
+    () => {
+      if (isPending) {
+        return;
+      }
+
+      setLeaveDialogOpen(
+        false
+      );
+
+      navigate(
+        `/tasks/${id}`
+      );
+    };
+
+  // ====================================================
   // VALIDATION
   // ====================================================
 
@@ -1493,21 +1853,9 @@ const TaskEdit = () => {
       // MULTIPLE ASSIGNMENT
       // ==================================================
 
-      const currentAssigneeIds =
-        getTaskAssigneeIds(
-          task
-        );
-
       const requestedAssigneeIds =
         normalizeIds(
           formData.assignee_ids
-        );
-
-      const assignmentChanged =
-        canChangeAssignee &&
-        !arraysHaveSameValues(
-          currentAssigneeIds,
-          requestedAssigneeIds
         );
 
       /*
@@ -1530,18 +1878,17 @@ const TaskEdit = () => {
       }
 
       const hasGeneralUpdate =
-        canEdit &&
-        Object.keys(
-          updateData
-        ).length >
-          0;
+        Boolean(
+          canEdit &&
+          generalChanged
+        );
 
       if (
         !hasGeneralUpdate &&
         !assignmentChanged
       ) {
-        toast.error(
-          'Güncellenecek alan bulunamadı.'
+        toast(
+          'Kaydedilecek bir değişiklik bulunmuyor'
         );
 
         return;
@@ -1656,25 +2003,80 @@ const TaskEdit = () => {
       return undefined;
     }
 
+    deletePreviousFocusRef.current =
+      document.activeElement;
+
     const previousOverflow =
-      document.body.style
-        .overflow;
+      document.body.style.overflow;
 
     document.body.style.overflow =
       'hidden';
 
+    const focusDialog =
+      () => {
+        const focusable =
+          getFocusableElements(
+            deleteDialogRef.current
+          );
+
+        focusable[0]?.focus();
+      };
+
+    const frame =
+      window.requestAnimationFrame(
+        focusDialog
+      );
+
     const handleKeyDown =
-      (
-        event
-      ) => {
+      (event) => {
         if (
           event.key ===
             'Escape' &&
           !deleteMutation.isPending
         ) {
-          setDeleteDialogOpen(
-            false
+          event.preventDefault();
+          setDeleteDialogOpen(false);
+          return;
+        }
+
+        if (
+          event.key !== 'Tab'
+        ) {
+          return;
+        }
+
+        const focusable =
+          getFocusableElements(
+            deleteDialogRef.current
           );
+
+        if (focusable.length === 0) {
+          event.preventDefault();
+          return;
+        }
+
+        const first =
+          focusable[0];
+
+        const last =
+          focusable[
+            focusable.length - 1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
         }
       };
 
@@ -1684,6 +2086,10 @@ const TaskEdit = () => {
     );
 
     return () => {
+      window.cancelAnimationFrame(
+        frame
+      );
+
       window.removeEventListener(
         'keydown',
         handleKeyDown
@@ -1691,10 +2097,135 @@ const TaskEdit = () => {
 
       document.body.style.overflow =
         previousOverflow;
+
+      const previousFocus =
+        deletePreviousFocusRef.current;
+
+      if (
+        previousFocus &&
+        typeof previousFocus.focus ===
+          'function'
+      ) {
+        previousFocus.focus();
+      }
     };
   }, [
     deleteDialogOpen,
     deleteMutation.isPending,
+  ]);
+
+  useEffect(() => {
+    if (!leaveDialogOpen) {
+      return undefined;
+    }
+
+    leavePreviousFocusRef.current =
+      document.activeElement;
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const focusDialog =
+      () => {
+        const focusable =
+          getFocusableElements(
+            leaveDialogRef.current
+          );
+
+        focusable[0]?.focus();
+      };
+
+    const frame =
+      window.requestAnimationFrame(
+        focusDialog
+      );
+
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key ===
+            'Escape' &&
+          !isPending
+        ) {
+          event.preventDefault();
+          setLeaveDialogOpen(false);
+          return;
+        }
+
+        if (
+          event.key !== 'Tab'
+        ) {
+          return;
+        }
+
+        const focusable =
+          getFocusableElements(
+            leaveDialogRef.current
+          );
+
+        if (focusable.length === 0) {
+          event.preventDefault();
+          return;
+        }
+
+        const first = focusable[0];
+        const last =
+          focusable[
+            focusable.length - 1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      };
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.cancelAnimationFrame(
+        frame
+      );
+
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+
+      const previousFocus =
+        leavePreviousFocusRef.current;
+
+      if (
+        previousFocus &&
+        typeof previousFocus.focus ===
+          'function'
+      ) {
+        previousFocus.focus();
+      }
+    };
+  }, [
+    leaveDialogOpen,
+    isPending,
   ]);
 
   // ====================================================
@@ -1741,13 +2272,10 @@ const TaskEdit = () => {
         </h2>
 
         <p className="mt-2 text-sm text-gray-500">
-          {taskError
-            ?.response
-            ?.data
-            ?.message ||
-            taskError
-              ?.message ||
-            'Görev bilgileri yüklenemedi'}
+          {getTaskErrorMessage(
+            taskError,
+            'Görev bilgileri yüklenemedi'
+          )}
         </p>
 
         <Link
@@ -1778,6 +2306,9 @@ const TaskEdit = () => {
 
         <Link
           to={`/tasks/${id}`}
+          onClick={
+            handleProtectedDetailLink
+          }
           className="
             inline-flex
             items-center
@@ -1828,6 +2359,12 @@ const TaskEdit = () => {
               ] ||
                 task.priority}
             </Badge>
+
+            {isDirty && (
+              <Badge variant="warning">
+                Kaydedilmemiş değişiklik
+              </Badge>
+            )}
 
             {approved && (
               <Badge variant="success">
@@ -2748,9 +3285,9 @@ const TaskEdit = () => {
                     assignMutation.isPending
                   }
                   disabled={
-                    updateMutation.isPending ||
-                    assignMutation.isPending ||
-                    workflowLocked
+                    isPending ||
+                    workflowLocked ||
+                    !isDirty
                   }
                 >
                   <Save className="mr-2 h-4 w-4" />
@@ -2762,10 +3299,11 @@ const TaskEdit = () => {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() =>
-                  navigate(
-                    `/tasks/${id}`
-                  )
+                onClick={
+                  requestLeave
+                }
+                disabled={
+                  isPending
                 }
               >
                 Vazgeç
@@ -2784,7 +3322,7 @@ const TaskEdit = () => {
                   deleteMutation.isPending
                 }
                 disabled={
-                  deleteMutation.isPending
+                  isPending
                 }
               >
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -2805,26 +3343,115 @@ const TaskEdit = () => {
 
       </Card>
 
-      {deleteDialogOpen && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
-          onMouseDown={(
-            event
-          ) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              handleCloseDeleteDialog();
+      {leaveDialogOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Kaydedilmemiş değişiklikler penceresini kapat"
+            disabled={
+              isPending
             }
-          }}
-        >
-          <div
-            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"
-            aria-hidden="true"
+            onClick={
+              handleCloseLeaveDialog
+            }
           />
 
           <div
+            ref={
+              leaveDialogRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="task-leave-dialog-title"
+            aria-describedby="task-leave-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.10] dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Kaydedilmemiş değişiklik
+                  </p>
+
+                  <h2
+                    id="task-leave-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Düzenlemeden çıkmak istiyor musunuz?
+                  </h2>
+
+                  <p
+                    id="task-leave-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    Görev üzerinde kaydedilmemiş değişiklikler var. Çıkarsanız bu değişiklikler kaybolacaktır.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-5">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+                <p className="text-sm leading-6 text-amber-900 dark:text-amber-200">
+                  Düzenlemeye devam ederek değişikliklerinizi kaydedebilir veya değişiklikleri atarak görev detayına dönebilirsiniz.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  isPending
+                }
+                onClick={
+                  handleCloseLeaveDialog
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                disabled={
+                  isPending
+                }
+                onClick={
+                  handleDiscardAndLeave
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteDialogOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Silme penceresini kapat"
+            disabled={
+              deleteMutation.isPending
+            }
+            onClick={
+              handleCloseDeleteDialog
+            }
+          />
+
+          <div
+            ref={
+              deleteDialogRef
+            }
             role="dialog"
             aria-modal="true"
             aria-labelledby="task-delete-dialog-title"
@@ -2896,7 +3523,7 @@ const TaskEdit = () => {
               <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
 
                 <p className="text-sm leading-6 text-gray-600 dark:text-slate-300">
-                  Silme işlemi geri alınamaz. Devam etmeden önce doğru görev kaydını seçtiğinizden emin olun.
+                  Devam etmeden önce doğru görev kaydını seçtiğinizden emin olun.
                 </p>
 
               </div>

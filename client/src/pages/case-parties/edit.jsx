@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -24,6 +25,7 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   Building2,
   Save,
@@ -373,6 +375,128 @@ const normalizeForm = (
     ).trim(),
 });
 
+const isLikelyTechnicalMessage = (
+  value
+) => {
+  const message =
+    String(
+      value || ''
+    ).trim();
+
+  if (!message) {
+    return false;
+  }
+
+  return /validation|invalid|required|must be|not found|forbidden|unauthorized|permission|network error|failed to fetch|timeout|sequelize|constraint|foreign key|internal server|request failed|status code|unexpected/i.test(
+    message
+  );
+};
+
+const getCasePartyErrorMessage = (
+  error,
+  fallback = 'İşlem tamamlanamadı'
+) => {
+  const status =
+    error?.response?.status;
+
+  const rawMessage =
+    error?.response?.data?.message ||
+    error?.message ||
+    '';
+
+  if (status === 401) {
+    return 'Oturumunuz sona ermiş olabilir. Lütfen yeniden giriş yapın.';
+  }
+
+  if (status === 403) {
+    return 'Bu işlem için yetkiniz bulunmuyor.';
+  }
+
+  if (status === 404) {
+    return 'Taraf kaydı bulunamadı veya artık erişilebilir değil.';
+  }
+
+  if (status >= 500) {
+    return 'Sunucu tarafında beklenmeyen bir sorun oluştu. Lütfen tekrar deneyin.';
+  }
+
+  if (
+    /network error|failed to fetch|timeout/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.';
+  }
+
+  if (
+    /validation|invalid|required|must be|sequelize|constraint|foreign key/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Formdaki bilgileri kontrol edin ve tekrar deneyin.';
+  }
+
+  return rawMessage &&
+    !isLikelyTechnicalMessage(
+      rawMessage
+    )
+    ? rawMessage
+    : fallback;
+};
+
+const getCasePartyFieldErrorMessage = (
+  field,
+  rawMessage
+) => {
+  const message =
+    String(
+      rawMessage || ''
+    ).trim();
+
+  if (
+    message &&
+    !isLikelyTechnicalMessage(
+      message
+    )
+  ) {
+    return message;
+  }
+
+  const fieldMessages = {
+    party_type:
+      'Geçerli bir taraf türü seçin',
+    entity_type:
+      'Geçerli bir kişi türü seçin',
+    name:
+      'Ad / unvan bilgisini kontrol edin',
+    identification_number:
+      'Kimlik veya vergi numarasını kontrol edin',
+    tax_office:
+      'Vergi dairesi bilgisini kontrol edin',
+    phone:
+      'Telefon numarasını kontrol edin',
+    email:
+      'E-posta adresini kontrol edin',
+    address:
+      'Adres bilgisini kontrol edin',
+    lawyer_name:
+      'Avukat adı bilgisini kontrol edin',
+    lawyer_phone:
+      'Avukat telefon numarasını kontrol edin',
+    lawyer_email:
+      'Avukat e-posta adresini kontrol edin',
+    lawyer_registry_number:
+      'Baro sicil numarasını kontrol edin',
+    notes:
+      'İç not bilgisini kontrol edin',
+  };
+
+  return (
+    fieldMessages[field] ||
+    'Geçersiz değer'
+  );
+};
+
 // ======================================================
 // CACHE INVALIDATION
 // ======================================================
@@ -500,6 +624,46 @@ const CasePartyEdit = () => {
   ] =
     useState(false);
 
+
+  const [
+    unsavedDialogOpen,
+    setUnsavedDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingExitPath,
+    setPendingExitPath,
+  ] =
+    useState('');
+
+  const [
+    entityTypeDialogOpen,
+    setEntityTypeDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingEntityType,
+    setPendingEntityType,
+  ] =
+    useState('');
+
+  const initializedPartyIdRef =
+    useRef('');
+
+  const unsavedDialogRef =
+    useRef(null);
+
+  const deleteDialogRef =
+    useRef(null);
+
+  const entityTypeDialogRef =
+    useRef(null);
+
+  const previousFocusRef =
+    useRef(null);
+
   // ======================================================
   // PARTY QUERY
   // ======================================================
@@ -546,7 +710,10 @@ const CasePartyEdit = () => {
 
   useEffect(() => {
     if (
-      !party
+      !party ||
+      !id ||
+      initializedPartyIdRef.current ===
+        id
     ) {
       return;
     }
@@ -617,8 +784,12 @@ const CasePartyEdit = () => {
     setErrors(
       {}
     );
+
+    initializedPartyIdRef.current =
+      id;
   }, [
     party,
+    id,
   ]);
 
   // ======================================================
@@ -726,13 +897,10 @@ const CasePartyEdit = () => {
             ?.errors;
 
         const message =
-          error
-            ?.response
-            ?.data
-            ?.message ||
-          error
-            ?.message ||
-          'Taraf güncellenemedi';
+          getCasePartyErrorMessage(
+            error,
+            'Taraf güncellenemedi'
+          );
 
         const nextErrors =
           {};
@@ -775,8 +943,11 @@ const CasePartyEdit = () => {
                   )
               ) {
                 nextErrors[field] =
-                  item?.msg ||
-                  'Geçersiz değer';
+                  getCasePartyFieldErrorMessage(
+                    field,
+                    item?.msg ||
+                      item?.message
+                  );
               }
             }
           );
@@ -788,7 +959,10 @@ const CasePartyEdit = () => {
           )
         ) {
           nextErrors.identification_number =
-            message;
+            getCasePartyFieldErrorMessage(
+              'identification_number',
+              message
+            );
         }
 
         if (
@@ -797,7 +971,10 @@ const CasePartyEdit = () => {
           )
         ) {
           nextErrors.name =
-            message;
+            getCasePartyFieldErrorMessage(
+              'name',
+              message
+            );
         }
 
         if (
@@ -806,14 +983,20 @@ const CasePartyEdit = () => {
           )
         ) {
           nextErrors.lawyer_email =
-            message;
+            getCasePartyFieldErrorMessage(
+              'lawyer_email',
+              message
+            );
         } else if (
           /e-posta|email/i.test(
             message
           )
         ) {
           nextErrors.email =
-            message;
+            getCasePartyFieldErrorMessage(
+              'email',
+              message
+            );
         }
 
         if (
@@ -822,14 +1005,20 @@ const CasePartyEdit = () => {
           )
         ) {
           nextErrors.lawyer_phone =
-            message;
+            getCasePartyFieldErrorMessage(
+              'lawyer_phone',
+              message
+            );
         } else if (
           /telefon|phone/i.test(
             message
           )
         ) {
           nextErrors.phone =
-            message;
+            getCasePartyFieldErrorMessage(
+              'phone',
+              message
+            );
         }
 
         if (
@@ -907,13 +1096,10 @@ const CasePartyEdit = () => {
         error
       ) => {
         toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
-          error
-            ?.message ||
-          'Taraf silinemedi'
+          getCasePartyErrorMessage(
+            error,
+            'Taraf silinemedi'
+          )
         );
       },
     });
@@ -921,6 +1107,205 @@ const CasePartyEdit = () => {
   const isPending =
     mutation.isPending ||
     deleteMutation.isPending;
+
+  useEffect(() => {
+    const handleBeforeUnload = (
+      event
+    ) => {
+      if (!isDirty) {
+        return;
+      }
+
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+  ]);
+
+  const focusDialog = (
+    dialogRef
+  ) => {
+    const dialog =
+      dialogRef.current;
+
+    if (!dialog) {
+      return;
+    }
+
+    const focusable =
+      dialog.querySelector(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+
+    if (focusable) {
+      focusable.focus();
+      return;
+    }
+
+    dialog.focus();
+  };
+
+  const trapDialogTab = (
+    event,
+    dialogRef
+  ) => {
+    if (event.key !== 'Tab') {
+      return;
+    }
+
+    const dialog =
+      dialogRef.current;
+
+    if (!dialog) {
+      return;
+    }
+
+    const focusable = [
+      ...dialog.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ),
+    ];
+
+    if (focusable.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (
+      event.shiftKey &&
+      document.activeElement === first
+    ) {
+      event.preventDefault();
+      last.focus();
+      return;
+    }
+
+    if (
+      !event.shiftKey &&
+      document.activeElement === last
+    ) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  const requestExit = (
+    path,
+    event = null
+  ) => {
+    event?.preventDefault?.();
+
+    if (isPending) {
+      return;
+    }
+
+    if (!isDirty) {
+      navigate(path);
+      return;
+    }
+
+    previousFocusRef.current =
+      document.activeElement;
+
+    setPendingExitPath(path);
+    setUnsavedDialogOpen(true);
+  };
+
+  const handleCloseUnsavedDialog =
+    () => {
+      setUnsavedDialogOpen(false);
+      setPendingExitPath('');
+    };
+
+  const handleDiscardAndExit =
+    () => {
+      const nextPath =
+        pendingExitPath ||
+        `/cases/${caseId}/parties/${id}`;
+
+      setUnsavedDialogOpen(false);
+      setPendingExitPath('');
+      navigate(nextPath);
+    };
+
+  useEffect(() => {
+    if (!unsavedDialogOpen) {
+      return undefined;
+    }
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const handleKeyDown = (
+      event
+    ) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleCloseUnsavedDialog();
+        return;
+      }
+
+      trapDialogTab(
+        event,
+        unsavedDialogRef
+      );
+    };
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    requestAnimationFrame(() => {
+      focusDialog(
+        unsavedDialogRef
+      );
+    });
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+
+      const previousFocus =
+        previousFocusRef.current;
+
+      if (
+        previousFocus &&
+        typeof previousFocus.focus === 'function'
+      ) {
+        requestAnimationFrame(() => {
+          previousFocus.focus();
+        });
+      }
+    };
+  }, [
+    unsavedDialogOpen,
+  ]);
 
   // ======================================================
   // CHANGE
@@ -1084,65 +1469,139 @@ const CasePartyEdit = () => {
   // ENTITY TYPE
   // ======================================================
 
+  const applyEntityTypeChange = (
+    type
+  ) => {
+    setFormData(
+      (
+        current
+      ) => ({
+        ...current,
+        entity_type: type,
+        identification_number: '',
+        tax_office:
+          type === 'company'
+            ? current.tax_office
+            : '',
+      })
+    );
+
+    setErrors(
+      (
+        current
+      ) => ({
+        ...current,
+        identification_number: '',
+        tax_office: '',
+      })
+    );
+  };
+
   const handleEntityTypeChange =
     (
       type
     ) => {
       if (
         isPending ||
-        type ===
-        formData.entity_type
+        type === formData.entity_type
       ) {
         return;
       }
 
-      const confirmed =
-        formData.identification_number
-          ? window.confirm(
-              'Kişi türünü değiştirdiğinizde mevcut TCKN/VKN temizlenecek. Devam etmek istiyor musunuz?'
-            )
-          : true;
-
-      if (
-        !confirmed
-      ) {
+      if (!formData.identification_number) {
+        applyEntityTypeChange(type);
         return;
       }
 
-      setFormData(
-        (
-          current
-        ) => ({
-          ...current,
+      previousFocusRef.current =
+        document.activeElement;
 
-          entity_type:
-            type,
+      setPendingEntityType(type);
+      setEntityTypeDialogOpen(true);
+    };
 
-          identification_number:
-            '',
+  const handleCloseEntityTypeDialog =
+    () => {
+      setEntityTypeDialogOpen(false);
+      setPendingEntityType('');
+    };
 
-          tax_office:
-            type ===
-            'company'
-              ? current.tax_office
-              : '',
-        })
+  const handleConfirmEntityTypeChange =
+    () => {
+      if (!pendingEntityType) {
+        handleCloseEntityTypeDialog();
+        return;
+      }
+
+      applyEntityTypeChange(
+        pendingEntityType
       );
 
-      setErrors(
-        (
-          current
-        ) => ({
-          ...current,
+      setEntityTypeDialogOpen(false);
+      setPendingEntityType('');
+    };
 
-          identification_number:
-            '',
+  useEffect(() => {
+    if (!entityTypeDialogOpen) {
+      return undefined;
+    }
 
-          tax_office:
-            '',
-        })
+    const previousOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const handleKeyDown = (
+      event
+    ) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleCloseEntityTypeDialog();
+        return;
+      }
+
+      trapDialogTab(
+        event,
+        entityTypeDialogRef
       );
     };
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    requestAnimationFrame(() => {
+      focusDialog(
+        entityTypeDialogRef
+      );
+    });
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+
+      const previousFocus =
+        previousFocusRef.current;
+
+      if (
+        previousFocus &&
+        typeof previousFocus.focus === 'function'
+      ) {
+        requestAnimationFrame(() => {
+          previousFocus.focus();
+        });
+      }
+    };
+  }, [
+    entityTypeDialogOpen,
+  ]);
 
   // ======================================================
   // VALIDATION
@@ -1503,28 +1962,7 @@ const CasePartyEdit = () => {
 
   const handleCancel =
     () => {
-      if (
-        isPending
-      ) {
-        return;
-      }
-
-      if (
-        isDirty
-      ) {
-        const confirmed =
-          window.confirm(
-            'Kaydedilmemiş değişiklikleriniz var. Sayfadan ayrılmak istediğinize emin misiniz?'
-          );
-
-        if (
-          !confirmed
-        ) {
-          return;
-        }
-      }
-
-      navigate(
+      requestExit(
         `/cases/${caseId}/parties/${id}`
       );
     };
@@ -1583,38 +2021,47 @@ const CasePartyEdit = () => {
     };
 
   useEffect(() => {
-    if (
-      !deleteDialogOpen
-    ) {
+    if (!deleteDialogOpen) {
       return undefined;
     }
 
+    previousFocusRef.current =
+      document.activeElement;
+
     const previousOverflow =
-      document.body.style
-        .overflow;
+      document.body.style.overflow;
 
     document.body.style.overflow =
       'hidden';
 
-    const handleKeyDown =
-      (
-        event
-      ) => {
-        if (
-          event.key ===
-            'Escape' &&
-          !deleteMutation.isPending
-        ) {
-          setDeleteDialogOpen(
-            false
-          );
-        }
-      };
+    const handleKeyDown = (
+      event
+    ) => {
+      if (
+        event.key === 'Escape' &&
+        !deleteMutation.isPending
+      ) {
+        event.preventDefault();
+        setDeleteDialogOpen(false);
+        return;
+      }
+
+      trapDialogTab(
+        event,
+        deleteDialogRef
+      );
+    };
 
     window.addEventListener(
       'keydown',
       handleKeyDown
     );
+
+    requestAnimationFrame(() => {
+      focusDialog(
+        deleteDialogRef
+      );
+    });
 
     return () => {
       window.removeEventListener(
@@ -1624,6 +2071,18 @@ const CasePartyEdit = () => {
 
       document.body.style.overflow =
         previousOverflow;
+
+      const previousFocus =
+        previousFocusRef.current;
+
+      if (
+        previousFocus &&
+        typeof previousFocus.focus === 'function'
+      ) {
+        requestAnimationFrame(() => {
+          previousFocus.focus();
+        });
+      }
     };
   }, [
     deleteDialogOpen,
@@ -1668,13 +2127,10 @@ const CasePartyEdit = () => {
         </h2>
 
         <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">
-          {error
-            ?.response
-            ?.data
-            ?.message ||
-            error
-              ?.message ||
-            'Taraf kaydı bulunamadı veya erişim yetkiniz bulunmuyor.'}
+          {getCasePartyErrorMessage(
+            error,
+            'Taraf kaydı bulunamadı veya erişim yetkiniz bulunmuyor.'
+          )}
         </p>
 
         <div className="mt-4 flex justify-center gap-2">
@@ -1718,6 +2174,12 @@ const CasePartyEdit = () => {
 
         <Link
           to={`/cases/${caseId}/parties/${id}`}
+          onClick={(event) =>
+            requestExit(
+              `/cases/${caseId}/parties/${id}`,
+              event
+            )
+          }
           className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 transition hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -2268,6 +2730,143 @@ const CasePartyEdit = () => {
 
       </Card>
 
+      {unsavedDialogOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
+
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Kaydedilmemiş değişiklik penceresini kapat"
+            onClick={handleCloseUnsavedDialog}
+          />
+
+          <div
+            ref={unsavedDialogRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="case-party-unsaved-dialog-title"
+            aria-describedby="case-party-unsaved-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl outline-none dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.10] dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Kaydedilmemiş değişiklik
+                  </p>
+                  <h2
+                    id="case-party-unsaved-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Değişiklikler kaydedilmedi
+                  </h2>
+                  <p
+                    id="case-party-unsaved-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    Bu sayfadan ayrılırsanız taraf üzerinde yaptığınız değişiklikler kaydedilmeyecek.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-5">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+                <p className="text-sm leading-6 text-amber-900 dark:text-amber-200">
+                  Düzenlemeye devam ederek bilgileri kaydedebilir veya değişiklikleri atıp taraf detayına dönebilirsiniz.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleCloseUnsavedDialog}
+              >
+                Düzenlemeye Devam Et
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={handleDiscardAndExit}
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {entityTypeDialogOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
+
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Kişi türü değişikliği penceresini kapat"
+            onClick={handleCloseEntityTypeDialog}
+          />
+
+          <div
+            ref={entityTypeDialogRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="case-party-entity-type-dialog-title"
+            aria-describedby="case-party-entity-type-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl outline-none dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.10] dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Kişi türü değişikliği
+                  </p>
+                  <h2
+                    id="case-party-entity-type-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Kimlik bilgisi temizlenecek
+                  </h2>
+                  <p
+                    id="case-party-entity-type-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    Kişi türünü değiştirirseniz mevcut TCKN/VKN bilgisi temizlenecek.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleCloseEntityTypeDialog}
+              >
+                Vazgeç
+              </Button>
+              <Button
+                type="button"
+                onClick={handleConfirmEntityTypeChange}
+              >
+                Kişi Türünü Değiştir
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {deleteDialogOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
 
@@ -2284,11 +2883,13 @@ const CasePartyEdit = () => {
           />
 
           <div
+            ref={deleteDialogRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-labelledby="case-party-delete-dialog-title"
             aria-describedby="case-party-delete-dialog-description"
-            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl outline-none dark:border-white/[0.08] dark:bg-[#0b1b33]"
           >
             <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
 

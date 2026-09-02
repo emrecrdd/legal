@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -298,6 +299,141 @@ const getCaseSecondaryInfo = (
     .join(' · ');
 };
 
+const normalizeId = (value) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+  if (typeof value === 'object') {
+    return value?.id === null ||
+      value?.id === undefined ||
+      value?.id === ''
+      ? ''
+      : String(value.id);
+  }
+
+  return String(value);
+};
+
+const normalizeText = (value) =>
+  String(value ?? '').trim();
+
+const normalizeAttendees = (value) => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((attendee) => {
+      if (typeof attendee === 'string') {
+        return {
+          name: attendee.trim(),
+          role: 'Katılımcı',
+        };
+      }
+
+      return {
+        name: normalizeText(
+          attendee?.name
+        ),
+        role:
+          normalizeText(
+            attendee?.role
+          ) || 'Katılımcı',
+      };
+    })
+    .filter((attendee) =>
+      Boolean(attendee.name)
+    );
+};
+
+const normalizeMeetingForm = (form) => ({
+  title: normalizeText(form?.title),
+  description: normalizeText(
+    form?.description
+  ),
+  start_date: form?.start_date || '',
+  end_date: form?.end_date || '',
+  location: normalizeText(
+    form?.location
+  ),
+  meeting_type:
+    form?.meeting_type || 'other',
+  case_id: normalizeId(
+    form?.case_id
+  ),
+  client_id: normalizeId(
+    form?.client_id
+  ),
+  assigned_to: normalizeId(
+    form?.assigned_to
+  ),
+  status: form?.status || 'scheduled',
+  attendees: normalizeAttendees(
+    form?.attendees
+  ),
+  meeting_link: normalizeText(
+    form?.meeting_link
+  ),
+  notes: normalizeText(form?.notes),
+});
+
+const getMeetingErrorMessage = (
+  error,
+  fallback
+) => {
+  const status =
+    error?.response?.status;
+
+  const rawMessage =
+    error?.response?.data?.message ||
+    error?.message ||
+    '';
+
+  if (status === 401) {
+    return 'Oturumunuzun süresi dolmuş olabilir. Lütfen yeniden giriş yapın.';
+  }
+
+  if (status === 403) {
+    return 'Bu toplantı kaydını görüntüleme yetkiniz bulunmuyor.';
+  }
+
+  if (status === 404) {
+    return 'Toplantı kaydı bulunamadı veya artık erişilebilir değil.';
+  }
+
+  if (
+    /network error|failed to fetch|timeout/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+  }
+
+  if (
+    /validation failed|validation error/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Toplantı bilgilerinde doğrulanamayan alanlar var.';
+  }
+
+  if (
+    rawMessage &&
+    /[çğıöşüÇĞİÖŞÜ]/.test(
+      rawMessage
+    )
+  ) {
+    return rawMessage;
+  }
+
+  return fallback;
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -315,6 +451,13 @@ const MeetingEdit = () => {
   const [
     formData,
     setFormData,
+  ] = useState(
+    INITIAL_FORM
+  );
+
+  const [
+    initialFormData,
+    setInitialFormData,
   ] = useState(
     INITIAL_FORM
   );
@@ -338,6 +481,31 @@ const MeetingEdit = () => {
     deleteDialogOpen,
     setDeleteDialogOpen,
   ] = useState(false);
+
+  const [
+    leaveDialogOpen,
+    setLeaveDialogOpen,
+  ] = useState(false);
+
+  const [
+    pendingExitPath,
+    setPendingExitPath,
+  ] = useState('');
+
+  const initializedMeetingIdRef =
+    useRef('');
+
+  const leaveDialogRef =
+    useRef(null);
+
+  const leaveTriggerRef =
+    useRef(null);
+
+  const deleteDialogRef =
+    useRef(null);
+
+  const deleteTriggerRef =
+    useRef(null);
 
   // ======================================================
   // MEETING
@@ -718,11 +886,19 @@ const MeetingEdit = () => {
   // ======================================================
 
   useEffect(() => {
-    if (!meeting) {
+    const meetingId =
+      normalizeId(meeting?.id || id);
+
+    if (
+      !meeting ||
+      !meetingId ||
+      initializedMeetingIdRef.current ===
+        meetingId
+    ) {
       return;
     }
 
-    setFormData({
+    const nextForm = {
       title:
         meeting.title ||
         '',
@@ -750,30 +926,31 @@ const MeetingEdit = () => {
         'other',
 
       case_id:
-        meeting.case_id ||
-        meeting.case?.id ||
-        '',
+        normalizeId(
+          meeting.case_id ??
+          meeting.case?.id
+        ),
 
       client_id:
-        meeting.client_id ||
-        meeting.client?.id ||
-        '',
+        normalizeId(
+          meeting.client_id ??
+          meeting.client?.id
+        ),
 
       assigned_to:
-        meeting.assigned_to ||
-        meeting.assignee?.id ||
-        '',
+        normalizeId(
+          meeting.assigned_to ??
+          meeting.assignee?.id
+        ),
 
       status:
         meeting.status ||
         'scheduled',
 
       attendees:
-        Array.isArray(
+        normalizeAttendees(
           meeting.attendees
-        )
-          ? meeting.attendees
-          : [],
+        ),
 
       meeting_link:
         meeting.meeting_link ||
@@ -782,10 +959,68 @@ const MeetingEdit = () => {
       notes:
         meeting.notes ||
         '',
-    });
+    };
+
+    setFormData(nextForm);
+    setInitialFormData(nextForm);
+    setErrors({});
+
+    initializedMeetingIdRef.current =
+      meetingId;
   }, [
     meeting,
+    id,
   ]);
+
+  const normalizedForm =
+    useMemo(
+      () =>
+        normalizeMeetingForm(
+          formData
+        ),
+      [formData]
+    );
+
+  const initialNormalizedForm =
+    useMemo(
+      () =>
+        normalizeMeetingForm(
+          initialFormData
+        ),
+      [initialFormData]
+    );
+
+  const isDirty =
+    JSON.stringify(
+      normalizedForm
+    ) !==
+    JSON.stringify(
+      initialNormalizedForm
+    );
+
+  useEffect(() => {
+    const handleBeforeUnload =
+      (event) => {
+        if (!isDirty) {
+          return;
+        }
+
+        event.preventDefault();
+        event.returnValue = '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [isDirty]);
 
   // ======================================================
   // MUTATIONS
@@ -810,6 +1045,10 @@ const MeetingEdit = () => {
         },
         {
           onSuccess: () => {
+            setInitialFormData(
+              formData
+            );
+
             navigate(
               `/meetings/${id}`
             );
@@ -833,6 +1072,168 @@ const MeetingEdit = () => {
         }
       ),
   };
+
+  const isPending =
+    updateMutation.isPending ||
+    deleteMutation.isPending;
+
+  const handleCloseLeaveDialog = () => {
+    if (isPending) {
+      return;
+    }
+
+    setLeaveDialogOpen(false);
+    setPendingExitPath('');
+  };
+
+  const requestExit = (path) => {
+    if (isPending) {
+      return;
+    }
+
+    if (!isDirty) {
+      navigate(path);
+      return;
+    }
+
+    leaveTriggerRef.current =
+      document.activeElement;
+
+    setPendingExitPath(path);
+    setLeaveDialogOpen(true);
+  };
+
+  const handleConfirmLeave = () => {
+    if (isPending) {
+      return;
+    }
+
+    const path =
+      pendingExitPath ||
+      `/meetings/${id}`;
+
+    leaveTriggerRef.current = null;
+    setLeaveDialogOpen(false);
+    setPendingExitPath('');
+    navigate(path);
+  };
+
+  useEffect(() => {
+    if (!leaveDialogOpen) {
+      return undefined;
+    }
+
+    const dialog =
+      leaveDialogRef.current;
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const focusFirst = () => {
+      const focusable =
+        dialog?.querySelectorAll(
+          focusableSelector
+        );
+
+      focusable?.[0]?.focus();
+    };
+
+    const frame =
+      window.requestAnimationFrame(
+        focusFirst
+      );
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleCloseLeaveDialog();
+        return;
+      }
+
+      if (
+        event.key !== 'Tab' ||
+        !dialog
+      ) {
+        return;
+      }
+
+      const focusable =
+        Array.from(
+          dialog.querySelectorAll(
+            focusableSelector
+          )
+        ).filter((element) =>
+          !element.hasAttribute(
+            'disabled'
+          )
+        );
+
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last =
+        focusable[
+          focusable.length - 1
+        ];
+
+      if (
+        event.shiftKey &&
+        document.activeElement === first
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (
+        !event.shiftKey &&
+        document.activeElement === last
+      ) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.cancelAnimationFrame(
+        frame
+      );
+
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+
+      const trigger =
+        leaveTriggerRef.current;
+
+      if (
+        trigger &&
+        document.contains(trigger)
+      ) {
+        trigger.focus?.();
+      }
+
+      leaveTriggerRef.current = null;
+    };
+  }, [
+    leaveDialogOpen,
+    isPending,
+  ]);
 
   // ======================================================
   // HANDLERS
@@ -1061,6 +1462,14 @@ const MeetingEdit = () => {
       return;
     }
 
+    if (!isDirty) {
+      toast(
+        'Kaydedilecek bir değişiklik bulunmuyor'
+      );
+
+      return;
+    }
+
     if (!validateForm()) {
       toast.error(
         'Formdaki eksik veya hatalı alanları kontrol edin'
@@ -1097,18 +1506,22 @@ const MeetingEdit = () => {
         formData.meeting_type,
 
       case_id:
-        formData.case_id ||
-        null,
+        normalizeId(
+          formData.case_id
+        ) || null,
 
       client_id:
-        formData.client_id ||
-        null,
+        normalizeId(
+          formData.client_id
+        ) || null,
 
       status:
         formData.status,
 
       attendees:
-        formData.attendees,
+        normalizeAttendees(
+          formData.attendees
+        ),
 
       meeting_link:
         formData.meeting_link
@@ -1130,8 +1543,9 @@ const MeetingEdit = () => {
      */
     if (isAdmin) {
       submitData.assigned_to =
-        formData.assigned_to ||
-        null;
+        normalizeId(
+          formData.assigned_to
+        ) || null;
     }
 
     updateMutation.mutate(
@@ -1159,6 +1573,9 @@ const MeetingEdit = () => {
       ) {
         return;
       }
+
+      deleteTriggerRef.current =
+        document.activeElement;
 
       setDeleteDialogOpen(
         true
@@ -1191,33 +1608,86 @@ const MeetingEdit = () => {
     };
 
   useEffect(() => {
-    if (
-      !deleteDialogOpen
-    ) {
+    if (!deleteDialogOpen) {
       return undefined;
     }
 
+    const dialog =
+      deleteDialogRef.current;
+
     const previousOverflow =
-      document.body.style
-        .overflow;
+      document.body.style.overflow;
 
     document.body.style.overflow =
       'hidden';
 
-    const handleKeyDown =
-      (
-        event
-      ) => {
-        if (
-          event.key ===
-            'Escape' &&
-          !deleteMutation.isPending
-        ) {
-          setDeleteDialogOpen(
-            false
-          );
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const frame =
+      window.requestAnimationFrame(
+        () => {
+          dialog
+            ?.querySelector(
+              focusableSelector
+            )
+            ?.focus();
         }
-      };
+      );
+
+    const handleKeyDown = (event) => {
+      if (
+        event.key === 'Escape' &&
+        !deleteMutation.isPending
+      ) {
+        event.preventDefault();
+        setDeleteDialogOpen(false);
+        return;
+      }
+
+      if (
+        event.key !== 'Tab' ||
+        !dialog
+      ) {
+        return;
+      }
+
+      const focusable =
+        Array.from(
+          dialog.querySelectorAll(
+            focusableSelector
+          )
+        ).filter((element) =>
+          !element.hasAttribute(
+            'disabled'
+          )
+        );
+
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last =
+        focusable[
+          focusable.length - 1
+        ];
+
+      if (
+        event.shiftKey &&
+        document.activeElement === first
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (
+        !event.shiftKey &&
+        document.activeElement === last
+      ) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
 
     window.addEventListener(
       'keydown',
@@ -1225,6 +1695,10 @@ const MeetingEdit = () => {
     );
 
     return () => {
+      window.cancelAnimationFrame(
+        frame
+      );
+
       window.removeEventListener(
         'keydown',
         handleKeyDown
@@ -1232,6 +1706,18 @@ const MeetingEdit = () => {
 
       document.body.style.overflow =
         previousOverflow;
+
+      const trigger =
+        deleteTriggerRef.current;
+
+      if (
+        trigger &&
+        document.contains(trigger)
+      ) {
+        trigger.focus?.();
+      }
+
+      deleteTriggerRef.current = null;
     };
   }, [
     deleteDialogOpen,
@@ -1280,13 +1766,10 @@ const MeetingEdit = () => {
         </h2>
 
         <p className="mt-2 text-sm text-gray-500">
-          {meetingError
-            ?.response
-            ?.data
-            ?.message ||
-            meetingError
-              ?.message ||
-            'Toplantı bilgileri yüklenemedi'}
+          {getMeetingErrorMessage(
+            meetingError,
+            'Toplantı bilgileri yüklenemedi'
+          )}
         </p>
 
         <Link
@@ -1315,6 +1798,19 @@ const MeetingEdit = () => {
 
         <Link
           to={`/meetings/${id}`}
+          onClick={(event) => {
+            if (isPending) {
+              event.preventDefault();
+              return;
+            }
+
+            if (isDirty) {
+              event.preventDefault();
+              requestExit(
+                `/meetings/${id}`
+              );
+            }
+          }}
           className="
             inline-flex
             items-center
@@ -1348,6 +1844,12 @@ const MeetingEdit = () => {
               formData.status
             )}
           </Badge>
+
+          {isDirty && (
+            <Badge variant="warning">
+              Kaydedilmemiş değişiklik
+            </Badge>
+          )}
 
         </div>
 
@@ -2143,7 +2645,8 @@ const MeetingEdit = () => {
                 }
                 disabled={
                   updateMutation.isPending ||
-                  deleteMutation.isPending
+                  deleteMutation.isPending ||
+                  !isDirty
                 }
               >
                 <Save className="mr-2 h-4 w-4" />
@@ -2156,7 +2659,7 @@ const MeetingEdit = () => {
               type="button"
               variant="secondary"
               onClick={() =>
-                navigate(
+                requestExit(
                   `/meetings/${id}`
                 )
               }
@@ -2195,26 +2698,105 @@ const MeetingEdit = () => {
 
       </Card>
 
-      {deleteDialogOpen && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
-          onMouseDown={(
-            event
-          ) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              handleCloseDeleteDialog();
+      {leaveDialogOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Kaydedilmemiş değişiklikler penceresini kapat"
+            disabled={isPending}
+            onClick={
+              handleCloseLeaveDialog
             }
-          }}
-        >
-          <div
-            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"
-            aria-hidden="true"
           />
 
           <div
+            ref={leaveDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="meeting-leave-dialog-title"
+            aria-describedby="meeting-leave-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.10] dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Kaydedilmemiş değişiklik
+                  </p>
+
+                  <h2
+                    id="meeting-leave-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Düzenleme ekranından çıkılsın mı?
+                  </h2>
+
+                  <p
+                    id="meeting-leave-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    Toplantı üzerinde yaptığınız değişiklikler henüz kaydedilmedi. Çıkarsanız bu değişiklikler kaybolacaktır.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-5">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+                <p className="text-sm leading-6 text-amber-900 dark:text-amber-200">
+                  Düzenlemeye devam ederek bilgileri kaydedebilir veya değişiklikleri atarak toplantı detayına dönebilirsiniz.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={isPending}
+                onClick={
+                  handleCloseLeaveDialog
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                disabled={isPending}
+                onClick={
+                  handleConfirmLeave
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteDialogOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Silme penceresini kapat"
+            disabled={
+              deleteMutation.isPending
+            }
+            onClick={
+              handleCloseDeleteDialog
+            }
+          />
+
+          <div
+            ref={deleteDialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="meeting-delete-dialog-title"
@@ -2286,7 +2868,7 @@ const MeetingEdit = () => {
               <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
 
                 <p className="text-sm leading-6 text-gray-600 dark:text-slate-300">
-                  Silme işlemi geri alınamaz. Devam etmeden önce doğru toplantıyı seçtiğinizden emin olun.
+                  Devam etmeden önce doğru toplantı kaydını seçtiğinizden emin olun. Silme işlemi yalnızca yetkili kullanıcı tarafından onaylanmalıdır.
                 </p>
 
               </div>
