@@ -1256,11 +1256,6 @@ export const useDeleteClient =
               context?.id
             );
 
-          removeClientRelatedCache(
-            queryClient,
-            normalizedId
-          );
-
           /*
            * Müvekkil silinmesi davaları / vekaletnameleri / belgeleri
            * backend politikasına göre detach/cascade edebilir.
@@ -1307,6 +1302,22 @@ export const useDeleteClient =
 
           toast.success(
             'Müvekkil kaydı kaldırıldı'
+          );
+
+          /*
+           * Sayfa-level onSuccess callback'i listeye navigate ettikten sonra
+           * silinen müvekkilin aktif detail cache'i temizlenir. Böylece açık
+           * detail query silinen kaydı yeniden fetch edip "Client not found"
+           * üretmez.
+           */
+          window.setTimeout(
+            () => {
+              removeClientRelatedCache(
+                queryClient,
+                normalizedId
+              );
+            },
+            0
           );
         },
 
