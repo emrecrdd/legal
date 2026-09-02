@@ -95,7 +95,8 @@ export const CASE_STATUS_COLORS = {
   'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/15 dark:bg-orange-500/[0.08] dark:text-orange-300',
   [CASE_STATUS.ARCHIVED]:
     'border-red-200 bg-red-50 text-red-700 dark:border-red-500/15 dark:bg-red-500/[0.08] dark:text-red-300',
-};
+
+  };
 
 // ======================================================
 // ORDER

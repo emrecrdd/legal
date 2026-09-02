@@ -2847,6 +2847,10 @@ const upcomingHearings =
       label: 'Temyiz',
     },
     {
+  value: 'suspended',
+  label: 'Durduruldu',
+},
+    {
       value: 'concluded',
       label: 'Sonuçlandı',
     },
@@ -2874,6 +2878,8 @@ const upcomingHearings =
 
       case 'cassation':
         return 'default';
+        case 'suspended':
+  return 'warning';
 
       case 'concluded':
         return 'default';
