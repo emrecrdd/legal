@@ -39,11 +39,15 @@ import Badge from '../../components/ui/Badge.jsx';
 import {
   AlertTriangle,
   ArrowLeft,
+  BriefcaseBusiness,
+  CalendarDays,
   FilePlus2,
+  FileText,
   KeyRound,
   Save,
   ScrollText,
   Trash2,
+  UserRound,
   X,
 } from 'lucide-react';
 
@@ -1764,32 +1768,18 @@ const PowerOfAttorneyEdit = () => {
       {/* HEADER */}
 
       <div>
-
         <Link
           to={`/power-of-attorney/${id}`}
-          className="
-            inline-flex
-            items-center
-            gap-1.5
-            text-xs
-            font-medium
-            text-gray-500
-            transition
-            hover:text-blue-600
-            dark:text-slate-500
-            dark:hover:text-blue-400
-          "
+          className="inline-flex items-center gap-1 text-blue-600 hover:underline"
         >
-          <ArrowLeft className="h-3.5 w-3.5" />
-
+          <ArrowLeft className="h-4 w-4" />
           Vekaletname Detayı
         </Link>
 
-        <h1 className="mt-3 text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
-          Vekaletname Düzenle
-        </h1>
-
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Vekaletname Bilgilerini Düzenle
+          </h1>
 
           <Badge
             variant={getStatusVariant(
@@ -1800,150 +1790,14 @@ const PowerOfAttorneyEdit = () => {
               formData.status
             )}
           </Badge>
-
-          <Badge variant="default">
-            <span className="inline-flex items-center gap-1">
-              <ScrollText className="h-3.5 w-3.5" />
-              Vekaletname
-            </span>
-          </Badge>
-
         </div>
 
-        <p className="mt-2 text-sm text-gray-500">
-          {poa.title ||
-            poa.client?.name ||
-            'Vekaletname'}
+        <p className="mt-1 text-sm text-gray-500">
+          Müvekkil, dava, geçerlilik, yetki, belge ve not bilgilerini güncelleyin.
         </p>
-
       </div>
-
-      {/* DOCUMENT */}
-
-      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
-
-        <div className="flex items-start gap-3">
-
-          <FilePlus2 className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
-
-          <div className="min-w-0 flex-1">
-
-            <p className="font-medium text-blue-900 dark:text-blue-200">
-              Vekaletname Belgesi
-            </p>
-
-            <p className="mt-1 text-sm leading-6 text-blue-800 dark:text-blue-300">
-              İsterseniz bu güncelleme sırasında yeni bir belge ekleyebilirsiniz.
-              Belge, bu vekaletname ve seçili müvekkil/dava ile ilişkilendirilir.
-            </p>
-
-            {Array.isArray(
-              poa.documents
-            ) &&
-              poa.documents.length >
-                0 && (
-                <div className="mt-3 space-y-2">
-
-                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
-                    Mevcut Belgeler
-                  </p>
-
-                  {poa.documents.map(
-                    (
-                      document
-                    ) => {
-                      const documentItem =
-                        document?.document ||
-                        document;
-
-                      return (
-                      <div
-                        key={
-                          normalizeId(
-                            documentItem?.id
-                          ) ||
-                          documentItem?.original_name ||
-                          documentItem?.name
-                        }
-                        className="rounded-lg border border-blue-200/70 bg-white/70 px-3 py-2 dark:border-blue-800 dark:bg-slate-900/30"
-                      >
-                        <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
-                          {documentItem?.original_name ||
-                            documentItem?.name ||
-                            'Belge'}
-                        </p>
-                      </div>
-                      );
-                    }
-                  )}
-
-                </div>
-              )}
-
-            <div className="mt-4">
-
-              <label className="mb-1.5 block text-sm font-medium text-blue-900 dark:text-blue-200">
-                Yeni Belge Ekle
-              </label>
-
-              <input
-                key={
-                  fileInputKey
-                }
-                type="file"
-                onChange={
-                  handleFileChange
-                }
-                disabled={
-                  updateMutation.isPending ||
-                  deleteMutation.isPending
-                }
-                accept={ALLOWED_DOCUMENT_EXTENSIONS.join(
-                  ','
-                )}
-                className="block w-full text-sm text-blue-900 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-700 disabled:opacity-60 dark:text-blue-200"
-              />
-
-              <p className="mt-1 text-xs text-blue-700/80 dark:text-blue-300/80">
-                PDF, Word, Excel, görsel, video ve UDF · Maksimum 10MB
-              </p>
-
-              {selectedFile && (
-                <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-white/80 px-3 py-2 dark:border-blue-800 dark:bg-slate-900/40">
-
-                  <p className="min-w-0 truncate text-sm font-medium text-gray-900 dark:text-white">
-                    {selectedFile.name}
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={
-                      clearSelectedFile
-                    }
-                    disabled={
-                      updateMutation.isPending
-                    }
-                    className="shrink-0 text-gray-400 transition hover:text-red-600 disabled:opacity-50"
-                    aria-label="Seçili belgeyi kaldır"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-
-                </div>
-              )}
-
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* FORM */}
 
       <Card>
-
         <form
           onSubmit={
             handleSubmit
@@ -1951,286 +1805,342 @@ const PowerOfAttorneyEdit = () => {
           className="space-y-6 p-6"
         >
 
-          {/* CLIENT */}
+          {/* CLIENT / CASE */}
 
-          <div>
+          <section className="space-y-4 border-b border-gray-200 pb-6 dark:border-gray-700">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/[0.08] dark:text-blue-400">
+                <UserRound className="h-4 w-4" />
+              </div>
 
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Müvekkil *
-            </label>
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Müvekkil ve Dava
+                </h2>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
+                  Vekaletnamenin bağlı olduğu müvekkil ve dava kaydını belirleyin.
+                </p>
+              </div>
+            </div>
 
-            <select
-              name="client_id"
-              value={
-                formData.client_id
-              }
-              onChange={
-                handleChange
-              }
-              disabled={
-                clientsLoading ||
-                updateMutation.isPending
-              }
-              className={`w-full rounded-md border ${
-                errors.client_id
-                  ? 'border-red-500'
-                  : 'border-gray-300 dark:border-gray-600'
-              } bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-wait disabled:bg-gray-100 dark:bg-gray-700 dark:text-white`}
-            >
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Müvekkil *
+                </label>
 
-              <option value="">
-                Müvekkil seçin
-              </option>
-
-              {clients.map(
-                (client) => (
-                  <option
-                    key={
-                      client.id
-                    }
-                    value={
-                      normalizeId(
-                        client.id
-                      )
-                    }
-                  >
-                    {
-                      client.name
-                    }
-
-                    {client.company_name &&
-                      ` (${client.company_name})`}
+                <select
+                  name="client_id"
+                  value={
+                    formData.client_id
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    clientsLoading ||
+                    updateMutation.isPending ||
+                    deleteMutation.isPending
+                  }
+                  className={`w-full rounded-md border ${
+                    errors.client_id
+                      ? 'border-red-500'
+                      : 'border-gray-300 dark:border-gray-600'
+                  } bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60 dark:bg-gray-700 dark:text-white`}
+                >
+                  <option value="">
+                    {clientsLoading
+                      ? 'Müvekkiller yükleniyor...'
+                      : 'Müvekkil seçin'}
                   </option>
-                )
-              )}
 
-            </select>
+                  {clients.map(
+                    (client) => (
+                      <option
+                        key={
+                          client.id
+                        }
+                        value={
+                          normalizeId(
+                            client.id
+                          )
+                        }
+                      >
+                        {client.name}
+                        {client.company_name &&
+                          ` (${client.company_name})`}
+                      </option>
+                    )
+                  )}
+                </select>
 
-            {errors.client_id && (
-              <p className="mt-1 text-sm text-red-600">
-                {
-                  errors.client_id
-                }
-              </p>
-            )}
+                {errors.client_id && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {errors.client_id}
+                  </p>
+                )}
+              </div>
 
-          </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  İlişkili Dava
+                </label>
 
-          {/* CASE */}
-
-          <div>
-
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              İlişkili Dava
-            </label>
-
-            <select
-              name="case_id"
-              value={
-                formData.case_id
-              }
-              onChange={
-                handleChange
-              }
-              disabled={
-                !formData.client_id ||
-                casesLoading ||
-                updateMutation.isPending
-              }
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-            >
-
-              <option value="">
-                {!formData.client_id
-                  ? 'Önce müvekkil seçin'
-                  : casesLoading
-                    ? 'Davalar yükleniyor...'
-                    : cases.length >
-                        0
-                      ? 'Dava seçin (isteğe bağlı)'
-                      : 'Bu müvekkile ait dava bulunamadı'}
-              </option>
-
-              {cases.map(
-                (caseItem) => (
-                  <option
-                    key={
-                      caseItem.id
-                    }
-                    value={
-                      normalizeId(
-                        caseItem.id
-                      )
-                    }
-                  >
-                    {
-                      caseItem.title
-                    }
-
-                    {caseItem.case_number &&
-                      ` · ${caseItem.case_number}`}
+                <select
+                  name="case_id"
+                  value={
+                    formData.case_id
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    !formData.client_id ||
+                    casesLoading ||
+                    updateMutation.isPending ||
+                    deleteMutation.isPending
+                  }
+                  className={`w-full rounded-md border ${
+                    errors.case_id
+                      ? 'border-red-500'
+                      : 'border-gray-300 dark:border-gray-600'
+                  } bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60 dark:bg-gray-700 dark:text-white`}
+                >
+                  <option value="">
+                    {!formData.client_id
+                      ? 'Önce müvekkil seçin'
+                      : casesLoading
+                        ? 'Davalar yükleniyor...'
+                        : cases.length > 0
+                          ? 'Dava seçin (isteğe bağlı)'
+                          : 'Bu müvekkile ait dava bulunamadı'}
                   </option>
-                )
-              )}
 
-            </select>
+                  {cases.map(
+                    (caseItem) => (
+                      <option
+                        key={
+                          caseItem.id
+                        }
+                        value={
+                          normalizeId(
+                            caseItem.id
+                          )
+                        }
+                      >
+                        {caseItem.title}
+                        {caseItem.case_number &&
+                          ` · ${caseItem.case_number}`}
+                      </option>
+                    )
+                  )}
+                </select>
 
-            {errors.case_id && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.case_id}
-              </p>
-            )}
+                {errors.case_id && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {errors.case_id}
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
 
-          </div>
+          {/* BASIC INFO */}
 
-          {/* TITLE */}
+          <section className="space-y-4 border-b border-gray-200 pb-6 dark:border-gray-700">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-500/[0.08] dark:text-indigo-400">
+                <FileText className="h-4 w-4" />
+              </div>
 
-          <Input
-            label="Vekaletname Başlığı"
-            name="title"
-            value={
-              formData.title
-            }
-            onChange={
-              handleChange
-            }
-            error={
-              errors.title
-            }
-            disabled={
-              updateMutation.isPending
-            }
-            placeholder="Örn: Arsa Davası Vekaleti"
-          />
-
-          {/* DESCRIPTION */}
-
-          <div>
-
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Açıklama
-            </label>
-
-            <textarea
-              name="description"
-              value={
-                formData.description
-              }
-              onChange={
-                handleChange
-              }
-              rows="4"
-              disabled={
-                updateMutation.isPending
-              }
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              placeholder="Vekaletname ile ilgili açıklama..."
-            />
-
-          </div>
-
-          {/* DATES */}
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Vekalet Bilgileri
+                </h2>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
+                  Başlık ve açıklama bilgilerini düzenleyin.
+                </p>
+              </div>
+            </div>
 
             <Input
-              label="Başlangıç Tarihi"
-              name="start_date"
-              type="date"
+              label="Vekaletname Başlığı"
+              name="title"
               value={
-                formData.start_date
-              }
-              onChange={
-                handleChange
-              }
-              disabled={
-                updateMutation.isPending
-              }
-            />
-
-            <Input
-              label="Bitiş Tarihi"
-              name="end_date"
-              type="date"
-              value={
-                formData.end_date
+                formData.title
               }
               onChange={
                 handleChange
               }
               error={
-                errors.end_date
+                errors.title
               }
               disabled={
-                updateMutation.isPending
+                updateMutation.isPending ||
+                deleteMutation.isPending
               }
+              maxLength={255}
+              placeholder="Örn: Arsa Davası Vekaleti"
             />
 
-          </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Açıklama
+              </label>
 
-          {/* STATUS */}
+              <textarea
+                name="description"
+                value={
+                  formData.description
+                }
+                onChange={
+                  handleChange
+                }
+                rows={4}
+                disabled={
+                  updateMutation.isPending ||
+                  deleteMutation.isPending
+                }
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                placeholder="Vekaletname ile ilgili açıklama..."
+              />
+            </div>
+          </section>
 
-          <div>
+          {/* VALIDITY */}
 
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Durum
-            </label>
+          <section className="space-y-4 border-b border-gray-200 pb-6 dark:border-gray-700">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.08] dark:text-emerald-400">
+                <CalendarDays className="h-4 w-4" />
+              </div>
 
-            <select
-              name="status"
-              value={
-                formData.status
-              }
-              onChange={
-                handleChange
-              }
-              disabled={
-                updateMutation.isPending
-              }
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-            >
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Geçerlilik ve Durum
+                </h2>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
+                  Başlangıç, bitiş ve kayıt durumunu yönetin.
+                </p>
+              </div>
+            </div>
 
-              {STATUS_OPTIONS.map(
-                (status) => (
-                  <option
-                    key={
-                      status.value
-                    }
-                    value={
-                      status.value
-                    }
-                  >
-                    {
-                      status.label
-                    }
-                  </option>
-                )
-              )}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Input
+                label="Başlangıç Tarihi"
+                name="start_date"
+                type="date"
+                value={
+                  formData.start_date
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  updateMutation.isPending ||
+                  deleteMutation.isPending
+                }
+              />
 
-            </select>
+              <Input
+                label="Bitiş Tarihi"
+                name="end_date"
+                type="date"
+                value={
+                  formData.end_date
+                }
+                onChange={
+                  handleChange
+                }
+                error={
+                  errors.end_date
+                }
+                min={
+                  formData.start_date ||
+                  undefined
+                }
+                disabled={
+                  updateMutation.isPending ||
+                  deleteMutation.isPending
+                }
+              />
 
-            {errors.status && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.status}
-              </p>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Durum
+                </label>
+
+                <select
+                  name="status"
+                  value={
+                    formData.status
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    updateMutation.isPending ||
+                    deleteMutation.isPending
+                  }
+                  className={`w-full rounded-md border ${
+                    errors.status
+                      ? 'border-red-500'
+                      : 'border-gray-300 dark:border-gray-600'
+                  } bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-700 dark:text-white`}
+                >
+                  {STATUS_OPTIONS.map(
+                    (status) => (
+                      <option
+                        key={
+                          status.value
+                        }
+                        value={
+                          status.value
+                        }
+                      >
+                        {status.label}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                {errors.status && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {errors.status}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {formData.status === 'cancelled' && (
+              <div className="flex items-start gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-900 dark:bg-red-900/20 dark:text-red-200">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>
+                  İptal durumu kaydı silmez. Vekaletname sistemde kalır ve geçmiş bağlantıları korunur.
+                </p>
+              </div>
             )}
-
-          </div>
+          </section>
 
           {/* AUTHORITIES */}
 
-          <div>
+          <section className="space-y-4 border-b border-gray-200 pb-6 dark:border-gray-700">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-500/[0.08] dark:text-violet-400">
+                <KeyRound className="h-4 w-4" />
+              </div>
 
-            <label className="mb-1 flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300">
-
-              <KeyRound className="h-4 w-4" />
-
-              Yetkiler
-
-            </label>
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Yetkiler
+                </h2>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
+                  Vekaletname kapsamında verilen özel yetkileri yönetin.
+                </p>
+              </div>
+            </div>
 
             <div className="flex flex-col gap-2 sm:flex-row">
-
               <input
                 type="text"
                 value={
@@ -2247,7 +2157,6 @@ const PowerOfAttorneyEdit = () => {
                     'Enter'
                   ) {
                     event.preventDefault();
-
                     handleAddAuthority();
                   }
                 }}
@@ -2272,13 +2181,10 @@ const PowerOfAttorneyEdit = () => {
               >
                 Ekle
               </Button>
-
             </div>
 
-            {formData.authorities.length >
-              0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-
+            {formData.authorities.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
                 {formData.authorities.map(
                   (
                     authority,
@@ -2289,9 +2195,7 @@ const PowerOfAttorneyEdit = () => {
                       variant="default"
                       className="flex items-center gap-1"
                     >
-                      {
-                        authority
-                      }
+                      {authority}
 
                       <button
                         type="button"
@@ -2301,30 +2205,157 @@ const PowerOfAttorneyEdit = () => {
                           )
                         }
                         disabled={
-                          updateMutation.isPending
+                          updateMutation.isPending ||
+                          deleteMutation.isPending
                         }
-                        className="ml-1 text-gray-400 hover:text-red-600"
+                        className="ml-1 text-gray-400 hover:text-red-600 disabled:opacity-50"
                         aria-label={`${authority} yetkisini kaldır`}
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
-
                     </Badge>
                   )
                 )}
-
               </div>
+            ) : (
+              <p className="text-xs text-gray-500 dark:text-slate-400">
+                Henüz özel yetki eklenmedi.
+              </p>
+            )}
+          </section>
+
+          {/* DOCUMENT */}
+
+          <section className="space-y-4 border-b border-gray-200 pb-6 dark:border-gray-700">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
+                <FilePlus2 className="h-4 w-4" />
+              </div>
+
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Vekaletname Belgesi
+                </h2>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
+                  Mevcut belgeleri görüntüleyin veya bu güncelleme sırasında yeni belge ekleyin.
+                </p>
+              </div>
+            </div>
+
+            {Array.isArray(
+              poa.documents
+            ) && poa.documents.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                  Mevcut Belgeler
+                </p>
+
+                {poa.documents.map(
+                  (document) => {
+                    const documentItem =
+                      document?.document ||
+                      document;
+
+                    return (
+                      <div
+                        key={
+                          normalizeId(
+                            documentItem?.id
+                          ) ||
+                          documentItem?.original_name ||
+                          documentItem?.name
+                        }
+                        className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/[0.07] dark:bg-white/[0.025]"
+                      >
+                        <FileText className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" />
+                        <p className="min-w-0 truncate text-sm font-medium text-gray-900 dark:text-white">
+                          {documentItem?.original_name ||
+                            documentItem?.name ||
+                            'Belge'}
+                        </p>
+                      </div>
+                    );
+                  }
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500 dark:text-slate-400">
+                Bu vekaletnameye bağlı belge bulunmuyor.
+              </p>
             )}
 
-          </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Yeni Belge Ekle
+              </label>
+
+              <input
+                key={
+                  fileInputKey
+                }
+                type="file"
+                onChange={
+                  handleFileChange
+                }
+                disabled={
+                  updateMutation.isPending ||
+                  deleteMutation.isPending
+                }
+                accept={ALLOWED_DOCUMENT_EXTENSIONS.join(
+                  ','
+                )}
+                className="block w-full rounded-md border border-gray-300 bg-white text-sm text-gray-700 file:mr-3 file:border-0 file:border-r file:border-gray-200 file:bg-gray-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 hover:file:bg-gray-100 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-slate-200 dark:file:border-gray-600 dark:file:bg-gray-800 dark:file:text-slate-200"
+              />
+
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                PDF, Word, Excel, görsel, video ve UDF · Maksimum 10 MB
+              </p>
+
+              {selectedFile && (
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50/60 px-3 py-2 dark:border-blue-500/20 dark:bg-blue-500/[0.06]">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <FilePlus2 className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                    <p className="min-w-0 truncate text-sm font-medium text-gray-900 dark:text-white">
+                      {selectedFile.name}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={
+                      clearSelectedFile
+                    }
+                    disabled={
+                      updateMutation.isPending ||
+                      deleteMutation.isPending
+                    }
+                    className="shrink-0 text-gray-400 transition hover:text-red-600 disabled:opacity-50"
+                    aria-label="Seçili belgeyi kaldır"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
 
           {/* NOTES */}
 
-          <div>
+          <section className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-slate-300">
+                <ScrollText className="h-4 w-4" />
+              </div>
 
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Notlar
-            </label>
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Notlar
+                </h2>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
+                  Büro içi açıklama ve takip notlarını güncelleyin.
+                </p>
+              </div>
+            </div>
 
             <textarea
               name="notes"
@@ -2334,36 +2365,30 @@ const PowerOfAttorneyEdit = () => {
               onChange={
                 handleChange
               }
-              rows="4"
+              rows={5}
               disabled={
-                updateMutation.isPending
+                updateMutation.isPending ||
+                deleteMutation.isPending
               }
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              placeholder="Ek notlar..."
+              placeholder="Vekaletname ile ilgili büro içi notlar..."
             />
-
-          </div>
+          </section>
 
           {/* WARNING */}
 
           <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-
             <div className="flex items-start gap-2">
-
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-
               <p>
                 Müvekkil veya dava ilişkisini değiştirmeniz vekaletnamenin dosya bağlamını etkiler. Kaydetmeden önce seçilen kayıtları kontrol edin.
               </p>
-
             </div>
-
           </div>
 
           {/* ACTIONS */}
 
-          <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
-
+          <div className="flex flex-wrap items-center gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
             <Button
               type="submit"
               loading={
@@ -2375,7 +2400,6 @@ const PowerOfAttorneyEdit = () => {
               }
             >
               <Save className="mr-2 h-4 w-4" />
-
               Değişiklikleri Kaydet
             </Button>
 
@@ -2409,17 +2433,15 @@ const PowerOfAttorneyEdit = () => {
                   deleteMutation.isPending ||
                   updateMutation.isPending
                 }
+                className="sm:ml-auto"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-
                 Vekaletnameyi Sil
               </Button>
             )}
-
           </div>
 
         </form>
-
       </Card>
 
       {updateDialogOpen && (
