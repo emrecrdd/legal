@@ -325,6 +325,12 @@ const AuditLogList = () => {
   ] =
     useState(false);
 
+  const [
+    deleteDialog,
+    setDeleteDialog,
+  ] =
+    useState(null);
+
   // ====================================================
   // FETCH
   // ====================================================
@@ -410,7 +416,7 @@ const AuditLogList = () => {
   // ====================================================
 
   const handleDelete =
-    async (
+    (
       id
     ) => {
       if (
@@ -423,63 +429,22 @@ const AuditLogList = () => {
         return;
       }
 
-      const confirmed =
-        window.confirm(
-          'Bu log kaydını silmek istediğinize emin misiniz?'
-        );
-
       if (
-        !confirmed
+        isDeleting
       ) {
         return;
       }
 
-      try {
-        setIsDeleting(
-          true
-        );
+      setDeleteDialog({
+        type:
+          'single',
 
-        await auditLogApi.delete(
-          id
-        );
-
-        toast.success(
-          'Log kaydı silindi'
-        );
-
-        setSelectedIds(
-          (
-            current
-          ) =>
-            current.filter(
-              (
-                selectedId
-              ) =>
-                selectedId !==
-                id
-            )
-        );
-
-        await fetchLogs();
-      } catch (
-        deleteError
-      ) {
-        toast.error(
-          deleteError
-            ?.response
-            ?.data
-            ?.message ||
-            'Log silinemedi'
-        );
-      } finally {
-        setIsDeleting(
-          false
-        );
-      }
+        id,
+      });
     };
 
   const handleBulkDelete =
-    async () => {
+    () => {
       if (
         !isAdmin
       ) {
@@ -501,13 +466,40 @@ const AuditLogList = () => {
         return;
       }
 
-      const confirmed =
-        window.confirm(
-          `${selectedIds.length} log kaydını silmek istediğinize emin misiniz?`
-        );
-
       if (
-        !confirmed
+        isDeleting
+      ) {
+        return;
+      }
+
+      setDeleteDialog({
+        type:
+          'bulk',
+
+        ids: [
+          ...selectedIds,
+        ],
+      });
+    };
+
+  const closeDeleteDialog =
+    () => {
+      if (
+        isDeleting
+      ) {
+        return;
+      }
+
+      setDeleteDialog(
+        null
+      );
+    };
+
+  const confirmDelete =
+    async () => {
+      if (
+        !deleteDialog ||
+        isDeleting
       ) {
         return;
       }
@@ -517,35 +509,91 @@ const AuditLogList = () => {
           true
         );
 
-        await Promise.all(
-          selectedIds.map(
+        if (
+          deleteDialog.type ===
+          'single'
+        ) {
+          await auditLogApi.delete(
+            deleteDialog.id
+          );
+
+          toast.success(
+            'Log kaydı silindi'
+          );
+
+          setSelectedIds(
             (
-              id
+              current
             ) =>
-              auditLogApi.delete(
-                id
+              current.filter(
+                (
+                  selectedId
+                ) =>
+                  selectedId !==
+                  deleteDialog.id
               )
-          )
-        );
+          );
+        } else {
+          const ids =
+            Array.isArray(
+              deleteDialog.ids
+            )
+              ? deleteDialog.ids
+                  .filter(
+                    Boolean
+                  )
+              : [];
 
-        toast.success(
-          `${selectedIds.length} log kaydı silindi`
-        );
+          if (
+            ids.length ===
+            0
+          ) {
+            setDeleteDialog(
+              null
+            );
 
-        setSelectedIds(
-          []
+            return;
+          }
+
+          await Promise.all(
+            ids.map(
+              (
+                id
+              ) =>
+                auditLogApi.delete(
+                  id
+                )
+            )
+          );
+
+          toast.success(
+            `${ids.length} log kaydı silindi`
+          );
+
+          setSelectedIds(
+            []
+          );
+        }
+
+        setDeleteDialog(
+          null
         );
 
         await fetchLogs();
       } catch (
-        bulkError
+        deleteError
       ) {
         toast.error(
-          bulkError
+          deleteError
             ?.response
             ?.data
             ?.message ||
-            'Loglar silinemedi'
+          (
+            deleteDialog.type ===
+              'bulk'
+              ? 'Loglar silinemedi'
+              : 'Log silinemedi'
+          )
         );
       } finally {
         setIsDeleting(
@@ -1482,6 +1530,148 @@ const AuditLogList = () => {
 
         </>
       )}
+
+      {/* ==================================================
+          DELETE CONFIRM MODAL
+      ================================================== */}
+
+      <Modal
+        isOpen={
+          Boolean(
+            deleteDialog
+          )
+        }
+        onClose={
+          closeDeleteDialog
+        }
+        title={
+          deleteDialog?.type ===
+          'bulk'
+            ? 'Denetim Kayıtlarını Sil'
+            : 'Denetim Kaydını Sil'
+        }
+        size="md"
+        closeOnBackdrop={
+          !isDeleting
+        }
+      >
+
+        {deleteDialog && (
+          <div className="space-y-5">
+
+            <div
+              className="
+                flex
+                items-start
+                gap-4
+                rounded-xl
+                border
+                border-red-200
+                bg-red-50/70
+                p-4
+                dark:border-red-500/20
+                dark:bg-red-500/[0.07]
+              "
+            >
+
+              <div
+                className="
+                  flex
+                  h-10
+                  w-10
+                  shrink-0
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-white
+                  text-red-600
+                  shadow-sm
+                  dark:bg-white/[0.05]
+                  dark:text-red-400
+                "
+              >
+                <Trash2 className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0">
+
+                <p className="text-sm font-semibold text-red-950 dark:text-red-200">
+                  {deleteDialog.type ===
+                  'bulk'
+                    ? `${deleteDialog.ids?.length || 0} denetim kaydı silinecek`
+                    : 'Denetim kaydı silinecek'}
+                </p>
+
+                <p className="mt-1 text-sm leading-6 text-red-900/80 dark:text-red-200/80">
+                  {deleteDialog.type ===
+                  'bulk'
+                    ? 'Seçili denetim kayıtları sistemden kaldırılacaktır.'
+                    : 'Seçili denetim kaydı sistemden kaldırılacaktır.'}
+                </p>
+
+              </div>
+
+            </div>
+
+            <div
+              className="
+                rounded-xl
+                border
+                border-amber-200
+                bg-amber-50/70
+                p-4
+                dark:border-amber-500/20
+                dark:bg-amber-500/[0.06]
+              "
+            >
+
+              <p className="text-sm leading-6 text-amber-900 dark:text-amber-200">
+                Denetim kayıtları güvenlik ve işlem geçmişinin parçasıdır. Silme işlemi tamamlandıktan sonra bu kayıtlar normal denetim ekranından geri getirilemez.
+              </p>
+
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 dark:border-white/[0.06] sm:flex-row sm:justify-end">
+
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  isDeleting
+                }
+                onClick={
+                  closeDeleteDialog
+                }
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                disabled={
+                  isDeleting
+                }
+                onClick={
+                  confirmDelete
+                }
+              >
+                <Trash2 className="h-4 w-4" />
+
+                {isDeleting
+                  ? 'Siliniyor...'
+                  : deleteDialog.type ===
+                      'bulk'
+                    ? 'Kayıtları Sil'
+                    : 'Kaydı Sil'}
+              </Button>
+
+            </div>
+
+          </div>
+        )}
+
+      </Modal>
 
       {/* DETAIL MODAL */}
 

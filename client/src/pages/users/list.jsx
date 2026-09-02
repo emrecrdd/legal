@@ -590,6 +590,12 @@ view_team_performance:
     ] =
       useState('');
 
+    const [
+      deleteUser,
+      setDeleteUser,
+    ] =
+      useState(null);
+
     // ====================================================
     // USER QUERY
     // ====================================================
@@ -920,6 +926,10 @@ view_team_performance:
 
         onSuccess:
           async () => {
+            setDeleteUser(
+              null
+            );
+
             await queryClient.invalidateQueries({
               queryKey: [
                 'users',
@@ -1162,26 +1172,43 @@ view_team_performance:
     const handleDelete = (
       user
     ) => {
-      const name =
-        getFullName(
-          user
-        );
-
-      const confirmed =
-        window.confirm(
-          `"${name}" kullanıcısını silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`
-        );
-
       if (
-        !confirmed
+        deleteMutation.isPending
       ) {
         return;
       }
 
-      deleteMutation.mutate(
-        user.id
+      setDeleteUser(
+        user
       );
     };
+
+    const closeDeleteModal =
+      () => {
+        if (
+          deleteMutation.isPending
+        ) {
+          return;
+        }
+
+        setDeleteUser(
+          null
+        );
+      };
+
+    const confirmDeleteUser =
+      () => {
+        if (
+          !deleteUser?.id ||
+          deleteMutation.isPending
+        ) {
+          return;
+        }
+
+        deleteMutation.mutate(
+          deleteUser.id
+        );
+      };
 
     // ====================================================
     // EDIT MODAL
@@ -2233,6 +2260,152 @@ view_team_performance:
 
           </>
         )}
+
+        {/* ==================================================
+            DELETE USER MODAL
+        ================================================== */}
+
+        <Modal
+          isOpen={
+            Boolean(
+              deleteUser
+            )
+          }
+          onClose={
+            closeDeleteModal
+          }
+          title="Kullanıcıyı Sil"
+          size="md"
+          closeOnBackdrop={
+            !deleteMutation.isPending
+          }
+        >
+
+          {deleteUser && (
+            <div className="space-y-5">
+
+              <div
+                className="
+                  flex
+                  items-start
+                  gap-4
+                  rounded-xl
+                  border
+                  border-red-200
+                  bg-red-50/70
+                  p-4
+                  dark:border-red-500/20
+                  dark:bg-red-500/[0.07]
+                "
+              >
+
+                <div
+                  className="
+                    flex
+                    h-10
+                    w-10
+                    shrink-0
+                    items-center
+                    justify-center
+                    rounded-xl
+                    bg-white
+                    text-red-600
+                    shadow-sm
+                    dark:bg-white/[0.05]
+                    dark:text-red-400
+                  "
+                >
+                  <Trash2 className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+
+                  <p className="text-sm font-semibold text-red-950 dark:text-red-200">
+                    Kullanıcı hesabı silinecek
+                  </p>
+
+                  <p className="mt-1 text-sm leading-6 text-red-900/80 dark:text-red-200/80">
+                    <span className="font-semibold">
+                      {getFullName(
+                        deleteUser
+                      )}
+                    </span>{' '}
+                    adlı kullanıcının hesabı sistemden kaldırılacaktır.
+                  </p>
+
+                </div>
+
+              </div>
+
+              <div
+                className="
+                  rounded-xl
+                  border
+                  border-gray-200
+                  bg-gray-50/70
+                  p-4
+                  dark:border-white/[0.07]
+                  dark:bg-white/[0.025]
+                "
+              >
+
+                <p className="text-sm leading-6 text-gray-600 dark:text-slate-300">
+                  Bu işlem geri alınamaz. Devam etmeden önce doğru kullanıcı hesabını seçtiğinizden emin olun.
+                </p>
+
+              </div>
+
+              <div
+                className="
+                  flex
+                  flex-col-reverse
+                  gap-2
+                  border-t
+                  border-gray-100
+                  pt-4
+                  dark:border-white/[0.06]
+                  sm:flex-row
+                  sm:justify-end
+                "
+              >
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={
+                    deleteMutation.isPending
+                  }
+                  onClick={
+                    closeDeleteModal
+                  }
+                >
+                  Vazgeç
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="danger"
+                  loading={
+                    deleteMutation.isPending
+                  }
+                  disabled={
+                    deleteMutation.isPending
+                  }
+                  onClick={
+                    confirmDeleteUser
+                  }
+                >
+                  <Trash2 className="h-4 w-4" />
+
+                  Kullanıcıyı Sil
+                </Button>
+
+              </div>
+
+            </div>
+          )}
+
+        </Modal>
 
         {/* ==================================================
             EDIT MODAL

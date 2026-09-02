@@ -4,7 +4,6 @@ import {
 
 import {
   Link,
-  useNavigate,
   useParams,
 } from 'react-router-dom';
 
@@ -47,7 +46,6 @@ import {
   Link2,
   Paperclip,
   ScrollText,
-  Trash2,
   UserRound,
 } from 'lucide-react';
 
@@ -397,9 +395,6 @@ const PowerOfAttorneyDetail = () => {
       idParam
     );
 
-  const navigate =
-    useNavigate();
-
   const queryClient =
     useQueryClient();
 
@@ -416,12 +411,6 @@ const PowerOfAttorneyDetail = () => {
     hasPermission(
       user,
       PERMISSION_KEYS.EDIT_POWER_OF_ATTORNEY
-    );
-
-  const canDelete =
-    hasPermission(
-      user,
-      PERMISSION_KEYS.DELETE_POWER_OF_ATTORNEY
     );
 
   const canViewDocuments =
@@ -583,64 +572,6 @@ const PowerOfAttorneyDetail = () => {
         invalidations
       );
     };
-
-  const deleteMutation =
-    useMutation({
-      mutationFn: () => {
-        if (
-          !id
-        ) {
-          throw new Error(
-            'Geçerli vekaletname kaydı bulunamadı'
-          );
-        }
-
-        return powerOfAttorneyApi.delete(
-          id
-        );
-      },
-
-      onSuccess: async () => {
-        await queryClient.cancelQueries({
-          queryKey: [
-            'powerOfAttorney',
-            id,
-          ],
-        });
-
-        queryClient.removeQueries({
-          queryKey: [
-            'powerOfAttorney',
-            id,
-          ],
-          exact: true,
-        });
-
-        await refreshRelatedViews({
-          includeDetail:
-            false,
-          includeDocuments:
-            true,
-        });
-
-        toast.success(
-          'Vekaletname silindi'
-        );
-
-        navigate(
-          '/power-of-attorney'
-        );
-      },
-
-      onError: (error) => {
-        toast.error(
-          error?.response
-            ?.data?.message ||
-          error?.message ||
-          'Silme başarısız'
-        );
-      },
-    });
 
   const updateStatusMutation =
     useMutation({
@@ -840,42 +771,6 @@ const PowerOfAttorneyDetail = () => {
     };
 
   // ======================================================
-  // DELETE
-  // ======================================================
-  // ======================================================
-  // DELETE
-  // ======================================================
-
-  const handleDelete =
-    () => {
-      if (
-        deleteMutation.isPending ||
-        updateStatusMutation.isPending
-      ) {
-        return;
-      }
-
-      if (!canDelete) {
-        toast.error(
-          'Bu vekaletnameyi silme yetkiniz bulunmuyor'
-        );
-
-        return;
-      }
-
-      const confirmed =
-        window.confirm(
-          `"${item?.title || 'Bu vekaletname'}" kaydını silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`
-        );
-
-      if (!confirmed) {
-        return;
-      }
-
-      deleteMutation.mutate();
-    };
-
-  // ======================================================
   // LOADING
   // ======================================================
 
@@ -1048,8 +943,7 @@ const PowerOfAttorneyDetail = () => {
                 if (
                   nextStatus ===
                     item.status ||
-                  updateStatusMutation.isPending ||
-                  deleteMutation.isPending
+                  updateStatusMutation.isPending
                 ) {
                   return;
                 }
@@ -1059,8 +953,7 @@ const PowerOfAttorneyDetail = () => {
                 );
               }}
               disabled={
-                updateStatusMutation.isPending ||
-                deleteMutation.isPending
+                updateStatusMutation.isPending
               }
               className="
                 rounded-md
@@ -1119,26 +1012,6 @@ const PowerOfAttorneyDetail = () => {
             </Link>
           )}
 
-          {canDelete && (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={
-                handleDelete
-              }
-              loading={
-                deleteMutation.isPending
-              }
-              disabled={
-                deleteMutation.isPending ||
-                updateStatusMutation.isPending
-              }
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-
-              Sil
-            </Button>
-          )}
 
         </div>
 

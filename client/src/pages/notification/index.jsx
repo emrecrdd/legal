@@ -25,6 +25,7 @@ import Error from '../../components/shared/Error.jsx';
 import Empty from '../../components/shared/Empty.jsx';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   Bell,
   BellOff,
@@ -184,6 +185,12 @@ const NotificationsPage = () => {
   ] =
     useState(1);
 
+  const [
+    deleteDialog,
+    setDeleteDialog,
+  ] =
+    useState(null);
+
   // ====================================================
   // QUERY
   // ====================================================
@@ -337,6 +344,10 @@ const NotificationsPage = () => {
         ),
 
       onSuccess: async () => {
+        setDeleteDialog(
+          null
+        );
+
         await refreshNotificationQueries();
 
         toast.success(
@@ -367,6 +378,10 @@ const NotificationsPage = () => {
         notificationApi.deleteAll(),
 
       onSuccess: async () => {
+        setDeleteDialog(
+          null
+        );
+
         await refreshNotificationQueries();
 
         setPage(1);
@@ -443,42 +458,139 @@ const NotificationsPage = () => {
       notification
     ) => {
       if (
-        !notification?.id
+        !notification?.id ||
+        deleteNotification.isPending ||
+        deleteAll.isPending
       ) {
         return;
       }
 
-      const confirmed =
-        window.confirm(
-          'Bu bildirimi silmek istediğinize emin misiniz?'
-        );
+      setDeleteDialog({
+        type:
+          'single',
 
-      if (
-        !confirmed
-      ) {
-        return;
-      }
-
-      deleteNotification.mutate(
-        notification.id
-      );
+        notification,
+      });
     };
 
   const handleDeleteAll =
     () => {
-      const confirmed =
-        window.confirm(
-          'Tüm bildirimleri silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.'
-        );
+      if (
+        deleteNotification.isPending ||
+        deleteAll.isPending
+      ) {
+        return;
+      }
+
+      setDeleteDialog({
+        type:
+          'all',
+      });
+    };
+
+  const handleCloseDeleteDialog =
+    () => {
+      if (
+        deleteNotification.isPending ||
+        deleteAll.isPending
+      ) {
+        return;
+      }
+
+      setDeleteDialog(
+        null
+      );
+    };
+
+  const handleConfirmDelete =
+    () => {
+      if (
+        !deleteDialog
+      ) {
+        return;
+      }
 
       if (
-        !confirmed
+        deleteDialog.type ===
+        'single'
+      ) {
+        const notificationId =
+          deleteDialog
+            .notification
+            ?.id;
+
+        if (
+          !notificationId ||
+          deleteNotification.isPending
+        ) {
+          return;
+        }
+
+        deleteNotification.mutate(
+          notificationId
+        );
+
+        return;
+      }
+
+      if (
+        deleteAll.isPending
       ) {
         return;
       }
 
       deleteAll.mutate();
     };
+
+  useEffect(() => {
+    if (
+      !deleteDialog
+    ) {
+      return undefined;
+    }
+
+    const previousOverflow =
+      document.body.style
+        .overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const handleKeyDown =
+      (
+        event
+      ) => {
+        if (
+          event.key ===
+            'Escape' &&
+          !deleteNotification.isPending &&
+          !deleteAll.isPending
+        ) {
+          setDeleteDialog(
+            null
+          );
+        }
+      };
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+    };
+  }, [
+    deleteDialog,
+    deleteNotification.isPending,
+    deleteAll.isPending,
+  ]);
 
   // ====================================================
   // LOADING
@@ -1130,6 +1242,169 @@ const NotificationsPage = () => {
           )}
 
       </Card>
+
+      {deleteDialog && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Silme penceresini kapat"
+            disabled={
+              deleteNotification.isPending ||
+              deleteAll.isPending
+            }
+            onClick={
+              handleCloseDeleteDialog
+            }
+          />
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="notification-delete-dialog-title"
+            aria-describedby="notification-delete-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+
+              <div className="flex items-start gap-4">
+
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-500/[0.10] dark:text-red-400">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Bildirim silme onayı
+                  </p>
+
+                  <h2
+                    id="notification-delete-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    {deleteDialog.type ===
+                    'all'
+                      ? 'Tüm bildirimleri sil'
+                      : 'Bildirimi sil'}
+                  </h2>
+
+                  <p
+                    id="notification-delete-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    {deleteDialog.type ===
+                    'all'
+                      ? 'Bildirim geçmişinizdeki tüm kayıtlar için bu işlemi onaylayın.'
+                      : (
+                        <>
+                          <span className="font-medium text-gray-700 dark:text-slate-200">
+                            {cleanNotificationTitle(
+                              deleteDialog
+                                .notification
+                                ?.title
+                            )}
+                          </span>{' '}
+                          bildirimi için bu işlemi onaylayın.
+                        </>
+                      )}
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+
+              <div className="rounded-xl border border-red-200 bg-red-50/70 p-4 dark:border-red-500/20 dark:bg-red-500/[0.07]">
+
+                <div className="flex items-start gap-3">
+
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+
+                  <div>
+
+                    <p className="text-sm font-semibold text-red-950 dark:text-red-200">
+                      {deleteDialog.type ===
+                      'all'
+                        ? 'Tüm bildirimler silinecek'
+                        : 'Bildirim kaydı silinecek'}
+                    </p>
+
+                    <p className="mt-1 text-sm leading-6 text-red-900/80 dark:text-red-200/80">
+                      {deleteDialog.type ===
+                      'all'
+                        ? 'Mevcut bildirim geçmişiniz temizlenecek ve bu kayıtlar bildirim ekranında artık görüntülenmeyecektir.'
+                        : 'Seçili bildirim, bildirim akışınızdan kaldırılacaktır.'}
+                    </p>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
+
+                <p className="text-sm leading-6 text-gray-600 dark:text-slate-300">
+                  {deleteDialog.type ===
+                  'all'
+                    ? 'Bu işlem tüm bildirimleri etkiler. Devam etmeden önce işlemi kontrol edin.'
+                    : 'Devam etmeden önce doğru bildirimi seçtiğinizden emin olun.'}
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  deleteNotification.isPending ||
+                  deleteAll.isPending
+                }
+                onClick={
+                  handleCloseDeleteDialog
+                }
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                loading={
+                  deleteNotification.isPending ||
+                  deleteAll.isPending
+                }
+                disabled={
+                  deleteNotification.isPending ||
+                  deleteAll.isPending
+                }
+                onClick={
+                  handleConfirmDelete
+                }
+              >
+                <Trash2 className="h-4 w-4" />
+
+                {deleteDialog.type ===
+                'all'
+                  ? 'Tümünü Sil'
+                  : 'Bildirimi Sil'}
+              </Button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
 
     </div>
   );
