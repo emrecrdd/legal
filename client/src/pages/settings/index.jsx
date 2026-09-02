@@ -1147,6 +1147,46 @@ const Settings = () => {
     };
 
   // ====================================================
+  // PROFILE CANCEL
+  // ====================================================
+
+  const handleProfileCancel =
+    () => {
+      if (
+        updateProfile.isPending ||
+        !isProfileDirty
+      ) {
+        return;
+      }
+
+      setProfileForm({
+        ...initialProfileForm,
+      });
+
+      setErrors(
+        (current) => {
+          const next = {
+            ...current,
+          };
+
+          [
+            'first_name',
+            'last_name',
+            'phone',
+            'title',
+            'bio',
+          ].forEach(
+            (field) => {
+              delete next[field];
+            }
+          );
+
+          return next;
+        }
+      );
+    };
+
+  // ====================================================
   // PASSWORD CHANGE
   // ====================================================
 
@@ -1740,7 +1780,21 @@ const Settings = () => {
 
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={
+                    handleProfileCancel
+                  }
+                  disabled={
+                    updateProfile.isPending ||
+                    !isProfileDirty
+                  }
+                >
+                  Vazgeç
+                </Button>
 
                 <Button
                   type="submit"
