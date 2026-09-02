@@ -1,4 +1,6 @@
 import {
+  useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -17,6 +19,7 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   Building2,
   Save,
@@ -231,6 +234,117 @@ const sanitizePhoneInput = (
     : digits;
 };
 
+const isLikelyTechnicalMessage = (
+  value
+) => {
+  const message =
+    String(
+      value || ''
+    ).trim();
+
+  if (!message) {
+    return false;
+  }
+
+  return /(?:validation failed|sequelize|constraint|foreign key|unique constraint|duplicate key|invalid input syntax|syntax error|stack trace|internal server error|network error|failed to fetch|econn|socket|timeout|request failed with status code|cannot read propert|undefined is not|null value in column|not-null violation|2350\d|22p02)/i.test(
+    message
+  );
+};
+
+const getClientCreateErrorMessage = (
+  error,
+  fallback = 'Müvekkil oluşturulamadı'
+) => {
+  const status =
+    error?.response?.status;
+
+  const rawMessage =
+    error?.response?.data?.message ||
+    error?.message ||
+    '';
+
+  if (status === 401) {
+    return 'Oturumunuz sona ermiş olabilir. Lütfen yeniden giriş yapın.';
+  }
+
+  if (status === 403) {
+    return 'Müvekkil oluşturmak için yetkiniz bulunmuyor.';
+  }
+
+  if (status === 409) {
+    return 'Bu bilgilerle çakışan mevcut bir müvekkil kaydı bulunuyor.';
+  }
+
+  if (status === 422) {
+    return 'Formdaki bilgileri kontrol edip tekrar deneyin.';
+  }
+
+  if (
+    Number(status) >= 500
+  ) {
+    return 'Sunucuda geçici bir sorun oluştu. Lütfen tekrar deneyin.';
+  }
+
+  if (
+    !error?.response &&
+    /network|fetch|timeout|econn|socket/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+  }
+
+  if (
+    rawMessage &&
+    !isLikelyTechnicalMessage(
+      rawMessage
+    )
+  ) {
+    return rawMessage;
+  }
+
+  return fallback;
+};
+
+const getClientFieldErrorMessage = (
+  field,
+  rawMessage
+) => {
+  const message =
+    String(
+      rawMessage || ''
+    ).trim();
+
+  if (
+    message &&
+    !isLikelyTechnicalMessage(
+      message
+    )
+  ) {
+    return message;
+  }
+
+  const fallbacks = {
+    name: 'Müvekkil adını kontrol edin',
+    identification_number: 'Kimlik numarasını kontrol edin',
+    email: 'E-posta adresini kontrol edin',
+    phone: 'Telefon numarasını kontrol edin',
+    address: 'Adres bilgisini kontrol edin',
+    city: 'Şehir bilgisini kontrol edin',
+    district: 'İlçe bilgisini kontrol edin',
+    postal_code: 'Posta kodunu kontrol edin',
+    notes: 'Not bilgisini kontrol edin',
+    tags: 'Etiketleri kontrol edin',
+    client_type: 'Müvekkil türünü kontrol edin',
+    status: 'Müvekkil durumunu kontrol edin',
+  };
+
+  return (
+    fallbacks[field] ||
+    'Bu alanı kontrol edin'
+  );
+};
+
 const getBackendFieldErrors = (
   error
 ) => {
@@ -257,9 +371,11 @@ const getBackendFieldErrors = (
           field
         ) {
           result[field] =
-            item?.msg ||
-            item?.message ||
-            'Geçersiz değer';
+            getClientFieldErrorMessage(
+              field,
+              item?.msg ||
+              item?.message
+            );
         }
       }
     );
@@ -285,9 +401,12 @@ const getBackendFieldErrors = (
           )
         ) {
           result[field] =
-            value
-              .filter(Boolean)
-              .join(', ');
+            getClientFieldErrorMessage(
+              field,
+              value
+                .filter(Boolean)
+                .join(', ')
+            );
 
           return;
         }
@@ -296,8 +415,11 @@ const getBackendFieldErrors = (
           value
         ) {
           result[field] =
-            String(
-              value
+            getClientFieldErrorMessage(
+              field,
+              String(
+                value
+              )
             );
         }
       }
@@ -443,6 +565,36 @@ const ClientCreate = () => {
     errors,
     setErrors,
   ] = useState({});
+
+
+  const [
+    unsavedDialogOpen,
+    setUnsavedDialogOpen,
+  ] = useState(false);
+
+  const [
+    pendingExitPath,
+    setPendingExitPath,
+  ] = useState('');
+
+  const [
+    typeDialogOpen,
+    setTypeDialogOpen,
+  ] = useState(false);
+
+  const [
+    pendingClientType,
+    setPendingClientType,
+  ] = useState('');
+
+  const unsavedDialogRef =
+    useRef(null);
+
+  const typeDialogRef =
+    useRef(null);
+
+  const previousFocusRef =
+    useRef(null);
 
   // ======================================================
   // DERIVED
@@ -629,22 +781,8 @@ const ClientCreate = () => {
   // CLIENT TYPE
   // ======================================================
 
-  const handleClientTypeChange =
+  const applyClientTypeChange =
     (type) => {
-      if (
-        createMutation.isPending
-      ) {
-        return;
-      }
-
-      if (
-        !CLIENT_TYPE_OPTIONS.includes(
-          type
-        )
-      ) {
-        return;
-      }
-
       setFormData(
         (current) => ({
           ...current,
@@ -664,6 +802,74 @@ const ClientCreate = () => {
             '',
         })
       );
+    };
+
+  const handleClientTypeChange =
+    (type) => {
+      if (
+        createMutation.isPending ||
+        type === formData.client_type
+      ) {
+        return;
+      }
+
+      if (
+        !CLIENT_TYPE_OPTIONS.includes(
+          type
+        )
+      ) {
+        return;
+      }
+
+      if (
+        String(
+          formData.identification_number ||
+          ''
+        ).trim()
+      ) {
+        setPendingClientType(
+          type
+        );
+
+        setTypeDialogOpen(
+          true
+        );
+
+        return;
+      }
+
+      applyClientTypeChange(
+        type
+      );
+    };
+
+  const closeTypeDialog =
+    () => {
+      setTypeDialogOpen(
+        false
+      );
+
+      setPendingClientType(
+        ''
+      );
+    };
+
+  const confirmClientTypeChange =
+    () => {
+      if (
+        !CLIENT_TYPE_OPTIONS.includes(
+          pendingClientType
+        )
+      ) {
+        closeTypeDialog();
+        return;
+      }
+
+      applyClientTypeChange(
+        pendingClientType
+      );
+
+      closeTypeDialog();
     };
 
   // ======================================================
@@ -901,7 +1107,10 @@ const ClientCreate = () => {
         )
       ) {
         nextErrors.identification_number =
-          message;
+          getClientFieldErrorMessage(
+            'identification_number',
+            message
+          );
       }
 
       if (
@@ -910,7 +1119,10 @@ const ClientCreate = () => {
         )
       ) {
         nextErrors.email =
-          message;
+          getClientFieldErrorMessage(
+            'email',
+            message
+          );
       }
 
       if (
@@ -919,7 +1131,10 @@ const ClientCreate = () => {
         )
       ) {
         nextErrors.phone =
-          message;
+          getClientFieldErrorMessage(
+            'phone',
+            message
+          );
       }
 
       if (
@@ -928,7 +1143,10 @@ const ClientCreate = () => {
         )
       ) {
         nextErrors.name =
-          message;
+          getClientFieldErrorMessage(
+            'name',
+            message
+          );
       }
 
       if (
@@ -937,7 +1155,10 @@ const ClientCreate = () => {
         )
       ) {
         nextErrors.address =
-          message;
+          getClientFieldErrorMessage(
+            'address',
+            message
+          );
       }
 
       if (
@@ -946,7 +1167,10 @@ const ClientCreate = () => {
         )
       ) {
         nextErrors.city =
-          message;
+          getClientFieldErrorMessage(
+            'city',
+            message
+          );
       }
 
       if (
@@ -955,7 +1179,10 @@ const ClientCreate = () => {
         )
       ) {
         nextErrors.district =
-          message;
+          getClientFieldErrorMessage(
+            'district',
+            message
+          );
       }
 
       if (
@@ -964,7 +1191,10 @@ const ClientCreate = () => {
         )
       ) {
         nextErrors.postal_code =
-          message;
+          getClientFieldErrorMessage(
+            'postal_code',
+            message
+          );
       }
 
       if (
@@ -973,7 +1203,10 @@ const ClientCreate = () => {
         )
       ) {
         nextErrors.tags =
-          message;
+          getClientFieldErrorMessage(
+            'tags',
+            message
+          );
       }
 
       if (
@@ -982,7 +1215,10 @@ const ClientCreate = () => {
         )
       ) {
         nextErrors.status =
-          message;
+          getClientFieldErrorMessage(
+            'status',
+            message
+          );
       }
 
       if (
@@ -991,7 +1227,10 @@ const ClientCreate = () => {
         )
       ) {
         nextErrors.client_type =
-          message;
+          getClientFieldErrorMessage(
+            'client_type',
+            message
+          );
       }
 
       if (
@@ -1008,6 +1247,233 @@ const ClientCreate = () => {
       }
 
       return false;
+    };
+
+  // ======================================================
+  // UNSAVED CHANGES / DIALOG ACCESSIBILITY
+  // ======================================================
+
+  useEffect(() => {
+    if (!isDirty) {
+      return undefined;
+    }
+
+    const handleBeforeUnload =
+      (event) => {
+        event.preventDefault();
+        event.returnValue = '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+  ]);
+
+  useEffect(() => {
+    const dialog =
+      unsavedDialogOpen
+        ? unsavedDialogRef.current
+        : typeDialogOpen
+          ? typeDialogRef.current
+          : null;
+
+    if (!dialog) {
+      return undefined;
+    }
+
+    previousFocusRef.current =
+      document.activeElement;
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const getFocusableElements =
+      () => Array.from(
+        dialog.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+
+    const frame =
+      window.requestAnimationFrame(
+        () => {
+          const focusable =
+            getFocusableElements();
+
+          (
+            focusable[0] ||
+            dialog
+          )?.focus?.();
+        }
+      );
+
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          event.preventDefault();
+
+          if (unsavedDialogOpen) {
+            setUnsavedDialogOpen(
+              false
+            );
+
+            setPendingExitPath(
+              ''
+            );
+          } else if (typeDialogOpen) {
+            closeTypeDialog();
+          }
+
+          return;
+        }
+
+        if (
+          event.key !==
+          'Tab'
+        ) {
+          return;
+        }
+
+        const focusable =
+          getFocusableElements();
+
+        if (
+          focusable.length ===
+          0
+        ) {
+          event.preventDefault();
+          dialog.focus();
+          return;
+        }
+
+        const first =
+          focusable[0];
+
+        const last =
+          focusable[
+            focusable.length - 1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+          return;
+        }
+
+        if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      };
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.cancelAnimationFrame(
+        frame
+      );
+
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+
+      previousFocusRef.current
+        ?.focus?.();
+    };
+  }, [
+    unsavedDialogOpen,
+    typeDialogOpen,
+  ]);
+
+  const requestExit =
+    (
+      path,
+      event
+    ) => {
+      event?.preventDefault?.();
+
+      if (
+        createMutation.isPending
+      ) {
+        return;
+      }
+
+      if (!isDirty) {
+        navigate(
+          path
+        );
+
+        return;
+      }
+
+      setPendingExitPath(
+        path
+      );
+
+      setUnsavedDialogOpen(
+        true
+      );
+    };
+
+  const closeUnsavedDialog =
+    () => {
+      setUnsavedDialogOpen(
+        false
+      );
+
+      setPendingExitPath(
+        ''
+      );
+    };
+
+  const discardAndExit =
+    () => {
+      const path =
+        pendingExitPath ||
+        '/clients';
+
+      setUnsavedDialogOpen(
+        false
+      );
+
+      setPendingExitPath(
+        ''
+      );
+
+      navigate(
+        path
+      );
     };
 
   // ======================================================
@@ -1076,10 +1542,9 @@ const ClientCreate = () => {
 
           if (!handled) {
             toast.error(
-              error?.response
-                ?.data?.message ||
-                error?.message ||
-                'Müvekkil oluşturulamadı'
+              getClientCreateErrorMessage(
+                error
+              )
             );
           }
         },
@@ -1100,6 +1565,12 @@ const ClientCreate = () => {
 
         <Link
           to="/clients"
+          onClick={(event) =>
+            requestExit(
+              '/clients',
+              event
+            )
+          }
           className="inline-flex items-center gap-1 text-blue-600 hover:underline"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -1107,9 +1578,17 @@ const ClientCreate = () => {
           Müvekkiller
         </Link>
 
-        <h1 className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
-          Yeni Müvekkil
-        </h1>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Yeni Müvekkil
+          </h1>
+
+          {isDirty && (
+            <Badge variant="warning">
+              Kaydedilmemiş değişiklik
+            </Badge>
+          )}
+        </div>
 
         <p className="mt-1 text-sm text-gray-500">
           Müvekkilin kimlik, iletişim, adres ve sınıflandırma bilgilerini oluşturun.
@@ -1589,26 +2068,11 @@ const ClientCreate = () => {
               disabled={
                 createMutation.isPending
               }
-              onClick={() => {
-                if (
-                  createMutation.isPending
-                ) {
-                  return;
-                }
-
-                if (
-                  isDirty &&
-                  !window.confirm(
-                    'Kaydedilmemiş müvekkil bilgileri var. Sayfadan ayrılmak istediğinize emin misiniz?'
-                  )
-                ) {
-                  return;
-                }
-
-                navigate(
+              onClick={() =>
+                requestExit(
                   '/clients'
-                );
-              }}
+                )
+              }
             >
               Vazgeç
             </Button>
@@ -1618,6 +2082,147 @@ const ClientCreate = () => {
         </form>
 
       </Card>
+
+      {unsavedDialogOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          aria-labelledby="client-create-unsaved-title"
+          aria-describedby="client-create-unsaved-description"
+          role="dialog"
+          aria-modal="true"
+        >
+          <button
+            type="button"
+            aria-label="Uyarıyı kapat"
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+            onClick={
+              closeUnsavedDialog
+            }
+          />
+
+          <div
+            ref={
+              unsavedDialogRef
+            }
+            tabIndex={-1}
+            className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl outline-none dark:border-white/[0.08] dark:bg-slate-900"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.1] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0">
+                <h2
+                  id="client-create-unsaved-title"
+                  className="text-base font-semibold text-slate-900 dark:text-white"
+                >
+                  Kaydedilmemiş değişiklikler
+                </h2>
+
+                <p
+                  id="client-create-unsaved-description"
+                  className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300"
+                >
+                  Yeni müvekkil formunda henüz kaydetmediğiniz bilgiler var. Çıkarsanız bu bilgiler kaybolacaktır.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 dark:border-white/[0.06] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  closeUnsavedDialog
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  discardAndExit
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {typeDialogOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          aria-labelledby="client-create-type-title"
+          aria-describedby="client-create-type-description"
+          role="dialog"
+          aria-modal="true"
+        >
+          <button
+            type="button"
+            aria-label="Uyarıyı kapat"
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+            onClick={
+              closeTypeDialog
+            }
+          />
+
+          <div
+            ref={
+              typeDialogRef
+            }
+            tabIndex={-1}
+            className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl outline-none dark:border-white/[0.08] dark:bg-slate-900"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.1] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0">
+                <h2
+                  id="client-create-type-title"
+                  className="text-base font-semibold text-slate-900 dark:text-white"
+                >
+                  Müvekkil türünü değiştir
+                </h2>
+
+                <p
+                  id="client-create-type-description"
+                  className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300"
+                >
+                  Müvekkil türü değiştirildiğinde girdiğiniz T.C. Kimlik / Vergi Kimlik Numarası temizlenecektir. Devam etmek istiyor musunuz?
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 dark:border-white/[0.06] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  closeTypeDialog
+                }
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                onClick={
+                  confirmClientTypeChange
+                }
+              >
+                Türü Değiştir
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
