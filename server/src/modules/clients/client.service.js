@@ -352,7 +352,8 @@ const assertClientAccess =
 const getAccessibleCaseIdsForClient =
   async (
     clientId,
-    actor
+    actor,
+    options = {}
   ) => {
     const where =
       buildCaseAccessWhere(
@@ -395,6 +396,9 @@ const getAccessibleCaseIdsForClient =
 
         raw:
           true,
+
+        transaction:
+          options.transaction,
       });
 
     return cases.map(
@@ -1922,57 +1926,187 @@ async remove(
       );
 
     // ==================================================
-    // MÜVEKKİLİN BAĞLI OLDUĞU DAVALARI BUL
+    // ADMIN: GLOBAL SOFT DELETE
     // ==================================================
 
-    const linkedCases =
+    /*
+     * Admin mevcut global davranışı korur:
+     * müvekkil sistem genelinde soft-delete edilir ve
+     * aktif müvekkili kalmayan bağlı davalar suspended olur.
+     */
+    if (
+      isAdmin(
+        actor
+      )
+    ) {
+      const linkedCases =
+        await sequelize.query(
+          `
+            SELECT
+              c.id,
+              c.status
+            FROM cases c
+            INNER JOIN case_clients cc
+              ON cc.case_id = c.id
+            WHERE
+              cc.client_id = :clientId
+              AND c.deleted_at IS NULL
+          `,
+          {
+            replacements: {
+              clientId: id,
+            },
+
+            type:
+              QueryTypes.SELECT,
+
+            transaction,
+          }
+        );
+
+      await client.destroy({
+        transaction,
+      });
+
+      if (
+        linkedCases.length >
+        0
+      ) {
+        const linkedCaseIds =
+          linkedCases.map(
+            (caseItem) =>
+              caseItem.id
+          );
+
+        const casesWithoutClients =
+          await sequelize.query(
+            `
+              SELECT
+                c.id
+              FROM cases c
+              WHERE
+                c.id IN (:caseIds)
+                AND c.deleted_at IS NULL
+
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM case_clients cc
+
+                  INNER JOIN clients cl
+                    ON cl.id = cc.client_id
+                    AND cl.deleted_at IS NULL
+
+                  WHERE
+                    cc.case_id = c.id
+                )
+            `,
+            {
+              replacements: {
+                caseIds:
+                  linkedCaseIds,
+              },
+
+              type:
+                QueryTypes.SELECT,
+
+              transaction,
+            }
+          );
+
+        const caseIdsToSuspend =
+          casesWithoutClients.map(
+            (caseItem) =>
+              caseItem.id
+          );
+
+        if (
+          caseIdsToSuspend.length >
+          0
+        ) {
+          await Case.update(
+            {
+              status:
+                CASE_STATUS.SUSPENDED,
+            },
+            {
+              where: {
+                id: {
+                  [Op.in]:
+                    caseIdsToSuspend,
+                },
+
+                status: {
+                  [Op.notIn]: [
+                    CASE_STATUS.CONCLUDED,
+                    CASE_STATUS.ARCHIVED,
+                    CASE_STATUS.SUSPENDED,
+                  ],
+                },
+              },
+
+              transaction,
+            }
+          );
+        }
+      }
+
+      await transaction.commit();
+
+      return client;
+    }
+
+    // ==================================================
+    // NORMAL USER: ONLY OWN ACCESS SCOPE
+    // ==================================================
+
+    /*
+     * Normal kullanıcı müvekkili sistem genelinden silmez.
+     * Yalnız erişebildiği davalardaki client bağlantılarını
+     * kaldırır. Başka kullanıcının erişimindeki davalara
+     * ve o davaların durumuna dokunulmaz.
+     */
+    const accessibleCaseIds =
+      await getAccessibleCaseIdsForClient(
+        id,
+        actor,
+        {
+          transaction,
+        }
+      );
+
+    if (
+      accessibleCaseIds.length >
+      0
+    ) {
       await sequelize.query(
         `
-          SELECT
-            c.id,
-            c.status
-          FROM cases c
-          INNER JOIN case_clients cc
-            ON cc.case_id = c.id
+          DELETE FROM case_clients
           WHERE
-            cc.client_id = :clientId
-            AND c.deleted_at IS NULL
+            client_id = :clientId
+            AND case_id IN (:caseIds)
         `,
         {
           replacements: {
-            clientId: id,
+            clientId:
+              id,
+
+            caseIds:
+              accessibleCaseIds,
           },
 
           type:
-            QueryTypes.SELECT,
+            QueryTypes.DELETE,
 
           transaction,
         }
       );
 
-    // ==================================================
-    // MÜVEKKİLİ SOFT DELETE ET
-    // ==================================================
-
-    await client.destroy({
-      transaction,
-    });
-
-    // ==================================================
-    // AKTİF MÜVEKKİLİ KALMAYAN DAVALARI BUL
-    // ==================================================
-
-    if (
-      linkedCases.length >
-      0
-    ) {
-      const linkedCaseIds =
-        linkedCases.map(
-          (caseItem) =>
-            caseItem.id
-        );
-
-      const casesWithoutClients =
+      /*
+       * Yalnız kullanıcının kendi erişimindeki davalar için
+       * aktif müvekkil kalıp kalmadığını kontrol et.
+       * Başka kullanıcıların davaları bu sorguya girmez.
+       */
+      const accessibleCasesWithoutClients =
         await sequelize.query(
           `
             SELECT
@@ -1997,7 +2131,7 @@ async remove(
           {
             replacements: {
               caseIds:
-                linkedCaseIds,
+                accessibleCaseIds,
             },
 
             type:
@@ -2007,18 +2141,14 @@ async remove(
           }
         );
 
-      const caseIdsToSuspend =
-        casesWithoutClients.map(
+      const accessibleCaseIdsToSuspend =
+        accessibleCasesWithoutClients.map(
           (caseItem) =>
             caseItem.id
         );
 
-      // ==================================================
-      // SONUÇLANMIŞ / ARŞİVLENMİŞ DAVALARA DOKUNMA
-      // ==================================================
-
       if (
-        caseIdsToSuspend.length >
+        accessibleCaseIdsToSuspend.length >
         0
       ) {
         await Case.update(
@@ -2030,7 +2160,7 @@ async remove(
             where: {
               id: {
                 [Op.in]:
-                  caseIdsToSuspend,
+                  accessibleCaseIdsToSuspend,
               },
 
               status: {
@@ -2046,6 +2176,62 @@ async remove(
           }
         );
       }
+    }
+
+    // ==================================================
+    // ORPHAN CLIENT CLEANUP
+    // ==================================================
+
+    /*
+     * Bağlantılar kaldırıldıktan sonra müvekkilin başka hiçbir
+     * aktif davaya bağlantısı kalmadıysa:
+     *
+     * - kaydı bu kullanıcı oluşturmuşsa soft-delete edilir;
+     * - aksi halde ortak/global client kaydı korunur.
+     *
+     * Böylece başka kullanıcının bağımsız/ortak kaydı yanlışlıkla
+     * silinmez.
+     */
+    const remainingLinkedCases =
+      await sequelize.query(
+        `
+          SELECT
+            1
+          FROM case_clients cc
+
+          INNER JOIN cases c
+            ON c.id = cc.case_id
+            AND c.deleted_at IS NULL
+
+          WHERE
+            cc.client_id = :clientId
+
+          LIMIT 1
+        `,
+        {
+          replacements: {
+            clientId:
+              id,
+          },
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction,
+        }
+      );
+
+    if (
+      remainingLinkedCases.length ===
+        0 &&
+      client.created_by ===
+        getActorId(
+          actor
+        )
+    ) {
+      await client.destroy({
+        transaction,
+      });
     }
 
     await transaction.commit();
