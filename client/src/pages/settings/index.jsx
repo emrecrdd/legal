@@ -185,6 +185,7 @@ const Settings = () => {
   const {
     user,
     logout,
+    setUser,
   } =
     useAuth();
 
@@ -517,6 +518,28 @@ const Settings = () => {
             updated ||
             normalizedProfile
           );
+
+        /*
+         * AuthProvider ortak kullanıcı state'ini de
+         * aynı anda güncelle. Böylece Topbar ve
+         * useAuth() kullanan diğer alanlar sayfa
+         * yenilenmeden yeni profil bilgisini görür.
+         */
+        setUser({
+          ...(user &&
+          typeof user ===
+            'object'
+            ? user
+            : {}),
+
+          ...(updated &&
+          typeof updated ===
+            'object'
+            ? updated
+            : {}),
+
+          ...nextProfile,
+        });
 
         setProfileForm(
           nextProfile
