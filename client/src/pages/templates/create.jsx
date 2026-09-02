@@ -24,6 +24,7 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   FileText,
@@ -32,6 +33,7 @@ import {
   Scale,
   Trash2,
   UploadCloud,
+  X,
 } from 'lucide-react';
 
 import toast from 'react-hot-toast';
@@ -116,6 +118,13 @@ const LAW_AREA_OPTIONS = [
     label: 'Ofis İçi',
   },
 ];
+
+const INITIAL_FORM = {
+  title: '',
+  description: '',
+  category: 'dilekce',
+  law_area: 'ozel_hukuk',
+};
 
 // ======================================================
 // HELPERS
@@ -233,6 +242,98 @@ const getTemplateIdFromResponse = (
   );
 };
 
+const looksTurkishMessage = (
+  value
+) => {
+  return /[çğıöşüÇĞİÖŞÜ]|zorunlu|geçersiz|bulunamadı|yetki|başarısız|yüklenemedi|oluşturulamadı|dosya|şablon/i.test(
+    String(
+      value ||
+      ''
+    )
+  );
+};
+
+const getSafeFieldMessage = (
+  field,
+  message
+) => {
+  const normalizedField =
+    String(
+      field ||
+      ''
+    )
+      .replace(
+        /\[(\w+)\]/g,
+        '.$1'
+      )
+      .split('.')[0]
+      .trim();
+
+  const aliases = {
+    lawArea:
+      'law_area',
+    mime_type:
+      'file',
+    mimetype:
+      'file',
+    file_type:
+      'file',
+  };
+
+  const safeField =
+    aliases[normalizedField] ||
+    normalizedField;
+
+  const rawMessage =
+    String(
+      message ||
+      ''
+    ).trim();
+
+  const technical =
+    /validation failed|validation error|sequelize|notnull|cannot be null|must not be null|invalid input syntax|constraint|foreign key|uuid|syntax error|unexpected|stack|trace|sql|database|mime type|multipart|multer/i.test(
+      rawMessage
+    );
+
+  if (
+    rawMessage &&
+    !technical &&
+    looksTurkishMessage(
+      rawMessage
+    )
+  ) {
+    return {
+      field:
+        safeField,
+      message:
+        rawMessage,
+    };
+  }
+
+  const fieldMessages = {
+    title:
+      'Şablon başlığını kontrol edin.',
+    description:
+      'Şablon açıklamasını kontrol edin.',
+    category:
+      'Geçerli bir kategori seçin.',
+    law_area:
+      'Geçerli bir hukuk alanı seçin.',
+    file:
+      'Şablon dosyasını kontrol edin.',
+  };
+
+  return {
+    field:
+      safeField,
+    message:
+      fieldMessages[
+        safeField
+      ] ||
+      'Bu alanı kontrol edin.',
+  };
+};
+
 const getBackendFieldErrors = (
   error
 ) => {
@@ -247,6 +348,29 @@ const getBackendFieldErrors = (
   if (!source) {
     return {};
   }
+
+  const assignSafeError = (
+    result,
+    field,
+    message
+  ) => {
+    const safe =
+      getSafeFieldMessage(
+        field,
+        message
+      );
+
+    if (
+      safe.field
+    ) {
+      result[
+        safe.field
+      ] =
+        safe.message;
+    }
+
+    return result;
+  };
 
   if (
     Array.isArray(
@@ -271,10 +395,11 @@ const getBackendFieldErrors = (
           field &&
           message
         ) {
-          result[field] =
-            String(
-              message
-            );
+          assignSafeError(
+            result,
+            field,
+            message
+          );
         }
 
         return result;
@@ -305,10 +430,11 @@ const getBackendFieldErrors = (
           message !== null &&
           message !== undefined
         ) {
-          result[field] =
-            String(
-              message
-            );
+          assignSafeError(
+            result,
+            field,
+            message
+          );
         }
 
         return result;
@@ -318,6 +444,144 @@ const getBackendFieldErrors = (
   }
 
   return {};
+};
+
+const getTemplateErrorMessage = (
+  error,
+  fallback =
+    'Şablon oluşturulamadı'
+) => {
+  const status =
+    Number(
+      error?.response?.status
+    );
+
+  const payload =
+    error?.response?.data;
+
+  const rawMessage =
+    String(
+      payload?.message ||
+      error?.message ||
+      ''
+    ).trim();
+
+  const validationText =
+    [
+      payload?.errors,
+      payload?.validation_errors,
+    ]
+      .flatMap(
+        (value) =>
+          Array.isArray(
+            value
+          )
+            ? value
+            : (
+                value &&
+                typeof value ===
+                  'object'
+                  ? Object.values(
+                      value
+                    )
+                  : []
+              )
+      )
+      .map(
+        (value) =>
+          String(
+            value?.message ??
+            value?.msg ??
+            (
+              Array.isArray(
+                value
+              )
+                ? value[0]
+                : value
+            ) ??
+            ''
+          ).trim()
+      )
+      .filter(Boolean)
+      .join(' ');
+
+  const technicalText =
+    `${rawMessage} ${validationText}`.trim();
+
+  if (
+    status === 401
+  ) {
+    return 'Oturumunuz sona ermiş olabilir. Lütfen yeniden giriş yapın.';
+  }
+
+  if (
+    status === 403
+  ) {
+    return 'Şablon oluşturmak için yetkiniz bulunmuyor.';
+  }
+
+  if (
+    status === 413 ||
+    /payload too large|file too large/i.test(
+      technicalText
+    )
+  ) {
+    return 'Dosya boyutu izin verilen sınırı aşıyor.';
+  }
+
+  if (
+    status === 409
+  ) {
+    return 'Bu bilgilerle çakışan bir şablon kaydı bulunuyor.';
+  }
+
+  if (
+    status === 422 ||
+    /validation failed|validation error|sequelize|notnull|cannot be null|must not be null|invalid input syntax|constraint|foreign key|uuid/i.test(
+      technicalText
+    )
+  ) {
+    return 'Şablon bilgileri doğrulanamadı. Formdaki alanları ve dosyayı kontrol edin.';
+  }
+
+  if (
+    /unsupported.*file|invalid.*file|file type|mime type|mimetype|multer/i.test(
+      technicalText
+    )
+  ) {
+    return 'Dosya türü desteklenmiyor. İzin verilen dosya türlerinden birini seçin.';
+  }
+
+  if (
+    /network error|failed to fetch|timeout|econnrefused|enotfound|network request failed/i.test(
+      technicalText
+    )
+  ) {
+    return 'Sunucuya bağlanılamadı. Lütfen bağlantınızı kontrol edip tekrar deneyin.';
+  }
+
+  if (
+    status >= 500
+  ) {
+    return 'Şablon şu anda oluşturulamıyor. Lütfen biraz sonra tekrar deneyin.';
+  }
+
+  const technical =
+    /sequelize|constraint|foreign key|uuid|syntax error|unexpected|stack|trace|sql|database/i.test(
+      rawMessage
+    );
+
+  if (
+    rawMessage &&
+    !technical &&
+    looksTurkishMessage(
+      rawMessage
+    )
+  ) {
+    return rawMessage;
+  }
+
+  return fallback;
 };
 
 const isAllowedOption = (
@@ -412,16 +676,21 @@ const TemplateCreate = () => {
   const fileInputRef =
     useRef(null);
 
+  const leaveModalRef =
+    useRef(null);
+
+  const previousFocusRef =
+    useRef(null);
+
   const [
     formData,
     setFormData,
   ] =
-    useState({
-      title: '',
-      description: '',
-      category: 'dilekce',
-      law_area: 'ozel_hukuk',
-    });
+    useState(
+      () => ({
+        ...INITIAL_FORM,
+      })
+    );
 
   const [
     file,
@@ -447,15 +716,32 @@ const TemplateCreate = () => {
   ] =
     useState(false);
 
+  const [
+    showLeaveModal,
+    setShowLeaveModal,
+  ] =
+    useState(false);
+
+  const normalizedForm = {
+    title:
+      formData.title.trim(),
+    description:
+      formData.description.trim(),
+    category:
+      formData.category,
+    law_area:
+      formData.law_area,
+  };
+
   const isDirty =
     Boolean(
-      formData.title.trim() ||
-      formData.description.trim() ||
-      formData.category !==
-        'dilekce' ||
-      formData.law_area !==
-        'ozel_hukuk' ||
-      file
+      file ||
+      JSON.stringify(
+        normalizedForm
+      ) !==
+        JSON.stringify(
+          INITIAL_FORM
+        )
     );
 
   // ====================================================
@@ -566,12 +852,9 @@ const TemplateCreate = () => {
         }
 
         toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
-          error?.message ||
-          'Şablon oluşturulamadı'
+          getTemplateErrorMessage(
+            error
+          )
         );
       },
     });
@@ -612,6 +895,154 @@ const TemplateCreate = () => {
     isDirty,
     mutation.isPending,
   ]);
+
+  useEffect(() => {
+    if (
+      !showLeaveModal
+    ) {
+      return;
+    }
+
+    previousFocusRef.current =
+      document.activeElement;
+
+    const modal =
+      leaveModalRef.current;
+
+    const getFocusable =
+      () =>
+        Array.from(
+          modal?.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          ) ||
+          []
+        );
+
+    const focusTimer =
+      window.setTimeout(
+        () => {
+          getFocusable()[0]
+            ?.focus();
+        },
+        0
+      );
+
+    const handleKeyDown =
+      (
+        event
+      ) => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          event.preventDefault();
+
+          setShowLeaveModal(
+            false
+          );
+
+          return;
+        }
+
+        if (
+          event.key !==
+          'Tab'
+        ) {
+          return;
+        }
+
+        const focusable =
+          getFocusable();
+
+        if (
+          focusable.length ===
+          0
+        ) {
+          event.preventDefault();
+          return;
+        }
+
+        const first =
+          focusable[0];
+
+        const last =
+          focusable[
+            focusable.length -
+              1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      };
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.clearTimeout(
+        focusTimer
+      );
+
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      previousFocusRef.current
+        ?.focus?.();
+    };
+  }, [
+    showLeaveModal,
+  ]);
+
+  const requestExit =
+    () => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
+      if (
+        !isDirty
+      ) {
+        navigate(
+          '/templates'
+        );
+
+        return;
+      }
+
+      setShowLeaveModal(
+        true
+      );
+    };
+
+  const discardAndExit =
+    () => {
+      setShowLeaveModal(
+        false
+      );
+
+      navigate(
+        '/templates'
+      );
+    };
 
   const handleChange =
     (
@@ -1085,21 +1516,8 @@ const TemplateCreate = () => {
           onClick={(
             event
           ) => {
-            if (
-              mutation.isPending
-            ) {
-              event.preventDefault();
-              return;
-            }
-
-            if (
-              isDirty &&
-              !window.confirm(
-                'Kaydedilmemiş değişiklikler var. Şablon oluşturmadan çıkmak istediğinize emin misiniz?'
-              )
-            ) {
-              event.preventDefault();
-            }
+            event.preventDefault();
+            requestExit();
           }}
           className="
             inline-flex
@@ -1164,6 +1582,17 @@ const TemplateCreate = () => {
             >
               Büro içerisinde tekrar kullanılacak dilekçe, ihtar veya sözleşme şablonunu tanımlayın.
             </p>
+
+            {isDirty && (
+              <div className="mt-2">
+                <Badge
+                  variant="warning"
+                  dot
+                >
+                  Kaydedilmemiş değişiklik
+                </Badge>
+              </div>
+            )}
 
           </div>
 
@@ -1236,6 +1665,9 @@ const TemplateCreate = () => {
               maxLength={
                 MAX_TITLE_LENGTH
               }
+              disabled={
+                mutation.isPending
+              }
               placeholder="Örn: İcra Takibi İtiraz Dilekçesi"
               autoFocus
             />
@@ -1257,6 +1689,9 @@ const TemplateCreate = () => {
                 rows={4}
                 maxLength={
                   MAX_DESCRIPTION_LENGTH
+                }
+                disabled={
+                  mutation.isPending
                 }
                 placeholder="Şablonun hangi işlemlerde kullanılacağını kısaca açıklayın..."
                 className="
@@ -1309,6 +1744,9 @@ const TemplateCreate = () => {
                   }
                   onChange={
                     handleChange
+                  }
+                  disabled={
+                    mutation.isPending
                   }
                   className="
                     h-10
@@ -1370,6 +1808,9 @@ const TemplateCreate = () => {
                   }
                   onChange={
                     handleChange
+                  }
+                  disabled={
+                    mutation.isPending
                   }
                   className="
                     h-10
@@ -1872,31 +2313,14 @@ const TemplateCreate = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={() => {
-              if (
-                mutation.isPending
-              ) {
-                return;
-              }
-
-              if (
-                isDirty &&
-                !window.confirm(
-                  'Kaydedilmemiş değişiklikler var. Şablon oluşturmadan çıkmak istediğinize emin misiniz?'
-                )
-              ) {
-                return;
-              }
-
-              navigate(
-                '/templates'
-              );
-            }}
+            onClick={
+              requestExit
+            }
             disabled={
               mutation.isPending
             }
           >
-            İptal
+            Vazgeç
           </Button>
 
           <Button
@@ -1915,6 +2339,141 @@ const TemplateCreate = () => {
         </div>
 
       </form>
+
+      {showLeaveModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="presentation"
+        >
+          <button
+            type="button"
+            aria-label="Uyarıyı kapat"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[1px]"
+            onClick={() =>
+              setShowLeaveModal(
+                false
+              )
+            }
+          />
+
+          <div
+            ref={
+              leaveModalRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="template-create-leave-title"
+            aria-describedby="template-create-leave-description"
+            className="
+              relative
+              z-10
+              w-full
+              max-w-md
+              rounded-2xl
+              border
+              border-gray-200
+              bg-white
+              p-5
+              shadow-2xl
+              dark:border-white/[0.08]
+              dark:bg-slate-900
+            "
+          >
+            <div className="flex items-start justify-between gap-4">
+
+              <div className="flex items-start gap-3">
+
+                <div
+                  className="
+                    flex
+                    h-10
+                    w-10
+                    shrink-0
+                    items-center
+                    justify-center
+                    rounded-xl
+                    bg-amber-50
+                    text-amber-600
+                    dark:bg-amber-500/[0.08]
+                    dark:text-amber-400
+                  "
+                >
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+
+                <div>
+                  <h2
+                    id="template-create-leave-title"
+                    className="text-base font-semibold text-gray-900 dark:text-white"
+                  >
+                    Kaydedilmemiş değişiklikler
+                  </h2>
+
+                  <p
+                    id="template-create-leave-description"
+                    className="mt-1.5 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    Şablon oluşturulmadan çıkarsanız girdiğiniz bilgiler ve seçtiğiniz dosya kaydedilmeyecek.
+                  </p>
+                </div>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowLeaveModal(
+                    false
+                  )
+                }
+                className="
+                  rounded-lg
+                  p-1.5
+                  text-gray-400
+                  transition
+                  hover:bg-gray-100
+                  hover:text-gray-600
+                  focus:outline-none
+                  focus:ring-2
+                  focus:ring-blue-500/20
+                  dark:hover:bg-white/[0.06]
+                  dark:hover:text-slate-200
+                "
+                aria-label="Uyarıyı kapat"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  setShowLeaveModal(
+                    false
+                  )
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  discardAndExit
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

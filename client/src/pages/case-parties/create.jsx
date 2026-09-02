@@ -1,5 +1,7 @@
 import {
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -34,6 +36,7 @@ import Badge
   from '../../components/ui/Badge.jsx';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   Building2,
   Gavel,
@@ -348,6 +351,115 @@ const isValidTCKN = (
   );
 };
 
+const isLikelyTechnicalMessage = (
+  value
+) => {
+  const message =
+    String(
+      value ||
+      ''
+    ).trim();
+
+  if (!message) {
+    return false;
+  }
+
+  return /validation failed|sequelize|constraint|foreign key|unique constraint|notnull|not null|invalid input syntax|syntax error|stack|internal server|network error|failed to fetch|timeout|econn|socket|request failed/i.test(
+    message
+  );
+};
+
+const getCasePartyErrorMessage = (
+  error,
+  fallback = 'İşlem tamamlanamadı'
+) => {
+  const status =
+    error?.response?.status;
+
+  const rawMessage =
+    error?.response?.data?.message ||
+    error?.message ||
+    '';
+
+  if (status === 401) {
+    return 'Oturumunuzun süresi dolmuş olabilir. Lütfen yeniden giriş yapın.';
+  }
+
+  if (status === 403) {
+    return 'Bu işlem için yetkiniz bulunmuyor.';
+  }
+
+  if (status === 404) {
+    return 'İlgili dava kaydı bulunamadı veya artık erişilebilir değil.';
+  }
+
+  if (status === 409) {
+    return 'Bu bilgiler mevcut bir kayıtla çakışıyor. Formu kontrol edip tekrar deneyin.';
+  }
+
+  if (status === 422) {
+    return 'Formdaki bilgileri kontrol edip tekrar deneyin.';
+  }
+
+  if (status >= 500) {
+    return 'Sunucu tarafında geçici bir sorun oluştu. Lütfen tekrar deneyin.';
+  }
+
+  if (
+    /network|fetch|timeout|econn|socket/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+  }
+
+  if (
+    rawMessage &&
+    !isLikelyTechnicalMessage(
+      rawMessage
+    )
+  ) {
+    return rawMessage;
+  }
+
+  return fallback;
+};
+
+const getCasePartyFieldErrorMessage = (
+  field,
+  rawMessage
+) => {
+  if (
+    rawMessage &&
+    !isLikelyTechnicalMessage(
+      rawMessage
+    )
+  ) {
+    return rawMessage;
+  }
+
+  const fallbacks = {
+    party_type: 'Taraf türünü kontrol edin',
+    entity_type: 'Kişi türünü kontrol edin',
+    name: 'Ad / unvan bilgisini kontrol edin',
+    identification_number: 'Kimlik / vergi numarasını kontrol edin',
+    tax_office: 'Vergi dairesi bilgisini kontrol edin',
+    phone: 'Telefon numarasını kontrol edin',
+    email: 'E-posta adresini kontrol edin',
+    address: 'Adres bilgisini kontrol edin',
+    lawyer_name: 'Avukat adını kontrol edin',
+    lawyer_phone: 'Avukat telefonunu kontrol edin',
+    lawyer_email: 'Avukat e-posta adresini kontrol edin',
+    lawyer_registry_number: 'Baro sicil numarasını kontrol edin',
+    notes: 'İç not bilgisini kontrol edin',
+  };
+
+  return (
+    fallbacks[field] ||
+    'Bu alanı kontrol edin'
+  );
+};
+
 const normalizeFormForComparison = (
   form
 ) => ({
@@ -507,6 +619,39 @@ const CasePartyCreate = () => {
   ] =
     useState({});
 
+  const [
+    unsavedDialogOpen,
+    setUnsavedDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingExitPath,
+    setPendingExitPath,
+  ] =
+    useState('');
+
+  const [
+    entityTypeDialogOpen,
+    setEntityTypeDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingEntityType,
+    setPendingEntityType,
+  ] =
+    useState('');
+
+  const unsavedDialogRef =
+    useRef(null);
+
+  const entityTypeDialogRef =
+    useRef(null);
+
+  const previousFocusRef =
+    useRef(null);
+
   // ======================================================
   // CASE QUERY
   // ======================================================
@@ -520,6 +665,9 @@ const CasePartyCreate = () => {
 
     error:
       caseError,
+
+    refetch:
+      refetchCase,
   } =
     useQuery({
       queryKey: [
@@ -607,6 +755,204 @@ const CasePartyCreate = () => {
       formData,
     ]);
 
+  useEffect(() => {
+    if (
+      !isDirty
+    ) {
+      return undefined;
+    }
+
+    const handleBeforeUnload =
+      (event) => {
+        event.preventDefault();
+        event.returnValue = '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+  ]);
+
+  useEffect(() => {
+    const activeDialogRef =
+      unsavedDialogOpen
+        ? unsavedDialogRef
+        : entityTypeDialogOpen
+          ? entityTypeDialogRef
+          : null;
+
+    if (
+      !activeDialogRef
+    ) {
+      return undefined;
+    }
+
+    previousFocusRef.current =
+      document.activeElement;
+
+    const dialog =
+      activeDialogRef.current;
+
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const focusFirst =
+      () => {
+        const focusable =
+          dialog?.querySelectorAll(
+            focusableSelector
+          );
+
+        const first =
+          focusable?.[0];
+
+        if (first) {
+          first.focus();
+        } else {
+          dialog?.focus();
+        }
+      };
+
+    const timer =
+      window.setTimeout(
+        focusFirst,
+        0
+      );
+
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          event.preventDefault();
+
+          if (
+            isPending
+          ) {
+            return;
+          }
+
+          if (
+            unsavedDialogOpen
+          ) {
+            setUnsavedDialogOpen(false);
+            setPendingExitPath('');
+          }
+
+          if (
+            entityTypeDialogOpen
+          ) {
+            setEntityTypeDialogOpen(false);
+            setPendingEntityType('');
+          }
+
+          return;
+        }
+
+        if (
+          event.key !==
+          'Tab' ||
+          !dialog
+        ) {
+          return;
+        }
+
+        const focusable =
+          Array.from(
+            dialog.querySelectorAll(
+              focusableSelector
+            )
+          ).filter(
+            (element) =>
+              !element.hasAttribute(
+                'disabled'
+              )
+          );
+
+        if (
+          focusable.length ===
+          0
+        ) {
+          event.preventDefault();
+          dialog.focus();
+          return;
+        }
+
+        const first =
+          focusable[0];
+
+        const last =
+          focusable[
+            focusable.length -
+              1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      };
+
+    document.body.style.overflow =
+      'hidden';
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.clearTimeout(
+        timer
+      );
+
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        '';
+
+      const previousFocus =
+        previousFocusRef.current;
+
+      if (
+        previousFocus &&
+        typeof previousFocus.focus ===
+          'function'
+      ) {
+        previousFocus.focus();
+      }
+    };
+  }, [
+    unsavedDialogOpen,
+    entityTypeDialogOpen,
+    isPending,
+  ]);
+
   // ======================================================
   // MUTATION
   // ======================================================
@@ -670,14 +1016,14 @@ const CasePartyCreate = () => {
             ?.data
             ?.errors;
 
-        const message =
+        const rawMessage =
           error
             ?.response
             ?.data
             ?.message ||
           error
             ?.message ||
-          'Taraf eklenemedi';
+          '';
 
         const nextErrors =
           {};
@@ -693,7 +1039,8 @@ const CasePartyCreate = () => {
             ) => {
               const rawField =
                 item?.path ||
-                item?.param;
+                item?.param ||
+                item?.field;
 
               const field =
                 Array.isArray(
@@ -720,70 +1067,83 @@ const CasePartyCreate = () => {
                   )
               ) {
                 nextErrors[field] =
-                  item?.msg ||
-                  'Geçersiz değer';
+                  getCasePartyFieldErrorMessage(
+                    field,
+                    item?.msg ||
+                      item?.message ||
+                      ''
+                  );
               }
             }
           );
         }
 
         if (
-          /kimlik|tckn|tckno|identification/i.test(
-            message
+          /kimlik|tckn|tckno|identification|vergi|vkn/i.test(
+            rawMessage
           )
         ) {
           nextErrors.identification_number =
-            message;
-        }
-
-        if (
-          /vergi|vkn/i.test(
-            message
-          )
-        ) {
-          nextErrors.identification_number =
-            message;
+            getCasePartyFieldErrorMessage(
+              'identification_number',
+              rawMessage
+            );
         }
 
         if (
           /ad soyad|unvan|name/i.test(
-            message
+            rawMessage
           )
         ) {
           nextErrors.name =
-            message;
+            getCasePartyFieldErrorMessage(
+              'name',
+              rawMessage
+            );
         }
 
         if (
           /avukat.*e-posta|lawyer_email/i.test(
-            message
+            rawMessage
           )
         ) {
           nextErrors.lawyer_email =
-            message;
+            getCasePartyFieldErrorMessage(
+              'lawyer_email',
+              rawMessage
+            );
         } else if (
           /e-posta|email/i.test(
-            message
+            rawMessage
           )
         ) {
           nextErrors.email =
-            message;
+            getCasePartyFieldErrorMessage(
+              'email',
+              rawMessage
+            );
         }
 
         if (
           /avukat.*telefon|lawyer_phone/i.test(
-            message
+            rawMessage
           )
         ) {
           nextErrors.lawyer_phone =
-            message;
+            getCasePartyFieldErrorMessage(
+              'lawyer_phone',
+              rawMessage
+            );
         } else if (
           /telefon|phone/i.test(
-            message
+            rawMessage
           )
         ) {
           nextErrors.phone =
-            message;
+            getCasePartyFieldErrorMessage(
+              'phone',
+              rawMessage
+            );
         }
 
         if (
@@ -809,7 +1169,10 @@ const CasePartyCreate = () => {
         }
 
         toast.error(
-          message
+          getCasePartyErrorMessage(
+            error,
+            'Taraf eklenemedi'
+          )
         );
       },
     });
@@ -953,20 +1316,6 @@ const CasePartyCreate = () => {
 
         [name]:
           nextValue,
-
-        ...(name ===
-        'entity_type'
-          ? {
-              identification_number:
-                '',
-
-              tax_office:
-                value ===
-                'company'
-                  ? current.tax_office
-                  : '',
-            }
-          : {}),
       })
     );
 
@@ -990,16 +1339,10 @@ const CasePartyCreate = () => {
   // ENTITY TYPE
   // ======================================================
 
-  const handleEntityTypeChange =
+  const applyEntityTypeChange =
     (
       type
     ) => {
-      if (
-        isPending
-      ) {
-        return;
-      }
-
       setFormData(
         (
           current
@@ -1031,7 +1374,99 @@ const CasePartyCreate = () => {
 
           tax_office:
             '',
+
+          entity_type:
+            '',
         })
+      );
+    };
+
+  const handleEntityTypeChange =
+    (
+      type
+    ) => {
+      if (
+        isPending ||
+        ![
+          'person',
+          'company',
+        ].includes(
+          type
+        ) ||
+        type ===
+          formData.entity_type
+      ) {
+        return;
+      }
+
+      const hasIdentityData =
+        Boolean(
+          onlyDigits(
+            formData.identification_number
+          ) ||
+          (
+            type ===
+              'person' &&
+            formData.tax_office
+              .trim()
+          )
+        );
+
+      if (
+        hasIdentityData
+      ) {
+        setPendingEntityType(
+          type
+        );
+
+        setEntityTypeDialogOpen(
+          true
+        );
+
+        return;
+      }
+
+      applyEntityTypeChange(
+        type
+      );
+    };
+
+  const closeEntityTypeDialog =
+    () => {
+      if (
+        isPending
+      ) {
+        return;
+      }
+
+      setEntityTypeDialogOpen(
+        false
+      );
+
+      setPendingEntityType(
+        ''
+      );
+    };
+
+  const confirmEntityTypeChange =
+    () => {
+      if (
+        isPending ||
+        !pendingEntityType
+      ) {
+        return;
+      }
+
+      applyEntityTypeChange(
+        pendingEntityType
+      );
+
+      setEntityTypeDialogOpen(
+        false
+      );
+
+      setPendingEntityType(
+        ''
       );
     };
 
@@ -1386,8 +1821,17 @@ const CasePartyCreate = () => {
   // CANCEL
   // ======================================================
 
-  const handleCancel =
-    () => {
+  const requestExit =
+    (
+      path,
+      event
+    ) => {
+      if (
+        event
+      ) {
+        event.preventDefault();
+      }
+
       if (
         isPending
       ) {
@@ -1395,21 +1839,69 @@ const CasePartyCreate = () => {
       }
 
       if (
-        isDirty
+        !isDirty
       ) {
-        const confirmed =
-          window.confirm(
-            'Kaydedilmemiş taraf bilgileri var. Sayfadan ayrılmak istediğinize emin misiniz?'
-          );
+        navigate(
+          path
+        );
 
-        if (
-          !confirmed
-        ) {
-          return;
-        }
+        return;
       }
 
+      setPendingExitPath(
+        path
+      );
+
+      setUnsavedDialogOpen(
+        true
+      );
+    };
+
+  const closeUnsavedDialog =
+    () => {
+      if (
+        isPending
+      ) {
+        return;
+      }
+
+      setUnsavedDialogOpen(
+        false
+      );
+
+      setPendingExitPath(
+        ''
+      );
+    };
+
+  const discardAndExit =
+    () => {
+      if (
+        isPending
+      ) {
+        return;
+      }
+
+      const path =
+        pendingExitPath ||
+        `/cases/${caseId}`;
+
+      setUnsavedDialogOpen(
+        false
+      );
+
+      setPendingExitPath(
+        ''
+      );
+
       navigate(
+        path
+      );
+    };
+
+  const handleCancel =
+    () => {
+      requestExit(
         `/cases/${caseId}`
       );
     };
@@ -1429,6 +1921,12 @@ const CasePartyCreate = () => {
 
         <Link
           to={`/cases/${caseId}`}
+          onClick={(event) =>
+            requestExit(
+              `/cases/${caseId}`,
+              event
+            )
+          }
           className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 transition hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -1454,7 +1952,7 @@ const CasePartyCreate = () => {
                 <Badge
                   variant="warning"
                 >
-                  Kaydedilmemiş bilgi
+                  Kaydedilmemiş değişiklik
                 </Badge>
               )}
 
@@ -1496,14 +1994,23 @@ const CasePartyCreate = () => {
               </p>
 
               <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
-                {caseError
-                  ?.response
-                  ?.data
-                  ?.message ||
-                  caseError
-                    ?.message ||
-                  'Dava kaydına erişilemedi.'}
+                {getCasePartyErrorMessage(
+                  caseError,
+                  'Dava kaydına erişilemedi.'
+                )}
               </p>
+
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="mt-3"
+                onClick={() =>
+                  refetchCase?.()
+                }
+              >
+                Tekrar Dene
+              </Button>
 
             </div>
           ) : caseItem ? (
@@ -2179,6 +2686,141 @@ const CasePartyCreate = () => {
         </form>
 
       </Card>
+
+      {unsavedDialogOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="presentation"
+        >
+          <button
+            type="button"
+            aria-label="Uyarıyı kapat"
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+            onClick={
+              closeUnsavedDialog
+            }
+          />
+
+          <div
+            ref={
+              unsavedDialogRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="case-party-create-unsaved-title"
+            tabIndex={-1}
+            className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl outline-none dark:border-white/[0.08] dark:bg-slate-900"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.1] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2
+                  id="case-party-create-unsaved-title"
+                  className="font-semibold text-gray-900 dark:text-white"
+                >
+                  Kaydedilmemiş değişiklikler var
+                </h2>
+
+                <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400">
+                  Taraf formunda kaydedilmemiş bilgiler bulunuyor. Çıkarsanız bu değişiklikler kaybolacak.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  closeUnsavedDialog
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  discardAndExit
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {entityTypeDialogOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="presentation"
+        >
+          <button
+            type="button"
+            aria-label="Kişi türü uyarısını kapat"
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+            onClick={
+              closeEntityTypeDialog
+            }
+          />
+
+          <div
+            ref={
+              entityTypeDialogRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="case-party-create-entity-title"
+            tabIndex={-1}
+            className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl outline-none dark:border-white/[0.08] dark:bg-slate-900"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.1] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2
+                  id="case-party-create-entity-title"
+                  className="font-semibold text-gray-900 dark:text-white"
+                >
+                  Kişi türü değiştirilsin mi?
+                </h2>
+
+                <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400">
+                  Kişi türünü değiştirirseniz mevcut TCKN/VKN bilgisi{pendingEntityType === 'person' && formData.tax_office.trim() ? ' ve vergi dairesi bilgisi' : ''} temizlenecek.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  closeEntityTypeDialog
+                }
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                onClick={
+                  confirmEntityTypeChange
+                }
+              >
+                Kişi Türünü Değiştir
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

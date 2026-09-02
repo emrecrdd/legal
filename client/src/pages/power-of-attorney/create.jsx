@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -27,6 +28,7 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   BriefcaseBusiness,
   CalendarDays,
@@ -362,6 +364,195 @@ const appendOptionalFormData = (
   );
 };
 
+const normalizeFormForComparison = (
+  value
+) => {
+  return JSON.stringify({
+    client_id:
+      String(
+        value?.client_id ||
+        ''
+      ),
+
+    case_id:
+      String(
+        value?.case_id ||
+        ''
+      ),
+
+    title:
+      String(
+        value?.title ||
+        ''
+      ).trim(),
+
+    description:
+      String(
+        value?.description ||
+        ''
+      ).trim(),
+
+    start_date:
+      value?.start_date ||
+      '',
+
+    end_date:
+      value?.end_date ||
+      '',
+
+    status:
+      value?.status ||
+      'active',
+
+    authorities:
+      Array.isArray(
+        value?.authorities
+      )
+        ? value.authorities
+            .map(
+              (item) =>
+                String(
+                  item ||
+                  ''
+                ).trim()
+            )
+            .filter(Boolean)
+        : [],
+
+    notes:
+      String(
+        value?.notes ||
+        ''
+      ).trim(),
+  });
+};
+
+const FIELD_ERROR_MESSAGES = {
+  client_id:
+    'Müvekkil seçimini kontrol edin.',
+  case_id:
+    'İlişkili dava seçimini kontrol edin.',
+  title:
+    'Vekaletname başlığını kontrol edin.',
+  description:
+    'Açıklama alanını kontrol edin.',
+  start_date:
+    'Başlangıç tarihini kontrol edin.',
+  end_date:
+    'Bitiş tarihini kontrol edin.',
+  status:
+    'Vekaletname durumunu kontrol edin.',
+  authorities:
+    'Vekaletname yetkilerini kontrol edin.',
+  notes:
+    'Notlar alanını kontrol edin.',
+};
+
+const getPowerOfAttorneyFieldErrors = (
+  error
+) => {
+  const source =
+    error?.response?.data?.errors ??
+    error?.response?.data?.validation_errors ??
+    null;
+
+  if (!source) {
+    return {};
+  }
+
+  const result = {};
+
+  const setFieldError = (
+    rawField,
+    rawMessage
+  ) => {
+    const field =
+      Array.isArray(
+        rawField
+      )
+        ? rawField[
+            rawField.length - 1
+          ]
+        : String(
+            rawField ||
+            ''
+          )
+            .split('.')
+            .filter(Boolean)
+            .pop();
+
+    if (
+      !field ||
+      !Object.prototype.hasOwnProperty.call(
+        FIELD_ERROR_MESSAGES,
+        field
+      )
+    ) {
+      return;
+    }
+
+    const message =
+      String(
+        rawMessage ||
+        ''
+      ).trim();
+
+    const looksTurkish =
+      /[çğıöşüÇĞİÖŞÜ]|zorunlu|geçersiz|kontrol|bulunamadı|eriş|seç|tarih|başlık|açıklama|not|yetki/i.test(
+        message
+      );
+
+    result[field] =
+      looksTurkish
+        ? message
+        : FIELD_ERROR_MESSAGES[
+            field
+          ];
+  };
+
+  if (
+    Array.isArray(
+      source
+    )
+  ) {
+    source.forEach(
+      (item) => {
+        setFieldError(
+          item?.path ??
+            item?.param ??
+            item?.field,
+          item?.message ??
+            item?.msg
+        );
+      }
+    );
+
+    return result;
+  }
+
+  if (
+    typeof source ===
+    'object'
+  ) {
+    Object.entries(
+      source
+    ).forEach(
+      ([field, value]) => {
+        setFieldError(
+          field,
+          Array.isArray(
+            value
+          )
+            ? value[0]
+            : value
+        );
+      }
+    );
+  }
+
+  return result;
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -383,11 +574,8 @@ const PowerOfAttorneyCreate = () => {
   const fileInputRef =
     useRef(null);
 
-  const [
-    formData,
-    setFormData,
-  ] =
-    useState({
+  const initialFormRef =
+    useRef({
       client_id:
         clientIdFromUrl ||
         '',
@@ -416,6 +604,17 @@ const PowerOfAttorneyCreate = () => {
       notes:
         '',
     });
+
+  const [
+    formData,
+    setFormData,
+  ] =
+    useState(
+      () => ({
+        ...initialFormRef.current,
+        authorities: [],
+      })
+    );
 
   const [
     file,
@@ -447,6 +646,33 @@ const PowerOfAttorneyCreate = () => {
   ] =
     useState(false);
 
+  const [
+    showLeaveModal,
+    setShowLeaveModal,
+  ] =
+    useState(false);
+
+  const [
+    showClientChangeModal,
+    setShowClientChangeModal,
+  ] =
+    useState(false);
+
+  const [
+    pendingClientId,
+    setPendingClientId,
+  ] =
+    useState('');
+
+  const leaveModalRef =
+    useRef(null);
+
+  const clientChangeModalRef =
+    useRef(null);
+
+  const lastFocusedRef =
+    useRef(null);
+
   // ====================================================
   // CLIENTS
   // ====================================================
@@ -456,6 +682,10 @@ const PowerOfAttorneyCreate = () => {
       clientsData,
     isLoading:
       clientsLoading,
+    isError:
+      clientsError,
+    refetch:
+      refetchClients,
   } =
     useQuery({
       queryKey: [
@@ -480,6 +710,10 @@ const PowerOfAttorneyCreate = () => {
       casesData,
     isLoading:
       casesLoading,
+    isError:
+      casesError,
+    refetch:
+      refetchCases,
   } =
     useQuery({
       queryKey: [
@@ -588,6 +822,28 @@ const PowerOfAttorneyCreate = () => {
       formData.case_id,
     ]);
 
+  const isDirty =
+    useMemo(() => {
+      return (
+        normalizeFormForComparison(
+          formData
+        ) !==
+          normalizeFormForComparison(
+            initialFormRef.current
+          ) ||
+        Boolean(
+          file
+        ) ||
+        Boolean(
+          authorityInput.trim()
+        )
+      );
+    }, [
+      formData,
+      file,
+      authorityInput,
+    ]);
+
   // ====================================================
   // MUTATION
   // ====================================================
@@ -630,6 +886,25 @@ const PowerOfAttorneyCreate = () => {
       onError: (
         error
       ) => {
+        const fieldErrors =
+          getPowerOfAttorneyFieldErrors(
+            error
+          );
+
+        if (
+          Object.keys(
+            fieldErrors
+          ).length >
+          0
+        ) {
+          setErrors(
+            (current) => ({
+              ...current,
+              ...fieldErrors,
+            })
+          );
+        }
+
         toast.error(
           getPowerOfAttorneyErrorMessage(
             error,
@@ -643,52 +918,88 @@ const PowerOfAttorneyCreate = () => {
   // FORM HANDLERS
   // ====================================================
 
+  const applyClientChange =
+    (nextClientId) => {
+      setFormData(
+        (current) => ({
+          ...current,
+          client_id:
+            nextClientId,
+          case_id:
+            '',
+        })
+      );
+
+      setErrors(
+        (current) => ({
+          ...current,
+          client_id:
+            '',
+          case_id:
+            '',
+        })
+      );
+    };
+
   const handleChange =
     (
       event
     ) => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       const {
         name,
         value,
       } =
         event.target;
 
-      setFormData(
-        (
-          current
-        ) => {
-          /*
-           * Müvekkil değiştiyse önceki dava
-           * artık bu müvekkile ait olmayabilir.
-           */
-          if (
-            name ===
-            'client_id'
-          ) {
-            return {
-              ...current,
-              client_id:
-                value,
-              case_id:
-                '',
-            };
-          }
+      if (
+        name ===
+          'client_id' &&
+        value !==
+          formData.client_id
+      ) {
+        if (
+          formData.case_id
+        ) {
+          lastFocusedRef.current =
+            document.activeElement;
 
-          return {
-            ...current,
-            [name]:
-              value,
-          };
+          setPendingClientId(
+            value
+          );
+
+          setShowClientChangeModal(
+            true
+          );
+
+          return;
         }
+
+        applyClientChange(
+          value
+        );
+
+        return;
+      }
+
+      setFormData(
+        (current) => ({
+          ...current,
+          [name]:
+            value,
+        })
       );
 
       if (
         errors[name]
       ) {
         setErrors(
-          (
-            current
-          ) => ({
+          (current) => ({
             ...current,
             [name]:
               '',
@@ -706,6 +1017,7 @@ const PowerOfAttorneyCreate = () => {
       selectedFile
     ) => {
       if (
+        mutation.isPending ||
         !selectedFile
       ) {
         return;
@@ -781,6 +1093,12 @@ const PowerOfAttorneyCreate = () => {
 
   const handleRemoveFile =
     () => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       setFile(
         null
       );
@@ -806,6 +1124,12 @@ const PowerOfAttorneyCreate = () => {
       event
     ) => {
       event.preventDefault();
+
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
 
       setIsDragging(
         true
@@ -833,6 +1157,12 @@ const PowerOfAttorneyCreate = () => {
         false
       );
 
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       const droppedFile =
         event.dataTransfer
           ?.files?.[0];
@@ -848,6 +1178,12 @@ const PowerOfAttorneyCreate = () => {
 
   const handleAddAuthority =
     () => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       const authority =
         authorityInput.trim();
 
@@ -902,6 +1238,12 @@ const PowerOfAttorneyCreate = () => {
     (
       index
     ) => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
       setFormData(
         (
           current
@@ -945,6 +1287,11 @@ const PowerOfAttorneyCreate = () => {
       ) {
         newErrors.client_id =
           'Müvekkil seçimi zorunludur';
+      } else if (
+        clientsError
+      ) {
+        newErrors.client_id =
+          'Müvekkil listesi doğrulanamadı. Lütfen tekrar deneyin.';
       }
 
       const title =
@@ -973,6 +1320,12 @@ const PowerOfAttorneyCreate = () => {
       }
 
       if (
+        formData.case_id &&
+        casesError
+      ) {
+        newErrors.case_id =
+          'Dava listesi doğrulanamadı. Lütfen tekrar deneyin.';
+      } else if (
         formData.case_id &&
         !cases.some(
           (caseItem) =>
@@ -1090,6 +1443,190 @@ const PowerOfAttorneyCreate = () => {
       );
     };
 
+  const requestExit =
+    () => {
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
+      if (
+        isDirty
+      ) {
+        lastFocusedRef.current =
+          document.activeElement;
+
+        setShowLeaveModal(
+          true
+        );
+
+        return;
+      }
+
+      navigate(
+        '/power-of-attorney'
+      );
+    };
+
+  useEffect(() => {
+    const handleBeforeUnload =
+      (event) => {
+        if (
+          !isDirty ||
+          mutation.isPending
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        event.returnValue =
+          '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+    mutation.isPending,
+  ]);
+
+  useEffect(() => {
+    const modalOpen =
+      showLeaveModal ||
+      showClientChangeModal;
+
+    if (
+      !modalOpen
+    ) {
+      return undefined;
+    }
+
+    const dialog =
+      showLeaveModal
+        ? leaveModalRef.current
+        : clientChangeModalRef.current;
+
+    const closeActiveModal =
+      () => {
+        if (
+          showLeaveModal
+        ) {
+          setShowLeaveModal(
+            false
+          );
+        } else {
+          setShowClientChangeModal(
+            false
+          );
+
+          setPendingClientId(
+            ''
+          );
+        }
+      };
+
+    requestAnimationFrame(
+      () => {
+        dialog?.focus();
+      }
+    );
+
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          event.preventDefault();
+          closeActiveModal();
+          return;
+        }
+
+        if (
+          event.key !==
+          'Tab' ||
+          !dialog
+        ) {
+          return;
+        }
+
+        const focusable =
+          Array.from(
+            dialog.querySelectorAll(
+              'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            )
+          );
+
+        if (
+          focusable.length ===
+          0
+        ) {
+          event.preventDefault();
+          dialog.focus();
+          return;
+        }
+
+        const first =
+          focusable[0];
+
+        const last =
+          focusable[
+            focusable.length - 1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      };
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      requestAnimationFrame(
+        () => {
+          lastFocusedRef.current
+            ?.focus?.();
+
+          lastFocusedRef.current =
+            null;
+        }
+      );
+    };
+  }, [
+    showLeaveModal,
+    showClientChangeModal,
+  ]);
+
   // ====================================================
   // RENDER
   // ====================================================
@@ -1103,6 +1640,10 @@ const PowerOfAttorneyCreate = () => {
 
         <Link
           to="/power-of-attorney"
+          onClick={(event) => {
+            event.preventDefault();
+            requestExit();
+          }}
           className="
             inline-flex
             items-center
@@ -1142,17 +1683,25 @@ const PowerOfAttorneyCreate = () => {
 
           <div>
 
-            <h1
-              className="
-                text-2xl
-                font-semibold
-                tracking-[-0.035em]
-                text-gray-900
-                dark:text-white
-              "
-            >
-              Yeni Vekaletname
-            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1
+                className="
+                  text-2xl
+                  font-semibold
+                  tracking-[-0.035em]
+                  text-gray-900
+                  dark:text-white
+                "
+              >
+                Yeni Vekaletname
+              </h1>
+
+              {isDirty && (
+                <Badge variant="warning">
+                  Kaydedilmemiş değişiklik
+                </Badge>
+              )}
+            </div>
 
             <p
               className="
@@ -1242,7 +1791,8 @@ const PowerOfAttorneyCreate = () => {
                     handleChange
                   }
                   disabled={
-                    clientsLoading
+                    clientsLoading ||
+                    mutation.isPending
                   }
                   className={`
                     h-10
@@ -1295,6 +1845,27 @@ const PowerOfAttorneyCreate = () => {
                   <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
                     {errors.client_id}
                   </p>
+                )}
+
+                {clientsError && (
+                  <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-red-100 bg-red-50/60 px-3 py-2 dark:border-red-500/10 dark:bg-red-500/[0.035]">
+                    <p className="text-xs text-red-700 dark:text-red-300">
+                      Müvekkil listesi yüklenemedi.
+                    </p>
+
+                    <button
+                      type="button"
+                      disabled={
+                        mutation.isPending
+                      }
+                      onClick={() =>
+                        refetchClients()
+                      }
+                      className="shrink-0 text-xs font-semibold text-red-700 hover:underline disabled:opacity-50 dark:text-red-300"
+                    >
+                      Tekrar Dene
+                    </button>
+                  </div>
                 )}
 
                 {selectedClient && (
@@ -1359,7 +1930,8 @@ const PowerOfAttorneyCreate = () => {
                   }
                   disabled={
                     !formData.client_id ||
-                    casesLoading
+                    casesLoading ||
+                    mutation.isPending
                   }
                   className="
                     h-10
@@ -1413,6 +1985,28 @@ const PowerOfAttorneyCreate = () => {
                     {errors.case_id}
                   </p>
                 )}
+
+                {casesError &&
+                  formData.client_id && (
+                    <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-red-100 bg-red-50/60 px-3 py-2 dark:border-red-500/10 dark:bg-red-500/[0.035]">
+                      <p className="text-xs text-red-700 dark:text-red-300">
+                        Müvekkile ait davalar yüklenemedi.
+                      </p>
+
+                      <button
+                        type="button"
+                        disabled={
+                          mutation.isPending
+                        }
+                        onClick={() =>
+                          refetchCases()
+                        }
+                        className="shrink-0 text-xs font-semibold text-red-700 hover:underline disabled:opacity-50 dark:text-red-300"
+                      >
+                        Tekrar Dene
+                      </button>
+                    </div>
+                  )}
 
                 {selectedCase && (
                   <div
@@ -1516,6 +2110,9 @@ const PowerOfAttorneyCreate = () => {
               error={
                 errors.title
               }
+              disabled={
+                mutation.isPending
+              }
               placeholder="Örn: Taşınmaz Davası Vekaleti"
             />
 
@@ -1532,6 +2129,9 @@ const PowerOfAttorneyCreate = () => {
                 }
                 onChange={
                   handleChange
+                }
+                disabled={
+                  mutation.isPending
                 }
                 rows={4}
                 placeholder="Vekaletnamenin kapsamı veya kullanım amacı..."
@@ -1621,6 +2221,9 @@ const PowerOfAttorneyCreate = () => {
                 onChange={
                   handleChange
                 }
+                disabled={
+                  mutation.isPending
+                }
               />
 
               <Input
@@ -1640,6 +2243,9 @@ const PowerOfAttorneyCreate = () => {
                   formData.start_date ||
                   undefined
                 }
+                disabled={
+                  mutation.isPending
+                }
               />
 
               <div>
@@ -1655,6 +2261,9 @@ const PowerOfAttorneyCreate = () => {
                   }
                   onChange={
                     handleChange
+                  }
+                  disabled={
+                    mutation.isPending
                   }
                   className="
                     h-10
@@ -1759,10 +2368,19 @@ const PowerOfAttorneyCreate = () => {
                 }
                 onChange={(
                   event
-                ) =>
+                ) => {
+                  if (
+                    mutation.isPending
+                  ) {
+                    return;
+                  }
+
                   setAuthorityInput(
                     event.target.value
-                  )
+                  );
+                }}
+                disabled={
+                  mutation.isPending
                 }
                 onKeyDown={(
                   event
@@ -1804,6 +2422,10 @@ const PowerOfAttorneyCreate = () => {
                 variant="secondary"
                 onClick={
                   handleAddAuthority
+                }
+                disabled={
+                  mutation.isPending ||
+                  !authorityInput.trim()
                 }
               >
                 <Plus className="h-4 w-4" />
@@ -1850,7 +2472,10 @@ const PowerOfAttorneyCreate = () => {
                             index
                           )
                         }
-                        className="text-gray-400 transition hover:text-red-500"
+                        disabled={
+                          mutation.isPending
+                        }
+                        className="text-gray-400 transition hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
                         aria-label={`${authority} yetkisini kaldır`}
                       >
                         <X className="h-3.5 w-3.5" />
@@ -1918,6 +2543,7 @@ const PowerOfAttorneyCreate = () => {
               role="button"
               tabIndex={0}
               onClick={() =>
+                !mutation.isPending &&
                 !file &&
                 fileInputRef.current?.click()
               }
@@ -1925,6 +2551,7 @@ const PowerOfAttorneyCreate = () => {
                 event
               ) => {
                 if (
+                  !mutation.isPending &&
                   !file &&
                   (
                     event.key ===
@@ -2034,6 +2661,9 @@ const PowerOfAttorneyCreate = () => {
 
                       handleRemoveFile();
                     }}
+                    disabled={
+                      mutation.isPending
+                    }
                   >
                     <Trash2 className="h-4 w-4" />
                     Kaldır
@@ -2105,6 +2735,9 @@ const PowerOfAttorneyCreate = () => {
                 onChange={
                   handleFileChange
                 }
+                disabled={
+                  mutation.isPending
+                }
                 accept=".pdf,.udf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp"
               />
 
@@ -2170,6 +2803,9 @@ const PowerOfAttorneyCreate = () => {
               onChange={
                 handleChange
               }
+              disabled={
+                mutation.isPending
+              }
               rows={4}
               placeholder="Vekaletname ile ilgili büro içi notlar..."
               className="
@@ -2224,22 +2860,28 @@ const PowerOfAttorneyCreate = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={() =>
-              navigate(
-                '/power-of-attorney'
-              )
+            onClick={
+              requestExit
             }
             disabled={
               mutation.isPending
             }
           >
-            İptal
+            Vazgeç
           </Button>
 
           <Button
             type="submit"
             loading={
               mutation.isPending
+            }
+            disabled={
+              mutation.isPending ||
+              clientsLoading ||
+              Boolean(
+                formData.client_id &&
+                casesLoading
+              )
             }
           >
             <Scale className="h-4 w-4" />
@@ -2249,6 +2891,167 @@ const PowerOfAttorneyCreate = () => {
         </div>
 
       </form>
+
+      {showLeaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Uyarıyı kapat"
+            className="absolute inset-0 bg-slate-950/45"
+            onClick={() =>
+              setShowLeaveModal(
+                false
+              )
+            }
+          />
+
+          <div
+            ref={
+              leaveModalRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="poa-create-leave-title"
+            tabIndex={-1}
+            className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl outline-none dark:border-white/[0.08] dark:bg-slate-900"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2
+                  id="poa-create-leave-title"
+                  className="font-semibold text-gray-900 dark:text-white"
+                >
+                  Kaydedilmemiş değişiklikler
+                </h2>
+
+                <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400">
+                  Vekaletname oluşturma ekranında kaydedilmemiş bilgiler var. Çıkarsanız bu bilgiler kaybolacak.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  setShowLeaveModal(
+                    false
+                  )
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => {
+                  setShowLeaveModal(
+                    false
+                  );
+
+                  navigate(
+                    '/power-of-attorney'
+                  );
+                }}
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClientChangeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Uyarıyı kapat"
+            className="absolute inset-0 bg-slate-950/45"
+            onClick={() => {
+              setShowClientChangeModal(
+                false
+              );
+
+              setPendingClientId(
+                ''
+              );
+            }}
+          />
+
+          <div
+            ref={
+              clientChangeModalRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="poa-create-client-change-title"
+            tabIndex={-1}
+            className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl outline-none dark:border-white/[0.08] dark:bg-slate-900"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2
+                  id="poa-create-client-change-title"
+                  className="font-semibold text-gray-900 dark:text-white"
+                >
+                  Müvekkil değişikliği
+                </h2>
+
+                <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400">
+                  Müvekkili değiştirirseniz seçili dava kaldırılacak. Diğer vekaletname bilgileri korunacak.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setShowClientChangeModal(
+                    false
+                  );
+
+                  setPendingClientId(
+                    ''
+                  );
+                }}
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                onClick={() => {
+                  applyClientChange(
+                    pendingClientId
+                  );
+
+                  setShowClientChangeModal(
+                    false
+                  );
+
+                  setPendingClientId(
+                    ''
+                  );
+                }}
+              >
+                Müvekkili Değiştir
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

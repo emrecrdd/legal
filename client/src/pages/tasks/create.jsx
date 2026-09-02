@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -39,6 +40,7 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   BriefcaseBusiness,
   CalendarClock,
@@ -254,6 +256,206 @@ const localToUTC = (
 
   return parsed.toISOString();
 };
+
+
+const normalizeTaskCreateForm = (
+  form
+) => ({
+  title:
+    String(
+      form?.title || ''
+    ).trim(),
+
+  description:
+    String(
+      form?.description || ''
+    ).trim(),
+
+  priority:
+    VALID_PRIORITIES.has(
+      form?.priority
+    )
+      ? form.priority
+      : 'normal',
+
+  due_date:
+    normalizeDateTimeLocal(
+      form?.due_date || ''
+    ),
+
+  assignee_ids:
+    [
+      ...new Set(
+        Array.isArray(
+          form?.assignee_ids
+        )
+          ? form.assignee_ids
+              .map(
+                (id) =>
+                  String(
+                    id ?? ''
+                  )
+              )
+              .filter(Boolean)
+          : []
+      ),
+    ].sort(),
+
+  case_id:
+    String(
+      form?.case_id || ''
+    ),
+
+  client_id:
+    String(
+      form?.client_id || ''
+    ),
+
+  estimated_hours:
+    String(
+      form?.estimated_hours ?? ''
+    ).trim(),
+
+  note:
+    String(
+      form?.note || ''
+    ).trim(),
+});
+
+const TASK_FIELD_FALLBACKS = {
+  title:
+    'Görev adı geçersiz',
+  description:
+    'Görev açıklaması geçersiz',
+  priority:
+    'Geçerli bir öncelik seçin',
+  due_date:
+    'Geçerli bir son tarih girin',
+  assignee_ids:
+    'Görev sorumlularını kontrol edin',
+  assigned_to:
+    'Görev sorumlusunu kontrol edin',
+  case_id:
+    'İlişkili davayı kontrol edin',
+  client_id:
+    'İlişkili müvekkili kontrol edin',
+  estimated_hours:
+    'Tahmini çalışma süresini kontrol edin',
+  note:
+    'Başlangıç notunu kontrol edin',
+};
+
+const getSafeTaskFieldErrors = (
+  error
+) => {
+  const source =
+    error?.response?.data?.errors ??
+    error?.response?.data?.validation_errors ??
+    null;
+
+  if (!source) {
+    return {};
+  }
+
+  const result = {};
+
+  const addFieldError = (
+    rawField,
+    rawMessage
+  ) => {
+    const field =
+      String(
+        Array.isArray(rawField)
+          ? rawField[
+              rawField.length - 1
+            ]
+          : rawField || ''
+      )
+        .split('.')
+        .filter(Boolean)
+        .pop();
+
+    const normalizedField =
+      field === 'assigned_to'
+        ? 'assignee_ids'
+        : field;
+
+    if (
+      !normalizedField ||
+      !Object.prototype
+        .hasOwnProperty.call(
+          TASK_FIELD_FALLBACKS,
+          normalizedField
+        )
+    ) {
+      return;
+    }
+
+    const message =
+      String(
+        rawMessage || ''
+      ).trim();
+
+    const looksTechnical =
+      /validation|sequelize|constraint|notnull|invalid input syntax|uuid|foreign key|database|sql|must be|is required|cannot be null/i.test(
+        message
+      );
+
+    const looksTurkish =
+      /[çğıöşüÇĞİÖŞÜ]|geçersiz|gerekli|zorunlu|bulunamadı|seçin|kontrol/i.test(
+        message
+      );
+
+    result[normalizedField] =
+      message &&
+      looksTurkish &&
+      !looksTechnical
+        ? message
+        : TASK_FIELD_FALLBACKS[
+            normalizedField
+          ];
+  };
+
+  if (
+    Array.isArray(
+      source
+    )
+  ) {
+    source.forEach(
+      (item) => {
+        addFieldError(
+          item?.path ??
+            item?.param ??
+            item?.field,
+          item?.msg ??
+            item?.message
+        );
+      }
+    );
+
+    return result;
+  }
+
+  if (
+    typeof source ===
+    'object'
+  ) {
+    Object.entries(
+      source
+    ).forEach(
+      ([field, value]) => {
+        addFieldError(
+          field,
+          Array.isArray(value)
+            ? value[0]
+            : value
+        );
+      }
+    );
+  }
+
+  return result;
+};
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -340,6 +542,52 @@ const TaskCreate = () => {
   ] =
     useState({});
 
+
+  const initialFormRef =
+    useRef(null);
+
+  if (
+    !initialFormRef.current
+  ) {
+    initialFormRef.current =
+      normalizeTaskCreateForm(
+        formData
+      );
+  }
+
+  const leaveDialogRef =
+    useRef(null);
+
+  const relationDialogRef =
+    useRef(null);
+
+  const previousFocusRef =
+    useRef(null);
+
+  const [
+    leaveDialogOpen,
+    setLeaveDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingExitDestination,
+    setPendingExitDestination,
+  ] =
+    useState('/tasks');
+
+  const [
+    relationDialogOpen,
+    setRelationDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingClientId,
+    setPendingClientId,
+  ] =
+    useState('');
+
   // ====================================================
   // PERMISSIONS
   // ====================================================
@@ -378,6 +626,10 @@ const TaskCreate = () => {
       assignableUsersData,
     isLoading:
       assignableUsersLoading,
+    isError:
+      assignableUsersError,
+    refetch:
+      refetchAssignableUsers,
   } =
     useAssignableUsers(
       canAssignTasks
@@ -388,6 +640,10 @@ const TaskCreate = () => {
       casesData,
     isLoading:
       casesLoading,
+    isError:
+      casesError,
+    refetch:
+      refetchCases,
   } =
     useCases(
       {
@@ -404,6 +660,10 @@ const TaskCreate = () => {
       clientsData,
     isLoading:
       clientsLoading,
+    isError:
+      clientsError,
+    refetch:
+      refetchClients,
   } =
     useClients(
       {
@@ -420,6 +680,10 @@ const TaskCreate = () => {
       clientCasesData,
     isLoading:
       clientCasesLoading,
+    isError:
+      clientCasesError,
+    refetch:
+      refetchClientCases,
   } =
     useClientCaseHistory(
       formData.client_id
@@ -515,6 +779,17 @@ const TaskCreate = () => {
       ? clientCasesLoading
       : casesLoading;
 
+
+  const relationCasesError =
+    formData.client_id
+      ? clientCasesError
+      : casesError;
+
+  const refetchRelationCases =
+    formData.client_id
+      ? refetchClientCases
+      : refetchCases;
+
   // ====================================================
   // SELECTED DATA
   // ====================================================
@@ -556,8 +831,12 @@ const TaskCreate = () => {
         (
           item
         ) =>
-          item.id ===
-          formData.client_id
+          String(
+            item.id
+          ) ===
+          String(
+            formData.client_id
+          )
       );
     }, [
       clients,
@@ -581,9 +860,13 @@ const TaskCreate = () => {
         (
           person
         ) =>
-          formData.assignee_ids.includes(
-            person.id
-          )
+          formData.assignee_ids
+            .map(String)
+            .includes(
+              String(
+                person.id
+              )
+            )
       );
     }, [
       assignableUsers,
@@ -591,6 +874,330 @@ const TaskCreate = () => {
       canAssignTasks,
       user,
     ]);
+
+  const normalizedCurrentForm =
+    useMemo(
+      () =>
+        normalizeTaskCreateForm(
+          formData
+        ),
+      [
+        formData,
+      ]
+    );
+
+  const isDirty =
+    useMemo(
+      () =>
+        JSON.stringify(
+          normalizedCurrentForm
+        ) !==
+        JSON.stringify(
+          initialFormRef.current
+        ),
+      [
+        normalizedCurrentForm,
+      ]
+    );
+
+  const getCancelDestination =
+    () => {
+      if (
+        canViewCases &&
+        formData.case_id
+      ) {
+        return `/cases/${formData.case_id}`;
+      }
+
+      return '/tasks';
+    };
+
+  const requestExit =
+    (
+      destination
+    ) => {
+      if (
+        createMutation.isPending
+      ) {
+        return;
+      }
+
+      if (!isDirty) {
+        navigate(
+          destination
+        );
+
+        return;
+      }
+
+      setPendingExitDestination(
+        destination
+      );
+
+      setLeaveDialogOpen(
+        true
+      );
+    };
+
+  const applyClientChange =
+    (
+      clientId
+    ) => {
+      setFormData(
+        (
+          current
+        ) => ({
+          ...current,
+          client_id:
+            clientId,
+          case_id:
+            '',
+        })
+      );
+
+      setErrors(
+        (
+          current
+        ) => ({
+          ...current,
+          client_id:
+            '',
+          case_id:
+            '',
+        })
+      );
+    };
+
+  useEffect(() => {
+    const handleBeforeUnload =
+      (
+        event
+      ) => {
+        if (
+          !isDirty ||
+          createMutation.isPending
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        event.returnValue =
+          '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+    createMutation.isPending,
+  ]);
+
+  useEffect(() => {
+    if (
+      !leaveDialogOpen
+    ) {
+      return undefined;
+    }
+
+    previousFocusRef.current =
+      document.activeElement;
+
+    const dialog =
+      leaveDialogRef.current;
+
+    const getFocusable =
+      () =>
+        Array.from(
+          dialog?.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          ) || []
+        );
+
+    getFocusable()[0]
+      ?.focus();
+
+    const handleKeyDown =
+      (
+        event
+      ) => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          event.preventDefault();
+          setLeaveDialogOpen(
+            false
+          );
+          return;
+        }
+
+        if (
+          event.key !==
+          'Tab'
+        ) {
+          return;
+        }
+
+        const focusable =
+          getFocusable();
+
+        if (
+          focusable.length ===
+          0
+        ) {
+          event.preventDefault();
+          return;
+        }
+
+        const first =
+          focusable[0];
+        const last =
+          focusable[
+            focusable.length - 1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      };
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      previousFocusRef.current
+        ?.focus?.();
+    };
+  }, [
+    leaveDialogOpen,
+  ]);
+
+  useEffect(() => {
+    if (
+      !relationDialogOpen
+    ) {
+      return undefined;
+    }
+
+    previousFocusRef.current =
+      document.activeElement;
+
+    const dialog =
+      relationDialogRef.current;
+
+    const getFocusable =
+      () =>
+        Array.from(
+          dialog?.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          ) || []
+        );
+
+    getFocusable()[0]
+      ?.focus();
+
+    const handleKeyDown =
+      (
+        event
+      ) => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          event.preventDefault();
+          setRelationDialogOpen(
+            false
+          );
+          return;
+        }
+
+        if (
+          event.key !==
+          'Tab'
+        ) {
+          return;
+        }
+
+        const focusable =
+          getFocusable();
+
+        if (
+          focusable.length ===
+          0
+        ) {
+          event.preventDefault();
+          return;
+        }
+
+        const first =
+          focusable[0];
+        const last =
+          focusable[
+            focusable.length - 1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      };
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      previousFocusRef.current
+        ?.focus?.();
+    };
+  }, [
+    relationDialogOpen,
+  ]);
 
   // ====================================================
   // HANDLERS
@@ -600,6 +1207,12 @@ const TaskCreate = () => {
     (
       event
     ) => {
+      if (
+        createMutation.isPending
+      ) {
+        return;
+      }
+
       const {
         name,
         value,
@@ -622,39 +1235,46 @@ const TaskCreate = () => {
         return;
       }
 
+      if (
+        name ===
+          'client_id'
+      ) {
+        if (
+          value ===
+          formData.client_id
+        ) {
+          return;
+        }
+
+        if (
+          formData.case_id
+        ) {
+          setPendingClientId(
+            value
+          );
+
+          setRelationDialogOpen(
+            true
+          );
+
+          return;
+        }
+
+        applyClientChange(
+          value
+        );
+
+        return;
+      }
+
       setFormData(
         (
           current
-        ) => {
-          /*
-           * Müvekkil değiştiğinde önceki dava seçimini
-           * temizliyoruz.
-           *
-           * Yeni müvekkilin dava listesi
-           * /clients/:id/cases endpoint'inden gelir.
-           */
-          if (
-            name ===
-            'client_id'
-          ) {
-            return {
-              ...current,
-
-              client_id:
-                value,
-
-              case_id:
-                '',
-            };
-          }
-
-          return {
-            ...current,
-
-            [name]:
-              value,
-          };
-        }
+        ) => ({
+          ...current,
+          [name]:
+            value,
+        })
       );
 
       if (
@@ -665,7 +1285,6 @@ const TaskCreate = () => {
             current
           ) => ({
             ...current,
-
             [name]:
               '',
           })
@@ -682,7 +1301,8 @@ const TaskCreate = () => {
       userId
     ) => {
       if (
-        !canAssignTasks
+        !canAssignTasks ||
+        createMutation.isPending
       ) {
         return;
       }
@@ -691,10 +1311,17 @@ const TaskCreate = () => {
         (
           current
         ) => {
-          const exists =
-            current.assignee_ids.includes(
+          const normalizedUserId =
+            String(
               userId
             );
+
+          const exists =
+            current.assignee_ids
+              .map(String)
+              .includes(
+                normalizedUserId
+              );
 
           return {
             ...current,
@@ -705,12 +1332,12 @@ const TaskCreate = () => {
                     (
                       id
                     ) =>
-                      id !==
-                      userId
+                      String(id) !==
+                      normalizedUserId
                   )
                 : [
                     ...current.assignee_ids,
-                    userId,
+                    normalizedUserId,
                   ],
           };
         }
@@ -739,7 +1366,8 @@ const TaskCreate = () => {
   const handleSelectAllAssignees =
     () => {
       if (
-        !canAssignTasks
+        !canAssignTasks ||
+        createMutation.isPending
       ) {
         return;
       }
@@ -763,7 +1391,9 @@ const TaskCreate = () => {
                   (
                     person
                   ) =>
-                    person.id
+                    String(
+                      person.id
+                    )
                 ),
         })
       );
@@ -779,6 +1409,12 @@ const TaskCreate = () => {
     ) => {
       event.preventDefault();
 
+      if (
+        createMutation.isPending
+      ) {
+        return;
+      }
+
       const newErrors =
         {};
 
@@ -787,6 +1423,26 @@ const TaskCreate = () => {
       ) {
         newErrors.title =
           'Görev adı gereklidir';
+      }
+
+
+      if (
+        !VALID_PRIORITIES.has(
+          formData.priority
+        )
+      ) {
+        newErrors.priority =
+          'Geçerli bir öncelik seçin';
+      }
+
+      if (
+        formData.due_date &&
+        !localToUTC(
+          formData.due_date
+        )
+      ) {
+        newErrors.due_date =
+          'Geçerli bir son tarih girin';
       }
 
       if (
@@ -805,6 +1461,98 @@ const TaskCreate = () => {
       ) {
         newErrors.estimated_hours =
           'Tahmini süre 0 veya daha büyük olmalıdır';
+      }
+
+      const clientChangedFromInitial =
+        String(
+          formData.client_id || ''
+        ) !==
+        String(
+          initialFormRef.current
+            ?.client_id || ''
+        );
+
+      const caseChangedFromInitial =
+        String(
+          formData.case_id || ''
+        ) !==
+        String(
+          initialFormRef.current
+            ?.case_id || ''
+        );
+
+      if (
+        canViewClients &&
+        formData.client_id &&
+        clientChangedFromInitial &&
+        (
+          clientsError ||
+          (
+            !clientsLoading &&
+            !selectedClient
+          )
+        )
+      ) {
+        newErrors.client_id =
+          'Seçilen müvekkil artık erişilebilir değil';
+      }
+
+      if (
+        canViewCases &&
+        formData.case_id &&
+        caseChangedFromInitial &&
+        (
+          relationCasesError ||
+          (
+            !relationCasesLoading &&
+            !selectedCase
+          )
+        )
+      ) {
+        newErrors.case_id =
+          formData.client_id
+            ? 'Seçilen dava bu müvekkille ilişkili değil veya artık erişilebilir değil'
+            : 'Seçilen dava artık erişilebilir değil';
+      }
+
+      if (
+        canAssignTasks &&
+        formData.assignee_ids.length >
+          0
+      ) {
+        if (
+          assignableUsersError
+        ) {
+          newErrors.assignee_ids =
+            'Görev sorumluları doğrulanamadı. Kullanıcı listesini yeniden yükleyin.';
+        } else if (
+          !assignableUsersLoading
+        ) {
+          const validIds =
+            new Set(
+              assignableUsers.map(
+                (person) =>
+                  String(
+                    person.id
+                  )
+              )
+            );
+
+          const hasInvalidAssignee =
+            formData.assignee_ids.some(
+              (id) =>
+                !validIds.has(
+                  String(id)
+                )
+            );
+
+          if (
+            hasInvalidAssignee
+          ) {
+            newErrors.assignee_ids =
+              'Seçilen sorumlulardan biri artık atanabilir değil';
+          }
+        }
       }
 
       if (
@@ -908,6 +1656,31 @@ const TaskCreate = () => {
               '/tasks'
             );
           },
+
+          onError: (
+            error
+          ) => {
+            const fieldErrors =
+              getSafeTaskFieldErrors(
+                error
+              );
+
+            if (
+              Object.keys(
+                fieldErrors
+              ).length >
+              0
+            ) {
+              setErrors(
+                (
+                  current
+                ) => ({
+                  ...current,
+                  ...fieldErrors,
+                })
+              );
+            }
+          },
         }
       );
     };
@@ -918,19 +1691,8 @@ const TaskCreate = () => {
 
   const handleCancel =
     () => {
-      if (
-        canViewCases &&
-        formData.case_id
-      ) {
-        navigate(
-          `/cases/${formData.case_id}`
-        );
-
-        return;
-      }
-
-      navigate(
-        '/tasks'
+      requestExit(
+        getCancelDestination()
       );
     };
 
@@ -949,6 +1711,15 @@ const TaskCreate = () => {
 
         <Link
           to="/tasks"
+          onClick={(
+            event
+          ) => {
+            event.preventDefault();
+
+            requestExit(
+              '/tasks'
+            );
+          }}
           className="
             inline-flex
             items-center
@@ -989,9 +1760,19 @@ const TaskCreate = () => {
 
           <div>
 
-            <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
-              Yeni Görev
-            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
+                Yeni Görev
+              </h1>
+
+              {isDirty && (
+                <Badge
+                  variant="warning"
+                >
+                  Kaydedilmemiş değişiklik
+                </Badge>
+              )}
+            </div>
 
             <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-slate-400">
               Yapılacak işi, sorumlu kişileri, önceliği ve ilişkili dosyaları tanımlayın.
@@ -1044,6 +1825,12 @@ const TaskCreate = () => {
         }
         className="space-y-5"
       >
+        <fieldset
+          disabled={
+            createMutation.isPending
+          }
+          className="contents"
+        >
 
         {/* ==================================================
             BASIC INFO
@@ -1268,6 +2055,12 @@ const TaskCreate = () => {
                   )}
                 </select>
 
+                {errors.priority && (
+                  <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                    {errors.priority}
+                  </p>
+                )}
+
                 <div className="mt-2">
 
                   <Badge
@@ -1307,25 +2100,33 @@ const TaskCreate = () => {
                   onChange={
                     handleChange
                   }
-                  className="
+                  className={`
                     h-10
                     w-full
                     rounded-lg
                     border
-                    border-gray-200
                     bg-white
                     px-3.5
                     text-sm
                     text-gray-700
                     outline-none
-                    focus:border-blue-500
                     focus:ring-2
                     focus:ring-blue-500/10
-                    dark:border-white/[0.08]
                     dark:bg-white/[0.035]
                     dark:text-slate-300
-                  "
+                    ${
+                      errors.due_date
+                        ? 'border-red-400 focus:border-red-500 dark:border-red-500/50'
+                        : 'border-gray-200 focus:border-blue-500 dark:border-white/[0.08]'
+                    }
+                  `}
                 />
+
+                {errors.due_date && (
+                  <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                    {errors.due_date}
+                  </p>
+                )}
 
               </div>
 
@@ -1477,9 +2278,29 @@ const TaskCreate = () => {
                   </div>
                 )}
 
+                {assignableUsersError &&
+                  !assignableUsersLoading && (
+                    <div className="rounded-xl border border-red-200 bg-red-50/60 p-4 dark:border-red-500/20 dark:bg-red-500/[0.04]">
+                      <p className="text-sm font-medium text-red-700 dark:text-red-300">
+                        Atanabilir kullanıcılar yüklenemedi.
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          refetchAssignableUsers()
+                        }
+                        className="mt-2 text-xs font-semibold text-red-700 underline underline-offset-2 dark:text-red-300"
+                      >
+                        Tekrar Dene
+                      </button>
+                    </div>
+                  )}
+
                 {/* EMPTY */}
 
                 {!assignableUsersLoading &&
+                  !assignableUsersError &&
                   assignableUsers.length ===
                     0 && (
                     <div className="rounded-xl border border-dashed border-gray-200 p-5 text-center text-sm text-gray-500 dark:border-white/[0.08] dark:text-slate-400">
@@ -1490,6 +2311,7 @@ const TaskCreate = () => {
                 {/* USERS */}
 
                 {!assignableUsersLoading &&
+                  !assignableUsersError &&
                   assignableUsers.length >
                     0 && (
                     <div className="grid gap-2 sm:grid-cols-2">
@@ -1499,9 +2321,13 @@ const TaskCreate = () => {
                           person
                         ) => {
                           const selected =
-                            formData.assignee_ids.includes(
-                              person.id
-                            );
+                            formData.assignee_ids
+                              .map(String)
+                              .includes(
+                                String(
+                                  person.id
+                                )
+                              );
 
                           return (
                             <button
@@ -1749,11 +2575,18 @@ const TaskCreate = () => {
 
                 {formData.assignee_ids.length ===
                   0 &&
-                  !assignableUsersLoading && (
+                  !assignableUsersLoading &&
+                  !assignableUsersError && (
                     <div className="rounded-lg bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-700 dark:bg-amber-500/[0.06] dark:text-amber-300">
                       Henüz sorumlu seçilmedi. Görev sorumlusuz olarak oluşturulabilir ve daha sonra kullanıcı atanabilir.
                     </div>
                   )}
+
+                {errors.assignee_ids && (
+                  <p className="text-sm text-red-600 dark:text-red-400">
+                    {errors.assignee_ids}
+                  </p>
+                )}
 
               </>
             ) : (
@@ -1855,6 +2688,7 @@ const TaskCreate = () => {
                   }
                   disabled={
                     relationCasesLoading ||
+                    relationCasesError ||
                     !canViewCases ||
                     !formData.client_id
                   }
@@ -1887,7 +2721,9 @@ const TaskCreate = () => {
                         ? 'Önce müvekkil seçin'
                         : relationCasesLoading
                           ? 'Davalar yükleniyor...'
-                          : relationCases.length >
+                          : relationCasesError
+                            ? 'Davalar yüklenemedi'
+                            : relationCases.length >
                               0
                             ? 'Dava seçin (isteğe bağlı)'
                             : 'Bu müvekkile ait dava bulunamadı'}
@@ -1914,6 +2750,32 @@ const TaskCreate = () => {
                     )}
 
                 </select>
+
+                {relationCasesError &&
+                  canViewCases &&
+                  formData.client_id && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-red-600 dark:text-red-400">
+                      <span>
+                        Müvekkilin dava listesi yüklenemedi.
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          refetchRelationCases()
+                        }
+                        className="font-semibold underline underline-offset-2"
+                      >
+                        Tekrar Dene
+                      </button>
+                    </div>
+                  )}
+
+                {errors.case_id && (
+                  <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                    {errors.case_id}
+                  </p>
+                )}
 
                 {!formData.client_id &&
                   canViewClients && (
@@ -1976,6 +2838,7 @@ const TaskCreate = () => {
                   }
                   disabled={
                     clientsLoading ||
+                    clientsError ||
                     !canViewClients
                   }
                   className="
@@ -2005,7 +2868,9 @@ const TaskCreate = () => {
                       ? 'Müvekkil görüntüleme yetkiniz yok'
                       : clientsLoading
                         ? 'Müvekkiller yükleniyor...'
-                        : 'Müvekkil seçin (isteğe bağlı)'}
+                        : clientsError
+                          ? 'Müvekkiller yüklenemedi'
+                          : 'Müvekkil seçin (isteğe bağlı)'}
                   </option>
 
                   {canViewClients &&
@@ -2031,6 +2896,31 @@ const TaskCreate = () => {
                     )}
 
                 </select>
+
+                {clientsError &&
+                  canViewClients && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-red-600 dark:text-red-400">
+                      <span>
+                        Müvekkil listesi yüklenemedi.
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          refetchClients()
+                        }
+                        className="font-semibold underline underline-offset-2"
+                      >
+                        Tekrar Dene
+                      </button>
+                    </div>
+                  )}
+
+                {errors.client_id && (
+                  <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                    {errors.client_id}
+                  </p>
+                )}
 
                 {selectedClient && (
                   <div className="mt-3 flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.025]">
@@ -2099,7 +2989,170 @@ const TaskCreate = () => {
 
         </div>
 
+        </fieldset>
+
       </form>
+
+      {leaveDialogOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[1px]"
+            aria-label="Ayrılma uyarısını kapat"
+            onClick={() =>
+              setLeaveDialogOpen(
+                false
+              )
+            }
+          />
+
+          <div
+            ref={
+              leaveDialogRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="task-create-leave-title"
+            aria-describedby="task-create-leave-description"
+            className="relative w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-white/[0.08] dark:bg-slate-900"
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0">
+                <h2
+                  id="task-create-leave-title"
+                  className="text-base font-semibold text-gray-900 dark:text-white"
+                >
+                  Kaydedilmemiş değişiklikler var
+                </h2>
+
+                <p
+                  id="task-create-leave-description"
+                  className="mt-2 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                >
+                  Görev henüz oluşturulmadı. Bu sayfadan çıkarsanız yaptığınız değişiklikler kaybolur.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  setLeaveDialogOpen(
+                    false
+                  )
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => {
+                  setLeaveDialogOpen(
+                    false
+                  );
+
+                  navigate(
+                    pendingExitDestination
+                  );
+                }}
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {relationDialogOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[1px]"
+            aria-label="Müvekkil değişikliği uyarısını kapat"
+            onClick={() =>
+              setRelationDialogOpen(
+                false
+              )
+            }
+          />
+
+          <div
+            ref={
+              relationDialogRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="task-create-relation-title"
+            aria-describedby="task-create-relation-description"
+            className="relative w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-white/[0.08] dark:bg-slate-900"
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0">
+                <h2
+                  id="task-create-relation-title"
+                  className="text-base font-semibold text-gray-900 dark:text-white"
+                >
+                  Müvekkil değişikliği
+                </h2>
+
+                <p
+                  id="task-create-relation-description"
+                  className="mt-2 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                >
+                  Müvekkili değiştirirseniz seçili dava ilişkisi temizlenecek. Yeni müvekkile geçmek istiyor musunuz?
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  setRelationDialogOpen(
+                    false
+                  )
+                }
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                onClick={() => {
+                  applyClientChange(
+                    pendingClientId
+                  );
+
+                  setRelationDialogOpen(
+                    false
+                  );
+                }}
+              >
+                Müvekkili Değiştir
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

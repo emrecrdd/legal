@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -28,6 +29,7 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   CalendarDays,
   Eye,
@@ -37,6 +39,7 @@ import {
   MessageCircle,
   Microscope,
   Plus,
+  RefreshCw,
   Save,
   Scale,
   Target,
@@ -236,6 +239,230 @@ const normalizeId = (
   return String(
     value
   );
+};
+
+const normalizeEventCreateForm = (
+  form
+) => ({
+  title:
+    String(
+      form?.title || ''
+    ).trim(),
+
+  description:
+    String(
+      form?.description || ''
+    ).trim(),
+
+  hearing_type:
+    form?.hearing_type || '',
+
+  status:
+    form?.status || '',
+
+  start_date:
+    String(
+      form?.start_date || ''
+    ).trim(),
+
+  end_date:
+    String(
+      form?.end_date || ''
+    ).trim(),
+
+  location:
+    String(
+      form?.location || ''
+    ).trim(),
+
+  court_room:
+    String(
+      form?.court_room || ''
+    ).trim(),
+
+  judge_name:
+    String(
+      form?.judge_name || ''
+    ).trim(),
+
+  assigned_to:
+    normalizeId(
+      form?.assigned_to
+    ),
+
+  opposing_counsel:
+    String(
+      form?.opposing_counsel || ''
+    ).trim(),
+
+  last_hearing_result:
+    String(
+      form?.last_hearing_result || ''
+    ).trim(),
+
+  expense_status:
+    form?.expense_status || '',
+
+  is_all_day:
+    Boolean(
+      form?.is_all_day
+    ),
+
+  case_id:
+    normalizeId(
+      form?.case_id
+    ),
+});
+
+const normalizeEventAttendees = (
+  items
+) => {
+  if (
+    !Array.isArray(
+      items
+    )
+  ) {
+    return [];
+  }
+
+  return items
+    .map(
+      (item) => ({
+        name:
+          String(
+            item?.name || ''
+          ).trim(),
+
+        role:
+          item?.role ||
+          'diger',
+      })
+    )
+    .filter(
+      (item) =>
+        Boolean(
+          item.name
+        )
+    );
+};
+
+const isLikelyTechnicalMessage = (
+  value
+) => {
+  const message =
+    String(
+      value || ''
+    ).trim();
+
+  if (!message) {
+    return false;
+  }
+
+  return /sequelize|validation failed|constraint|foreign key|notnull|not null|invalid input syntax|uuid|sql|database|query failed|network error|failed to fetch|econn|timeout|stack|syntaxerror|typeerror|internal server error/i.test(
+    message
+  );
+};
+
+const getEventErrorMessage = (
+  error,
+  fallback =
+    'İşlem tamamlanamadı'
+) => {
+  const status =
+    error?.response?.status;
+
+  const rawMessage =
+    error?.response?.data
+      ?.message ||
+    error?.message ||
+    '';
+
+  if (status === 401) {
+    return 'Oturumunuz sona ermiş olabilir. Lütfen yeniden giriş yapın.';
+  }
+
+  if (status === 403) {
+    return 'Bu işlem için yetkiniz bulunmuyor.';
+  }
+
+  if (status === 404) {
+    return 'İlgili kayıt bulunamadı veya artık erişilemiyor.';
+  }
+
+  if (status === 409) {
+    return 'Bu işlem mevcut kayıtlarla çakışıyor. Bilgileri kontrol edip tekrar deneyin.';
+  }
+
+  if (status === 422) {
+    return 'Girilen bilgiler doğrulanamadı. Form alanlarını kontrol edin.';
+  }
+
+  if (
+    Number(status) >= 500
+  ) {
+    return 'Sunucu tarafında geçici bir sorun oluştu. Lütfen tekrar deneyin.';
+  }
+
+  if (
+    /network|failed to fetch|econn|timeout/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+  }
+
+  if (
+    rawMessage &&
+    !isLikelyTechnicalMessage(
+      rawMessage
+    )
+  ) {
+    return rawMessage;
+  }
+
+  return fallback;
+};
+
+const getEventFieldErrorMessage = (
+  field,
+  rawMessage
+) => {
+  const labels = {
+    title: 'Başlık',
+    description: 'Açıklama',
+    hearing_type: 'Duruşma türü',
+    status: 'Durum',
+    start_date: 'Başlangıç tarihi',
+    end_date: 'Bitiş tarihi',
+    location: 'Mahkeme / yer',
+    court_room: 'Salon',
+    judge_name: 'Hakim',
+    assigned_to: 'Atanan avukat',
+    opposing_counsel: 'Karşı taraf avukatı',
+    last_hearing_result: 'Son duruşma sonucu',
+    expense_status: 'Masraf / harç durumu',
+    case_id: 'Dava',
+    attendees: 'Katılımcılar',
+  };
+
+  const message =
+    String(
+      rawMessage || ''
+    ).trim();
+
+  if (
+    message &&
+    !isLikelyTechnicalMessage(
+      message
+    )
+  ) {
+    return message;
+  }
+
+  return `${
+    labels[field] ||
+    'Bu alan'
+  } bilgisini kontrol edin`;
 };
 
 /*
@@ -471,6 +698,30 @@ const EventCreate = () => {
   ] =
     useState([]);
 
+  const [
+    unsavedDialogOpen,
+    setUnsavedDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingExitPath,
+    setPendingExitPath,
+  ] =
+    useState('');
+
+  const unsavedDialogRef =
+    useRef(null);
+
+  const previousFocusRef =
+    useRef(null);
+
+  const defaultAssignedToRef =
+    useRef('');
+
+  const defaultLocationRef =
+    useRef('');
+
   // ======================================================
   // CURRENT CASE
   // ======================================================
@@ -481,6 +732,12 @@ const EventCreate = () => {
 
     isLoading:
       caseLoading,
+
+    error:
+      caseError,
+
+    refetch:
+      refetchCase,
   } =
     useQuery({
       queryKey: [
@@ -517,6 +774,12 @@ const EventCreate = () => {
 
     isLoading:
       lawyersLoading,
+
+    error:
+      lawyersError,
+
+    refetch:
+      refetchLawyers,
   } =
     useQuery({
       queryKey: [
@@ -571,6 +834,45 @@ const EventCreate = () => {
           ];
     })();
 
+  const initialCreateForm = {
+    ...INITIAL_FORM,
+
+    case_id:
+      caseIdFromUrl ||
+      '',
+
+    assigned_to:
+      defaultAssignedToRef
+        .current,
+
+    location:
+      defaultLocationRef
+        .current,
+  };
+
+  const isDirty =
+    JSON.stringify(
+      normalizeEventCreateForm(
+        formData
+      )
+    ) !==
+      JSON.stringify(
+        normalizeEventCreateForm(
+          initialCreateForm
+        )
+      ) ||
+    normalizeEventAttendees(
+      attendees
+    ).length > 0 ||
+    Boolean(
+      attendeeName.trim()
+    );
+
+  const exitPath =
+    caseIdFromUrl
+      ? `/cases/${caseIdFromUrl}`
+      : '/calendar';
+
   // ======================================================
   // DEFAULT ASSIGNEE
   // ======================================================
@@ -593,6 +895,14 @@ const EventCreate = () => {
       user.role ===
       'lawyer'
     ) {
+      const nextDefault =
+        normalizeId(
+          user.id
+        );
+
+      defaultAssignedToRef.current =
+        nextDefault;
+
       setFormData(
         (
           current
@@ -601,9 +911,7 @@ const EventCreate = () => {
 
           assigned_to:
             current.assigned_to ||
-            normalizeId(
-              user.id
-            ),
+            nextDefault,
         })
       );
     }
@@ -631,14 +939,26 @@ const EventCreate = () => {
     setFormData(
       (
         current
-      ) => ({
-        ...current,
+      ) => {
+        if (
+          current.location
+        ) {
+          return current;
+        }
 
-        location:
-          current.location ||
+        const nextDefault =
           caseItem.court_name ||
-          '',
-      })
+          '';
+
+        defaultLocationRef.current =
+          nextDefault;
+
+        return {
+          ...current,
+          location:
+            nextDefault,
+        };
+      }
     );
   }, [
     caseItem,
@@ -719,13 +1039,194 @@ const EventCreate = () => {
       onError: (
         error
       ) => {
-        toast.error(
-          error
-            ?.response
-            ?.data
+        const backendErrors =
+          error?.response?.data
+            ?.errors;
+
+        const nextErrors =
+          {};
+
+        if (
+          Array.isArray(
+            backendErrors
+          )
+        ) {
+          backendErrors.forEach(
+            (item) => {
+              const rawField =
+                item?.path ||
+                item?.param ||
+                item?.field;
+
+              const field =
+                Array.isArray(
+                  rawField
+                )
+                  ? rawField[
+                      rawField.length -
+                        1
+                    ]
+                  : String(
+                      rawField || ''
+                    )
+                      .split('.')
+                      .filter(Boolean)
+                      .pop();
+
+              if (
+                field &&
+                (
+                  Object.prototype
+                    .hasOwnProperty.call(
+                      INITIAL_FORM,
+                      field
+                    ) ||
+                  field ===
+                    'case_id' ||
+                  field ===
+                    'attendees'
+                )
+              ) {
+                nextErrors[field] =
+                  getEventFieldErrorMessage(
+                    field,
+                    item?.msg ||
+                      item?.message
+                  );
+              }
+            }
+          );
+        } else if (
+          backendErrors &&
+          typeof backendErrors ===
+            'object'
+        ) {
+          Object.entries(
+            backendErrors
+          ).forEach(
+            ([
+              field,
+              value,
+            ]) => {
+              if (
+                Object.prototype
+                  .hasOwnProperty.call(
+                    INITIAL_FORM,
+                    field
+                  ) ||
+                field ===
+                  'case_id' ||
+                field ===
+                  'attendees'
+              ) {
+                const raw =
+                  Array.isArray(
+                    value
+                  )
+                    ? value
+                        .filter(Boolean)
+                        .join(', ')
+                    : value;
+
+                nextErrors[field] =
+                  getEventFieldErrorMessage(
+                    field,
+                    raw
+                  );
+              }
+            }
+          );
+        }
+
+        const message =
+          error?.response?.data
             ?.message ||
           error?.message ||
-          'Duruşma oluşturulamadı'
+          '';
+
+        const fieldMatchers = [
+          [
+            /başlık|title/i,
+            'title',
+          ],
+          [
+            /başlangıç|start_date/i,
+            'start_date',
+          ],
+          [
+            /bitiş|end_date/i,
+            'end_date',
+          ],
+          [
+            /duruşma türü|hearing_type/i,
+            'hearing_type',
+          ],
+          [
+            /durum|status/i,
+            'status',
+          ],
+          [
+            /karşı taraf avukatı|opposing_counsel/i,
+            'opposing_counsel',
+          ],
+          [
+            /atanan|assigned_to/i,
+            'assigned_to',
+          ],
+          [
+            /dava|case_id/i,
+            'case_id',
+          ],
+          [
+            /katılımcı|attendee/i,
+            'attendees',
+          ],
+        ];
+
+        fieldMatchers.forEach(
+          ([
+            pattern,
+            field,
+          ]) => {
+            if (
+              pattern.test(
+                message
+              ) &&
+              !nextErrors[field]
+            ) {
+              nextErrors[field] =
+                getEventFieldErrorMessage(
+                  field,
+                  message
+                );
+            }
+          }
+        );
+
+        if (
+          Object.keys(
+            nextErrors
+          ).length > 0
+        ) {
+          setErrors(
+            (current) => ({
+              ...current,
+              ...nextErrors,
+            })
+          );
+
+          toast.error(
+            'Formdaki hatalı alanları kontrol edin'
+          );
+
+          return;
+        }
+
+        toast.error(
+          getEventErrorMessage(
+            error,
+            'Duruşma oluşturulamadı'
+          )
         );
       },
     });
@@ -740,6 +1241,12 @@ const EventCreate = () => {
   const handleChange = (
     event
   ) => {
+    if (
+      isPending
+    ) {
+      return;
+    }
+
     const {
       name,
       value,
@@ -882,6 +1389,217 @@ const EventCreate = () => {
     };
 
   // ======================================================
+  // UNSAVED CHANGE PROTECTION
+  // ======================================================
+
+  useEffect(() => {
+    if (
+      !isDirty ||
+      isPending
+    ) {
+      return undefined;
+    }
+
+    const handleBeforeUnload =
+      (event) => {
+        event.preventDefault();
+        event.returnValue = '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+    isPending,
+  ]);
+
+  useEffect(() => {
+    if (
+      !unsavedDialogOpen
+    ) {
+      return undefined;
+    }
+
+    previousFocusRef.current =
+      document.activeElement;
+
+    const dialog =
+      unsavedDialogRef.current;
+
+    const previousOverflow =
+      document.body.style
+        .overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const frame =
+      window.requestAnimationFrame(
+        () => {
+          const firstFocusable =
+            dialog?.querySelector(
+              'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            );
+
+          (
+            firstFocusable ||
+            dialog
+          )?.focus?.();
+        }
+      );
+
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          event.preventDefault();
+          setUnsavedDialogOpen(
+            false
+          );
+          setPendingExitPath('');
+          return;
+        }
+
+        if (
+          event.key !==
+            'Tab' ||
+          !dialog
+        ) {
+          return;
+        }
+
+        const focusable =
+          Array.from(
+            dialog.querySelectorAll(
+              'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            )
+          );
+
+        if (
+          focusable.length ===
+          0
+        ) {
+          event.preventDefault();
+          dialog.focus();
+          return;
+        }
+
+        const first =
+          focusable[0];
+
+        const last =
+          focusable[
+            focusable.length -
+              1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      };
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.cancelAnimationFrame(
+        frame
+      );
+
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+
+      previousFocusRef.current
+        ?.focus?.();
+    };
+  }, [
+    unsavedDialogOpen,
+  ]);
+
+  const requestExit = (
+    path,
+    event
+  ) => {
+    event?.preventDefault?.();
+
+    if (
+      isPending
+    ) {
+      return;
+    }
+
+    if (
+      isDirty
+    ) {
+      setPendingExitPath(
+        path
+      );
+
+      setUnsavedDialogOpen(
+        true
+      );
+
+      return;
+    }
+
+    navigate(path);
+  };
+
+  const closeUnsavedDialog =
+    () => {
+      setUnsavedDialogOpen(
+        false
+      );
+
+      setPendingExitPath('');
+    };
+
+  const discardAndExit =
+    () => {
+      const path =
+        pendingExitPath ||
+        exitPath;
+
+      setUnsavedDialogOpen(
+        false
+      );
+
+      setPendingExitPath('');
+
+      navigate(path);
+    };
+
+  // ======================================================
   // VALIDATION
   // ======================================================
 
@@ -951,6 +1669,60 @@ const EventCreate = () => {
         }
       }
 
+      if (
+        !HEARING_TYPES.some(
+          (option) =>
+            option.value ===
+            formData.hearing_type
+        )
+      ) {
+        nextErrors.hearing_type =
+          'Geçersiz duruşma türü';
+      }
+
+      if (
+        !STATUS_OPTIONS.some(
+          (option) =>
+            option.value ===
+            formData.status
+        )
+      ) {
+        nextErrors.status =
+          'Geçersiz duruşma durumu';
+      }
+
+      if (
+        !EXPENSE_OPTIONS.some(
+          (option) =>
+            option.value ===
+            formData.expense_status
+        )
+      ) {
+        nextErrors.expense_status =
+          'Geçersiz masraf / harç durumu';
+      }
+
+      const assignedTo =
+        normalizeId(
+          formData.assigned_to
+        );
+
+      if (
+        assignedTo &&
+        !lawyersLoading &&
+        !lawyersError &&
+        !assignableUsersWithCurrent.some(
+          (person) =>
+            normalizeId(
+              person?.id
+            ) ===
+            assignedTo
+        )
+      ) {
+        nextErrors.assigned_to =
+          'Seçilen avukat artık atanabilir değil';
+      }
+
       setErrors(
         nextErrors
       );
@@ -975,6 +1747,21 @@ const EventCreate = () => {
     if (
       isPending
     ) {
+      return;
+    }
+
+    if (
+      caseIdFromUrl &&
+      (
+        caseLoading ||
+        caseError ||
+        !caseItem
+      )
+    ) {
+      toast.error(
+        'İlişkili dava doğrulanamadı. Dava bilgilerini yeniden yükleyip tekrar deneyin.'
+      );
+
       return;
     }
 
@@ -1101,18 +1888,8 @@ const EventCreate = () => {
 
   const handleCancel =
     () => {
-      if (
-        caseIdFromUrl
-      ) {
-        navigate(
-          `/cases/${caseIdFromUrl}`
-        );
-
-        return;
-      }
-
-      navigate(
-        '/calendar'
+      requestExit(
+        exitPath
       );
     };
 
@@ -1131,9 +1908,15 @@ const EventCreate = () => {
 
         <Link
           to={
-            caseIdFromUrl
-              ? `/cases/${caseIdFromUrl}`
-              : '/calendar'
+            exitPath
+          }
+          onClick={(
+            event
+          ) =>
+            requestExit(
+              exitPath,
+              event
+            )
           }
           className="inline-flex items-center gap-1 text-sm text-gray-500 transition-colors hover:text-blue-600"
         >
@@ -1154,9 +1937,21 @@ const EventCreate = () => {
 
           <div>
 
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Yeni Duruşma
-            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Yeni Duruşma
+              </h1>
+
+              {isDirty && (
+                <Badge
+                  variant="warning"
+                >
+                  Kaydedilmemiş değişiklik
+                </Badge>
+              )}
+
+            </div>
 
             <p className="mt-1 text-sm text-gray-500">
               Duruşma tarihini, görevlendirilen avukatı ve katılımcıları oluşturun.
@@ -1181,6 +1976,35 @@ const EventCreate = () => {
               <p className="text-sm text-gray-500">
                 Dava bilgileri yükleniyor...
               </p>
+            ) : caseError ? (
+              <div className="space-y-3">
+
+                <div>
+                  <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                    Dava bilgileri yüklenemedi
+                  </p>
+
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+                    {getEventErrorMessage(
+                      caseError,
+                      'İlişkili dava bilgileri yüklenemedi'
+                    )}
+                  </p>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    refetchCase()
+                  }
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Tekrar Dene
+                </Button>
+
+              </div>
             ) : caseItem ? (
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
@@ -1642,6 +2466,38 @@ const EventCreate = () => {
 
                 </select>
 
+                {errors.assigned_to && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {errors.assigned_to}
+                  </p>
+                )}
+
+                {lawyersError && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      {getEventErrorMessage(
+                        lawyersError,
+                        'Atanabilir avukatlar yüklenemedi'
+                      )}
+                    </p>
+
+                    <button
+                      type="button"
+                      disabled={
+                        isPending ||
+                        lawyersLoading
+                      }
+                      onClick={() =>
+                        refetchLawyers()
+                      }
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline disabled:opacity-50 dark:text-blue-400"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Tekrar Dene
+                    </button>
+                  </div>
+                )}
+
               </div>
 
               <Input
@@ -1930,7 +2786,16 @@ const EventCreate = () => {
                 isPending
               }
               disabled={
-                isPending
+                isPending ||
+                (
+                  Boolean(
+                    caseIdFromUrl
+                  ) &&
+                  (
+                    caseLoading ||
+                    !caseItem
+                  )
+                )
               }
             >
               <Save className="mr-2 h-4 w-4" />
@@ -1956,6 +2821,73 @@ const EventCreate = () => {
         </form>
 
       </Card>
+
+      {unsavedDialogOpen && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+        >
+          <button
+            type="button"
+            aria-label="Uyarıyı kapat"
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+            onClick={
+              closeUnsavedDialog
+            }
+          />
+
+          <div
+            ref={
+              unsavedDialogRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="event-create-unsaved-title"
+            tabIndex={-1}
+            className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl outline-none dark:border-white/[0.08] dark:bg-slate-900"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.1] dark:text-amber-300">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2
+                  id="event-create-unsaved-title"
+                  className="font-semibold text-gray-900 dark:text-white"
+                >
+                  Kaydedilmemiş değişiklikler
+                </h2>
+
+                <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400">
+                  Duruşma oluşturma formunda kaydedilmemiş bilgiler var. Çıkarsanız bu bilgiler kaybolacak.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  closeUnsavedDialog
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  discardAndExit
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

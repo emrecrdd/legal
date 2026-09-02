@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -33,6 +34,7 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   BriefcaseBusiness,
   CheckCircle2,
@@ -42,6 +44,7 @@ import {
   FolderOpen,
   Link2,
   Plus,
+  RefreshCw,
   ShieldCheck,
   Tag,
   Trash2,
@@ -397,6 +400,53 @@ const getCaseSecondaryInfo = (
     .join(' · ');
 };
 
+
+const normalizeUploadFormForComparison = (
+  form
+) => ({
+  name:
+    String(
+      form?.name || ''
+    ).trim(),
+
+  description:
+    String(
+      form?.description || ''
+    ).trim(),
+
+  category:
+    String(
+      form?.category || 'general'
+    ),
+
+  tags:
+    normalizeTags(
+      String(
+        form?.tags || ''
+      )
+    ),
+
+  case_id:
+    normalizeId(
+      form?.case_id
+    ),
+
+  client_id:
+    normalizeId(
+      form?.client_id
+    ),
+
+  power_of_attorney_id:
+    normalizeId(
+      form?.power_of_attorney_id
+    ),
+
+  is_public:
+    Boolean(
+      form?.is_public
+    ),
+});
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -416,11 +466,8 @@ const DocumentUpload = () => {
   const fileInputRef =
     useRef(null);
 
-  const [
-    formData,
-    setFormData,
-  ] =
-    useState({
+  const initialFormRef =
+    useRef({
       name: '',
       description: '',
       category: 'general',
@@ -451,6 +498,16 @@ const DocumentUpload = () => {
     });
 
   const [
+    formData,
+    setFormData,
+  ] =
+    useState(
+      () => ({
+        ...initialFormRef.current,
+      })
+    );
+
+  const [
     files,
     setFiles,
   ] =
@@ -468,6 +525,40 @@ const DocumentUpload = () => {
   ] =
     useState(false);
 
+
+  const [
+    unsavedDialogOpen,
+    setUnsavedDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingExitPath,
+    setPendingExitPath,
+  ] =
+    useState('');
+
+  const [
+    relationDialogOpen,
+    setRelationDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingClientId,
+    setPendingClientId,
+  ] =
+    useState('');
+
+  const unsavedDialogRef =
+    useRef(null);
+
+  const relationDialogRef =
+    useRef(null);
+
+  const previousFocusRef =
+    useRef(null);
+
   // ======================================================
   // RELATED DATA
   // ======================================================
@@ -477,6 +568,10 @@ const DocumentUpload = () => {
       clientsData,
     isLoading:
       clientsLoading,
+    isError:
+      clientsError,
+    refetch:
+      refetchClients,
   } =
     useQuery({
       queryKey: [
@@ -500,6 +595,10 @@ const DocumentUpload = () => {
       casesData,
     isLoading:
       casesLoading,
+    isError:
+      casesError,
+    refetch:
+      refetchCases,
   } =
     useQuery({
       queryKey: [
@@ -523,6 +622,10 @@ const DocumentUpload = () => {
       clientCasesData,
     isLoading:
       clientCasesLoading,
+    isError:
+      clientCasesError,
+    refetch:
+      refetchClientCases,
   } =
     useQuery({
       queryKey: [
@@ -550,6 +653,10 @@ const DocumentUpload = () => {
       poaData,
     isLoading:
       poaLoading,
+    isError:
+      poaError,
+    refetch:
+      refetchPoa,
   } =
     useQuery({
       queryKey: [
@@ -628,6 +735,17 @@ const DocumentUpload = () => {
     formData.client_id
       ? clientCasesLoading
       : casesLoading;
+
+
+  const relationCasesError =
+    formData.client_id
+      ? clientCasesError
+      : casesError;
+
+  const refetchRelationCases =
+    formData.client_id
+      ? refetchClientCases
+      : refetchCases;
 
   const powerOfAttorneys =
     useMemo(() => {
@@ -745,9 +863,97 @@ const DocumentUpload = () => {
       formData.power_of_attorney_id,
     ]);
 
+
+  const isDirty =
+    useMemo(() => {
+      if (
+        files.length >
+        0
+      ) {
+        return true;
+      }
+
+      return (
+        JSON.stringify(
+          normalizeUploadFormForComparison(
+            formData
+          )
+        ) !==
+        JSON.stringify(
+          normalizeUploadFormForComparison(
+            initialFormRef.current
+          )
+        )
+      );
+    }, [
+      files,
+      formData,
+    ]);
+
+  const getReturnPath =
+    () => {
+      const caseId =
+        normalizeId(
+          formData.case_id
+        );
+
+      const clientId =
+        normalizeId(
+          formData.client_id
+        );
+
+      if (caseId) {
+        return `/cases/${caseId}`;
+      }
+
+      if (clientId) {
+        return `/clients/${clientId}`;
+      }
+
+      return '/documents';
+    };
+
   // ======================================================
   // HANDLERS
   // ======================================================
+
+  const applyClientChange =
+    (
+      clientId
+    ) => {
+      const normalizedClientId =
+        normalizeId(
+          clientId
+        );
+
+      setFormData(
+        (
+          current
+        ) => ({
+          ...current,
+          client_id:
+            normalizedClientId,
+          case_id:
+            '',
+          power_of_attorney_id:
+            '',
+        })
+      );
+
+      setErrors(
+        (
+          current
+        ) => ({
+          ...current,
+          client_id:
+            '',
+          case_id:
+            '',
+          power_of_attorney_id:
+            '',
+        })
+      );
+    };
 
   const handleChange =
     (
@@ -783,35 +989,61 @@ const DocumentUpload = () => {
               )
             : value;
 
+      if (
+        name ===
+        'client_id'
+      ) {
+        const currentClientId =
+          normalizeId(
+            formData.client_id
+          );
+
+        if (
+          nextValue ===
+          currentClientId
+        ) {
+          return;
+        }
+
+        const willClearRelations =
+          Boolean(
+            normalizeId(
+              formData.case_id
+            ) ||
+            normalizeId(
+              formData.power_of_attorney_id
+            )
+          );
+
+        if (
+          willClearRelations
+        ) {
+          setPendingClientId(
+            nextValue
+          );
+
+          setRelationDialogOpen(
+            true
+          );
+
+          return;
+        }
+
+        applyClientChange(
+          nextValue
+        );
+
+        return;
+      }
+
       setFormData(
         (
           current
-        ) => {
-          /*
-           * Müvekkil değişirse önceki dava ve
-           * vekalet ilişkisi geçersiz olabilir.
-           */
-          if (
-            name ===
-            'client_id'
-          ) {
-            return {
-              ...current,
-              client_id:
-                nextValue,
-              case_id:
-                '',
-              power_of_attorney_id:
-                '',
-            };
-          }
-
-          return {
-            ...current,
-            [name]:
-              nextValue,
-          };
-        }
+        ) => ({
+          ...current,
+          [name]:
+            nextValue,
+        })
       );
 
       if (
@@ -1466,6 +1698,27 @@ const DocumentUpload = () => {
         );
 
       if (
+        clientId &&
+        clientsError
+      ) {
+        nextErrors.client_id =
+          'Müvekkil bilgisi doğrulanamadı. Listeyi yenileyip tekrar deneyin.';
+      } else if (
+        clientId &&
+        !clientsLoading &&
+        !selectedClient
+      ) {
+        nextErrors.client_id =
+          'Seçilen müvekkil artık erişilemiyor';
+      }
+
+      if (
+        caseId &&
+        relationCasesError
+      ) {
+        nextErrors.case_id =
+          'Dava bilgisi doğrulanamadı. Listeyi yenileyip tekrar deneyin.';
+      } else if (
         caseId &&
         !selectedCase
       ) {
@@ -1476,6 +1729,12 @@ const DocumentUpload = () => {
       }
 
       if (
+        poaId &&
+        poaError
+      ) {
+        nextErrors.power_of_attorney_id =
+          'Vekaletname bilgisi doğrulanamadı. Listeyi yenileyip tekrar deneyin.';
+      } else if (
         poaId &&
         !selectedPowerOfAttorney
       ) {
@@ -1541,51 +1800,304 @@ const DocumentUpload = () => {
     };
 
   // ======================================================
-  // CANCEL
+  // NAVIGATION / DIALOGS
   // ======================================================
 
-  const handleCancel =
-    () => {
+  const requestExit =
+    (
+      path,
+      event
+    ) => {
+      event?.preventDefault?.();
+
       if (
         isUploading
       ) {
         return;
       }
 
-      const caseId =
-        normalizeId(
-          formData.case_id
-        );
-
-      const clientId =
-        normalizeId(
-          formData.client_id
-        );
-
       if (
-        caseId
+        isDirty
       ) {
-        navigate(
-          `/cases/${caseId}`
+        setPendingExitPath(
+          path
         );
 
-        return;
-      }
-
-      if (
-        clientId
-      ) {
-        navigate(
-          `/clients/${clientId}`
+        setUnsavedDialogOpen(
+          true
         );
 
         return;
       }
 
       navigate(
-        '/documents'
+        path
       );
     };
+
+  const handleCancel =
+    () => {
+      requestExit(
+        getReturnPath()
+      );
+    };
+
+  const closeUnsavedDialog =
+    () => {
+      setUnsavedDialogOpen(
+        false
+      );
+
+      setPendingExitPath(
+        ''
+      );
+    };
+
+  const discardAndExit =
+    () => {
+      const path =
+        pendingExitPath ||
+        getReturnPath();
+
+      setUnsavedDialogOpen(
+        false
+      );
+
+      setPendingExitPath(
+        ''
+      );
+
+      navigate(
+        path
+      );
+    };
+
+  const closeRelationDialog =
+    () => {
+      setRelationDialogOpen(
+        false
+      );
+
+      setPendingClientId(
+        ''
+      );
+    };
+
+  const confirmClientChange =
+    () => {
+      const nextClientId =
+        pendingClientId;
+
+      setRelationDialogOpen(
+        false
+      );
+
+      setPendingClientId(
+        ''
+      );
+
+      applyClientChange(
+        nextClientId
+      );
+    };
+
+  const focusDialog =
+    (
+      dialogRef
+    ) => {
+      const dialog =
+        dialogRef.current;
+
+      if (!dialog) {
+        return;
+      }
+
+      const focusable =
+        dialog.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+
+      const target =
+        focusable[0] ||
+        dialog;
+
+      target.focus?.();
+    };
+
+  const trapDialogTab =
+    (
+      event,
+      dialogRef
+    ) => {
+      const dialog =
+        dialogRef.current;
+
+      if (
+        !dialog ||
+        event.key !==
+          'Tab'
+      ) {
+        return;
+      }
+
+      const focusable = [
+        ...dialog.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        ),
+      ];
+
+      if (
+        focusable.length ===
+        0
+      ) {
+        event.preventDefault();
+        dialog.focus?.();
+
+        return;
+      }
+
+      const first =
+        focusable[0];
+
+      const last =
+        focusable[
+          focusable.length - 1
+        ];
+
+      if (
+        event.shiftKey &&
+        document.activeElement ===
+          first
+      ) {
+        event.preventDefault();
+        last.focus();
+
+        return;
+      }
+
+      if (
+        !event.shiftKey &&
+        document.activeElement ===
+          last
+      ) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+  useEffect(() => {
+    if (
+      !isDirty
+    ) {
+      return undefined;
+    }
+
+    const handleBeforeUnload =
+      (
+        event
+      ) => {
+        event.preventDefault();
+        event.returnValue =
+          '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+  ]);
+
+  useEffect(() => {
+    const activeDialogRef =
+      unsavedDialogOpen
+        ? unsavedDialogRef
+        : relationDialogOpen
+          ? relationDialogRef
+          : null;
+
+    if (
+      !activeDialogRef
+    ) {
+      return undefined;
+    }
+
+    previousFocusRef.current =
+      document.activeElement;
+
+    const previousOverflow =
+      document.body.style
+        .overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    window.requestAnimationFrame(
+      () => {
+        focusDialog(
+          activeDialogRef
+        );
+      }
+    );
+
+    const handleKeyDown =
+      (
+        event
+      ) => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          event.preventDefault();
+
+          if (
+            unsavedDialogOpen
+          ) {
+            closeUnsavedDialog();
+          } else if (
+            relationDialogOpen
+          ) {
+            closeRelationDialog();
+          }
+
+          return;
+        }
+
+        trapDialogTab(
+          event,
+          activeDialogRef
+        );
+      };
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+
+      previousFocusRef.current
+        ?.focus?.();
+    };
+  }, [
+    unsavedDialogOpen,
+    relationDialogOpen,
+  ]);
 
   // ======================================================
   // RENDER
@@ -1600,15 +2112,15 @@ const DocumentUpload = () => {
 
         <Link
           to={
-            formData.case_id
-              ? `/cases/${normalizeId(
-                  formData.case_id
-                )}`
-              : formData.client_id
-                ? `/clients/${normalizeId(
-                    formData.client_id
-                  )}`
-                : '/documents'
+            getReturnPath()
+          }
+          onClick={(
+            event
+          ) =>
+            requestExit(
+              getReturnPath(),
+              event
+            )
           }
           className="
             inline-flex
@@ -1654,17 +2166,29 @@ const DocumentUpload = () => {
 
           <div>
 
-            <h1
-              className="
-                text-2xl
-                font-semibold
-                tracking-[-0.035em]
-                text-gray-900
-                dark:text-white
-              "
-            >
-              Belge Yükle
-            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+
+              <h1
+                className="
+                  text-2xl
+                  font-semibold
+                  tracking-[-0.035em]
+                  text-gray-900
+                  dark:text-white
+                "
+              >
+                Belge Yükle
+              </h1>
+
+              {isDirty && (
+                <Badge
+                  variant="warning"
+                >
+                  Kaydedilmemiş değişiklik
+                </Badge>
+              )}
+
+            </div>
 
             <p
               className="
@@ -2442,7 +2966,9 @@ const DocumentUpload = () => {
                   <option value="">
                     {clientsLoading
                       ? 'Müvekkiller yükleniyor...'
-                      : 'İlişki yok'}
+                      : clientsError
+                        ? 'Müvekkiller yüklenemedi'
+                        : 'İlişki yok'}
                   </option>
 
                   {clients.map(
@@ -2473,6 +2999,30 @@ const DocumentUpload = () => {
                   <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                     {errors.client_id}
                   </p>
+                )}
+
+                {clientsError && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <p className="text-xs text-red-600 dark:text-red-400">
+                      Müvekkil listesi alınamadı.
+                    </p>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        refetchClients?.()
+                      }
+                      disabled={
+                        clientsLoading ||
+                        isUploading
+                      }
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Tekrar Dene
+                    </Button>
+                  </div>
                 )}
 
                 {selectedClient && (
@@ -2551,12 +3101,14 @@ const DocumentUpload = () => {
                   <option value="">
                     {relationCasesLoading
                       ? 'Davalar yükleniyor...'
-                      : relationCases.length >
-                          0
-                        ? 'İlişki yok'
-                        : formData.client_id
-                          ? 'Bu müvekkile ait dava bulunamadı'
-                          : 'Dava bulunamadı'}
+                      : relationCasesError
+                        ? 'Davalar yüklenemedi'
+                        : relationCases.length >
+                            0
+                          ? 'İlişki yok'
+                          : formData.client_id
+                            ? 'Bu müvekkile ait dava bulunamadı'
+                            : 'Dava bulunamadı'}
                   </option>
 
                   {relationCases.map(
@@ -2586,6 +3138,30 @@ const DocumentUpload = () => {
                   <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                     {errors.case_id}
                   </p>
+                )}
+
+                {relationCasesError && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <p className="text-xs text-red-600 dark:text-red-400">
+                      Dava listesi alınamadı.
+                    </p>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        refetchRelationCases?.()
+                      }
+                      disabled={
+                        relationCasesLoading ||
+                        isUploading
+                      }
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Tekrar Dene
+                    </Button>
+                  </div>
                 )}
 
                 {!formData.client_id && (
@@ -2688,12 +3264,14 @@ const DocumentUpload = () => {
                 <option value="">
                   {poaLoading
                     ? 'Vekaletnameler yükleniyor...'
-                    : powerOfAttorneys.length >
-                        0
-                      ? 'İlişki yok'
-                      : formData.client_id
-                        ? 'Bu müvekkile ait vekaletname bulunamadı'
-                        : 'Vekaletname bulunamadı'}
+                    : poaError
+                      ? 'Vekaletnameler yüklenemedi'
+                      : powerOfAttorneys.length >
+                          0
+                        ? 'İlişki yok'
+                        : formData.client_id
+                          ? 'Bu müvekkile ait vekaletname bulunamadı'
+                          : 'Vekaletname bulunamadı'}
                 </option>
 
                 {powerOfAttorneys.map(
@@ -2726,6 +3304,30 @@ const DocumentUpload = () => {
                 <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                   {errors.power_of_attorney_id}
                 </p>
+              )}
+
+              {poaError && (
+                <div className="mt-2 flex items-center gap-2">
+                  <p className="text-xs text-red-600 dark:text-red-400">
+                    Vekaletname listesi alınamadı.
+                  </p>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      refetchPoa?.()
+                    }
+                    disabled={
+                      poaLoading ||
+                      isUploading
+                    }
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Tekrar Dene
+                  </Button>
+                </div>
               )}
 
               {!formData.client_id && (
@@ -3053,6 +3655,149 @@ const DocumentUpload = () => {
         </div>
 
       </form>
+
+      {unsavedDialogOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          aria-live="polite"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+            aria-label="Uyarıyı kapat"
+            onClick={
+              closeUnsavedDialog
+            }
+          />
+
+          <div
+            ref={
+              unsavedDialogRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="document-upload-unsaved-title"
+            tabIndex={-1}
+            className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl outline-none dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="flex items-start gap-3">
+
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2
+                  id="document-upload-unsaved-title"
+                  className="font-semibold text-gray-900 dark:text-white"
+                >
+                  Kaydedilmemiş değişiklikler
+                </h2>
+
+                <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400">
+                  Seçtiğiniz dosyalar veya girdiğiniz belge bilgileri henüz yüklenmedi. Çıkarsanız bu değişiklikler kaybolur.
+                </p>
+              </div>
+
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  closeUnsavedDialog
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  discardAndExit
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {relationDialogOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          aria-live="polite"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+            aria-label="Uyarıyı kapat"
+            onClick={
+              closeRelationDialog
+            }
+          />
+
+          <div
+            ref={
+              relationDialogRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="document-upload-client-change-title"
+            tabIndex={-1}
+            className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl outline-none dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="flex items-start gap-3">
+
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2
+                  id="document-upload-client-change-title"
+                  className="font-semibold text-gray-900 dark:text-white"
+                >
+                  Müvekkil ilişkisini değiştir
+                </h2>
+
+                <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400">
+                  Müvekkili değiştirirseniz seçili dava ve vekaletname ilişkileri temizlenecek. Devam etmek istiyor musunuz?
+                </p>
+              </div>
+
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  closeRelationDialog
+                }
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                onClick={
+                  confirmClientChange
+                }
+              >
+                Müvekkili Değiştir
+              </Button>
+
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

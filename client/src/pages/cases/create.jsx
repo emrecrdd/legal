@@ -1,4 +1,6 @@
 import {
+  useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -30,6 +32,7 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   BriefcaseBusiness,
   CalendarDays,
@@ -317,6 +320,118 @@ const getCreatedCaseId = (
   );
 };
 
+const isLikelyTechnicalMessage = (
+  value
+) => {
+  const message =
+    String(
+      value || ''
+    ).trim();
+
+  if (!message) {
+    return false;
+  }
+
+  return /(?:validation failed|sequelize|constraint|foreign key|unique constraint|duplicate key|invalid input syntax|syntax error|stack trace|internal server error|network error|failed to fetch|econn|socket|timeout|request failed with status code|cannot read propert|undefined is not|null value in column|not-null violation|2350\d|22p02)/i.test(
+    message
+  );
+};
+
+const getCaseCreateErrorMessage = (
+  error,
+  fallback = 'Dava oluşturulamadı'
+) => {
+  const status =
+    error?.response?.status;
+
+  const rawMessage =
+    error?.response?.data?.message ||
+    error?.message ||
+    '';
+
+  if (status === 401) {
+    return 'Oturumunuz sona ermiş olabilir. Lütfen yeniden giriş yapın.';
+  }
+
+  if (status === 403) {
+    return 'Bu işlem için yetkiniz bulunmuyor.';
+  }
+
+  if (status === 404) {
+    return 'İstenen kayıt veya yardımcı veri bulunamadı.';
+  }
+
+  if (status === 409) {
+    return 'Bu bilgiler mevcut bir kayıtla çakışıyor. Alanları kontrol edip tekrar deneyin.';
+  }
+
+  if (status === 422) {
+    return 'Formdaki bilgileri kontrol edip tekrar deneyin.';
+  }
+
+  if (Number(status) >= 500) {
+    return 'Sunucuda geçici bir sorun oluştu. Lütfen tekrar deneyin.';
+  }
+
+  if (
+    !error?.response &&
+    /network|fetch|timeout|econn|socket/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+  }
+
+  if (
+    rawMessage &&
+    !isLikelyTechnicalMessage(
+      rawMessage
+    )
+  ) {
+    return rawMessage;
+  }
+
+  return fallback;
+};
+
+const getCaseFieldErrorMessage = (
+  field,
+  rawMessage
+) => {
+  const message =
+    String(
+      rawMessage || ''
+    ).trim();
+
+  if (
+    message &&
+    !isLikelyTechnicalMessage(
+      message
+    )
+  ) {
+    return message;
+  }
+
+  const fallbacks = {
+    judiciary_type: 'Yargı türünü kontrol edin',
+    judiciary_unit: 'Yargı birimini kontrol edin',
+    court_name: 'Mahkeme bilgisini kontrol edin',
+    case_number: 'Dosya / esas numarasını kontrol edin',
+    client_ids: 'Müvekkil seçimini kontrol edin',
+    assigned_to: 'Atanan avukatı kontrol edin',
+    status: 'Dava durumunu kontrol edin',
+    priority: 'Öncelik bilgisini kontrol edin',
+    subject: 'Dava konusunu kontrol edin',
+    description: 'Açıklamayı kontrol edin',
+    opening_date: 'Dava açılış tarihini kontrol edin',
+  };
+
+  return (
+    fallbacks[field] ||
+    'Bu alanı kontrol edin'
+  );
+};
+
 const getBackendFieldErrors = (
   error
 ) => {
@@ -343,9 +458,11 @@ const getBackendFieldErrors = (
           field
         ) {
           nextErrors[field] =
-            item?.msg ||
-            item?.message ||
-            'Geçersiz değer';
+            getCaseFieldErrorMessage(
+              field,
+              item?.msg ||
+              item?.message
+            );
         }
       }
     );
@@ -367,15 +484,21 @@ const getBackendFieldErrors = (
           )
         ) {
           nextErrors[field] =
-            value
-              .filter(Boolean)
-              .join(', ');
+            getCaseFieldErrorMessage(
+              field,
+              value
+                .filter(Boolean)
+                .join(', ')
+            );
         } else if (
           value
         ) {
           nextErrors[field] =
-            String(
-              value
+            getCaseFieldErrorMessage(
+              field,
+              String(
+                value
+              )
             );
         }
       }
@@ -475,6 +598,22 @@ const CaseCreate = () => {
   ] =
     useState('');
 
+  const [
+    unsavedDialogOpen,
+    setUnsavedDialogOpen,
+  ] = useState(false);
+
+  const [
+    pendingExitPath,
+    setPendingExitPath,
+  ] = useState('');
+
+  const unsavedDialogRef =
+    useRef(null);
+
+  const previousFocusRef =
+    useRef(null);
+
   // ======================================================
   // QUERIES
   // ======================================================
@@ -484,6 +623,10 @@ const CaseCreate = () => {
       clientsData,
     isLoading:
       clientsLoading,
+    error:
+      clientsQueryError,
+    refetch:
+      refetchClients,
   } =
     useQuery({
       queryKey: [
@@ -504,6 +647,10 @@ const CaseCreate = () => {
       lawyersData,
     isLoading:
       lawyersLoading,
+    error:
+      lawyersQueryError,
+    refetch:
+      refetchLawyers,
   } =
     useQuery({
       queryKey: [
@@ -627,6 +774,166 @@ const CaseCreate = () => {
     );
 
   // ======================================================
+  // UNSAVED CHANGES / DIALOG ACCESSIBILITY
+  // ======================================================
+
+  useEffect(() => {
+    if (!isDirty) {
+      return undefined;
+    }
+
+    const handleBeforeUnload =
+      (event) => {
+        event.preventDefault();
+        event.returnValue = '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+  ]);
+
+  useEffect(() => {
+    const dialog =
+      unsavedDialogOpen
+        ? unsavedDialogRef.current
+        : null;
+
+    if (!dialog) {
+      return undefined;
+    }
+
+    previousFocusRef.current =
+      document.activeElement;
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const getFocusableElements =
+      () => Array.from(
+        dialog.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+
+    const frame =
+      window.requestAnimationFrame(
+        () => {
+          const focusable =
+            getFocusableElements();
+
+          (
+            focusable[0] ||
+            dialog
+          )?.focus?.();
+        }
+      );
+
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          event.preventDefault();
+
+          setUnsavedDialogOpen(
+            false
+          );
+
+          setPendingExitPath(
+            ''
+          );
+
+          return;
+        }
+
+        if (
+          event.key !==
+          'Tab'
+        ) {
+          return;
+        }
+
+        const focusable =
+          getFocusableElements();
+
+        if (
+          focusable.length ===
+          0
+        ) {
+          event.preventDefault();
+          dialog.focus();
+          return;
+        }
+
+        const first =
+          focusable[0];
+
+        const last =
+          focusable[
+            focusable.length - 1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+          return;
+        }
+
+        if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      };
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.cancelAnimationFrame(
+        frame
+      );
+
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+
+      previousFocusRef.current
+        ?.focus?.();
+    };
+  }, [
+    unsavedDialogOpen,
+  ]);
+
+  // ======================================================
   // MUTATION
   // ======================================================
 
@@ -654,7 +961,10 @@ const CaseCreate = () => {
         )
       ) {
         nextErrors.judiciary_type =
-          message;
+          getCaseFieldErrorMessage(
+            'judiciary_type',
+            message
+          );
       }
 
       if (
@@ -663,7 +973,10 @@ const CaseCreate = () => {
         )
       ) {
         nextErrors.judiciary_unit =
-          message;
+          getCaseFieldErrorMessage(
+            'judiciary_unit',
+            message
+          );
       }
 
       if (
@@ -672,7 +985,10 @@ const CaseCreate = () => {
         )
       ) {
         nextErrors.court_name =
-          message;
+          getCaseFieldErrorMessage(
+            'court_name',
+            message
+          );
       }
 
       if (
@@ -681,7 +997,10 @@ const CaseCreate = () => {
         )
       ) {
         nextErrors.case_number =
-          message;
+          getCaseFieldErrorMessage(
+            'case_number',
+            message
+          );
       }
 
       if (
@@ -690,7 +1009,10 @@ const CaseCreate = () => {
         )
       ) {
         nextErrors.client_ids =
-          message;
+          getCaseFieldErrorMessage(
+            'client_ids',
+            message
+          );
       }
 
       if (
@@ -699,7 +1021,10 @@ const CaseCreate = () => {
         )
       ) {
         nextErrors.assigned_to =
-          message;
+          getCaseFieldErrorMessage(
+            'assigned_to',
+            message
+          );
       }
 
       if (
@@ -708,7 +1033,10 @@ const CaseCreate = () => {
         )
       ) {
         nextErrors.status =
-          message;
+          getCaseFieldErrorMessage(
+            'status',
+            message
+          );
       }
 
       if (
@@ -717,7 +1045,10 @@ const CaseCreate = () => {
         )
       ) {
         nextErrors.priority =
-          message;
+          getCaseFieldErrorMessage(
+            'priority',
+            message
+          );
       }
 
       if (
@@ -726,7 +1057,10 @@ const CaseCreate = () => {
         )
       ) {
         nextErrors.subject =
-          message;
+          getCaseFieldErrorMessage(
+            'subject',
+            message
+          );
       }
 
       if (
@@ -735,7 +1069,10 @@ const CaseCreate = () => {
         )
       ) {
         nextErrors.description =
-          message;
+          getCaseFieldErrorMessage(
+            'description',
+            message
+          );
       }
 
       if (
@@ -744,7 +1081,10 @@ const CaseCreate = () => {
         )
       ) {
         nextErrors.opening_date =
-          message;
+          getCaseFieldErrorMessage(
+            'opening_date',
+            message
+          );
       }
 
       if (
@@ -1047,33 +1387,72 @@ const CaseCreate = () => {
     };
 
   // ======================================================
-  // CANCEL
+  // CANCEL / UNSAVED EXIT
   // ======================================================
 
-  const handleCancel =
-    () => {
+  const requestExit =
+    (
+      path,
+      event
+    ) => {
+      event?.preventDefault?.();
+
       if (
         mutation.isPending
       ) {
         return;
       }
 
-      if (
-        isDirty
-      ) {
-        const confirmed =
-          window.confirm(
-            'Kaydedilmemiş dava bilgileri var. Sayfadan ayrılmak istediğinize emin misiniz?'
-          );
+      if (!isDirty) {
+        navigate(
+          path
+        );
 
-        if (
-          !confirmed
-        ) {
-          return;
-        }
+        return;
       }
 
+      setPendingExitPath(
+        path
+      );
+
+      setUnsavedDialogOpen(
+        true
+      );
+    };
+
+  const closeUnsavedDialog =
+    () => {
+      setUnsavedDialogOpen(
+        false
+      );
+
+      setPendingExitPath(
+        ''
+      );
+    };
+
+  const discardAndExit =
+    () => {
+      const path =
+        pendingExitPath ||
+        '/cases';
+
+      setUnsavedDialogOpen(
+        false
+      );
+
+      setPendingExitPath(
+        ''
+      );
+
       navigate(
+        path
+      );
+    };
+
+  const handleCancel =
+    () => {
+      requestExit(
         '/cases'
       );
     };
@@ -1196,6 +1575,11 @@ const CaseCreate = () => {
         );
 
       if (
+        clientsQueryError
+      ) {
+        newErrors.client_ids =
+          'Müvekkil listesi yüklenemedi. Listeyi yenileyip tekrar deneyin.';
+      } else if (
         normalizedClientIds.length ===
         0
       ) {
@@ -1420,6 +1804,12 @@ const CaseCreate = () => {
 
         <Link
           to="/cases"
+          onClick={(event) =>
+            requestExit(
+              '/cases',
+              event
+            )
+          }
           className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 transition hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -1434,9 +1824,17 @@ const CaseCreate = () => {
 
           <div>
 
-            <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
-              Yeni Dava
-            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-[-0.035em] text-gray-900 dark:text-white">
+                Yeni Dava
+              </h1>
+
+              {isDirty && (
+                <Badge variant="warning">
+                  Kaydedilmemiş değişiklik
+                </Badge>
+              )}
+            </div>
 
             <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-slate-400">
               Dava dosyasının yargı bilgilerini, müvekkillerini ve sorumlu avukatı belirleyin.
@@ -1660,10 +2058,12 @@ const CaseCreate = () => {
                 <option value="">
                   {clientsLoading
                     ? 'Müvekkiller yükleniyor...'
-                    : availableClients.length ===
-                        0
-                      ? 'Eklenebilecek müvekkil yok'
-                      : 'Müvekkil seçin'}
+                    : clientsQueryError
+                      ? 'Müvekkiller yüklenemedi'
+                      : availableClients.length ===
+                          0
+                        ? 'Eklenebilecek müvekkil yok'
+                        : 'Müvekkil seçin'}
                 </option>
 
                 {availableClients.map(
@@ -1712,6 +2112,31 @@ const CaseCreate = () => {
               <p className="text-sm text-red-600 dark:text-red-400">
                 {errors.client_ids}
               </p>
+            )}
+
+            {clientsQueryError && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/[0.07] dark:text-amber-200">
+                <span>
+                  {getCaseCreateErrorMessage(
+                    clientsQueryError,
+                    'Müvekkil listesi yüklenemedi.'
+                  )}
+                </span>
+
+                <button
+                  type="button"
+                  disabled={
+                    clientsLoading ||
+                    mutation.isPending
+                  }
+                  onClick={() =>
+                    refetchClients?.()
+                  }
+                  className="font-semibold underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Tekrar Dene
+                </button>
+              </div>
             )}
 
             {selectedClients.length >
@@ -1868,7 +2293,9 @@ const CaseCreate = () => {
                 <option value="">
                   {lawyersLoading
                     ? 'Avukatlar yükleniyor...'
-                    : 'Avukat seçin'}
+                    : lawyersQueryError
+                      ? 'Avukat listesi yüklenemedi'
+                      : 'Avukat seçin'}
                 </option>
 
                 {lawyers.map(
@@ -1910,6 +2337,31 @@ const CaseCreate = () => {
                 <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
                   {errors.assigned_to}
                 </p>
+              )}
+
+              {lawyersQueryError && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
+                  <span>
+                    {getCaseCreateErrorMessage(
+                      lawyersQueryError,
+                      'Atanabilir avukat listesi yüklenemedi.'
+                    )}
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={
+                      lawyersLoading ||
+                      mutation.isPending
+                    }
+                    onClick={() =>
+                      refetchLawyers?.()
+                    }
+                    className="font-semibold underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Tekrar Dene
+                  </button>
+                </div>
               )}
 
             </div>
@@ -2193,7 +2645,7 @@ const CaseCreate = () => {
               handleCancel
             }
           >
-            İptal
+            Vazgeç
           </Button>
 
           <Button
@@ -2212,6 +2664,77 @@ const CaseCreate = () => {
         </div>
 
       </form>
+
+      {unsavedDialogOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          aria-labelledby="case-create-unsaved-title"
+          aria-describedby="case-create-unsaved-description"
+          role="dialog"
+          aria-modal="true"
+        >
+          <button
+            type="button"
+            aria-label="Uyarıyı kapat"
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+            onClick={
+              closeUnsavedDialog
+            }
+          />
+
+          <div
+            ref={
+              unsavedDialogRef
+            }
+            tabIndex={-1}
+            className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl outline-none dark:border-white/[0.08] dark:bg-slate-900"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.1] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0">
+                <h2
+                  id="case-create-unsaved-title"
+                  className="text-base font-semibold text-slate-900 dark:text-white"
+                >
+                  Kaydedilmemiş değişiklikler
+                </h2>
+
+                <p
+                  id="case-create-unsaved-description"
+                  className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300"
+                >
+                  Yeni dava formunda henüz kaydetmediğiniz bilgiler var. Çıkarsanız bu bilgiler kaybolacaktır.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 dark:border-white/[0.06] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={
+                  closeUnsavedDialog
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={
+                  discardAndExit
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

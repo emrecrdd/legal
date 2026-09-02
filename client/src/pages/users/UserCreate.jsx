@@ -1,4 +1,7 @@
 import {
+  useEffect,
+  useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -13,6 +16,7 @@ import {
 } from '@tanstack/react-query';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   Eye,
   EyeOff,
@@ -25,6 +29,7 @@ import userApi from '../../features/users/user.api.js';
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
+import Badge from '../../components/ui/Badge.jsx';
 
 import toast from 'react-hot-toast';
 
@@ -39,9 +44,335 @@ const INITIAL_FORM = {
   is_active: true,
 };
 
+const ROLE_OPTIONS = [
+  {
+    value: 'lawyer',
+    label: 'Avukat',
+  },
+  {
+    value: 'secretary',
+    label: 'Sekreter',
+  },
+  {
+    value: 'intern',
+    label: 'Stajyer',
+  },
+  {
+    value: 'admin',
+    label: 'Yönetici',
+  },
+];
+
+const normalizeForm = (
+  value = {}
+) => ({
+  first_name: String(
+    value.first_name ?? ''
+  ).trim(),
+
+  last_name: String(
+    value.last_name ?? ''
+  ).trim(),
+
+  email: String(
+    value.email ?? ''
+  )
+    .trim()
+    .toLowerCase(),
+
+  phone: String(
+    value.phone ?? ''
+  ).trim(),
+
+  role: String(
+    value.role ?? 'lawyer'
+  ),
+
+  password: String(
+    value.password ?? ''
+  ),
+
+  confirm_password: String(
+    value.confirm_password ?? ''
+  ),
+
+  is_active:
+    Boolean(value.is_active),
+});
+
+const isAllowedRole = (
+  value
+) => {
+  return ROLE_OPTIONS.some(
+    (option) =>
+      option.value === value
+  );
+};
+
+const getBackendFieldErrors = (
+  error
+) => {
+  const source =
+    error?.response?.data?.errors ??
+    error?.response?.data?.validation_errors ??
+    null;
+
+  if (!source) {
+    return {};
+  }
+
+  const normalizeField = (
+    field
+  ) => {
+    const raw = Array.isArray(field)
+      ? field[0]
+      : field;
+
+    const aliases = {
+      firstName: 'first_name',
+      lastName: 'last_name',
+      confirmPassword:
+        'confirm_password',
+      isActive: 'is_active',
+    };
+
+    return aliases[raw] || raw;
+  };
+
+  const mapMessage = (
+    field,
+    message
+  ) => {
+    const normalizedField =
+      normalizeField(field);
+
+    const rawMessage = String(
+      message ?? ''
+    ).trim();
+
+    if (
+      normalizedField === 'email' &&
+      /unique|already|exists|duplicate|kullanılıyor|kayıtlı/i.test(
+        rawMessage
+      )
+    ) {
+      return 'Bu e-posta adresiyle kayıtlı bir kullanıcı zaten var';
+    }
+
+    const safeMessages = {
+      first_name:
+        'Ad bilgisini kontrol edin',
+      last_name:
+        'Soyad bilgisini kontrol edin',
+      email:
+        'Geçerli bir e-posta adresi girin',
+      phone:
+        'Telefon bilgisini kontrol edin',
+      role:
+        'Geçerli bir rol seçin',
+      password:
+        'Şifre en az 8 karakter olmalıdır',
+      confirm_password:
+        'Şifre tekrarını kontrol edin',
+      is_active:
+        'Hesap durumunu kontrol edin',
+    };
+
+    return (
+      safeMessages[normalizedField] ||
+      'Bu alanı kontrol edin'
+    );
+  };
+
+  if (Array.isArray(source)) {
+    return source.reduce(
+      (
+        result,
+        item
+      ) => {
+        const field =
+          normalizeField(
+            item?.path ??
+              item?.param ??
+              item?.field
+          );
+
+        const message =
+          item?.msg ??
+          item?.message;
+
+        if (field && message) {
+          result[field] =
+            mapMessage(
+              field,
+              message
+            );
+        }
+
+        return result;
+      },
+      {}
+    );
+  }
+
+  if (
+    typeof source === 'object'
+  ) {
+    return Object.entries(
+      source
+    ).reduce(
+      (
+        result,
+        [field, value]
+      ) => {
+        const message =
+          Array.isArray(value)
+            ? value[0]
+            : value;
+
+        if (
+          message !== null &&
+          message !== undefined
+        ) {
+          const normalizedField =
+            normalizeField(field);
+
+          result[normalizedField] =
+            mapMessage(
+              normalizedField,
+              message
+            );
+        }
+
+        return result;
+      },
+      {}
+    );
+  }
+
+  return {};
+};
+
+const getUserCreateErrorMessage = (
+  error,
+  fallback =
+    'Kullanıcı oluşturulamadı'
+) => {
+  const status =
+    error?.response?.status;
+
+  const responseData =
+    error?.response?.data;
+
+  const rawMessage = String(
+    responseData?.message ||
+      error?.message ||
+      ''
+  ).trim();
+
+  const validationMessages =
+    Array.isArray(
+      responseData?.errors
+    )
+      ? responseData.errors
+          .map((item) =>
+            String(
+              item?.message ||
+                item?.msg ||
+                ''
+            ).trim()
+          )
+          .filter(Boolean)
+      : [];
+
+  const technicalMessage = [
+    rawMessage,
+    ...validationMessages,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  if (
+    status === 401
+  ) {
+    return 'Oturumunuz sona ermiş olabilir. Lütfen yeniden giriş yapın.';
+  }
+
+  if (
+    status === 403
+  ) {
+    return 'Yeni kullanıcı oluşturmak için yetkiniz bulunmuyor.';
+  }
+
+  if (
+    status === 409 ||
+    /unique|already exists|duplicate|email.*exists|email.*registered|email.*kullanılıyor|email.*kayıtlı/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Bu e-posta adresiyle kayıtlı bir kullanıcı zaten var.';
+  }
+
+  if (
+    status === 422 ||
+    /validation failed|validation error|sequelizevalidationerror|notnull violation|cannot be null|must not be null|invalid input syntax|invalid.*role|invalid.*email/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Kullanıcı bilgileri doğrulanamadı. Zorunlu ve geçerli alanları kontrol edin.';
+  }
+
+  if (
+    status === 429
+  ) {
+    return 'Kısa sürede çok fazla istek yapıldı. Lütfen biraz sonra tekrar deneyin.';
+  }
+
+  if (
+    status >= 500
+  ) {
+    return 'Kullanıcı şu anda oluşturulamıyor. Lütfen tekrar deneyin.';
+  }
+
+  if (
+    /network error|failed to fetch|timeout|econnrefused|enotfound/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+  }
+
+  const looksTechnical =
+    /sequelize|constraint|database|sql|stack|syntaxerror|typeerror|referenceerror|axios|request failed|status code|uuid|postgres|column|relation/i.test(
+      technicalMessage
+    );
+
+  if (looksTechnical) {
+    return fallback;
+  }
+
+  const looksTurkish =
+    /[çğıöşüÇĞİÖŞÜ]|bulunamadı|geçersiz|zorunlu|yetkiniz|başarısız|oluşturulamadı|kayıtlı|kullanılıyor|hata/i.test(
+      rawMessage
+    );
+
+  return looksTurkish
+    ? rawMessage
+    : fallback;
+};
+
 const UserCreate = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  const leaveDialogRef =
+    useRef(null);
+
+  const leaveTriggerRef =
+    useRef(null);
+
+  const pendingDestinationRef =
+    useRef('/users');
 
   const [formData, setFormData] =
     useState(INITIAL_FORM);
@@ -51,6 +382,36 @@ const UserCreate = () => {
 
   const [showPassword, setShowPassword] =
     useState(false);
+
+  const [showLeaveConfirm, setShowLeaveConfirm] =
+    useState(false);
+
+  const normalizedForm =
+    useMemo(
+      () => normalizeForm(formData),
+      [formData]
+    );
+
+  const normalizedInitial =
+    useMemo(
+      () => normalizeForm(INITIAL_FORM),
+      []
+    );
+
+  const isDirty =
+    useMemo(
+      () =>
+        JSON.stringify(
+          normalizedForm
+        ) !==
+        JSON.stringify(
+          normalizedInitial
+        ),
+      [
+        normalizedForm,
+        normalizedInitial,
+      ]
+    );
 
   const createMutation =
     useMutation({
@@ -70,20 +431,196 @@ const UserCreate = () => {
       },
 
       onError: (error) => {
+        const fieldErrors =
+          getBackendFieldErrors(
+            error
+          );
+
+        if (
+          Object.keys(
+            fieldErrors
+          ).length > 0
+        ) {
+          setErrors(
+            (current) => ({
+              ...current,
+              ...fieldErrors,
+            })
+          );
+        }
+
         toast.error(
-          error?.response?.data?.message ||
-          'Kullanıcı oluşturulamadı'
+          getUserCreateErrorMessage(
+            error
+          )
         );
       },
     });
 
+  useEffect(() => {
+    const handleBeforeUnload =
+      (event) => {
+        if (
+          !isDirty ||
+          createMutation.isPending
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        event.returnValue = '';
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [
+    isDirty,
+    createMutation.isPending,
+  ]);
+
+  useEffect(() => {
+    if (!showLeaveConfirm) {
+      return undefined;
+    }
+
+    const dialog =
+      leaveDialogRef.current;
+
+    const focusable =
+      dialog?.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+
+    focusable?.[0]?.focus();
+
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key === 'Escape'
+        ) {
+          event.preventDefault();
+          setShowLeaveConfirm(false);
+          return;
+        }
+
+        if (
+          event.key !== 'Tab' ||
+          !focusable?.length
+        ) {
+          return;
+        }
+
+        const first =
+          focusable[0];
+
+        const last =
+          focusable[
+            focusable.length - 1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+          return;
+        }
+
+        if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      };
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      window.requestAnimationFrame(
+        () => {
+          leaveTriggerRef.current
+            ?.focus?.();
+        }
+      );
+    };
+  }, [showLeaveConfirm]);
+
+  const requestExit = (
+    destination = '/users',
+    trigger = null
+  ) => {
+    if (
+      createMutation.isPending
+    ) {
+      return;
+    }
+
+    if (!isDirty) {
+      navigate(destination);
+      return;
+    }
+
+    pendingDestinationRef.current =
+      destination;
+
+    leaveTriggerRef.current =
+      trigger ||
+      document.activeElement;
+
+    setShowLeaveConfirm(true);
+  };
+
+  const handleConfirmLeave = () => {
+    const destination =
+      pendingDestinationRef.current ||
+      '/users';
+
+    setShowLeaveConfirm(false);
+    navigate(destination);
+  };
+
   const handleChange = (event) => {
+    if (
+      createMutation.isPending
+    ) {
+      return;
+    }
+
     const {
       name,
       value,
       type,
       checked,
     } = event.target;
+
+    if (
+      name === 'role' &&
+      !isAllowedRole(value)
+    ) {
+      return;
+    }
 
     setFormData((current) => ({
       ...current,
@@ -99,34 +636,61 @@ const UserCreate = () => {
         [name]: '',
       }));
     }
+
+    if (
+      name === 'password' &&
+      errors.confirm_password
+    ) {
+      setErrors((current) => ({
+        ...current,
+        confirm_password: '',
+      }));
+    }
   };
 
   const validateForm = () => {
     const nextErrors = {};
 
-    if (!formData.first_name.trim()) {
+    const firstName =
+      formData.first_name.trim();
+
+    const lastName =
+      formData.last_name.trim();
+
+    const email =
+      formData.email
+        .trim()
+        .toLowerCase();
+
+    if (!firstName) {
       nextErrors.first_name =
         'Ad gereklidir';
     }
 
-    if (!formData.last_name.trim()) {
+    if (!lastName) {
       nextErrors.last_name =
         'Soyad gereklidir';
     }
 
-    if (!formData.email.trim()) {
+    if (!email) {
       nextErrors.email =
         'E-posta gereklidir';
-    }
-
-    if (
-      formData.email &&
+    } else if (
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        formData.email
+        email
       )
     ) {
       nextErrors.email =
         'Geçerli bir e-posta girin';
+    }
+
+    if (
+      !isAllowedRole(
+        formData.role
+      )
+    ) {
+      nextErrors.role =
+        'Geçerli bir rol seçin';
     }
 
     if (!formData.password) {
@@ -140,6 +704,11 @@ const UserCreate = () => {
     }
 
     if (
+      !formData.confirm_password
+    ) {
+      nextErrors.confirm_password =
+        'Şifre tekrarı gereklidir';
+    } else if (
       formData.password !==
       formData.confirm_password
     ) {
@@ -149,9 +718,19 @@ const UserCreate = () => {
 
     setErrors(nextErrors);
 
-    return (
-      Object.keys(nextErrors).length === 0
-    );
+    if (
+      Object.keys(
+        nextErrors
+      ).length > 0
+    ) {
+      toast.error(
+        'Formdaki eksik veya hatalı alanları kontrol edin'
+      );
+
+      return false;
+    }
+
+    return true;
   };
 
   const handleSubmit = (event) => {
@@ -196,20 +775,50 @@ const UserCreate = () => {
       <div>
         <Link
           to="/users"
+          onClick={(event) => {
+            if (
+              createMutation.isPending
+            ) {
+              event.preventDefault();
+              return;
+            }
+
+            if (isDirty) {
+              event.preventDefault();
+
+              requestExit(
+                '/users',
+                event.currentTarget
+              );
+            }
+          }}
           className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline"
         >
           <ArrowLeft className="h-4 w-4" />
           Kullanıcılar
         </Link>
 
-        <h1 className="mt-3 flex items-center gap-2 text-2xl font-semibold text-gray-900 dark:text-white">
-          <UserPlus className="h-6 w-6" />
-          Yeni Kullanıcı
-        </h1>
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="flex items-center gap-2 text-2xl font-semibold text-gray-900 dark:text-white">
+              <UserPlus className="h-6 w-6" />
+              Yeni Kullanıcı
+            </h1>
 
-        <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-          Büro sistemine yeni kullanıcı ekleyin ve rolünü belirleyin.
-        </p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+              Büro sistemine yeni kullanıcı ekleyin ve rolünü belirleyin.
+            </p>
+          </div>
+
+          {isDirty && (
+            <Badge
+              variant="warning"
+              dot
+            >
+              Kaydedilmemiş değişiklik
+            </Badge>
+          )}
+        </div>
       </div>
 
       <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-500/15 dark:bg-blue-500/[0.05]">
@@ -274,6 +883,7 @@ const UserCreate = () => {
             name="phone"
             value={formData.phone}
             onChange={handleChange}
+            error={errors.phone}
             disabled={createMutation.isPending}
             placeholder="05xx xxx xx xx"
           />
@@ -288,24 +898,46 @@ const UserCreate = () => {
               value={formData.role}
               onChange={handleChange}
               disabled={createMutation.isPending}
-              className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white"
+              className={`
+                h-10
+                w-full
+                rounded-lg
+                border
+                bg-white
+                px-3.5
+                text-sm
+                text-gray-900
+                outline-none
+                focus:ring-2
+                focus:ring-blue-500/10
+                disabled:cursor-not-allowed
+                disabled:opacity-50
+                dark:bg-white/[0.035]
+                dark:text-white
+                ${
+                  errors.role
+                    ? 'border-red-400 focus:border-red-500'
+                    : 'border-gray-200 focus:border-blue-500 dark:border-white/[0.08]'
+                }
+              `}
             >
-              <option value="lawyer">
-                Avukat
-              </option>
-
-              <option value="secretary">
-                 Sekreter
-              </option>
-
-              <option value="intern">
-                 Stajyer
-              </option>
-
-              <option value="admin">
-                 Yönetici
-              </option>
+              {ROLE_OPTIONS.map(
+                (option) => (
+                  <option
+                    key={option.value}
+                    value={option.value}
+                  >
+                    {option.label}
+                  </option>
+                )
+              )}
             </select>
+
+            {errors.role && (
+              <p className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+                {errors.role}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -327,6 +959,7 @@ const UserCreate = () => {
                   onChange={handleChange}
                   disabled={createMutation.isPending}
                   placeholder="En az 8 karakter"
+                  autoComplete="new-password"
                   className={`
                     h-10
                     w-full
@@ -338,25 +971,35 @@ const UserCreate = () => {
                     text-sm
                     text-gray-900
                     outline-none
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
                     dark:bg-white/[0.035]
                     dark:text-white
                     ${
                       errors.password
-                        ? 'border-red-400'
-                        : 'border-gray-200 dark:border-white/[0.08]'
+                        ? 'border-red-400 focus:border-red-500'
+                        : 'border-gray-200 focus:border-blue-500 dark:border-white/[0.08]'
                     }
                   `}
                 />
 
                 <button
                   type="button"
+                  disabled={createMutation.isPending}
                   onClick={() =>
                     setShowPassword(
                       (current) =>
                         !current
                     )
                   }
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.05]"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-400 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-white/[0.05]"
+                  aria-label={
+                    showPassword
+                      ? 'Şifreyi gizle'
+                      : 'Şifreyi göster'
+                  }
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -367,7 +1010,7 @@ const UserCreate = () => {
               </div>
 
               {errors.password && (
-                <p className="mt-1.5 text-xs font-medium text-red-600">
+                <p className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
                   {errors.password}
                 </p>
               )}
@@ -386,6 +1029,7 @@ const UserCreate = () => {
               error={errors.confirm_password}
               disabled={createMutation.isPending}
               placeholder="Şifreyi tekrar girin"
+              autoComplete="new-password"
             />
 
           </div>
@@ -400,7 +1044,7 @@ const UserCreate = () => {
                 checked={formData.is_active}
                 onChange={handleChange}
                 disabled={createMutation.isPending}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600"
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
               />
 
               <div>
@@ -414,6 +1058,12 @@ const UserCreate = () => {
               </div>
 
             </label>
+
+            {errors.is_active && (
+              <p className="mt-2 text-xs font-medium text-red-600 dark:text-red-400">
+                {errors.is_active}
+              </p>
+            )}
 
           </div>
 
@@ -432,8 +1082,11 @@ const UserCreate = () => {
               type="button"
               variant="secondary"
               disabled={createMutation.isPending}
-              onClick={() =>
-                navigate('/users')
+              onClick={(event) =>
+                requestExit(
+                  '/users',
+                  event.currentTarget
+                )
               }
             >
               Vazgeç
@@ -443,6 +1096,70 @@ const UserCreate = () => {
 
         </form>
       </Card>
+
+      {showLeaveConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[1px]"
+            onClick={() =>
+              setShowLeaveConfirm(false)
+            }
+            aria-label="Ayrılma penceresini kapat"
+          />
+
+          <div
+            ref={leaveDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="user-create-leave-title"
+            aria-describedby="user-create-leave-description"
+            className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-white/[0.08] dark:bg-slate-900"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.1] dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0">
+                <h2
+                  id="user-create-leave-title"
+                  className="text-base font-semibold text-gray-900 dark:text-white"
+                >
+                  Kaydedilmemiş değişiklikler var
+                </h2>
+
+                <p
+                  id="user-create-leave-description"
+                  className="mt-1.5 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                >
+                  Yeni kullanıcı için girdiğiniz bilgiler henüz kaydedilmedi. Çıkarsanız bu değişiklikler kaybolacak.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  setShowLeaveConfirm(false)
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={handleConfirmLeave}
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

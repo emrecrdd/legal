@@ -32,6 +32,7 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   BriefcaseBusiness,
   CalendarClock,
@@ -240,6 +241,186 @@ const getResponseItem = (
   );
 };
 
+const normalizeText = (
+  value
+) => {
+  return String(
+    value ?? ''
+  ).trim();
+};
+
+const normalizeAttendees = (
+  attendees
+) => {
+  if (
+    !Array.isArray(
+      attendees
+    )
+  ) {
+    return [];
+  }
+
+  return attendees
+    .map(
+      (
+        attendee
+      ) => ({
+        name:
+          normalizeText(
+            attendee?.name
+          ),
+        role:
+          normalizeText(
+            attendee?.role
+          ) ||
+          'Katılımcı',
+      })
+    )
+    .filter(
+      (
+        attendee
+      ) =>
+        Boolean(
+          attendee.name
+        )
+    );
+};
+
+const normalizeMeetingForm = (
+  form
+) => ({
+  title:
+    normalizeText(
+      form?.title
+    ),
+
+  description:
+    normalizeText(
+      form?.description
+    ),
+
+  start_date:
+    form?.start_date ||
+    '',
+
+  end_date:
+    form?.end_date ||
+    '',
+
+  location:
+    normalizeText(
+      form?.location
+    ),
+
+  meeting_type:
+    form?.meeting_type ||
+    'other',
+
+  case_id:
+    normalizeId(
+      form?.case_id
+    ),
+
+  client_id:
+    normalizeId(
+      form?.client_id
+    ),
+
+  assigned_to:
+    normalizeId(
+      form?.assigned_to
+    ),
+
+  status:
+    form?.status ||
+    'scheduled',
+
+  attendees:
+    normalizeAttendees(
+      form?.attendees
+    ),
+
+  meeting_link:
+    normalizeText(
+      form?.meeting_link
+    ),
+
+  notes:
+    normalizeText(
+      form?.notes
+    ),
+});
+
+const isLikelyTechnicalMessage = (
+  value
+) => {
+  const message =
+    normalizeText(
+      value
+    );
+
+  if (!message) {
+    return false;
+  }
+
+  return /(?:validation failed|validation error|sequelize|constraint|foreign key|unique constraint|duplicate key|invalid input syntax|syntax error|stack trace|internal server error|network error|failed to fetch|econn|socket|timeout|request failed with status code|cannot read propert|undefined is not|null value in column|not-null violation|2350\d|22p02)/i.test(
+    message
+  );
+};
+
+const getMeetingFieldErrorMessage = (
+  field,
+  rawMessage
+) => {
+  const message =
+    normalizeText(
+      rawMessage
+    );
+
+  if (
+    message &&
+    !isLikelyTechnicalMessage(
+      message
+    )
+  ) {
+    return message;
+  }
+
+  const fallbacks = {
+    title:
+      'Toplantı başlığını kontrol edin',
+    description:
+      'Açıklamayı kontrol edin',
+    start_date:
+      'Başlangıç tarihini kontrol edin',
+    end_date:
+      'Bitiş tarihini kontrol edin',
+    location:
+      'Toplantı yerini kontrol edin',
+    meeting_type:
+      'Toplantı türünü kontrol edin',
+    case_id:
+      'İlişkili dava seçimini kontrol edin',
+    client_id:
+      'İlişkili müvekkil seçimini kontrol edin',
+    assigned_to:
+      'Sorumlu kişi seçimini kontrol edin',
+    status:
+      'Toplantı durumunu kontrol edin',
+    attendees:
+      'Katılımcı bilgilerini kontrol edin',
+    meeting_link:
+      'Toplantı bağlantısını kontrol edin',
+    notes:
+      'Notları kontrol edin',
+  };
+
+  return (
+    fallbacks[field] ||
+    'Bu alanı kontrol edin'
+  );
+};
+
 const getBackendFieldErrors = (
   error
 ) => {
@@ -252,87 +433,98 @@ const getBackendFieldErrors = (
     return {};
   }
 
+  const result =
+    {};
+
+  const setFieldError =
+    (
+      rawField,
+      rawMessage
+    ) => {
+      const fieldValue =
+        Array.isArray(
+          rawField
+        )
+          ? rawField[
+              rawField.length - 1
+            ]
+          : String(
+              rawField ||
+              ''
+            )
+              .split('.')
+              .filter(Boolean)
+              .pop();
+
+      if (
+        !fieldValue ||
+        !Object.prototype
+          .hasOwnProperty.call(
+            INITIAL_FORM,
+            fieldValue
+          )
+      ) {
+        return;
+      }
+
+      result[fieldValue] =
+        getMeetingFieldErrorMessage(
+          fieldValue,
+          rawMessage
+        );
+    };
+
   if (
     Array.isArray(
       source
     )
   ) {
-    return source.reduce(
+    source.forEach(
       (
-        result,
         item
       ) => {
-        const field =
+        setFieldError(
           item?.path ??
           item?.param ??
-          item?.field;
-
-        const message =
+          item?.field,
           item?.msg ??
-          item?.message;
-
-        if (
-          field &&
-          message
-        ) {
-          result[field] =
-            String(
-              message
-            );
-        }
-
-        return result;
-      },
-      {}
+          item?.message
+        );
+      }
     );
+
+    return result;
   }
 
   if (
     typeof source ===
     'object'
   ) {
-    return Object.entries(
+    Object.entries(
       source
-    ).reduce(
-      (
-        result,
-        [field, value]
-      ) => {
+    ).forEach(
+      ([
+        field,
+        value,
+      ]) => {
         const message =
           Array.isArray(
             value
           )
-            ? value[0]
+            ? value
+                .filter(Boolean)
+                .join(', ')
             : value;
 
-        if (
-          message !== null &&
-          message !== undefined
-        ) {
-          result[field] =
-            String(
-              message
-            );
-        }
-
-        return result;
-      },
-      {}
+        setFieldError(
+          field,
+          message
+        );
+      }
     );
   }
 
-  return {};
-};
-
-const getErrorMessage = (
-  error,
-  fallback
-) => {
-  return (
-    error?.response?.data?.message ||
-    error?.message ||
-    fallback
-  );
+  return result;
 };
 
 const isAllowedOption = (
@@ -574,6 +766,17 @@ const MeetingCreate = () => {
   const prefillAppliedRef =
     useRef(false);
 
+  const initialFormRef =
+    useRef({
+      ...INITIAL_FORM,
+
+      client_id:
+        requestedClientId,
+
+      case_id:
+        requestedCaseId,
+    });
+
   const [
     formData,
     setFormData,
@@ -608,6 +811,39 @@ const MeetingCreate = () => {
   ] =
     useState({});
 
+  const [
+    unsavedDialogOpen,
+    setUnsavedDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingExitPath,
+    setPendingExitPath,
+  ] =
+    useState('');
+
+  const [
+    relationDialogOpen,
+    setRelationDialogOpen,
+  ] =
+    useState(false);
+
+  const [
+    pendingClientId,
+    setPendingClientId,
+  ] =
+    useState('');
+
+  const unsavedDialogRef =
+    useRef(null);
+
+  const relationDialogRef =
+    useRef(null);
+
+  const previousFocusRef =
+    useRef(null);
+
   // ====================================================
   // QUERIES
   // ====================================================
@@ -637,6 +873,10 @@ const MeetingCreate = () => {
       clientsData,
     isLoading:
       clientsLoading,
+    error:
+      clientsError,
+    refetch:
+      refetchClients,
   } =
     useQuery({
       queryKey: [
@@ -659,6 +899,8 @@ const MeetingCreate = () => {
       requestedClientLoading,
     error:
       requestedClientError,
+    refetch:
+      refetchRequestedClient,
   } =
     useQuery({
       queryKey: [
@@ -688,6 +930,10 @@ const MeetingCreate = () => {
       clientCasesData,
     isLoading:
       clientCasesLoading,
+    error:
+      clientCasesError,
+    refetch:
+      refetchClientCases,
   } =
     useQuery({
       queryKey: [
@@ -712,6 +958,10 @@ const MeetingCreate = () => {
       usersData,
     isLoading:
       usersLoading,
+    error:
+      usersError,
+    refetch:
+      refetchUsers,
   } =
     useQuery({
       queryKey: [
@@ -910,6 +1160,14 @@ const MeetingCreate = () => {
         prefillAppliedRef.current =
           true;
 
+        initialFormRef.current = {
+          ...initialFormRef.current,
+          client_id:
+            '',
+          case_id:
+            '',
+        };
+
         setFormData(
           (
             current
@@ -939,6 +1197,20 @@ const MeetingCreate = () => {
     ) {
       return;
     }
+
+    initialFormRef.current = {
+      ...initialFormRef.current,
+
+      client_id:
+        requestedClientId ||
+        initialFormRef.current
+          .client_id,
+
+      case_id:
+        requestedCaseId ||
+        initialFormRef.current
+          .case_id,
+    };
 
     setFormData(
       (
@@ -1052,6 +1324,44 @@ const MeetingCreate = () => {
   // FORM HANDLERS
   // ====================================================
 
+  const applyClientChange =
+    (
+      nextClientId
+    ) => {
+      const normalizedClientId =
+        normalizeId(
+          nextClientId
+        );
+
+      setFormData(
+        (
+          current
+        ) => ({
+          ...current,
+
+          client_id:
+            normalizedClientId,
+
+          case_id:
+            '',
+        })
+      );
+
+      setErrors(
+        (
+          current
+        ) => ({
+          ...current,
+
+          client_id:
+            '',
+
+          case_id:
+            '',
+        })
+      );
+    };
+
   const handleChange =
     (
       event
@@ -1067,6 +1377,50 @@ const MeetingCreate = () => {
         value,
       } =
         event.target;
+
+      if (
+        name ===
+        'client_id'
+      ) {
+        const nextClientId =
+          normalizeId(
+            value
+          );
+
+        const currentClientId =
+          normalizeId(
+            formData.client_id
+          );
+
+        if (
+          nextClientId ===
+          currentClientId
+        ) {
+          return;
+        }
+
+        if (
+          normalizeId(
+            formData.case_id
+          )
+        ) {
+          setPendingClientId(
+            nextClientId
+          );
+
+          setRelationDialogOpen(
+            true
+          );
+
+          return;
+        }
+
+        applyClientChange(
+          nextClientId
+        );
+
+        return;
+      }
 
       setFormData(
         (
@@ -1415,6 +1769,12 @@ const MeetingCreate = () => {
           );
 
         if (
+          clientsError &&
+          !clientExists
+        ) {
+          newErrors.client_id =
+            'Müvekkil listesi yüklenemedi. Listeyi yenileyip tekrar deneyin.';
+        } else if (
           !clientExists ||
           requestedClientError
         ) {
@@ -1437,6 +1797,11 @@ const MeetingCreate = () => {
           );
 
         if (
+          clientCasesError
+        ) {
+          newErrors.case_id =
+            'Müvekkilin dava listesi yüklenemedi. Listeyi yenileyip tekrar deneyin.';
+        } else if (
           !caseExists
         ) {
           newErrors.case_id =
@@ -1466,17 +1831,25 @@ const MeetingCreate = () => {
       if (
         user?.role ===
           'admin' &&
-        assignedTo &&
-        !assignableUsers.some(
-          (person) =>
-            normalizeId(
-              person?.id
-            ) ===
-            assignedTo
-        )
+        assignedTo
       ) {
-        newErrors.assigned_to =
-          'Seçilen kullanıcı artık atanabilir değil';
+        if (
+          usersError
+        ) {
+          newErrors.assigned_to =
+            'Kullanıcı listesi yüklenemedi. Listeyi yenileyip tekrar deneyin.';
+        } else if (
+          !assignableUsers.some(
+            (person) =>
+              normalizeId(
+                person?.id
+              ) ===
+              assignedTo
+          )
+        ) {
+          newErrors.assigned_to =
+            'Seçilen kullanıcı artık atanabilir değil';
+        }
       }
 
       if (
@@ -1587,22 +1960,36 @@ const MeetingCreate = () => {
     };
 
   const isDirty =
-    Boolean(
-      formData.title.trim() ||
-      formData.description.trim() ||
-      formData.start_date ||
-      formData.end_date ||
-      formData.location.trim() ||
-      formData.case_id ||
-      formData.client_id ||
-      formData.assigned_to ||
-      formData.attendees.length ||
-      formData.meeting_link.trim() ||
-      formData.notes.trim() ||
-      formData.meeting_type !==
-        'other' ||
-      formData.status !==
-        'scheduled'
+    useMemo(
+      () => {
+        const current =
+          normalizeMeetingForm(
+            formData
+          );
+
+        const initial =
+          normalizeMeetingForm(
+            initialFormRef.current
+          );
+
+        return (
+          JSON.stringify(
+            current
+          ) !==
+            JSON.stringify(
+              initial
+            ) ||
+          Boolean(
+            attendeeName.trim() ||
+            attendeeRole.trim()
+          )
+        );
+      },
+      [
+        formData,
+        attendeeName,
+        attendeeRole,
+      ]
     );
 
   const cancelDestination =
@@ -1610,18 +1997,194 @@ const MeetingCreate = () => {
       ? `/clients/${requestedClientId}`
       : '/meetings';
 
+  // ====================================================
+  // NAVIGATION / DIALOGS
+  // ====================================================
+
+  const requestExit =
+    (
+      path,
+      event
+    ) => {
+      event?.preventDefault?.();
+
+      if (
+        mutation.isPending
+      ) {
+        return;
+      }
+
+      if (!isDirty) {
+        navigate(
+          path
+        );
+
+        return;
+      }
+
+      setPendingExitPath(
+        path
+      );
+
+      setUnsavedDialogOpen(
+        true
+      );
+    };
+
+  const closeUnsavedDialog =
+    () => {
+      setUnsavedDialogOpen(
+        false
+      );
+
+      setPendingExitPath(
+        ''
+      );
+    };
+
+  const discardAndExit =
+    () => {
+      const path =
+        pendingExitPath ||
+        cancelDestination;
+
+      setUnsavedDialogOpen(
+        false
+      );
+
+      setPendingExitPath(
+        ''
+      );
+
+      navigate(
+        path
+      );
+    };
+
+  const closeRelationDialog =
+    () => {
+      setRelationDialogOpen(
+        false
+      );
+
+      setPendingClientId(
+        ''
+      );
+    };
+
+  const confirmClientChange =
+    () => {
+      const nextClientId =
+        pendingClientId;
+
+      setRelationDialogOpen(
+        false
+      );
+
+      setPendingClientId(
+        ''
+      );
+
+      applyClientChange(
+        nextClientId
+      );
+    };
+
+  const focusDialog =
+    (
+      dialogRef
+    ) => {
+      const dialog =
+        dialogRef.current;
+
+      if (!dialog) {
+        return;
+      }
+
+      const focusable =
+        dialog.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+
+      (
+        focusable[0] ||
+        dialog
+      )?.focus?.();
+    };
+
+  const trapDialogTab =
+    (
+      event,
+      dialogRef
+    ) => {
+      const dialog =
+        dialogRef.current;
+
+      if (
+        !dialog ||
+        event.key !==
+          'Tab'
+      ) {
+        return;
+      }
+
+      const focusable = [
+        ...dialog.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        ),
+      ];
+
+      if (
+        focusable.length ===
+        0
+      ) {
+        event.preventDefault();
+        dialog.focus?.();
+
+        return;
+      }
+
+      const first =
+        focusable[0];
+
+      const last =
+        focusable[
+          focusable.length - 1
+        ];
+
+      if (
+        event.shiftKey &&
+        document.activeElement ===
+          first
+      ) {
+        event.preventDefault();
+        last.focus();
+
+        return;
+      }
+
+      if (
+        !event.shiftKey &&
+        document.activeElement ===
+          last
+      ) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
   useEffect(() => {
+    if (
+      !isDirty ||
+      mutation.isPending
+    ) {
+      return undefined;
+    }
+
     const handleBeforeUnload =
       (
         event
       ) => {
-        if (
-          !isDirty ||
-          mutation.isPending
-        ) {
-          return;
-        }
-
         event.preventDefault();
         event.returnValue =
           '';
@@ -1643,6 +2206,94 @@ const MeetingCreate = () => {
     mutation.isPending,
   ]);
 
+  useEffect(() => {
+    const activeDialogRef =
+      unsavedDialogOpen
+        ? unsavedDialogRef
+        : relationDialogOpen
+          ? relationDialogRef
+          : null;
+
+    if (
+      !activeDialogRef
+    ) {
+      return undefined;
+    }
+
+    previousFocusRef.current =
+      document.activeElement;
+
+    const previousOverflow =
+      document.body.style
+        .overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const frame =
+      window.requestAnimationFrame(
+        () => {
+          focusDialog(
+            activeDialogRef
+          );
+        }
+      );
+
+    const handleKeyDown =
+      (
+        event
+      ) => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          event.preventDefault();
+
+          if (
+            unsavedDialogOpen
+          ) {
+            closeUnsavedDialog();
+          } else if (
+            relationDialogOpen
+          ) {
+            closeRelationDialog();
+          }
+
+          return;
+        }
+
+        trapDialogTab(
+          event,
+          activeDialogRef
+        );
+      };
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.cancelAnimationFrame(
+        frame
+      );
+
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+
+      previousFocusRef.current
+        ?.focus?.();
+    };
+  }, [
+    unsavedDialogOpen,
+    relationDialogOpen,
+  ]);
+
   // ====================================================
   // RENDER
   // ====================================================
@@ -1660,23 +2311,12 @@ const MeetingCreate = () => {
           }
           onClick={(
             event
-          ) => {
-            if (
-              mutation.isPending
-            ) {
-              event.preventDefault();
-              return;
-            }
-
-            if (
-              isDirty &&
-              !window.confirm(
-                'Kaydedilmemiş toplantı bilgileri var. Çıkmak istediğinize emin misiniz?'
-              )
-            ) {
-              event.preventDefault();
-            }
-          }}
+          ) =>
+            requestExit(
+              cancelDestination,
+              event
+            )
+          }
           className="
             inline-flex
             items-center
@@ -1719,17 +2359,27 @@ const MeetingCreate = () => {
 
           <div>
 
-            <h1
-              className="
-                text-2xl
-                font-semibold
-                tracking-[-0.035em]
-                text-gray-900
-                dark:text-white
-              "
-            >
-              Yeni Toplantı
-            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+
+              <h1
+                className="
+                  text-2xl
+                  font-semibold
+                  tracking-[-0.035em]
+                  text-gray-900
+                  dark:text-white
+                "
+              >
+                Yeni Toplantı
+              </h1>
+
+              {isDirty && (
+                <Badge variant="warning">
+                  Kaydedilmemiş değişiklik
+                </Badge>
+              )}
+
+            </div>
 
             <p
               className="
@@ -1813,6 +2463,9 @@ const MeetingCreate = () => {
               }
               error={
                 errors.title
+              }
+              disabled={
+                mutation.isPending
               }
               maxLength={
                 MAX_TITLE_LENGTH
@@ -2117,6 +2770,9 @@ const MeetingCreate = () => {
                 error={
                   errors.location
                 }
+                disabled={
+                  mutation.isPending
+                }
                 placeholder="Örn: Toplantı Odası 1"
                 icon={
                   <MapPin size={16} />
@@ -2135,6 +2791,9 @@ const MeetingCreate = () => {
                 }
                 error={
                   errors.meeting_link
+                }
+                disabled={
+                  mutation.isPending
                 }
                 placeholder="https://zoom.us/..."
                 icon={
@@ -2291,6 +2950,52 @@ const MeetingCreate = () => {
                   </p>
                 )}
 
+                {clientsError && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/[0.06] dark:text-red-300">
+                    <span>
+                      Müvekkil listesi yüklenemedi.
+                    </span>
+
+                    <button
+                      type="button"
+                      className="font-semibold underline underline-offset-2"
+                      disabled={
+                        clientsLoading
+                      }
+                      onClick={() =>
+                        refetchClients?.()
+                      }
+                    >
+                      Tekrar Dene
+                    </button>
+                  </div>
+                )}
+
+                {requestedClientError &&
+                  requestedClientId && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/[0.06] dark:text-amber-300">
+                    <span>
+                      Bağlantıdaki müvekkil doğrulanamadı.
+                    </span>
+
+                    <button
+                      type="button"
+                      className="font-semibold underline underline-offset-2"
+                      disabled={
+                        requestedClientLoading
+                      }
+                      onClick={() => {
+                        prefillAppliedRef.current =
+                          false;
+
+                        refetchRequestedClient?.();
+                      }}
+                    >
+                      Tekrar Dene
+                    </button>
+                  </div>
+                )}
+
                 {selectedClient && (
                   <div
                     className="
@@ -2399,6 +3104,28 @@ const MeetingCreate = () => {
                   <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
                     {errors.case_id}
                   </p>
+                )}
+
+                {formData.client_id &&
+                  clientCasesError && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/[0.06] dark:text-red-300">
+                    <span>
+                      Müvekkilin dava listesi yüklenemedi.
+                    </span>
+
+                    <button
+                      type="button"
+                      className="font-semibold underline underline-offset-2"
+                      disabled={
+                        clientCasesLoading
+                      }
+                      onClick={() =>
+                        refetchClientCases?.()
+                      }
+                    >
+                      Tekrar Dene
+                    </button>
+                  </div>
                 )}
 
                 {!formData.client_id && (
@@ -2574,6 +3301,27 @@ const MeetingCreate = () => {
                   <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
                     {errors.assigned_to}
                   </p>
+                )}
+
+                {usersError && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/[0.06] dark:text-red-300">
+                    <span>
+                      Kullanıcı listesi yüklenemedi.
+                    </span>
+
+                    <button
+                      type="button"
+                      className="font-semibold underline underline-offset-2"
+                      disabled={
+                        usersLoading
+                      }
+                      onClick={() =>
+                        refetchUsers?.()
+                      }
+                    >
+                      Tekrar Dene
+                    </button>
+                  </div>
                 )}
 
               </div>
@@ -3062,26 +3810,11 @@ const MeetingCreate = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={() => {
-              if (
-                mutation.isPending
-              ) {
-                return;
-              }
-
-              if (
-                isDirty &&
-                !window.confirm(
-                  'Kaydedilmemiş toplantı bilgileri var. İptal etmek istediğinize emin misiniz?'
-                )
-              ) {
-                return;
-              }
-
-              navigate(
+            onClick={() =>
+              requestExit(
                 cancelDestination
-              );
-            }}
+              )
+            }
             disabled={
               mutation.isPending
             }
@@ -3107,6 +3840,197 @@ const MeetingCreate = () => {
         </div>
 
       </form>
+
+      {unsavedDialogOpen && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6"
+          aria-live="polite"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Kaydedilmemiş değişiklikler penceresini kapat"
+            disabled={
+              mutation.isPending
+            }
+            onClick={
+              closeUnsavedDialog
+            }
+          />
+
+          <div
+            ref={
+              unsavedDialogRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="meeting-create-unsaved-title"
+            aria-describedby="meeting-create-unsaved-description"
+            tabIndex={-1}
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl outline-none dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+
+              <div className="flex items-start gap-4">
+
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.10] dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Kaydedilmemiş değişiklik
+                  </p>
+
+                  <h2
+                    id="meeting-create-unsaved-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Toplantı oluşturmadan çıkılsın mı?
+                  </h2>
+
+                  <p
+                    id="meeting-create-unsaved-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    Yeni toplantı formunda henüz kaydetmediğiniz bilgiler var. Çıkarsanız bu bilgiler kaybolacaktır.
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 px-6 py-4 sm:flex-row sm:justify-end">
+
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  mutation.isPending
+                }
+                onClick={
+                  closeUnsavedDialog
+                }
+              >
+                Düzenlemeye Devam Et
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                disabled={
+                  mutation.isPending
+                }
+                onClick={
+                  discardAndExit
+                }
+              >
+                Değişiklikleri At ve Çık
+              </Button>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {relationDialogOpen && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6"
+          aria-live="polite"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="İlişki değişikliği penceresini kapat"
+            disabled={
+              mutation.isPending
+            }
+            onClick={
+              closeRelationDialog
+            }
+          />
+
+          <div
+            ref={
+              relationDialogRef
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="meeting-create-client-change-title"
+            aria-describedby="meeting-create-client-change-description"
+            tabIndex={-1}
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl outline-none dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+
+              <div className="flex items-start gap-4">
+
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/[0.10] dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    İlişkili kayıt
+                  </p>
+
+                  <h2
+                    id="meeting-create-client-change-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Müvekkil değiştirilsin mi?
+                  </h2>
+
+                  <p
+                    id="meeting-create-client-change-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    Müvekkili değiştirirseniz seçili dava ilişkisi temizlenecek. Devam etmek istiyor musunuz?
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 px-6 py-4 sm:flex-row sm:justify-end">
+
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  mutation.isPending
+                }
+                onClick={
+                  closeRelationDialog
+                }
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                disabled={
+                  mutation.isPending
+                }
+                onClick={
+                  confirmClientChange
+                }
+              >
+                Müvekkili Değiştir
+              </Button>
+
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );
