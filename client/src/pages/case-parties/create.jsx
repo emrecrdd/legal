@@ -783,176 +783,6 @@ const CasePartyCreate = () => {
     isDirty,
   ]);
 
-  useEffect(() => {
-    const activeDialogRef =
-      unsavedDialogOpen
-        ? unsavedDialogRef
-        : entityTypeDialogOpen
-          ? entityTypeDialogRef
-          : null;
-
-    if (
-      !activeDialogRef
-    ) {
-      return undefined;
-    }
-
-    previousFocusRef.current =
-      document.activeElement;
-
-    const dialog =
-      activeDialogRef.current;
-
-    const focusableSelector =
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-    const focusFirst =
-      () => {
-        const focusable =
-          dialog?.querySelectorAll(
-            focusableSelector
-          );
-
-        const first =
-          focusable?.[0];
-
-        if (first) {
-          first.focus();
-        } else {
-          dialog?.focus();
-        }
-      };
-
-    const timer =
-      window.setTimeout(
-        focusFirst,
-        0
-      );
-
-    const handleKeyDown =
-      (event) => {
-        if (
-          event.key ===
-          'Escape'
-        ) {
-          event.preventDefault();
-
-          if (
-            isPending
-          ) {
-            return;
-          }
-
-          if (
-            unsavedDialogOpen
-          ) {
-            setUnsavedDialogOpen(false);
-            setPendingExitPath('');
-          }
-
-          if (
-            entityTypeDialogOpen
-          ) {
-            setEntityTypeDialogOpen(false);
-            setPendingEntityType('');
-          }
-
-          return;
-        }
-
-        if (
-          event.key !==
-          'Tab' ||
-          !dialog
-        ) {
-          return;
-        }
-
-        const focusable =
-          Array.from(
-            dialog.querySelectorAll(
-              focusableSelector
-            )
-          ).filter(
-            (element) =>
-              !element.hasAttribute(
-                'disabled'
-              )
-          );
-
-        if (
-          focusable.length ===
-          0
-        ) {
-          event.preventDefault();
-          dialog.focus();
-          return;
-        }
-
-        const first =
-          focusable[0];
-
-        const last =
-          focusable[
-            focusable.length -
-              1
-          ];
-
-        if (
-          event.shiftKey &&
-          document.activeElement ===
-            first
-        ) {
-          event.preventDefault();
-          last.focus();
-        } else if (
-          !event.shiftKey &&
-          document.activeElement ===
-            last
-        ) {
-          event.preventDefault();
-          first.focus();
-        }
-      };
-
-    document.body.style.overflow =
-      'hidden';
-
-    document.addEventListener(
-      'keydown',
-      handleKeyDown
-    );
-
-    return () => {
-      window.clearTimeout(
-        timer
-      );
-
-      document.removeEventListener(
-        'keydown',
-        handleKeyDown
-      );
-
-      document.body.style.overflow =
-        '';
-
-      const previousFocus =
-        previousFocusRef.current;
-
-      if (
-        previousFocus &&
-        typeof previousFocus.focus ===
-          'function'
-      ) {
-        previousFocus.focus();
-      }
-    };
-  }, [
-    unsavedDialogOpen,
-    entityTypeDialogOpen,
-    isPending,
-  ]);
-
   // ======================================================
   // MUTATION
   // ======================================================
@@ -1179,6 +1009,177 @@ const CasePartyCreate = () => {
 
   const isPending =
     mutation.isPending;
+
+
+  useEffect(() => {
+    const activeDialogRef =
+      unsavedDialogOpen
+        ? unsavedDialogRef
+        : entityTypeDialogOpen
+          ? entityTypeDialogRef
+          : null;
+
+    if (
+      !activeDialogRef
+    ) {
+      return undefined;
+    }
+
+    previousFocusRef.current =
+      document.activeElement;
+
+    const dialog =
+      activeDialogRef.current;
+
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const focusFirst =
+      () => {
+        const focusable =
+          dialog?.querySelectorAll(
+            focusableSelector
+          );
+
+        const first =
+          focusable?.[0];
+
+        if (first) {
+          first.focus();
+        } else {
+          dialog?.focus();
+        }
+      };
+
+    const timer =
+      window.setTimeout(
+        focusFirst,
+        0
+      );
+
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          event.preventDefault();
+
+          if (
+            isPending
+          ) {
+            return;
+          }
+
+          if (
+            unsavedDialogOpen
+          ) {
+            setUnsavedDialogOpen(false);
+            setPendingExitPath('');
+          }
+
+          if (
+            entityTypeDialogOpen
+          ) {
+            setEntityTypeDialogOpen(false);
+            setPendingEntityType('');
+          }
+
+          return;
+        }
+
+        if (
+          event.key !==
+          'Tab' ||
+          !dialog
+        ) {
+          return;
+        }
+
+        const focusable =
+          Array.from(
+            dialog.querySelectorAll(
+              focusableSelector
+            )
+          ).filter(
+            (element) =>
+              !element.hasAttribute(
+                'disabled'
+              )
+          );
+
+        if (
+          focusable.length ===
+          0
+        ) {
+          event.preventDefault();
+          dialog.focus();
+          return;
+        }
+
+        const first =
+          focusable[0];
+
+        const last =
+          focusable[
+            focusable.length -
+              1
+          ];
+
+        if (
+          event.shiftKey &&
+          document.activeElement ===
+            first
+        ) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement ===
+            last
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      };
+
+    document.body.style.overflow =
+      'hidden';
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.clearTimeout(
+        timer
+      );
+
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        '';
+
+      const previousFocus =
+        previousFocusRef.current;
+
+      if (
+        previousFocus &&
+        typeof previousFocus.focus ===
+          'function'
+      ) {
+        previousFocus.focus();
+      }
+    };
+  }, [
+    unsavedDialogOpen,
+    entityTypeDialogOpen,
+    isPending,
+  ]);
 
   // ======================================================
   // CHANGE
