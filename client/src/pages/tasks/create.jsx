@@ -54,6 +54,8 @@ import {
   Users,
 } from 'lucide-react';
 
+import toast from 'react-hot-toast';
+
 // ======================================================
 // CONSTANTS
 // ======================================================
@@ -1563,6 +1565,10 @@ const TaskCreate = () => {
       ) {
         setErrors(
           newErrors
+        );
+
+        toast.error(
+          'Formdaki eksik veya hatalı alanları kontrol edin'
         );
 
         return;
