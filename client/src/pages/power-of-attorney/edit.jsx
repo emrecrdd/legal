@@ -347,6 +347,140 @@ const formatDateInput = (
   }
 };
 
+const getPowerOfAttorneyErrorMessage = (
+  error,
+  fallback
+) => {
+  const responseData =
+    error?.response?.data;
+
+  const rawMessage =
+    String(
+      responseData?.message ||
+      error?.message ||
+      ''
+    ).trim();
+
+  const validationMessages =
+    Array.isArray(
+      responseData?.errors
+    )
+      ? responseData.errors
+          .map(
+            (item) =>
+              String(
+                item?.message ||
+                item?.msg ||
+                ''
+              ).trim()
+          )
+          .filter(Boolean)
+      : [];
+
+  const technicalMessage =
+    [
+      rawMessage,
+      ...validationMessages,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+  if (
+    !technicalMessage
+  ) {
+    return fallback;
+  }
+
+  if (
+    /validation failed|validation error|sequelizevalidationerror|notnull violation|cannot be null|must not be null|invalid input syntax|invalid date/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Vekaletname bilgileri doğrulanamadı. Zorunlu ve geçerli alanları kontrol edin.';
+  }
+
+  if (
+    /power[\s_-]*of[\s_-]*attorney.*not found|powerofattorney.*not found/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Vekaletname kaydı bulunamadı.';
+  }
+
+  if (
+    /client.*not found/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Seçilen müvekkil bulunamadı veya bu kayda erişim yetkiniz yok.';
+  }
+
+  if (
+    /case.*not found/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Seçilen dava bulunamadı veya bu kayda erişim yetkiniz yok.';
+  }
+
+  if (
+    /forbidden|permission denied|not authorized|unauthorized|access denied/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Bu işlem için yetkiniz bulunmuyor.';
+  }
+
+  if (
+    /invalid.*status/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Geçersiz vekaletname durumu.';
+  }
+
+  if (
+    /document.*not found/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Belge bulunamadı.';
+  }
+
+  if (
+    /file.*too large|payload too large/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Belge boyutu izin verilen sınırı aşıyor.';
+  }
+
+  if (
+    /unsupported.*file|invalid.*file|file type|mime type/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Desteklenmeyen belge türü.';
+  }
+
+  if (
+    /network error|failed to fetch|timeout|econnrefused|enotfound/i.test(
+      technicalMessage
+    )
+  ) {
+    return 'Sunucuya bağlanılamadı. Lütfen tekrar deneyin.';
+  }
+
+  const looksTurkish =
+    /[çğıöşüÇĞİÖŞÜ]|bulunamadı|geçersiz|zorunlu|yetkiniz|başarısız|yüklenemedi|güncellenemedi|oluşturulamadı|silinemedi|hata/i.test(
+      rawMessage
+    );
+
+  return looksTurkish
+    ? rawMessage
+    : fallback;
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -797,13 +931,10 @@ const PowerOfAttorneyEdit = () => {
               documentError
             ) {
               documentWarning =
-                documentError
-                  ?.response
-                  ?.data
-                  ?.message ||
-                documentError
-                  ?.message ||
-                'Belge yüklenemedi';
+                getPowerOfAttorneyErrorMessage(
+                  documentError,
+                  'Belge yüklenemedi'
+                );
             }
           }
 
@@ -853,9 +984,10 @@ const PowerOfAttorneyEdit = () => {
 
       onError: (error) => {
         toast.error(
-          error?.response
-            ?.data?.message ||
+          getPowerOfAttorneyErrorMessage(
+            error,
             'Vekaletname güncellenemedi'
+          )
         );
       },
     });
@@ -912,9 +1044,10 @@ const PowerOfAttorneyEdit = () => {
 
       onError: (error) => {
         toast.error(
-          error?.response
-            ?.data?.message ||
+          getPowerOfAttorneyErrorMessage(
+            error,
             'Vekaletname silinemedi'
+          )
         );
       },
     });
@@ -1528,10 +1661,10 @@ const PowerOfAttorneyEdit = () => {
         </h2>
 
         <p className="mt-2 text-sm text-gray-500">
-          {poaError?.response
-            ?.data?.message ||
-            poaError?.message ||
-            'Vekaletname bilgileri yüklenemedi'}
+          {getPowerOfAttorneyErrorMessage(
+            poaError,
+            'Vekaletname bilgileri yüklenemedi'
+          )}
         </p>
 
         <Link
