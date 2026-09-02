@@ -38,6 +38,7 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   BriefcaseBusiness,
   CalendarDays,
@@ -575,6 +576,12 @@ const CaseEdit = () => {
   ] =
     useState('');
 
+  const [
+    deleteDialogOpen,
+    setDeleteDialogOpen,
+  ] =
+    useState(false);
+
   // ======================================================
   // CASE QUERY
   // ======================================================
@@ -966,6 +973,64 @@ const CaseEdit = () => {
   const isPending =
     mutation.isPending ||
     deleteMutation.isPending;
+
+  const deleteCaseName =
+    [
+      caseItem?.court_name,
+      caseItem?.case_number,
+    ]
+      .filter(
+        Boolean
+      )
+      .join(
+        ' · '
+      ) ||
+    caseItem?.title ||
+    'Seçili dava';
+
+  useEffect(() => {
+    if (
+      !deleteDialogOpen
+    ) {
+      return undefined;
+    }
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key === 'Escape' &&
+          !deleteMutation.isPending
+        ) {
+          setDeleteDialogOpen(
+            false
+          );
+        }
+      };
+
+    document.body.style.overflow =
+      'hidden';
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      document.body.style.overflow =
+        previousOverflow;
+
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+    };
+  }, [
+    deleteDialogOpen,
+    deleteMutation.isPending,
+  ]);
 
   // ======================================================
   // CHANGE
@@ -1596,18 +1661,40 @@ const CaseEdit = () => {
         return;
       }
 
-      const confirmed =
-        window.confirm(
-          `Bu dava kaydını silmek istediğinize emin misiniz?\n\n${
-            caseItem.title ||
-            caseItem.case_number ||
-            'Seçili dava'
-          }\n\nBu işlem geri alınamaz.`
-        );
+      setDeleteDialogOpen(
+        true
+      );
+    };
+
+  const handleCloseDeleteDialog =
+    () => {
+      if (
+        deleteMutation.isPending
+      ) {
+        return;
+      }
+
+      setDeleteDialogOpen(
+        false
+      );
+    };
+
+  const handleConfirmDelete =
+    () => {
+      if (
+        !canDelete ||
+        deleteMutation.isPending
+      ) {
+        return;
+      }
 
       if (
-        !confirmed
+        !id
       ) {
+        toast.error(
+          'Geçerli dava kaydı bulunamadı'
+        );
+
         return;
       }
 
@@ -1615,6 +1702,10 @@ const CaseEdit = () => {
         id,
         {
           onSuccess: () => {
+            setDeleteDialogOpen(
+              false
+            );
+
             navigate(
               '/cases'
             );
@@ -2596,6 +2687,126 @@ const CaseEdit = () => {
           </Card.Body>
 
         </Card>
+      )}
+
+
+      {deleteDialogOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              handleCloseDeleteDialog();
+            }
+          }}
+        >
+          <div
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"
+            aria-hidden="true"
+          />
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="case-delete-dialog-title"
+            aria-describedby="case-delete-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-500/[0.10] dark:text-red-400">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Dava silme onayı
+                  </p>
+
+                  <h2
+                    id="case-delete-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Dava kaydını sil
+                  </h2>
+
+                  <p
+                    id="case-delete-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    <span className="font-medium text-gray-700 dark:text-slate-200">
+                      {deleteCaseName}
+                    </span>{' '}
+                    için bu işlemi onaylayın.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              <div className="rounded-xl border border-red-200 bg-red-50/70 p-4 dark:border-red-500/20 dark:bg-red-500/[0.07]">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+
+                  <div>
+                    <p className="text-sm font-semibold text-red-950 dark:text-red-200">
+                      Bu dava kaydı silinecek
+                    </p>
+
+                    <p className="mt-1 text-sm leading-6 text-red-900/80 dark:text-red-200/80">
+                      İşlem tamamlandıktan sonra dava kaydı normal ekranlardan erişilebilir olmayacaktır.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
+                <p className="text-sm leading-6 text-gray-600 dark:text-slate-300">
+                  Devam etmeden önce dosya numarası, mahkeme ve dava bilgilerini kontrol ederek doğru kaydı seçtiğinizden emin olun.
+                </p>
+              </div>
+
+              <p className="text-xs leading-5 text-gray-400 dark:text-slate-500">
+                Bu işlem geri alınamaz niteliktedir. Silme işlemi yalnızca yetkili kullanıcı tarafından onaylanmalıdır.
+              </p>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  deleteMutation.isPending
+                }
+                onClick={
+                  handleCloseDeleteDialog
+                }
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                loading={
+                  deleteMutation.isPending
+                }
+                disabled={
+                  deleteMutation.isPending
+                }
+                onClick={
+                  handleConfirmDelete
+                }
+              >
+                <Trash2 className="h-4 w-4" />
+
+                Davayı Sil
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
