@@ -349,136 +349,99 @@ const formatDateInput = (
 
 const getPowerOfAttorneyErrorMessage = (
   error,
-  fallback
+  fallback = 'İşlem tamamlanamadı'
 ) => {
-  const responseData =
-    error?.response?.data;
-
   const rawMessage =
-    String(
-      responseData?.message ||
-      error?.message ||
-      ''
-    ).trim();
+    error?.response?.data?.message ||
+    error?.message ||
+    '';
 
-  const validationMessages =
-    Array.isArray(
-      responseData?.errors
-    )
-      ? responseData.errors
-          .map(
-            (item) =>
-              String(
-                item?.message ||
-                item?.msg ||
-                ''
-              ).trim()
-          )
-          .filter(Boolean)
-      : [];
+  const message = String(
+    rawMessage
+  ).trim();
 
-  const technicalMessage =
-    [
-      rawMessage,
-      ...validationMessages,
-    ]
-      .filter(Boolean)
-      .join(' ');
-
-  if (
-    !technicalMessage
-  ) {
+  if (!message) {
     return fallback;
   }
 
+  const normalized =
+    message.toLocaleLowerCase(
+      'tr-TR'
+    );
+
   if (
-    /validation failed|validation error|sequelizevalidationerror|notnull violation|cannot be null|must not be null|invalid input syntax|invalid date/i.test(
-      technicalMessage
+    normalized.includes(
+      'validation failed'
+    ) ||
+    normalized.includes(
+      'validation error'
     )
   ) {
     return 'Vekaletname bilgileri doğrulanamadı. Zorunlu ve geçerli alanları kontrol edin.';
   }
 
   if (
-    /power[\s_-]*of[\s_-]*attorney.*not found|powerofattorney.*not found/i.test(
-      technicalMessage
+    normalized.includes(
+      'client not found'
     )
   ) {
-    return 'Vekaletname kaydı bulunamadı.';
+    return 'Seçilen müvekkil bulunamadı veya artık erişilemiyor.';
   }
 
   if (
-    /client.*not found/i.test(
-      technicalMessage
+    normalized.includes(
+      'case not found'
     )
   ) {
-    return 'Seçilen müvekkil bulunamadı veya bu kayda erişim yetkiniz yok.';
+    return 'Seçilen dava bulunamadı veya artık erişilemiyor.';
   }
 
   if (
-    /case.*not found/i.test(
-      technicalMessage
+    normalized.includes(
+      'power of attorney not found'
+    ) ||
+    normalized.includes(
+      'powerofattorney not found'
     )
   ) {
-    return 'Seçilen dava bulunamadı veya bu kayda erişim yetkiniz yok.';
+    return 'Vekaletname kaydı bulunamadı veya artık erişilemiyor.';
   }
 
   if (
-    /forbidden|permission denied|not authorized|unauthorized|access denied/i.test(
-      technicalMessage
+    normalized.includes(
+      'forbidden'
+    ) ||
+    normalized.includes(
+      'permission denied'
+    ) ||
+    normalized.includes(
+      'not authorized'
+    ) ||
+    normalized.includes(
+      'unauthorized'
     )
   ) {
     return 'Bu işlem için yetkiniz bulunmuyor.';
   }
 
-  if (
-    /invalid.*status/i.test(
-      technicalMessage
-    )
-  ) {
-    return 'Geçersiz vekaletname durumu.';
-  }
-
-  if (
-    /document.*not found/i.test(
-      technicalMessage
-    )
-  ) {
-    return 'Belge bulunamadı.';
-  }
-
-  if (
-    /file.*too large|payload too large/i.test(
-      technicalMessage
-    )
-  ) {
-    return 'Belge boyutu izin verilen sınırı aşıyor.';
-  }
-
-  if (
-    /unsupported.*file|invalid.*file|file type|mime type/i.test(
-      technicalMessage
-    )
-  ) {
-    return 'Desteklenmeyen belge türü.';
-  }
-
-  if (
-    /network error|failed to fetch|timeout|econnrefused|enotfound/i.test(
-      technicalMessage
-    )
-  ) {
-    return 'Sunucuya bağlanılamadı. Lütfen tekrar deneyin.';
-  }
-
-  const looksTurkish =
-    /[çğıöşüÇĞİÖŞÜ]|bulunamadı|geçersiz|zorunlu|yetkiniz|başarısız|yüklenemedi|güncellenemedi|oluşturulamadı|silinemedi|hata/i.test(
-      rawMessage
+  /*
+   * Backend'den teknik İngilizce bir mesaj geldiyse kullanıcıya
+   * ham metni göstermeyelim. Türkçe / kullanıcı odaklı mesajları
+   * ise olduğu gibi koruyalım.
+   */
+  const looksTechnicalEnglish =
+    /^[\x00-\x7F]+$/.test(
+      message
+    ) &&
+    /[a-z]/i.test(
+      message
     );
 
-  return looksTurkish
-    ? rawMessage
-    : fallback;
+  if (looksTechnicalEnglish) {
+    return fallback;
+  }
+
+  return message;
 };
 
 // ======================================================
@@ -542,6 +505,16 @@ const PowerOfAttorneyEdit = () => {
   const [
     initializedId,
     setInitializedId,
+  ] = useState(null);
+
+  const [
+    updateDialogOpen,
+    setUpdateDialogOpen,
+  ] = useState(false);
+
+  const [
+    pendingUpdateRequest,
+    setPendingUpdateRequest,
   ] = useState(null);
 
   const [
@@ -959,6 +932,14 @@ const PowerOfAttorneyEdit = () => {
               formData.case_id,
           });
 
+          setUpdateDialogOpen(
+            false
+          );
+
+          setPendingUpdateRequest(
+            null
+          );
+
           if (
             result?.documentWarning
           ) {
@@ -983,6 +964,14 @@ const PowerOfAttorneyEdit = () => {
         },
 
       onError: (error) => {
+        setUpdateDialogOpen(
+          false
+        );
+
+        setPendingUpdateRequest(
+          null
+        );
+
         toast.error(
           getPowerOfAttorneyErrorMessage(
             error,
@@ -1501,14 +1490,98 @@ const PowerOfAttorneyEdit = () => {
         null,
     };
 
-    updateMutation.mutate({
+    setPendingUpdateRequest({
       data:
         submitData,
 
       file:
         selectedFile,
     });
+
+    setUpdateDialogOpen(
+      true
+    );
   };
+
+  // ======================================================
+  // UPDATE CONFIRMATION
+  // ======================================================
+
+  const handleCloseUpdateDialog =
+    () => {
+      if (
+        updateMutation.isPending
+      ) {
+        return;
+      }
+
+      setUpdateDialogOpen(
+        false
+      );
+
+      setPendingUpdateRequest(
+        null
+      );
+    };
+
+  const handleConfirmUpdate =
+    () => {
+      if (
+        !updateDialogOpen ||
+        updateMutation.isPending ||
+        !pendingUpdateRequest
+      ) {
+        return;
+      }
+
+      updateMutation.mutate(
+        pendingUpdateRequest
+      );
+    };
+
+  useEffect(() => {
+    if (
+      !updateDialogOpen
+    ) {
+      return undefined;
+    }
+
+    const previousOverflow =
+      document.body.style
+        .overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key ===
+            'Escape' &&
+          !updateMutation.isPending
+        ) {
+          handleCloseUpdateDialog();
+        }
+      };
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+    };
+  }, [
+    updateDialogOpen,
+    updateMutation.isPending,
+  ]);
 
   // ======================================================
   // DELETE
@@ -1518,7 +1591,8 @@ const PowerOfAttorneyEdit = () => {
     () => {
       if (
         updateMutation.isPending ||
-        deleteMutation.isPending
+        deleteMutation.isPending ||
+        updateDialogOpen
       ) {
         return;
       }
@@ -2347,6 +2421,165 @@ const PowerOfAttorneyEdit = () => {
         </form>
 
       </Card>
+
+      {updateDialogOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+            aria-label="Güncelleme penceresini kapat"
+            disabled={
+              updateMutation.isPending
+            }
+            onClick={
+              handleCloseUpdateDialog
+            }
+          />
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="poa-update-dialog-title"
+            aria-describedby="poa-update-dialog-description"
+            className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+          >
+            <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+
+              <div className="flex items-start gap-4">
+
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/[0.10] dark:text-blue-400">
+                  <Save className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                    Vekaletname güncelleme onayı
+                  </p>
+
+                  <h2
+                    id="poa-update-dialog-title"
+                    className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+                  >
+                    Değişiklikleri kaydet
+                  </h2>
+
+                  <p
+                    id="poa-update-dialog-description"
+                    className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+                  >
+                    <span className="font-medium text-gray-700 dark:text-slate-200">
+                      {formData.title?.trim() ||
+                        poa?.title ||
+                        poa?.client?.name ||
+                        'Seçili vekaletname'}
+                    </span>{' '}
+                    için yaptığınız değişiklikleri onaylayın.
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+
+              <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-500/20 dark:bg-blue-500/[0.07]">
+
+                <div className="flex items-start gap-3">
+
+                  <Save className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+
+                  <div>
+
+                    <p className="text-sm font-semibold text-blue-950 dark:text-blue-200">
+                      Vekaletname bilgileri güncellenecek
+                    </p>
+
+                    <p className="mt-1 text-sm leading-6 text-blue-900/80 dark:text-blue-200/80">
+                      Müvekkil, dava, tarihler, durum, yetkiler ve notlarda yaptığınız değişiklikler kaydedilecektir.
+                    </p>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {selectedFile && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
+
+                  <div className="flex items-start gap-3">
+
+                    <FilePlus2 className="mt-0.5 h-5 w-5 shrink-0 text-gray-500 dark:text-slate-400" />
+
+                    <div className="min-w-0">
+
+                      <p className="text-sm font-semibold text-gray-800 dark:text-slate-200">
+                        Yeni belge de eklenecek
+                      </p>
+
+                      <p className="mt-1 truncate text-sm text-gray-600 dark:text-slate-400">
+                        {selectedFile.name}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+              )}
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
+
+                <p className="text-sm leading-6 text-gray-600 dark:text-slate-300">
+                  Kaydetmeden önce seçilen müvekkil, dava ve vekaletname kapsamını kontrol edin.
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  updateMutation.isPending
+                }
+                onClick={
+                  handleCloseUpdateDialog
+                }
+              >
+                Vazgeç
+              </Button>
+
+              <Button
+                type="button"
+                loading={
+                  updateMutation.isPending
+                }
+                disabled={
+                  updateMutation.isPending
+                }
+                onClick={
+                  handleConfirmUpdate
+                }
+              >
+                <Save className="h-4 w-4" />
+
+                Değişiklikleri Kaydet
+              </Button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
 
       {deleteDialogOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
