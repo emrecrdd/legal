@@ -65,6 +65,103 @@ const getHttpStatusFromError = (
   return fallback;
 };
 
+
+const isLikelyTechnicalEventMessage = (
+  value
+) => {
+  const message =
+    String(
+      value ||
+      ''
+    ).trim();
+
+  if (!message) {
+    return false;
+  }
+
+  return /sequelize|validation error|constraint|foreign key|unique constraint|notnull|not null|invalid input syntax|uuid|database|sql|column|relation .* does not exist|syntax error|axioserror|network error|request failed with status code|econn|etimedout|timeout|cannot read properties|typeerror|referenceerror|stack trace|internal server error/i.test(
+    message
+  );
+};
+
+const isSafeTurkishEventMessage = (
+  value
+) => {
+  const message =
+    String(
+      value ||
+      ''
+    ).trim();
+
+  if (
+    !message ||
+    isLikelyTechnicalEventMessage(
+      message
+    )
+  ) {
+    return false;
+  }
+
+  return /[çğıöşüÇĞİÖŞÜ]|duruşma|etkinlik|başlangıç|bitiş|tarih|avukat|kullanıcı|dava|katılımcı|durum|masraf|harç|erişim|yetki|bulunamadı|gereklidir|geçersiz|atanan/i.test(
+    message
+  );
+};
+
+const getSafeEventErrorMessage = (
+  error,
+  fallback =
+    'İşlem tamamlanamadı'
+) => {
+  const status =
+    getHttpStatusFromError(
+      error
+    );
+
+  const rawMessage =
+    String(
+      error?.message ||
+      ''
+    ).trim();
+
+  /*
+   * Service katmanındaki Türkçe business-rule mesajlarını
+   * kullanıcıya aynen taşıyoruz.
+   */
+  if (
+    isSafeTurkishEventMessage(
+      rawMessage
+    )
+  ) {
+    return rawMessage;
+  }
+
+  if (
+    rawMessage
+      .toLowerCase() ===
+    'event not found'
+  ) {
+    return 'Duruşma / etkinlik bulunamadı veya artık erişilebilir değil';
+  }
+
+  if (status === 401) {
+    return 'Oturumunuz sona ermiş olabilir. Lütfen yeniden giriş yapın.';
+  }
+
+  if (status === 403) {
+    return 'Bu işlem için gerekli yetkiye sahip değilsiniz';
+  }
+
+  if (status === 404) {
+    return 'Duruşma / etkinlik bulunamadı veya artık erişilebilir değil';
+  }
+
+  if (status >= 500) {
+    return 'Sunucu tarafında geçici bir sorun oluştu. Lütfen tekrar deneyin.';
+  }
+
+  return fallback;
+};
+
 const hasOptionalPermission = (
   user,
   permissionKey
@@ -286,7 +383,10 @@ export const eventController = {
 
       return errorResponse(
         res,
-        error.message,
+        getSafeEventErrorMessage(
+          error,
+          'Duruşma / etkinlik oluşturulamadı'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -354,7 +454,10 @@ export const eventController = {
 
       return errorResponse(
         res,
-        error.message,
+        getSafeEventErrorMessage(
+          error,
+          'Duruşma / etkinlik kayıtları getirilemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -425,7 +528,10 @@ export const eventController = {
 
       return errorResponse(
         res,
-        error.message,
+        getSafeEventErrorMessage(
+          error,
+          'Takvim kayıtları getirilemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -467,7 +573,10 @@ export const eventController = {
 
       return errorResponse(
         res,
-        error.message,
+        getSafeEventErrorMessage(
+          error,
+          'Kullanıcıya ait duruşma / etkinlik kayıtları getirilemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -508,7 +617,10 @@ export const eventController = {
 
       return errorResponse(
         res,
-        error.message,
+        getSafeEventErrorMessage(
+          error,
+          'Davaya ait duruşmalar getirilemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -549,7 +661,10 @@ export const eventController = {
 
       return errorResponse(
         res,
-        error.message,
+        getSafeEventErrorMessage(
+          error,
+          'Duruşma / etkinlik getirilemedi'
+        ),
         getHttpStatusFromError(
           error,
           404
@@ -808,8 +923,10 @@ export const eventController = {
 
       return errorResponse(
         res,
-        error.message ||
-          'Duruşma / etkinlik takvim dosyası oluşturulamadı',
+        getSafeEventErrorMessage(
+          error,
+          'Duruşma / etkinlik takvim dosyası oluşturulamadı'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -868,7 +985,10 @@ export const eventController = {
 
       return errorResponse(
         res,
-        error.message,
+        getSafeEventErrorMessage(
+          error,
+          'Duruşma / etkinlik güncellenemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -937,7 +1057,10 @@ export const eventController = {
 
       return errorResponse(
         res,
-        error.message,
+        getSafeEventErrorMessage(
+          error,
+          'Durum güncellenemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -995,7 +1118,10 @@ export const eventController = {
 
       return errorResponse(
         res,
-        error.message,
+        getSafeEventErrorMessage(
+          error,
+          'Duruşma / etkinlik silinemedi'
+        ),
         getHttpStatusFromError(
           error
         )

@@ -496,6 +496,62 @@ const localDateTimeToIso = (
   return date.toISOString();
 };
 
+
+const getCurrentLocalDateTimeMinute = () => {
+  const now =
+    new Date();
+
+  now.setSeconds(
+    0,
+    0
+  );
+
+  const localTime =
+    new Date(
+      now.getTime() -
+      now.getTimezoneOffset() *
+      60 *
+      1000
+    );
+
+  return localTime
+    .toISOString()
+    .slice(
+      0,
+      16
+    );
+};
+
+const isPastCreateDateTime = (
+  value
+) => {
+  if (!value) {
+    return false;
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return false;
+  }
+
+  /*
+   * datetime-local dakika hassasiyetinde çalıştığı için,
+   * aynı dakika içinde saniye farkından kaynaklanan
+   * yanlış "geçmiş tarih" hatasını önlüyoruz.
+   */
+  return (
+    date.getTime() <
+    Date.now() -
+      60 * 1000
+  );
+};
+
 const getRoleLabel = (
   role
 ) => {
@@ -1634,6 +1690,14 @@ const EventCreate = () => {
       ) {
         nextErrors.start_date =
           'Geçerli bir başlangıç tarihi girin';
+      } else if (
+        formData.start_date &&
+        isPastCreateDateTime(
+          formData.start_date
+        )
+      ) {
+        nextErrors.start_date =
+          'Duruşma başlangıç tarihi geçmiş bir tarih olamaz';
       }
 
       if (
@@ -1708,7 +1772,11 @@ const EventCreate = () => {
         );
 
       if (
-        assignedTo &&
+        !assignedTo
+      ) {
+        nextErrors.assigned_to =
+          'Duruşma için sorumlu avukat seçilmelidir';
+      } else if (
         !lawyersLoading &&
         !lawyersError &&
         !assignableUsersWithCurrent.some(
@@ -2251,6 +2319,9 @@ const EventCreate = () => {
                 error={
                   errors.start_date
                 }
+                min={
+                  getCurrentLocalDateTimeMinute()
+                }
                 disabled={
                   isPending
                 }
@@ -2268,6 +2339,10 @@ const EventCreate = () => {
                 }
                 error={
                   errors.end_date
+                }
+                min={
+                  formData.start_date ||
+                  getCurrentLocalDateTimeMinute()
                 }
                 disabled={
                   isPending
@@ -2405,7 +2480,7 @@ const EventCreate = () => {
               <div>
 
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Atanan Avukat
+                  Atanan Avukat *
                 </label>
 
                 <select
@@ -2787,6 +2862,7 @@ const EventCreate = () => {
               }
               disabled={
                 isPending ||
+                lawyersLoading ||
                 (
                   Boolean(
                     caseIdFromUrl

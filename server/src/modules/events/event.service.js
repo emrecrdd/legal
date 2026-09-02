@@ -338,6 +338,164 @@ const validateEventDates = ({
   }
 };
 
+
+const isPastEventDateWithMinuteTolerance = (
+  value
+) => {
+  const parsed =
+    new Date(
+      value
+    );
+
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
+    return false;
+  }
+
+  /*
+   * datetime-local dakika hassasiyetinde çalışabildiği için,
+   * aynı dakika içindeki saniye farkının yanlış biçimde
+   * "geçmiş tarih" sayılmasını önlüyoruz.
+   */
+  return (
+    parsed.getTime() <
+    Date.now() -
+      60 * 1000
+  );
+};
+
+const validateHearingCreateRules = (
+  data
+) => {
+  if (
+    data?.event_type !==
+    'hearing'
+  ) {
+    return;
+  }
+
+  if (
+    !data?.assigned_to
+  ) {
+    throw new Error(
+      'Duruşma için sorumlu avukat seçilmelidir'
+    );
+  }
+
+  if (
+    data?.start_date &&
+    isPastEventDateWithMinuteTolerance(
+      data.start_date
+    )
+  ) {
+    throw new Error(
+      'Duruşma başlangıç tarihi geçmiş bir tarih olamaz'
+    );
+  }
+};
+
+const validateHearingUpdateRules = ({
+  event,
+  updateData,
+}) => {
+  const effectiveEventType =
+    updateData?.event_type !==
+    undefined
+      ? updateData.event_type
+      : event?.event_type;
+
+  if (
+    effectiveEventType !==
+    'hearing'
+  ) {
+    return;
+  }
+
+  const assignedToWasProvided =
+    Object.prototype
+      .hasOwnProperty.call(
+        updateData || {},
+        'assigned_to'
+      );
+
+  const effectiveAssignedTo =
+    assignedToWasProvided
+      ? updateData.assigned_to
+      : event?.assigned_to;
+
+  /*
+   * Eski kayıtta sorumlu eksikse başka bir alanı düzenlemeyi
+   * sırf bu nedenle kilitlemiyoruz.
+   *
+   * Ancak:
+   * - assigned_to alanı değiştiriliyorsa boş bırakılamaz,
+   * - başka bir event hearing'e çevriliyorsa sorumlu zorunludur.
+   */
+  if (
+    (
+      assignedToWasProvided ||
+      event?.event_type !==
+        'hearing'
+    ) &&
+    !effectiveAssignedTo
+  ) {
+    throw new Error(
+      'Duruşma için sorumlu avukat seçilmelidir'
+    );
+  }
+
+  const startDateWasProvided =
+    Object.prototype
+      .hasOwnProperty.call(
+        updateData || {},
+        'start_date'
+      );
+
+  if (
+    !startDateWasProvided ||
+    !updateData.start_date
+  ) {
+    return;
+  }
+
+  const previousStartTime =
+    event?.start_date
+      ? new Date(
+          event.start_date
+        ).getTime()
+      : null;
+
+  const nextStartTime =
+    new Date(
+      updateData.start_date
+    ).getTime();
+
+  const startDateChanged =
+    Number.isFinite(
+      nextStartTime
+    ) &&
+    (
+      previousStartTime ===
+        null ||
+      nextStartTime !==
+        previousStartTime
+    );
+
+  if (
+    startDateChanged &&
+    isPastEventDateWithMinuteTolerance(
+      updateData.start_date
+    )
+  ) {
+    throw new Error(
+      'Duruşma başlangıç tarihi geçmiş bir tarih olamaz'
+    );
+  }
+};
+
 // ======================================================
 // ENUM VALIDATION
 // ======================================================
@@ -1119,6 +1277,10 @@ export const eventService = {
         normalizedData.end_date,
     });
 
+    validateHearingCreateRules(
+      normalizedData
+    );
+
     const transaction =
       await sequelize.transaction();
 
@@ -1663,6 +1825,11 @@ export const eventService = {
           undefined
             ? updateData.end_date
             : event.end_date,
+      });
+
+      validateHearingUpdateRules({
+        event,
+        updateData,
       });
 
       const effectiveCaseId =
