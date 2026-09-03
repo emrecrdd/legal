@@ -73,6 +73,48 @@ const ANALYSIS_TYPES = Object.freeze({
   DRAFT_GENERATION: 'draft_generation',
 });
 
+const AI_IMAGE_EXTENSIONS = new Set([
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+]);
+
+const AI_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+
+const isAIImageDocument = (
+  document
+) => {
+  const extension =
+    path
+      .extname(
+        document?.original_name ||
+          ''
+      )
+      .toLowerCase();
+
+  const mimeType =
+    String(
+      document?.mime_type ||
+        ''
+    )
+      .trim()
+      .toLowerCase();
+
+  return (
+    AI_IMAGE_EXTENSIONS.has(
+      extension
+    ) ||
+    AI_IMAGE_MIME_TYPES.has(
+      mimeType
+    )
+  );
+};
+
 const DRAFT_TYPES = Object.freeze([
   'petition',
   'contract',
@@ -363,32 +405,52 @@ if (isUdf) {
   uploadMimeType = 'text/plain';
 }
 
+const isImage =
+  isAIImageDocument(
+    document
+  );
+
 const uploadedFile = await aiProvider.uploadFile({
   buffer: uploadBuffer,
   filename: uploadFilename,
   mimeType: uploadMimeType,
+  purpose:
+    isImage
+      ? 'vision'
+      : 'user_data',
 });
 
       openAIFileId = uploadedFile.id;
 
+      const responseOptions = {
+        fileId: openAIFileId,
+        instructions: DOCUMENT_ANALYSIS_PROMPT,
+        prompt:
+          'Bu dosyanın tamamını incele ve tanımlanan şemaya göre hukuki belge analizi oluştur.',
+        schemaName: 'legal_document_analysis',
+        schema: documentAnalysisSchema,
+        schemaDescription:
+          'Hukuki belgenin yapılandırılmış analiz sonucu.',
+        maxOutputTokens: 10_000,
+        metadata: {
+          operation: ANALYSIS_TYPES.DOCUMENT_ANALYSIS,
+          analysisId: analysis.id,
+          documentId,
+          userId,
+        },
+      };
+
       const providerResult =
-        await aiProvider.createStructuredFileResponse({
-          fileId: openAIFileId,
-          instructions: DOCUMENT_ANALYSIS_PROMPT,
-          prompt:
-            'Bu dosyanın tamamını incele ve tanımlanan şemaya göre hukuki belge analizi oluştur.',
-          schemaName: 'legal_document_analysis',
-          schema: documentAnalysisSchema,
-          schemaDescription:
-            'Hukuki belgenin yapılandırılmış analiz sonucu.',
-             maxOutputTokens: 10_000,
-          metadata: {
-            operation: ANALYSIS_TYPES.DOCUMENT_ANALYSIS,
-            analysisId: analysis.id,
-            documentId,
-            userId,
-          },
-        });
+        isImage
+          ? await aiProvider
+              .createStructuredImageResponse({
+                ...responseOptions,
+                detail: 'auto',
+              })
+          : await aiProvider
+              .createStructuredFileResponse(
+                responseOptions
+              );
 
       await this.completeAnalysis({
         analysis,
@@ -488,32 +550,60 @@ const uploadedFile = await aiProvider.uploadFile({
     let openAIFileId = null;
 
     try {
-      const uploadedFile = await aiProvider.uploadFile({
-        buffer: file.buffer,
-        filename: document.original_name,
-        mimeType: document.mime_type,
-      });
+      const isImage =
+        isAIImageDocument(
+          document
+        );
+
+      const uploadedFile =
+        await aiProvider.uploadFile({
+          buffer: file.buffer,
+          filename:
+            document.original_name,
+          mimeType:
+            document.mime_type,
+          purpose:
+            isImage
+              ? 'vision'
+              : 'user_data',
+        });
 
       openAIFileId = uploadedFile.id;
 
+      const responseOptions = {
+        fileId: openAIFileId,
+        instructions:
+          DOCUMENT_CLASSIFICATION_PROMPT,
+        prompt:
+          'Bu dosyanın hukuki belge türünü sınıflandır.',
+        schemaName:
+          'legal_document_classification',
+        schema:
+          documentClassificationSchema,
+        schemaDescription:
+          'Hukuki belgenin sınıflandırma sonucu.',
+        metadata: {
+          operation:
+            ANALYSIS_TYPES
+              .DOCUMENT_CLASSIFICATION,
+          analysisId:
+            analysis.id,
+          documentId,
+          userId,
+        },
+      };
+
       const providerResult =
-        await aiProvider.createStructuredFileResponse({
-          fileId: openAIFileId,
-          instructions: DOCUMENT_CLASSIFICATION_PROMPT,
-          prompt:
-            'Bu dosyanın hukuki belge türünü sınıflandır.',
-          schemaName: 'legal_document_classification',
-          schema: documentClassificationSchema,
-          schemaDescription:
-            'Hukuki belgenin sınıflandırma sonucu.',
-          metadata: {
-            operation:
-              ANALYSIS_TYPES.DOCUMENT_CLASSIFICATION,
-            analysisId: analysis.id,
-            documentId,
-            userId,
-          },
-        });
+        isImage
+          ? await aiProvider
+              .createStructuredImageResponse({
+                ...responseOptions,
+                detail: 'auto',
+              })
+          : await aiProvider
+              .createStructuredFileResponse(
+                responseOptions
+              );
 
       await this.completeAnalysis({
         analysis,

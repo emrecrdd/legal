@@ -379,10 +379,132 @@ class AIProvider {
     }
   }
 
+  async createStructuredImageResponse({
+    fileId,
+    instructions,
+    prompt,
+    schemaName,
+    schema,
+    schemaDescription,
+    detail = 'auto',
+    model = config.OPENAI_MODEL,
+    maxOutputTokens = config.OPENAI_MAX_OUTPUT_TOKENS,
+    metadata,
+  }) {
+    this.ensureAvailable();
+
+    this.validateFileInput({
+      fileId,
+      prompt,
+    });
+
+    this.validateSchema({
+      schemaName,
+      schema,
+    });
+
+    const allowedDetails = new Set([
+      'auto',
+      'low',
+      'high',
+    ]);
+
+    if (!allowedDetails.has(detail)) {
+      throw new AIProviderError(
+        'Geçersiz görsel detay seviyesi.',
+        {
+          code: 'INVALID_IMAGE_DETAIL',
+          statusCode: 400,
+        }
+      );
+    }
+
+    const startedAt = Date.now();
+
+    try {
+      const response = await this.client.responses.create({
+        model,
+        instructions,
+
+        input: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text: prompt,
+              },
+              {
+                type: 'input_image',
+                file_id: fileId,
+                detail,
+              },
+            ],
+          },
+        ],
+
+        text: {
+          format: {
+            type: 'json_schema',
+            name: this.normalizeSchemaName(schemaName),
+            strict: true,
+            schema,
+            ...(schemaDescription
+              ? { description: schemaDescription }
+              : {}),
+          },
+        },
+
+        max_output_tokens: maxOutputTokens,
+
+        ...(metadata
+          ? { metadata: this.sanitizeMetadata(metadata) }
+          : {}),
+      });
+
+      this.ensureResponseCompleted(response);
+
+      const outputText = this.extractOutputText(response);
+      const parsedOutput =
+        this.parseStructuredOutput(outputText);
+
+      const result = this.buildResult({
+        response,
+        output: parsedOutput,
+        model,
+        startedAt,
+      });
+
+      logger.info(
+        'OpenAI structured görsel cevabı oluşturuldu',
+        {
+          responseId: result.responseId,
+          fileId,
+          model: result.model,
+          schemaName,
+          detail,
+          durationMs: result.durationMs,
+          usage: result.usage,
+        }
+      );
+
+      return result;
+    } catch (error) {
+      throw this.handleError(error, {
+        operation: 'createStructuredImageResponse',
+        model,
+        schemaName,
+        fileId,
+        startedAt,
+      });
+    }
+  }
+
   async uploadFile({
     buffer,
     filename,
     mimeType = 'application/octet-stream',
+    purpose = 'user_data',
   }) {
     this.ensureAvailable();
 
@@ -409,6 +531,19 @@ class AIProvider {
       );
     }
 
+    if (
+      !purpose ||
+      typeof purpose !== 'string'
+    ) {
+      throw new AIProviderError(
+        'OpenAI dosya yükleme amacı geçerli olmalıdır.',
+        {
+          code: 'INVALID_FILE_PURPOSE',
+          statusCode: 400,
+        }
+      );
+    }
+
     const startedAt = Date.now();
 
     try {
@@ -423,7 +558,7 @@ class AIProvider {
       const uploadedFile =
         await this.client.files.create({
           file,
-          purpose: 'user_data',
+          purpose,
         });
 
       logger.info(
@@ -432,6 +567,7 @@ class AIProvider {
           fileId: uploadedFile.id,
           filename,
           bytes: uploadedFile.bytes,
+          purpose,
           durationMs: Date.now() - startedAt,
         }
       );
