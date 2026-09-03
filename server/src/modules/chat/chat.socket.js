@@ -11,6 +11,10 @@ import {
 } from './chat.realtime.js';
 
 import {
+  chatPresence,
+} from './chat.presence.js';
+
+import {
   logger,
 } from '../../config/logger.js';
 
@@ -36,6 +40,101 @@ export const registerChatSocket = ({
 }) => {
   let lastTypingAt =
     0;
+
+  const userId =
+    socket.data.userId;
+
+  /*
+   * Presence socket sayısı üzerinden tutulur.
+   * Aynı kullanıcının birden fazla sekmesi/cihazı desteklenir.
+   */
+  void chatPresence
+    .markConnected(
+      userId
+    )
+    .then(
+      async (
+        result
+      ) => {
+        if (
+          result.changed
+        ) {
+          await chatRealtime.publishPresence(
+            userId,
+            {
+              isOnline:
+                true,
+
+              lastSeenAt:
+                null,
+            }
+          );
+        }
+      }
+    )
+    .catch(
+      (
+        error
+      ) => {
+        logger.warn(
+          'Chat presence connect kaydı başarısız',
+          {
+            userId,
+
+            message:
+              error?.message,
+          }
+        );
+      }
+    );
+
+  socket.on(
+    'disconnect',
+    () => {
+      void chatPresence
+        .markDisconnected(
+          userId
+        )
+        .then(
+          async (
+            result
+          ) => {
+            if (
+              result.changed &&
+              result.snapshot
+            ) {
+              await chatRealtime.publishPresence(
+                userId,
+                {
+                  isOnline:
+                    false,
+
+                  lastSeenAt:
+                    result
+                      .snapshot
+                      .last_seen_at,
+                }
+              );
+            }
+          }
+        )
+        .catch(
+          (
+            error
+          ) => {
+            logger.warn(
+              'Chat presence disconnect kaydı başarısız',
+              {
+                userId,
+
+                message:
+                  error?.message,
+              }
+            );
+          }
+        );
+    }
+  );
 
   socket.on(
     'chat:typing',

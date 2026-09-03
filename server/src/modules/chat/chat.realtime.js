@@ -20,6 +20,30 @@ const normalizeIds = (
   ),
 ];
 
+const getAllActiveUserIds =
+  async () => {
+    const users =
+      await User.findAll({
+        where: {
+          is_active:
+            true,
+        },
+
+        attributes: [
+          'id',
+        ],
+      });
+
+    return normalizeIds(
+      users.map(
+        (
+          user
+        ) =>
+          user.id
+      )
+    );
+  };
+
 const getActiveRecipientIds =
   async (
     conversationId
@@ -296,6 +320,45 @@ export const chatRealtime = {
 
             last_read_message_id:
               readState.last_read_message_id ||
+              null,
+          }
+        );
+      }
+    );
+  },
+
+  async publishPresence(
+    userId,
+    {
+      isOnline,
+      lastSeenAt =
+        null,
+    } = {}
+  ) {
+    return safePublish(
+      async () => {
+        const userIds =
+          await getAllActiveUserIds();
+
+        emitToUsers(
+          userIds.filter(
+            (
+              recipientId
+            ) =>
+              recipientId !==
+              userId
+          ),
+          'chat:presence',
+          {
+            user_id:
+              userId,
+
+            is_online:
+              isOnline ===
+              true,
+
+            last_seen_at:
+              lastSeenAt ||
               null,
           }
         );

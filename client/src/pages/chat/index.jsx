@@ -69,6 +69,98 @@ const getMessagesFromInfiniteData = (
     );
 };
 
+const isSameLocalDay = (
+  first,
+  second
+) =>
+  first.getFullYear() ===
+    second.getFullYear() &&
+  first.getMonth() ===
+    second.getMonth() &&
+  first.getDate() ===
+    second.getDate();
+
+const formatLastSeen = (
+  value
+) => {
+  if (!value) {
+    return 'Çevrimdışı';
+  }
+
+  const date =
+    new Date(
+      value
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return 'Çevrimdışı';
+  }
+
+  const now =
+    new Date();
+
+  const yesterday =
+    new Date(
+      now
+    );
+
+  yesterday.setDate(
+    now.getDate() -
+      1
+  );
+
+  const time =
+    date.toLocaleTimeString(
+      'tr-TR',
+      {
+        hour:
+          '2-digit',
+
+        minute:
+          '2-digit',
+      }
+    );
+
+  if (
+    isSameLocalDay(
+      date,
+      now
+    )
+  ) {
+    return `Son görülme bugün ${time}`;
+  }
+
+  if (
+    isSameLocalDay(
+      date,
+      yesterday
+    )
+  ) {
+    return `Son görülme dün ${time}`;
+  }
+
+  const day =
+    date.toLocaleDateString(
+      'tr-TR',
+      {
+        day:
+          '2-digit',
+
+        month:
+          '2-digit',
+
+        year:
+          'numeric',
+      }
+    );
+
+  return `Son görülme ${day} ${time}`;
+};
+
 const ChatPage = () => {
   const {
     user,
@@ -134,6 +226,7 @@ const ChatPage = () => {
   const {
     typingState,
     readState,
+    presenceState,
     sendTyping,
   } =
     useChatRealtime();
@@ -534,6 +627,52 @@ const ChatPage = () => {
           ?.user
       : null;
 
+  const directPresence =
+    otherMember?.id
+      ? (
+          presenceState[
+            otherMember.id
+          ] ||
+          selectedConversation
+            ?.direct_presence ||
+          null
+        )
+      : null;
+
+  const persistedReadReceipt =
+    selectedConversation
+      ?.type ===
+      'direct' &&
+    otherMember?.id
+      ? {
+          user_id:
+            otherMember.id,
+
+          last_read_message_id:
+            selectedConversation
+              ?.other_last_read_message_id ||
+            null,
+        }
+      : null;
+
+  const directStatusText =
+    selectedConversation
+      ?.type !==
+      'direct'
+      ? ''
+      : otherMember
+          ?.is_active !==
+        true
+        ? 'Pasif kullanıcı'
+        : directPresence
+            ?.is_online ===
+          true
+          ? 'Çevrimiçi'
+          : formatLastSeen(
+              directPresence
+                ?.last_seen_at
+            );
+
   return (
     <>
       <div className="mx-auto h-[calc(100vh-112px)] min-h-[560px] max-w-[1600px] px-3 pb-3 md:px-5 md:pb-5">
@@ -686,10 +825,7 @@ const ChatPage = () => {
                               .type ===
                             'office'
                           ? 'Tüm aktif ofis kullanıcıları'
-                          : otherMember
-                              ?.is_active
-                            ? 'Aktif'
-                            : 'Pasif kullanıcı'}
+                          : directStatusText}
                     </p>
                   </div>
                 </div>
@@ -730,7 +866,7 @@ const ChatPage = () => {
                         selectedConversation
                           .id
                       ] ||
-                      null
+                      persistedReadReceipt
                     }
                     onEdit={
                       handleEdit

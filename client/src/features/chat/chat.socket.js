@@ -40,6 +40,12 @@ export const useChatRealtime = () => {
   ] =
     useState({});
 
+  const [
+    presenceState,
+    setPresenceState,
+  ] =
+    useState({});
+
   useEffect(() => {
     const unsubscribeConversation =
       on(
@@ -153,6 +159,45 @@ export const useChatRealtime = () => {
         }
       );
 
+    const unsubscribePresence =
+      on(
+        'chat:presence',
+        (
+          payload
+        ) => {
+          const userId =
+            payload
+              ?.user_id;
+
+          if (!userId) {
+            return;
+          }
+
+          setPresenceState(
+            (
+              current
+            ) => ({
+              ...current,
+
+              [userId]: {
+                user_id:
+                  userId,
+
+                is_online:
+                  payload
+                    ?.is_online ===
+                  true,
+
+                last_seen_at:
+                  payload
+                    ?.last_seen_at ||
+                  null,
+              },
+            })
+          );
+        }
+      );
+
     const unsubscribeTyping =
       on(
         'chat:typing',
@@ -219,6 +264,7 @@ export const useChatRealtime = () => {
       unsubscribeUpdated();
       unsubscribeDeleted();
       unsubscribeRead();
+      unsubscribePresence();
       unsubscribeTyping();
     };
   }, [
@@ -261,12 +307,15 @@ export const useChatRealtime = () => {
 
       readState,
 
+      presenceState,
+
       sendTyping,
     }),
     [
       isConnected,
       typingState,
       readState,
+      presenceState,
       sendTyping,
     ]
   );

@@ -15,6 +15,10 @@ import {
 } from './chat.storage.js';
 
 import {
+  chatPresence,
+} from './chat.presence.js';
+
+import {
   logger,
 } from '../../config/logger.js';
 
@@ -328,13 +332,47 @@ const getConversationDisplayName = (
     'Birebir Sohbet';
 };
 
+const getOtherDirectMembership = (
+  conversation,
+  actorId
+) => {
+  if (
+    conversation
+      ?.type !==
+      'direct'
+  ) {
+    return null;
+  }
+
+  return (
+    conversation
+      ?.members ||
+    []
+  ).find(
+    (
+      member
+    ) =>
+      member.user_id !==
+      actorId
+  ) ||
+  null;
+};
+
 const serializeConversation = ({
   conversation,
   actorId,
   membership,
   lastMessage = null,
   unreadCount = 0,
-}) => ({
+  directPresence = null,
+}) => {
+  const otherMembership =
+    getOtherDirectMembership(
+      conversation,
+      actorId
+    );
+
+  return {
   id:
     conversation.id,
 
@@ -386,7 +424,38 @@ const serializeConversation = ({
 
   updated_at:
     conversation.updated_at,
-});
+
+  /*
+   * Birebir sohbet read receipt'i reload sonrasında da
+   * görüntülenebilsin diye yalnızca karşı üyenin read cursor'u
+   * expose edilir.
+   */
+  other_last_read_message_id:
+    otherMembership
+      ?.last_read_message_id ??
+    null,
+
+  direct_presence:
+    conversation.type ===
+      'direct'
+      ? (
+          directPresence ||
+          {
+            user_id:
+              otherMembership
+                ?.user_id ||
+              null,
+
+            is_online:
+              false,
+
+            last_seen_at:
+              null,
+          }
+        )
+      : null,
+  };
+};
 
 // ======================================================
 // INCLUDES
@@ -1113,14 +1182,22 @@ export const chatService = {
                 conversation.id
               );
 
+            const otherMembership =
+              getOtherDirectMembership(
+                conversation,
+                actor.id
+              );
+
             const [
               lastMessage,
               unreadCount,
+              directPresence,
             ] =
               await Promise.all([
                 getLastMessage(
                   conversation.id
                 ),
+
                 getUnreadCount({
                   conversationId:
                     conversation.id,
@@ -1130,6 +1207,18 @@ export const chatService = {
 
                   membership,
                 }),
+
+                conversation.type ===
+                  'direct' &&
+                otherMembership
+                  ?.user_id
+                  ? chatPresence.getSnapshot(
+                      otherMembership
+                        .user_id
+                    )
+                  : Promise.resolve(
+                      null
+                    ),
               ]);
 
             return serializeConversation({
@@ -1139,6 +1228,7 @@ export const chatService = {
               membership,
               lastMessage,
               unreadCount,
+              directPresence,
             });
           }
         )
@@ -1231,6 +1321,11 @@ export const chatService = {
     const directKey =
       buildDirectKey(
         actor.id,
+        targetId
+      );
+
+    const directPresence =
+      await chatPresence.getSnapshot(
         targetId
       );
 
@@ -1333,6 +1428,8 @@ export const chatService = {
                 actor.id,
 
               membership,
+
+              directPresence,
             }),
         };
       }
