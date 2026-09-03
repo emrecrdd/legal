@@ -3286,7 +3286,8 @@ const handlePreview = async (
 
             {(
               documentItem.powerOfAttorney ||
-              documentItem.power_of_attorney
+              documentItem.power_of_attorney ||
+              documentItem.power_of_attorney_id
             ) && (
               <div>
 
@@ -3294,13 +3295,38 @@ const handlePreview = async (
                   İlişkili Vekâletname
                 </p>
 
-                <p className="mt-1 font-medium text-gray-900 dark:text-white">
-                  {(
+                {normalizeId(
+                  (
                     documentItem.powerOfAttorney ||
                     documentItem.power_of_attorney
-                  )?.title ||
-                    'Vekâletname'}
-                </p>
+                  )?.id ??
+                    documentItem.power_of_attorney_id
+                ) ? (
+                  <Link
+                    to={`/power-of-attorney/${normalizeId(
+                      (
+                        documentItem.powerOfAttorney ||
+                        documentItem.power_of_attorney
+                      )?.id ??
+                        documentItem.power_of_attorney_id
+                    )}`}
+                    className="mt-1 block font-medium text-blue-600 hover:underline"
+                  >
+                    {(
+                      documentItem.powerOfAttorney ||
+                      documentItem.power_of_attorney
+                    )?.title ||
+                      'Vekâletnameyi Görüntüle'}
+                  </Link>
+                ) : (
+                  <span className="mt-1 block font-medium text-gray-900 dark:text-white">
+                    {(
+                      documentItem.powerOfAttorney ||
+                      documentItem.power_of_attorney
+                    )?.title ||
+                      'Vekâletname'}
+                  </span>
+                )}
 
               </div>
             )}
