@@ -1,6 +1,5 @@
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import jwt from 'jsonwebtoken';
 
 import { app } from './app.js';
 import { config } from './config/env.js';
@@ -10,7 +9,22 @@ import {
 } from './config/database.js';
 import { logger } from './config/logger.js';
 
-import { setIo } from './modules/notifications/notification.service.js';
+import {
+  setIo as setNotificationIo,
+} from './modules/notifications/notification.service.js';
+
+import {
+  authenticateSocket,
+} from './socket/socket.auth.js';
+
+import {
+  setIo as setSocketIo,
+} from './socket/socket.service.js';
+
+import {
+  registerChatSocket,
+} from './modules/chat/chat.socket.js';
+
 import { reminderWorker } from './jobs/reminder.worker.js';
 
 const PORT = config.PORT;
@@ -45,90 +59,20 @@ let shuttingDown = false;
 /**
  * Socket.IO kimlik doğrulaması.
  *
- * İstemci tokenı şu şekilde göndermelidir:
+ * HTTP authentication yapısına paralel olarak:
  *
- * io(url, {
- *   auth: { token }
- * });
+ * - access token doğrulaması
+ * - token type
+ * - issuer / audience
+ * - kullanıcı DB kontrolü
+ * - is_active
+ * - token_version
+ *
+ * kontrolleri socket.auth.js içinde yapılır.
  */
-io.use((socket, next) => {
-  const token = socket.handshake.auth?.token;
-
-  if (
-    !token ||
-    typeof token !== 'string'
-  ) {
-    logger.warn(
-      'Socket bağlantısı reddedildi: token bulunamadı',
-      {
-        socketId: socket.id,
-        address: socket.handshake.address,
-      }
-    );
-
-    const error = new Error(
-      'Kimlik doğrulaması gerekli.'
-    );
-
-    error.data = {
-      code: 'SOCKET_AUTH_REQUIRED',
-    };
-
-    return next(error);
-  }
-
-  try {
-    const decoded = jwt.verify(
-      token,
-      config.JWT_SECRET,
-      {
-        algorithms: ['HS256'],
-      }
-    );
-
-    const userId =
-      decoded.id ||
-      decoded.userId ||
-      decoded.sub;
-
-    if (!userId) {
-      const error = new Error(
-        'Token içinde kullanıcı bilgisi bulunamadı.'
-      );
-
-      error.data = {
-        code: 'SOCKET_INVALID_TOKEN',
-      };
-
-      return next(error);
-    }
-
-    socket.data.userId = userId;
-
-    socket.data.tokenPayload = {
-      id: userId,
-      role: decoded.role || null,
-    };
-
-    return next();
-  } catch (error) {
-    logger.warn('Geçersiz socket tokenı', {
-      socketId: socket.id,
-      message: error.message,
-      address: socket.handshake.address,
-    });
-
-    const authenticationError = new Error(
-      'Geçersiz veya süresi dolmuş token.'
-    );
-
-    authenticationError.data = {
-      code: 'SOCKET_INVALID_TOKEN',
-    };
-
-    return next(authenticationError);
-  }
-});
+io.use(
+  authenticateSocket
+);
 
 io.on('connection', (socket) => {
   const userId = socket.data.userId;
@@ -139,6 +83,17 @@ io.on('connection', (socket) => {
    * kullanıcı kimliğine ait odaya katılır.
    */
   socket.join(userRoom);
+
+  /*
+   * Chat'e özel socket eventleri mevcut
+   * authenticated socket bağlantısına kaydedilir.
+   *
+   * Ayrı bir Socket.IO bağlantısı veya namespace
+   * oluşturulmaz.
+   */
+  registerChatSocket({
+    socket,
+  });
 
   logger.info('Socket bağlantısı kuruldu', {
     socketId: socket.id,
@@ -182,10 +137,15 @@ io.engine.on('connection_error', (error) => {
 });
 
 /*
- * Notification service ve controller katmanı
- * Socket.IO instance'ına buradan erişir.
+ * Notification sistemi şimdilik mevcut setIo
+ * altyapısını kullanmaya devam eder.
+ *
+ * Chat ve yeni realtime özellikler merkezi
+ * socket.service.js üzerinden aynı io instance'ını kullanır.
  */
-setIo(io);
+setNotificationIo(io);
+setSocketIo(io);
+
 app.set('io', io);
 
 /**

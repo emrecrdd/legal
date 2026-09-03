@@ -2,7 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-
+import {
+  chatRoutes,
+} from './modules/chat/chat.routes.js';
 import {
   rateLimit,
   ipKeyGenerator,
@@ -1119,7 +1121,10 @@ app.use(
   '/api/notifications',
   notificationRoutes
 );
-
+app.use(
+  '/api/chat',
+  chatRoutes
+);
 app.use(
   '/api/audit-logs',
   auditLogRoutes

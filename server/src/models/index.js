@@ -18,7 +18,10 @@ import { Template } from './Template.js';
 import { AIAnalysis } from './AIAnalysis.js';
 import { Reminder } from './Reminder.js';
 import { CalendarIntegration } from './CalendarIntegration.js';
-
+import { Conversation } from './Conversation.js';
+import { ConversationMember } from './ConversationMember.js';
+import { Message } from './Message.js';
+import { MessageAttachment } from './MessageAttachment.js';
 const initModels = (sequelize) => {
   // ======================================================
   // MODEL INITIALIZATION
@@ -51,7 +54,10 @@ const initModels = (sequelize) => {
   CalendarIntegration.initModel(
     sequelize
   );
-
+Conversation.initModel(sequelize);
+ConversationMember.initModel(sequelize);
+Message.initModel(sequelize);
+MessageAttachment.initModel(sequelize);
   // ======================================================
   // USER ASSOCIATIONS
   // ======================================================
@@ -858,7 +864,96 @@ const initModels = (sequelize) => {
         'case',
     }
   );
+// ======================================================
+// CHAT ASSOCIATIONS
+// ======================================================
 
+User.hasMany(ConversationMember, {
+  foreignKey: 'user_id',
+  as: 'conversationMemberships',
+  onUpdate: 'CASCADE',
+  onDelete: 'CASCADE',
+});
+
+ConversationMember.belongsTo(User, {
+  foreignKey: 'user_id',
+  as: 'user',
+});
+
+Conversation.hasMany(ConversationMember, {
+  foreignKey: 'conversation_id',
+  as: 'members',
+  onUpdate: 'CASCADE',
+  onDelete: 'CASCADE',
+});
+
+ConversationMember.belongsTo(Conversation, {
+  foreignKey: 'conversation_id',
+  as: 'conversation',
+});
+
+User.belongsToMany(Conversation, {
+  through: ConversationMember,
+  foreignKey: 'user_id',
+  otherKey: 'conversation_id',
+  as: 'conversations',
+});
+
+Conversation.belongsToMany(User, {
+  through: ConversationMember,
+  foreignKey: 'conversation_id',
+  otherKey: 'user_id',
+  as: 'users',
+});
+
+User.hasMany(Conversation, {
+  foreignKey: 'created_by',
+  as: 'createdConversations',
+});
+
+Conversation.belongsTo(User, {
+  foreignKey: 'created_by',
+  as: 'creator',
+});
+
+Conversation.hasMany(Message, {
+  foreignKey: 'conversation_id',
+  as: 'messages',
+  onUpdate: 'CASCADE',
+  onDelete: 'CASCADE',
+});
+
+Message.belongsTo(Conversation, {
+  foreignKey: 'conversation_id',
+  as: 'conversation',
+});
+
+User.hasMany(Message, {
+  foreignKey: 'sender_id',
+  as: 'sentMessages',
+});
+
+Message.belongsTo(User, {
+  foreignKey: 'sender_id',
+  as: 'sender',
+});
+
+Message.hasMany(MessageAttachment, {
+  foreignKey: 'message_id',
+  as: 'attachments',
+  onUpdate: 'CASCADE',
+  onDelete: 'CASCADE',
+});
+
+MessageAttachment.belongsTo(Message, {
+  foreignKey: 'message_id',
+  as: 'message',
+});
+
+ConversationMember.belongsTo(Message, {
+  foreignKey: 'last_read_message_id',
+  as: 'lastReadMessage',
+});
   // ======================================================
   // REMINDER ASSOCIATIONS
   // ======================================================
@@ -1034,4 +1129,9 @@ export {
   Reminder,
 
   CalendarIntegration,
+  
+  Conversation,
+ConversationMember,
+Message,
+MessageAttachment,
 };
