@@ -18,6 +18,7 @@ import ConversationList from '../../components/chat/ConversationList.jsx';
 import MessageList from '../../components/chat/MessageList.jsx';
 import MessageInput from '../../components/chat/MessageInput.jsx';
 import NewDirectChatModal from '../../components/chat/NewDirectChatModal.jsx';
+import ChatMessageActionDialog from '../../components/chat/ChatMessageActionDialog.jsx';
 
 import chatApi from '../../features/chat/chat.api.js';
 
@@ -36,6 +37,8 @@ import {
 import {
   useChatRealtime,
 } from '../../features/chat/chat.socket.js';
+
+import toast from 'react-hot-toast';
 
 const getMessagesFromInfiniteData = (
   data
@@ -192,8 +195,8 @@ const ChatPage = () => {
     useState(false);
 
   const [
-    editingMessage,
-    setEditingMessage,
+    messageDialog,
+    setMessageDialog,
   ] =
     useState(null);
 
@@ -474,23 +477,6 @@ const ChatPage = () => {
         return;
       }
 
-      if (
-        editingMessage
-      ) {
-        await editMessage.mutateAsync({
-          messageId:
-            editingMessage.id,
-
-          content,
-        });
-
-        setEditingMessage(
-          null
-        );
-
-        return;
-      }
-
       await sendMessage.mutateAsync({
         conversationId:
           selectedConversationId,
@@ -529,39 +515,11 @@ const ChatPage = () => {
     (
       message
     ) => {
-      /*
-       * İlk sürümde ayrı modal açmadan kullanıcıya
-       * düzenlenecek metni prompt ile alıyoruz.
-       * Chat omurgası stabil olduktan sonra inline editor
-       * yapılabilir.
-       */
-      const nextContent =
-        window.prompt(
-          'Mesajı düzenle:',
-          message.content ||
-            ''
-        );
+      setMessageDialog({
+        mode:
+          'edit',
 
-      if (
-        nextContent ===
-          null
-      ) {
-        return;
-      }
-
-      const normalized =
-        nextContent.trim();
-
-      if (!normalized) {
-        return;
-      }
-
-      editMessage.mutate({
-        messageId:
-          message.id,
-
-        content:
-          normalized,
+        message,
       });
     };
 
@@ -569,18 +527,86 @@ const ChatPage = () => {
     (
       message
     ) => {
-      const confirmed =
-        window.confirm(
-          'Bu mesajı silmek istediğine emin misin?'
-        );
+      setMessageDialog({
+        mode:
+          'delete',
 
-      if (!confirmed) {
+        message,
+      });
+    };
+
+  const handleCloseMessageDialog =
+    () => {
+      if (
+        editMessage.isPending ||
+        deleteMessage.isPending
+      ) {
         return;
       }
 
-      deleteMessage.mutate(
-        message.id
+      setMessageDialog(
+        null
       );
+    };
+
+  const handleConfirmMessageAction =
+    async (
+      content
+    ) => {
+      const dialog =
+        messageDialog;
+
+      if (
+        !dialog?.message?.id
+      ) {
+        return;
+      }
+
+      try {
+        if (
+          dialog.mode ===
+          'edit'
+        ) {
+          await editMessage.mutateAsync({
+            messageId:
+              dialog.message.id,
+
+            content,
+          });
+
+          setMessageDialog(
+            null
+          );
+
+          toast.success(
+            'Mesaj güncellendi'
+          );
+
+          return;
+        }
+
+        if (
+          dialog.mode ===
+          'delete'
+        ) {
+          await deleteMessage.mutateAsync(
+            dialog.message.id
+          );
+
+          setMessageDialog(
+            null
+          );
+
+          toast.success(
+            'Mesaj silindi'
+          );
+        }
+      } catch {
+        /*
+         * Mutation hook mevcut hata toast'ını gösterir.
+         * Dialog hata halinde açık kalır.
+         */
+      }
     };
 
   const handleDownloadAttachment =
@@ -926,6 +952,32 @@ const ChatPage = () => {
           </section>
         </div>
       </div>
+
+      <ChatMessageActionDialog
+        open={
+          Boolean(
+            messageDialog
+          )
+        }
+        mode={
+          messageDialog
+            ?.mode
+        }
+        message={
+          messageDialog
+            ?.message
+        }
+        pending={
+          editMessage.isPending ||
+          deleteMessage.isPending
+        }
+        onClose={
+          handleCloseMessageDialog
+        }
+        onConfirm={
+          handleConfirmMessageAction
+        }
+      />
 
       <NewDirectChatModal
         open={
