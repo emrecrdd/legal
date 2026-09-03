@@ -522,9 +522,9 @@ const MessageInput = ({
               border border-slate-200
               bg-slate-50/90 px-3 py-2.5
               text-sm leading-5
-              text-gray-900 outline-none
-              transition
-              placeholder:text-gray-400
+              text-slate-900 caret-[#102f59]
+              outline-none transition
+              placeholder:text-slate-400
               focus:border-amber-300
               focus:bg-white
               focus:ring-2
@@ -533,9 +533,11 @@ const MessageInput = ({
               disabled:opacity-60
               dark:border-white/[0.07]
               dark:bg-white/[0.035]
-              dark:text-white
+              dark:text-slate-100
+              dark:caret-amber-300
               dark:placeholder:text-slate-500
               dark:focus:border-amber-400/30
+              dark:focus:bg-white/[0.055]
               dark:focus:ring-amber-500/10
             "
           />
