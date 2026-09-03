@@ -30,6 +30,7 @@ import {
   useMarkChatRead,
   useOpenDirectConversation,
   useSendChatMessage,
+  useSendChatAttachments,
 } from '../../features/chat/chat.query.js';
 
 import {
@@ -117,6 +118,9 @@ const ChatPage = () => {
 
   const sendMessage =
     useSendChatMessage();
+
+  const sendAttachments =
+    useSendChatAttachments();
 
   const editMessage =
     useEditChatMessage();
@@ -397,6 +401,32 @@ const ChatPage = () => {
       await sendMessage.mutateAsync({
         conversationId:
           selectedConversationId,
+
+        content,
+      });
+    };
+
+  const handleSendFiles =
+    async (
+      files,
+      content = ''
+    ) => {
+      if (
+        !selectedConversationId ||
+        !Array.isArray(
+          files
+        ) ||
+        files.length ===
+          0
+      ) {
+        return;
+      }
+
+      await sendAttachments.mutateAsync({
+        conversationId:
+          selectedConversationId,
+
+        files,
 
         content,
       });
@@ -728,11 +758,16 @@ const ChatPage = () => {
                   sending={
                     sendMessage
                       .isPending ||
+                    sendAttachments
+                      .isPending ||
                     editMessage
                       .isPending
                   }
                   onSend={
                     handleSend
+                  }
+                  onSendFiles={
+                    handleSendFiles
                   }
                   onTyping={(
                     isTyping
@@ -743,7 +778,7 @@ const ChatPage = () => {
                     )
                   }
                   attachmentsEnabled={
-                    false
+                    true
                   }
                 />
               </>
