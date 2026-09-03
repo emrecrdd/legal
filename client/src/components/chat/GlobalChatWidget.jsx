@@ -48,6 +48,61 @@ import MessageList from './MessageList.jsx';
 import NewDirectChatModal from './NewDirectChatModal.jsx';
 import ChatMessageActionDialog from './ChatMessageActionDialog.jsx';
 
+const CHAT_DRAWER_STORAGE_KEY =
+  'derkenar-chat-drawer-width';
+
+const CHAT_DRAWER_MIN_WIDTH =
+  320;
+
+const CHAT_DRAWER_DEFAULT_WIDTH =
+  420;
+
+const CHAT_DRAWER_MAX_WIDTH =
+  560;
+
+const clampDrawerWidth = (
+  value
+) => {
+  const numeric =
+    Number(
+      value
+    );
+
+  if (
+    !Number.isFinite(
+      numeric
+    )
+  ) {
+    return CHAT_DRAWER_DEFAULT_WIDTH;
+  }
+
+  return Math.min(
+    CHAT_DRAWER_MAX_WIDTH,
+    Math.max(
+      CHAT_DRAWER_MIN_WIDTH,
+      Math.round(
+        numeric
+      )
+    )
+  );
+};
+
+const readStoredDrawerWidth =
+  () => {
+    if (
+      typeof window ===
+      'undefined'
+    ) {
+      return CHAT_DRAWER_DEFAULT_WIDTH;
+    }
+
+    return clampDrawerWidth(
+      window.localStorage.getItem(
+        CHAT_DRAWER_STORAGE_KEY
+      )
+    );
+  };
+
 const getMessagesFromInfiniteData = (
   data
 ) => {
@@ -201,6 +256,20 @@ const GlobalChatPanel = ({
     user,
   } =
     useAuth();
+
+  const [
+    drawerWidth,
+    setDrawerWidth,
+  ] =
+    useState(
+      readStoredDrawerWidth
+    );
+
+  const [
+    resizing,
+    setResizing,
+  ] =
+    useState(false);
 
   const [
     selectedConversationId,
@@ -796,6 +865,120 @@ const GlobalChatPanel = ({
       ]
     );
 
+  useEffect(
+    () => {
+      if (
+        typeof window ===
+        'undefined'
+      ) {
+        return;
+      }
+
+      window.localStorage.setItem(
+        CHAT_DRAWER_STORAGE_KEY,
+        String(
+          drawerWidth
+        )
+      );
+    },
+    [
+      drawerWidth,
+    ]
+  );
+
+  useEffect(
+    () => {
+      if (
+        !resizing
+      ) {
+        return undefined;
+      }
+
+      const previousCursor =
+        document.body.style
+          .cursor;
+
+      const previousUserSelect =
+        document.body.style
+          .userSelect;
+
+      document.body.style.cursor =
+        'ew-resize';
+
+      document.body.style.userSelect =
+        'none';
+
+      const handlePointerMove =
+        (
+          event
+        ) => {
+          const nextWidth =
+            window.innerWidth -
+            event.clientX -
+            16;
+
+          setDrawerWidth(
+            clampDrawerWidth(
+              nextWidth
+            )
+          );
+        };
+
+      const handlePointerUp =
+        () => {
+          setResizing(
+            false
+          );
+        };
+
+      window.addEventListener(
+        'pointermove',
+        handlePointerMove
+      );
+
+      window.addEventListener(
+        'pointerup',
+        handlePointerUp,
+        {
+          once:
+            true,
+        }
+      );
+
+      return () => {
+        window.removeEventListener(
+          'pointermove',
+          handlePointerMove
+        );
+
+        window.removeEventListener(
+          'pointerup',
+          handlePointerUp
+        );
+
+        document.body.style.cursor =
+          previousCursor;
+
+        document.body.style.userSelect =
+          previousUserSelect;
+      };
+    },
+    [
+      resizing,
+    ]
+  );
+
+  const setWidthPreset =
+    (
+      width
+    ) => {
+      setDrawerWidth(
+        clampDrawerWidth(
+          width
+        )
+      );
+    };
+
   return (
     <>
       <section
@@ -806,14 +989,63 @@ const GlobalChatPanel = ({
           shadow-2xl
           dark:bg-[#08172b]
           md:inset-y-4 md:left-auto md:right-4
-          md:w-[420px]
           md:rounded-[24px]
           md:border md:border-slate-200/90
           md:shadow-[0_24px_80px_rgba(15,23,42,0.22)]
           md:dark:border-white/[0.08]
         "
+        style={{
+          width:
+            typeof window !==
+              'undefined' &&
+            window.innerWidth <
+              768
+              ? '100%'
+              : `${drawerWidth}px`,
+        }}
         aria-label="Hızlı sohbet"
       >
+        <button
+          type="button"
+          onPointerDown={(
+            event
+          ) => {
+            if (
+              window.innerWidth <
+              768
+            ) {
+              return;
+            }
+
+            event.preventDefault();
+
+            setResizing(
+              true
+            );
+          }}
+          className="
+            absolute bottom-4 left-0 top-4
+            z-20 hidden w-2
+            -translate-x-1/2
+            cursor-ew-resize
+            items-center justify-center
+            md:flex
+          "
+          aria-label="Sohbet paneli genişliğini ayarla"
+          title="Sürükleyerek genişliği ayarla"
+        >
+          <span
+            className={`
+              h-16 w-1 rounded-full
+              transition
+              ${
+                resizing
+                  ? 'bg-blue-500'
+                  : 'bg-slate-300 hover:bg-blue-400 dark:bg-white/15'
+              }
+            `}
+          />
+        </button>
         <header
           className="
             flex min-h-[62px] shrink-0
@@ -904,6 +1136,79 @@ const GlobalChatPanel = ({
                 </p>
               </>
             )}
+          </div>
+
+          <div className="hidden items-center gap-1 rounded-xl border border-slate-200 bg-slate-50/80 p-1 dark:border-white/[0.07] dark:bg-white/[0.035] md:flex">
+            <button
+              type="button"
+              onClick={() =>
+                setWidthPreset(
+                  340
+                )
+              }
+              className={`
+                rounded-lg px-2 py-1
+                text-[10px] font-semibold
+                transition
+                ${
+                  drawerWidth <
+                  380
+                    ? 'bg-white text-[#102f59] shadow-sm dark:bg-white/[0.08] dark:text-blue-300'
+                    : 'text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300'
+                }
+              `}
+              title="Dar görünüm"
+            >
+              Dar
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setWidthPreset(
+                  420
+                )
+              }
+              className={`
+                rounded-lg px-2 py-1
+                text-[10px] font-semibold
+                transition
+                ${
+                  drawerWidth >=
+                    380 &&
+                  drawerWidth <
+                    490
+                    ? 'bg-white text-[#102f59] shadow-sm dark:bg-white/[0.08] dark:text-blue-300'
+                    : 'text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300'
+                }
+              `}
+              title="Normal görünüm"
+            >
+              Normal
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setWidthPreset(
+                  540
+                )
+              }
+              className={`
+                rounded-lg px-2 py-1
+                text-[10px] font-semibold
+                transition
+                ${
+                  drawerWidth >=
+                  490
+                    ? 'bg-white text-[#102f59] shadow-sm dark:bg-white/[0.08] dark:text-blue-300'
+                    : 'text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300'
+                }
+              `}
+              title="Geniş görünüm"
+            >
+              Geniş
+            </button>
           </div>
 
           <button
