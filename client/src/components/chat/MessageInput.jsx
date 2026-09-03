@@ -380,7 +380,7 @@ const MessageInput = ({
     };
 
   return (
-    <div className="border-t border-gray-200 bg-white p-3 dark:border-white/[0.06] dark:bg-[#0b1b33]">
+    <div className="border-t border-slate-200/90 bg-white/95 p-3 shadow-[0_-8px_30px_rgba(15,23,42,0.035)] backdrop-blur dark:border-white/[0.06] dark:bg-[#09182c]/95">
       {selectedFiles.length >
         0 && (
         <div className="mb-2 flex flex-wrap gap-2">
@@ -391,7 +391,7 @@ const MessageInput = ({
             ) => (
               <div
                 key={`${file.name}-${file.size}-${index}`}
-                className="flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-2 dark:border-white/[0.07] dark:bg-white/[0.04]"
+                className="flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/90 px-2.5 py-2 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.04]"
               >
                 <FileText
                   size={15}
@@ -519,8 +519,8 @@ const MessageInput = ({
             className="
               max-h-32 min-h-10 w-full
               resize-none rounded-xl
-              border border-gray-200
-              bg-gray-50 px-3 py-2.5
+              border border-slate-200
+              bg-slate-50/90 px-3 py-2.5
               text-sm leading-5
               text-gray-900 outline-none
               transition
@@ -572,9 +572,9 @@ const MessageInput = ({
           className="
             inline-flex h-10 w-10 shrink-0
             items-center justify-center
-            rounded-xl bg-blue-600
-            text-white transition
-            hover:bg-blue-500
+            rounded-xl bg-[#102f59]
+            text-white shadow-sm transition
+            hover:bg-[#153d70]
             disabled:cursor-not-allowed
             disabled:opacity-40
           "

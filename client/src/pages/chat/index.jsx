@@ -537,11 +537,13 @@ const ChatPage = () => {
   return (
     <>
       <div className="mx-auto h-[calc(100vh-112px)] min-h-[560px] max-w-[1600px] px-3 pb-3 md:px-5 md:pb-5">
-        <div className="grid h-full min-h-0 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-white/[0.07] dark:bg-[#0b1b33] md:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="grid h-full min-h-0 overflow-hidden rounded-[22px] border border-slate-200/90 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.10)] ring-1 ring-slate-900/[0.02] dark:border-white/[0.07] dark:bg-[#08172b] dark:shadow-[0_20px_60px_rgba(0,0,0,0.30)] md:grid-cols-[328px_minmax(0,1fr)]">
           <aside
             className={`
-              min-h-0 border-r border-gray-200
+              min-h-0 border-r border-slate-200/90
+              bg-[#fbfcfe]
               dark:border-white/[0.06]
+              dark:bg-[#09182c]
               ${
                 mobileConversationOpen
                   ? 'hidden md:block'
@@ -589,7 +591,7 @@ const ChatPage = () => {
             `}
           >
             {!selectedConversation ? (
-              <div className="flex h-full items-center justify-center px-6 text-center">
+              <div className="flex h-full items-center justify-center bg-[#f7f8fa] px-6 text-center dark:bg-[#061324]">
                 <div>
                   <MessagesSquare
                     size={34}
@@ -607,7 +609,7 @@ const ChatPage = () => {
               </div>
             ) : (
               <>
-                <div className="flex min-h-[64px] items-center gap-3 border-b border-gray-200 px-3 py-2.5 dark:border-white/[0.06] md:px-4">
+                <div className="flex min-h-[68px] items-center gap-3 border-b border-slate-200/90 bg-white/95 px-3 py-2.5 shadow-[0_1px_0_rgba(15,23,42,0.02)] backdrop-blur dark:border-white/[0.06] dark:bg-[#09182c]/95 md:px-5">
                   <button
                     type="button"
                     onClick={() =>
@@ -632,8 +634,8 @@ const ChatPage = () => {
                         selectedConversation
                           .type ===
                         'office'
-                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300'
-                          : 'bg-slate-100 text-slate-700 dark:bg-white/[0.06] dark:text-slate-300'
+                          ? 'border border-amber-200/70 bg-[#fbf4df] text-[#8a6518] shadow-sm dark:border-amber-400/10 dark:bg-amber-400/[0.08] dark:text-amber-300'
+                          : 'border border-slate-200 bg-slate-50 text-[#17345d] shadow-sm dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300'
                       }
                     `}
                   >
@@ -667,14 +669,14 @@ const ChatPage = () => {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-sm font-bold text-gray-900 dark:text-white">
+                    <h2 className="truncate text-[14px] font-bold tracking-[-0.01em] text-slate-900 dark:text-white">
                       {
                         selectedConversation
                           .display_name
                       }
                     </h2>
 
-                    <p className="mt-0.5 truncate text-[10px] text-gray-400 dark:text-slate-500">
+                    <p className="mt-0.5 truncate text-[10px] font-medium text-slate-400 dark:text-slate-500">
                       {typingNames.length >
                       0
                         ? `${typingNames.join(
@@ -694,7 +696,7 @@ const ChatPage = () => {
 
                 {messagesQuery
                   .isLoading ? (
-                  <div className="flex min-h-0 flex-1 items-center justify-center bg-gray-50/70 dark:bg-[#071426]/55">
+                  <div className="flex min-h-0 flex-1 items-center justify-center bg-[#f4f6f8] dark:bg-[#061324]">
                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600 dark:border-white/[0.08] dark:border-b-blue-500" />
                   </div>
                 ) : (

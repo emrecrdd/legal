@@ -109,7 +109,14 @@ const MessageList = ({
       ref={
         containerRef
       }
-      className="min-h-0 flex-1 overflow-y-auto bg-gray-50/70 px-3 py-4 dark:bg-[#071426]/55 md:px-5"
+      className="min-h-0 flex-1 overflow-y-auto bg-[#f3f5f7] px-3 py-5 dark:bg-[#061324] md:px-6"
+      style={{
+        backgroundImage:
+          'radial-gradient(circle at 1px 1px, rgba(15, 42, 76, 0.055) 1px, transparent 0), linear-gradient(135deg, rgba(255,255,255,0.58), rgba(255,255,255,0.08))',
+
+        backgroundSize:
+          '26px 26px, 100% 100%',
+      }}
     >
       {hasMore && (
         <div className="mb-4 flex justify-center">
@@ -122,8 +129,8 @@ const MessageList = ({
               loadingMore
             }
             className="
-              rounded-full border border-gray-200
-              bg-white px-3 py-1.5
+              rounded-full border border-slate-200/90
+              bg-white/90 px-3.5 py-1.5 backdrop-blur
               text-[10px] font-semibold
               text-gray-500 shadow-sm
               transition hover:bg-gray-50
@@ -155,7 +162,7 @@ const MessageList = ({
           </div>
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="mx-auto max-w-[1080px] space-y-2.5">
           {messages.map(
             (
               message,

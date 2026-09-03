@@ -113,7 +113,7 @@ const MessageBubble = ({
           }
         `}
       >
-        <div className="max-w-[82%] rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-3.5 py-2.5 text-xs italic text-gray-400 dark:border-white/[0.08] dark:bg-white/[0.025] dark:text-slate-500 md:max-w-[70%]">
+        <div className="max-w-[82%] rounded-2xl border border-dashed border-slate-300/80 bg-white/55 px-3.5 py-2.5 text-xs italic text-slate-400 backdrop-blur-sm dark:border-white/[0.08] dark:bg-white/[0.025] dark:text-slate-500 md:max-w-[70%]">
           Bu mesaj silindi
         </div>
       </div>
@@ -131,11 +131,11 @@ const MessageBubble = ({
         }
       `}
     >
-      <div className="max-w-[86%] md:max-w-[72%]">
+      <div className="max-w-[88%] md:max-w-[74%]">
         {showSender &&
           !own &&
           senderName && (
-            <p className="mb-1 ml-1 text-[10px] font-bold text-gray-400 dark:text-slate-500">
+            <p className="mb-1 ml-1 text-[10px] font-bold tracking-wide text-[#52657d] dark:text-slate-500">
               {senderName}
             </p>
           )}
@@ -143,11 +143,11 @@ const MessageBubble = ({
         <div
           className={`
             relative rounded-2xl px-3.5 py-2.5
-            shadow-sm
+            shadow-[0_5px_18px_rgba(15,23,42,0.07)]
             ${
               own
-                ? 'rounded-br-md bg-[#0c2858] text-white dark:bg-blue-600'
-                : 'rounded-bl-md border border-gray-200 bg-white text-gray-800 dark:border-white/[0.07] dark:bg-white/[0.05] dark:text-slate-100'
+                ? 'rounded-br-md border border-[#183d68] bg-gradient-to-br from-[#102f59] to-[#173f70] text-white dark:border-blue-500/25 dark:from-[#12345f] dark:to-[#174a82]'
+                : 'rounded-bl-md border border-slate-200/90 bg-white/95 text-slate-800 backdrop-blur-sm dark:border-white/[0.07] dark:bg-[#0d2039]/95 dark:text-slate-100'
             }
           `}
         >
@@ -199,8 +199,8 @@ const MessageBubble = ({
                         text-left transition
                         ${
                           own
-                            ? 'border-white/15 bg-white/10 hover:bg-white/15'
-                            : 'border-gray-200 bg-gray-50 hover:bg-gray-100 dark:border-white/[0.07] dark:bg-white/[0.04] dark:hover:bg-white/[0.07]'
+                            ? 'border-white/15 bg-white/[0.09] hover:bg-white/[0.14]'
+                            : 'border-slate-200 bg-slate-50/90 hover:bg-slate-100 dark:border-white/[0.07] dark:bg-white/[0.04] dark:hover:bg-white/[0.07]'
                         }
                       `}
                     >
