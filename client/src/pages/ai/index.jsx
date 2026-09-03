@@ -97,7 +97,6 @@ const categoryLabels = {
 
 const analysisTypeLabels = {
   document_analysis: 'Belge Analizi',
-  document_classification: 'Belge Sınıflandırma',
   legal_research: 'Hukuki Ön Değerlendirme',
   legal_assessment: 'Hukuki Ön Değerlendirme',
   draft_generation: 'Şablon Oluşturma',
@@ -899,17 +898,7 @@ const AIAssistant = () => {
                   Analiz Et
                 </Button>
 
-                <Button
-                  variant="secondary"
-                  onClick={handleClassify}
-                  loading={classifyMutation.isPending}
-                  disabled={
-                    !selectedDocumentId ||
-                    analyzeMutation.isPending
-                  }
-                >
-                  Sınıflandır
-                </Button>
+               
 
                 <Button
                   variant="secondary"
