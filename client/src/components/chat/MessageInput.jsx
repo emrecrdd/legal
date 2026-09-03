@@ -28,6 +28,12 @@ const ALLOWED_EXTENSIONS =
     '.doc',
     '.docx',
     '.udf',
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.webp',
+    '.xls',
+    '.xlsx',
   ]);
 
 const getExtension = (
@@ -237,7 +243,7 @@ const MessageInput = ({
           )
         ) {
           toast.error(
-            `${file.name}: yalnızca PDF, Word ve UDF dosyaları gönderilebilir.`
+            `${file.name}: yalnızca PDF, Word, Excel, UDF ve JPG/JPEG/PNG/WEBP dosyaları gönderilebilir.`
           );
 
           continue;
@@ -440,7 +446,7 @@ const MessageInput = ({
           }
           type="file"
           multiple
-          accept=".pdf,.doc,.docx,.udf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept=".pdf,.doc,.docx,.udf,.xls,.xlsx,.jpg,.jpeg,.png,.webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png,image/webp"
           onChange={
             handleFileChange
           }
@@ -476,7 +482,7 @@ const MessageInput = ({
           aria-label="Dosya ekle"
           title={
             attachmentsEnabled
-              ? 'PDF, Word veya UDF ekle'
+              ? 'PDF, Word, Excel, UDF veya görsel ekle'
               : 'Dosya gönderimi kullanılamıyor'
           }
         >

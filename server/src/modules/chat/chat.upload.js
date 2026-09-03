@@ -30,14 +30,51 @@ const CHAT_ALLOWED_FILE_TYPES =
       ],
     ],
 
+    [
+      'application/vnd.ms-excel',
+      [
+        '.xls',
+      ],
+    ],
+
+    [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      [
+        '.xlsx',
+      ],
+    ],
+
+    [
+      'image/jpeg',
+      [
+        '.jpg',
+        '.jpeg',
+      ],
+    ],
+
+    [
+      'image/png',
+      [
+        '.png',
+      ],
+    ],
+
+    [
+      'image/webp',
+      [
+        '.webp',
+      ],
+    ],
+
     /*
-     * Bazı browser/OS kombinasyonlarında DOCX generic MIME ile gelir.
+     * Bazı browser/OS kombinasyonlarında DOCX/XLSX generic ZIP MIME ile gelir.
      * İçerik doğrulaması service katmanında ayrıca yapılır.
      */
     [
       'application/zip',
       [
         '.docx',
+        '.xlsx',
       ],
     ],
 
@@ -45,6 +82,7 @@ const CHAT_ALLOWED_FILE_TYPES =
       'application/x-zip-compressed',
       [
         '.docx',
+        '.xlsx',
       ],
     ],
 
@@ -53,6 +91,12 @@ const CHAT_ALLOWED_FILE_TYPES =
       [
         '.doc',
         '.docx',
+        '.xls',
+        '.xlsx',
+        '.jpg',
+        '.jpeg',
+        '.png',
+        '.webp',
       ],
     ],
   ]);
@@ -124,7 +168,7 @@ const fileFilter = (
   if (!allowedExtensions) {
     return callback(
       createUploadError(
-        'Sohbette yalnızca PDF, Word ve UDF dosyaları gönderilebilir.'
+        'Sohbette yalnızca PDF, Word, Excel, UDF ve desteklenen görsel dosyaları gönderilebilir.'
       )
     );
   }

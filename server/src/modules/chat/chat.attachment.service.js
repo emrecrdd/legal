@@ -45,6 +45,37 @@ const OLE_SIGNATURE =
     0xe1,
   ]);
 
+const JPEG_SIGNATURE =
+  Buffer.from([
+    0xff,
+    0xd8,
+    0xff,
+  ]);
+
+const PNG_SIGNATURE =
+  Buffer.from([
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a,
+  ]);
+
+const RIFF_SIGNATURE =
+  Buffer.from(
+    'RIFF',
+    'ascii'
+  );
+
+const WEBP_SIGNATURE =
+  Buffer.from(
+    'WEBP',
+    'ascii'
+  );
+
 const ZIP_SIGNATURES = [
   Buffer.from([
     0x50,
@@ -111,6 +142,47 @@ const containsAscii = (
     Buffer.from(
       value,
       'utf8'
+    )
+  )
+);
+
+const isWebp = (
+  buffer
+) => (
+  Buffer.isBuffer(
+    buffer
+  ) &&
+  buffer.length >=
+    12 &&
+  buffer
+    .subarray(
+      0,
+      4
+    )
+    .equals(
+      RIFF_SIGNATURE
+    ) &&
+  buffer
+    .subarray(
+      8,
+      12
+    )
+    .equals(
+      WEBP_SIGNATURE
+    )
+);
+
+const containsUtf16Le = (
+  buffer,
+  value
+) => (
+  Buffer.isBuffer(
+    buffer
+  ) &&
+  buffer.includes(
+    Buffer.from(
+      value,
+      'utf16le'
     )
   )
 );
@@ -219,6 +291,87 @@ const assertFileContent = (
       containsAscii(
         file.buffer,
         'word/'
+      );
+  }
+
+  if (
+    extension ===
+    '.xls'
+  ) {
+    /*
+     * Eski XLS BIFF dosyaları OLE Compound File konteyneridir.
+     * Sadece OLE imzasına güvenmeyip Excel workbook stream adını da arıyoruz.
+     */
+    valid =
+      startsWithSignature(
+        file.buffer,
+        OLE_SIGNATURE
+      ) &&
+      (
+        containsUtf16Le(
+          file.buffer,
+          'Workbook'
+        ) ||
+        containsUtf16Le(
+          file.buffer,
+          'Book'
+        ) ||
+        containsAscii(
+          file.buffer,
+          'Workbook'
+        )
+      );
+  }
+
+  if (
+    extension ===
+    '.xlsx'
+  ) {
+    valid =
+      hasZipSignature(
+        file.buffer
+      ) &&
+      containsAscii(
+        file.buffer,
+        '[Content_Types].xml'
+      ) &&
+      containsAscii(
+        file.buffer,
+        'xl/'
+      );
+  }
+
+  if (
+    extension ===
+      '.jpg' ||
+    extension ===
+      '.jpeg'
+  ) {
+    valid =
+      startsWithSignature(
+        file.buffer,
+        JPEG_SIGNATURE
+      );
+  }
+
+  if (
+    extension ===
+    '.png'
+  ) {
+    valid =
+      startsWithSignature(
+        file.buffer,
+        PNG_SIGNATURE
+      );
+  }
+
+  if (
+    extension ===
+    '.webp'
+  ) {
+    valid =
+      isWebp(
+        file.buffer
       );
   }
 
