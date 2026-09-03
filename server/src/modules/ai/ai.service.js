@@ -1,7 +1,5 @@
 import crypto from 'crypto';
-import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
 import { config } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
@@ -58,11 +56,6 @@ import {
   PERMISSION_KEYS,
   getEffectivePermissions,
 } from '../../constants/roles.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const UPLOAD_DIRECTORY = path.resolve(__dirname, '../../../uploads');
 
 const PROMPT_VERSION = 'v2';
 
@@ -312,7 +305,10 @@ class AIService {
       documentId,
       actorContext
     );
-    const file = await this.readDocumentFile(document);
+    const file = await this.readDocumentFile(
+      document,
+      actorContext
+    );
     const inputHash = this.createInputHash({
       buffer: file.buffer,
       operation: ANALYSIS_TYPES.DOCUMENT_ANALYSIS,
@@ -452,7 +448,10 @@ const uploadedFile = await aiProvider.uploadFile({
       documentId,
       actorContext
     );
-    const file = await this.readDocumentFile(document);
+    const file = await this.readDocumentFile(
+      document,
+      actorContext
+    );
     const inputHash = this.createInputHash({
       buffer: file.buffer,
       operation: ANALYSIS_TYPES.DOCUMENT_CLASSIFICATION,
@@ -3081,71 +3080,119 @@ sanitizeHearingPreparationSources(
     }
   }
 
-  async readDocumentFile(document) {
-    if (!document.file_path) {
+  async readDocumentFile(
+    document,
+    actorContext
+  ) {
+    if (!document?.id) {
       throw new AIServiceError(
-        'Belgenin dosya yolu bulunamadı.',
+        'Belge kaydı bulunamadı.',
         {
-          code: 'DOCUMENT_FILE_PATH_MISSING',
-          statusCode: 422,
+          code:
+            'DOCUMENT_NOT_FOUND',
+          statusCode:
+            404,
         }
       );
     }
 
-    /*
-     * Şu an DocumentService local uploads klasörü kullanıyor.
-     * MinIO entegrasyonunda bu metot storage adapter üzerinden
-     * okuyacak şekilde değiştirilecek.
-     */
-    const resolvedPath = path.resolve(
-      UPLOAD_DIRECTORY,
-      document.file_path
-    );
-
-    const relativePath = path.relative(
-      UPLOAD_DIRECTORY,
-      resolvedPath
-    );
-
-    if (
-      relativePath.startsWith('..') ||
-      path.isAbsolute(relativePath)
-    ) {
+    if (!document.file_path) {
       throw new AIServiceError(
-        'Geçersiz belge dosya yolu.',
+        'Belgenin dosya yolu bulunamadı.',
         {
-          code: 'INVALID_DOCUMENT_PATH',
-          statusCode: 400,
+          code:
+            'DOCUMENT_FILE_PATH_MISSING',
+          statusCode:
+            422,
         }
       );
     }
 
     try {
-      const buffer = await fs.readFile(resolvedPath);
+      /*
+       * Belge depolaması artık Neon Object Storage (S3) kullanıyor.
+       * documentService.download hem s3:documents/... referanslarını
+       * bucket'tan okur hem de eski lokal belgeler için fallback sağlar.
+       *
+       * AI servisi storage tipini bilmez; yalnızca yetki kontrollü stream'i
+       * Buffer'a dönüştürür.
+       */
+      const stream =
+        await documentService.download(
+          document.id,
+          actorContext
+        );
+
+      if (!stream) {
+        throw new AIServiceError(
+          'Belge dosyası depolama alanında bulunamadı.',
+          {
+            code:
+              'DOCUMENT_FILE_NOT_FOUND',
+            statusCode:
+              404,
+          }
+        );
+      }
+
+      const chunks = [];
+
+      for await (
+        const chunk of stream
+      ) {
+        chunks.push(
+          Buffer.isBuffer(chunk)
+            ? chunk
+            : Buffer.from(chunk)
+        );
+      }
+
+      const buffer =
+        Buffer.concat(chunks);
 
       if (buffer.length === 0) {
-        throw new AIServiceError('Belge dosyası boş.', {
-          code: 'EMPTY_DOCUMENT_FILE',
-          statusCode: 422,
-        });
+        throw new AIServiceError(
+          'Belge dosyası boş.',
+          {
+            code:
+              'EMPTY_DOCUMENT_FILE',
+            statusCode:
+              422,
+          }
+        );
       }
 
       return {
         buffer,
-        absolutePath: resolvedPath,
       };
     } catch (error) {
-      if (error instanceof AIServiceError) {
+      if (
+        error instanceof
+        AIServiceError
+      ) {
         throw error;
       }
 
-      if (error.code === 'ENOENT') {
+      const message =
+        String(
+          error?.message ||
+            ''
+        );
+
+      if (
+        /file not found|no such key|nosuchkey|not found/i.test(
+          message
+        )
+      ) {
         throw new AIServiceError(
           'Belge dosyası depolama alanında bulunamadı.',
           {
-            code: 'DOCUMENT_FILE_NOT_FOUND',
-            statusCode: 404,
-            cause: error,
+            code:
+              'DOCUMENT_FILE_NOT_FOUND',
+            statusCode:
+              404,
+            cause:
+              error,
           }
         );
       }
@@ -3153,9 +3200,12 @@ sanitizeHearingPreparationSources(
       throw new AIServiceError(
         'Belge dosyası okunamadı.',
         {
-          code: 'DOCUMENT_FILE_READ_ERROR',
-          statusCode: 500,
-          cause: error,
+          code:
+            'DOCUMENT_FILE_READ_ERROR',
+          statusCode:
+            500,
+          cause:
+            error,
         }
       );
     }
