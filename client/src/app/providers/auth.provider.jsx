@@ -13,6 +13,10 @@ import {
 
 import authApi from '../../features/auth/auth.api.js';
 
+import {
+  queryClient,
+} from './query.provider.jsx';
+
 const AuthContext =
   createContext(null);
 
@@ -47,13 +51,36 @@ export const AuthProvider = ({
   // ====================================================
 
   const clearAuth =
-    useCallback(() => {
-      removeUser();
-      removeTokens();
-    }, [
-      removeUser,
-      removeTokens,
-    ]);
+    useCallback(
+      async () => {
+        /*
+         * Eski kullanıcıya ait devam eden
+         * React Query isteklerini durdur.
+         *
+         * Böylece cache temizlendikten sonra
+         * eski kullanıcının isteği tamamlanıp
+         * cache'i tekrar dolduramaz.
+         */
+        await queryClient.cancelQueries();
+
+        /*
+         * Dashboard, davalar, müvekkiller,
+         * görevler, etkinlikler vb. tüm
+         * React Query cache'ini temizle.
+         */
+        queryClient.clear();
+
+        /*
+         * Kullanıcının auth bilgilerini temizle.
+         */
+        removeUser();
+        removeTokens();
+      },
+      [
+        removeUser,
+        removeTokens,
+      ]
+    );
 
   // ====================================================
   // INIT / VERIFY AUTH
@@ -107,7 +134,7 @@ export const AuthProvider = ({
           if (
             !cancelled
           ) {
-            clearAuth();
+            await clearAuth();
           }
         } finally {
           if (
@@ -149,6 +176,18 @@ export const AuthProvider = ({
         const data =
           response?.data?.data;
 
+        /*
+         * Önceki kullanıcıdan herhangi bir
+         * cache kalmışsa yeni kullanıcıya
+         * taşınmasını engelle.
+         */
+        await queryClient.cancelQueries();
+
+        queryClient.clear();
+
+        /*
+         * Yeni oturumu oluştur.
+         */
         setTokens({
           accessToken:
             data.accessToken,
@@ -173,49 +212,42 @@ export const AuthProvider = ({
   // LOGOUT
   // ====================================================
 
-  // ====================================================
-// LOGOUT
-// ====================================================
+  const logout =
+    useCallback(
+      async () => {
+        const refreshToken =
+          tokens?.refreshToken;
 
-const logout =
-  useCallback(
-    async () => {
-      const refreshToken =
-        tokens?.refreshToken;
-
-      try {
-        /*
-         * Önce backend oturumunu kapat.
-         *
-         * Access token geçersiz olsa bile /auth/logout
-         * artık authenticate arkasında olmadığı için
-         * refresh token üzerinden çalışabilir.
-         */
-        await authApi.logout(
-          refreshToken
-        );
-      } catch (error) {
-        if (
-          import.meta.env.DEV
-        ) {
-          console.error(
-            'Logout error:',
-            error
+        try {
+          /*
+           * Önce backend oturumunu kapat.
+           */
+          await authApi.logout(
+            refreshToken
           );
+        } catch (error) {
+          if (
+            import.meta.env.DEV
+          ) {
+            console.error(
+              'Logout error:',
+              error
+            );
+          }
+        } finally {
+          /*
+           * Backend logout başarılı veya
+           * başarısız olsa da cihazdaki
+           * kullanıcı ve cache temizlenir.
+           */
+          await clearAuth();
         }
-      } finally {
-        /*
-         * Backend başarılı veya başarısız olsun,
-         * kullanıcı cihazındaki session mutlaka temizlenir.
-         */
-        clearAuth();
-      }
-    },
-    [
-      tokens?.refreshToken,
-      clearAuth,
-    ]
-  );
+      },
+      [
+        tokens?.refreshToken,
+        clearAuth,
+      ]
+    );
 
   // ====================================================
   // REGISTER
@@ -244,7 +276,7 @@ const logout =
         if (
           !currentRefreshToken
         ) {
-          clearAuth();
+          await clearAuth();
 
           throw new Error(
             'Refresh token bulunamadı'
@@ -271,7 +303,7 @@ const logout =
 
           return response;
         } catch (error) {
-          clearAuth();
+          await clearAuth();
 
           throw error;
         }
