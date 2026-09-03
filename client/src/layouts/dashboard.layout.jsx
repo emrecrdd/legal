@@ -8,10 +8,12 @@ import {
   useLocation,
 } from 'react-router-dom';
 
+import GlobalChatWidget from '../components/chat/GlobalChatWidget.jsx';
 import Sidebar from '../components/layout/Sidebar.jsx';
 import Topbar from '../components/layout/Topbar.jsx';
 import MobileNav from '../components/layout/MobileNav.jsx';
 import IdleBrandOverlay from '../components/layout/IdleBrandOverlay.jsx';
+
 const DashboardLayout = () => {
   const [
     sidebarOpen,
@@ -119,6 +121,11 @@ const DashboardLayout = () => {
 
         </div>
       </div>
+
+      {/* GLOBAL CHAT */}
+      <GlobalChatWidget />
+
+      {/* IDLE / SECURITY OVERLAY */}
       <IdleBrandOverlay />
     </div>
   );
