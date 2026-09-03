@@ -48,59 +48,190 @@ import MessageList from './MessageList.jsx';
 import NewDirectChatModal from './NewDirectChatModal.jsx';
 import ChatMessageActionDialog from './ChatMessageActionDialog.jsx';
 
-const CHAT_DRAWER_STORAGE_KEY =
-  'derkenar-chat-drawer-width';
+const CHAT_WINDOW_STORAGE_KEY =
+  'derkenar-chat-window';
 
-const CHAT_DRAWER_MIN_WIDTH =
-  320;
+const CHAT_WINDOW_DEFAULT = {
+  width:
+    420,
 
-const CHAT_DRAWER_DEFAULT_WIDTH =
-  420;
+  height:
+    650,
 
-const CHAT_DRAWER_MAX_WIDTH =
-  560;
+  x:
+    null,
 
-const clampDrawerWidth = (
-  value
-) => {
-  const numeric =
-    Number(
-      value
-    );
-
-  if (
-    !Number.isFinite(
-      numeric
-    )
-  ) {
-    return CHAT_DRAWER_DEFAULT_WIDTH;
-  }
-
-  return Math.min(
-    CHAT_DRAWER_MAX_WIDTH,
-    Math.max(
-      CHAT_DRAWER_MIN_WIDTH,
-      Math.round(
-        numeric
-      )
-    )
-  );
+  y:
+    24,
 };
 
-const readStoredDrawerWidth =
+const CHAT_WINDOW_MIN_WIDTH =
+  280;
+
+const CHAT_WINDOW_MIN_HEIGHT =
+  340;
+
+const CHAT_WINDOW_MARGIN =
+  12;
+
+const getViewportBounds =
+  () => ({
+    width:
+      typeof window !==
+        'undefined'
+        ? window.innerWidth
+        : 1440,
+
+    height:
+      typeof window !==
+        'undefined'
+        ? window.innerHeight
+        : 900,
+  });
+
+const clamp = (
+  value,
+  min,
+  max
+) =>
+  Math.min(
+    Math.max(
+      value,
+      min
+    ),
+    max
+  );
+
+const normalizeWindowState =
+  (
+    value = {}
+  ) => {
+    const viewport =
+      getViewportBounds();
+
+    const maxWidth =
+      Math.max(
+        CHAT_WINDOW_MIN_WIDTH,
+        viewport.width -
+          CHAT_WINDOW_MARGIN *
+            2
+      );
+
+    const maxHeight =
+      Math.max(
+        CHAT_WINDOW_MIN_HEIGHT,
+        viewport.height -
+          CHAT_WINDOW_MARGIN *
+            2
+      );
+
+    const width =
+      clamp(
+        Number(
+          value.width
+        ) ||
+          CHAT_WINDOW_DEFAULT.width,
+        CHAT_WINDOW_MIN_WIDTH,
+        maxWidth
+      );
+
+    const height =
+      clamp(
+        Number(
+          value.height
+        ) ||
+          Math.min(
+            CHAT_WINDOW_DEFAULT.height,
+            maxHeight
+          ),
+        CHAT_WINDOW_MIN_HEIGHT,
+        maxHeight
+      );
+
+    const defaultX =
+      Math.max(
+        CHAT_WINDOW_MARGIN,
+        viewport.width -
+          width -
+          24
+      );
+
+    const x =
+      clamp(
+        Number.isFinite(
+          Number(
+            value.x
+          )
+        )
+          ? Number(
+              value.x
+            )
+          : defaultX,
+        CHAT_WINDOW_MARGIN,
+        Math.max(
+          CHAT_WINDOW_MARGIN,
+          viewport.width -
+            width -
+            CHAT_WINDOW_MARGIN
+        )
+      );
+
+    const y =
+      clamp(
+        Number(
+          value.y
+        ) ||
+          CHAT_WINDOW_DEFAULT.y,
+        CHAT_WINDOW_MARGIN,
+        Math.max(
+          CHAT_WINDOW_MARGIN,
+          viewport.height -
+            height -
+            CHAT_WINDOW_MARGIN
+        )
+      );
+
+    return {
+      width,
+      height,
+      x,
+      y,
+    };
+  };
+
+const readStoredWindowState =
   () => {
     if (
       typeof window ===
       'undefined'
     ) {
-      return CHAT_DRAWER_DEFAULT_WIDTH;
+      return normalizeWindowState(
+        CHAT_WINDOW_DEFAULT
+      );
     }
 
-    return clampDrawerWidth(
-      window.localStorage.getItem(
-        CHAT_DRAWER_STORAGE_KEY
-      )
-    );
+    try {
+      const stored =
+        window.localStorage.getItem(
+          CHAT_WINDOW_STORAGE_KEY
+        );
+
+      if (!stored) {
+        return normalizeWindowState(
+          CHAT_WINDOW_DEFAULT
+        );
+      }
+
+      return normalizeWindowState(
+        JSON.parse(
+          stored
+        )
+      );
+    } catch {
+      return normalizeWindowState(
+        CHAT_WINDOW_DEFAULT
+      );
+    }
   };
 
 const getMessagesFromInfiniteData = (
@@ -258,18 +389,24 @@ const GlobalChatPanel = ({
     useAuth();
 
   const [
-    drawerWidth,
-    setDrawerWidth,
+    windowState,
+    setWindowState,
   ] =
     useState(
-      readStoredDrawerWidth
+      readStoredWindowState
     );
 
   const [
-    resizing,
-    setResizing,
+    dragState,
+    setDragState,
   ] =
-    useState(false);
+    useState(null);
+
+  const [
+    resizeState,
+    setResizeState,
+  ] =
+    useState(null);
 
   const [
     selectedConversationId,
@@ -875,59 +1012,206 @@ const GlobalChatPanel = ({
       }
 
       window.localStorage.setItem(
-        CHAT_DRAWER_STORAGE_KEY,
-        String(
-          drawerWidth
+        CHAT_WINDOW_STORAGE_KEY,
+        JSON.stringify(
+          windowState
         )
       );
     },
     [
-      drawerWidth,
+      windowState,
     ]
   );
 
   useEffect(
     () => {
+      const handleViewportResize =
+        () => {
+          if (
+            window.innerWidth <
+            768
+          ) {
+            return;
+          }
+
+          setWindowState(
+            (
+              current
+            ) =>
+              normalizeWindowState(
+                current
+              )
+          );
+        };
+
+      window.addEventListener(
+        'resize',
+        handleViewportResize
+      );
+
+      return () => {
+        window.removeEventListener(
+          'resize',
+          handleViewportResize
+        );
+      };
+    },
+    []
+  );
+
+  useEffect(
+    () => {
       if (
-        !resizing
+        !dragState &&
+        !resizeState
       ) {
         return undefined;
       }
-
-      const previousCursor =
-        document.body.style
-          .cursor;
 
       const previousUserSelect =
         document.body.style
           .userSelect;
 
-      document.body.style.cursor =
-        'ew-resize';
+      const previousCursor =
+        document.body.style
+          .cursor;
 
       document.body.style.userSelect =
         'none';
+
+      document.body.style.cursor =
+        dragState
+          ? 'grabbing'
+          : 'nwse-resize';
 
       const handlePointerMove =
         (
           event
         ) => {
-          const nextWidth =
-            window.innerWidth -
-            event.clientX -
-            16;
+          if (
+            window.innerWidth <
+            768
+          ) {
+            return;
+          }
 
-          setDrawerWidth(
-            clampDrawerWidth(
-              nextWidth
-            )
-          );
+          if (
+            dragState
+          ) {
+            const viewport =
+              getViewportBounds();
+
+            const nextX =
+              event.clientX -
+              dragState.offsetX;
+
+            const nextY =
+              event.clientY -
+              dragState.offsetY;
+
+            setWindowState(
+              (
+                current
+              ) => ({
+                ...current,
+
+                x:
+                  clamp(
+                    nextX,
+                    CHAT_WINDOW_MARGIN,
+                    Math.max(
+                      CHAT_WINDOW_MARGIN,
+                      viewport.width -
+                        current.width -
+                        CHAT_WINDOW_MARGIN
+                    )
+                  ),
+
+                y:
+                  clamp(
+                    nextY,
+                    CHAT_WINDOW_MARGIN,
+                    Math.max(
+                      CHAT_WINDOW_MARGIN,
+                      viewport.height -
+                        current.height -
+                        CHAT_WINDOW_MARGIN
+                    )
+                  ),
+              })
+            );
+
+            return;
+          }
+
+          if (
+            resizeState
+          ) {
+            const viewport =
+              getViewportBounds();
+
+            const maxWidth =
+              Math.max(
+                CHAT_WINDOW_MIN_WIDTH,
+                viewport.width -
+                  resizeState.startX -
+                  CHAT_WINDOW_MARGIN
+              );
+
+            const maxHeight =
+              Math.max(
+                CHAT_WINDOW_MIN_HEIGHT,
+                viewport.height -
+                  resizeState.startY -
+                  CHAT_WINDOW_MARGIN
+              );
+
+            const nextWidth =
+              clamp(
+                resizeState.startWidth +
+                  (
+                    event.clientX -
+                    resizeState.pointerX
+                  ),
+                CHAT_WINDOW_MIN_WIDTH,
+                maxWidth
+              );
+
+            const nextHeight =
+              clamp(
+                resizeState.startHeight +
+                  (
+                    event.clientY -
+                    resizeState.pointerY
+                  ),
+                CHAT_WINDOW_MIN_HEIGHT,
+                maxHeight
+              );
+
+            setWindowState(
+              (
+                current
+              ) => ({
+                ...current,
+
+                width:
+                  nextWidth,
+
+                height:
+                  nextHeight,
+              })
+            );
+          }
         };
 
       const handlePointerUp =
         () => {
-          setResizing(
-            false
+          setDragState(
+            null
+          );
+
+          setResizeState(
+            null
           );
         };
 
@@ -938,11 +1222,7 @@ const GlobalChatPanel = ({
 
       window.addEventListener(
         'pointerup',
-        handlePointerUp,
-        {
-          once:
-            true,
-        }
+        handlePointerUp
       );
 
       return () => {
@@ -956,27 +1236,91 @@ const GlobalChatPanel = ({
           handlePointerUp
         );
 
-        document.body.style.cursor =
-          previousCursor;
-
         document.body.style.userSelect =
           previousUserSelect;
+
+        document.body.style.cursor =
+          previousCursor;
       };
     },
     [
-      resizing,
+      dragState,
+      resizeState,
     ]
   );
 
-  const setWidthPreset =
+  const handleWindowDragStart =
     (
-      width
+      event
     ) => {
-      setDrawerWidth(
-        clampDrawerWidth(
-          width
-        )
-      );
+      if (
+        window.innerWidth <
+          768 ||
+        event.button !==
+          0
+      ) {
+        return;
+      }
+
+      const interactive =
+        event.target.closest(
+          'button, input, textarea, a, [role="button"]'
+        );
+
+      if (
+        interactive
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      setDragState({
+        offsetX:
+          event.clientX -
+          windowState.x,
+
+        offsetY:
+          event.clientY -
+          windowState.y,
+      });
+    };
+
+  const handleResizeStart =
+    (
+      event
+    ) => {
+      if (
+        window.innerWidth <
+          768 ||
+        event.button !==
+          0
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      setResizeState({
+        pointerX:
+          event.clientX,
+
+        pointerY:
+          event.clientY,
+
+        startWidth:
+          windowState.width,
+
+        startHeight:
+          windowState.height,
+
+        startX:
+          windowState.x,
+
+        startY:
+          windowState.y,
+      });
     };
 
   return (
@@ -988,65 +1332,38 @@ const GlobalChatPanel = ({
           overflow-hidden bg-white
           shadow-2xl
           dark:bg-[#08172b]
-          md:inset-y-4 md:left-auto md:right-4
+          md:inset-auto
           md:rounded-[24px]
           md:border md:border-slate-200/90
           md:shadow-[0_24px_80px_rgba(15,23,42,0.22)]
           md:dark:border-white/[0.08]
         "
-        style={{
-          width:
-            typeof window !==
-              'undefined' &&
-            window.innerWidth <
-              768
-              ? '100%'
-              : `${drawerWidth}px`,
-        }}
+        style={
+          typeof window !==
+            'undefined' &&
+          window.innerWidth >=
+            768
+            ? {
+                left:
+                  `${windowState.x}px`,
+
+                top:
+                  `${windowState.y}px`,
+
+                width:
+                  `${windowState.width}px`,
+
+                height:
+                  `${windowState.height}px`,
+              }
+            : undefined
+        }
         aria-label="Hızlı sohbet"
       >
-        <button
-          type="button"
-          onPointerDown={(
-            event
-          ) => {
-            if (
-              window.innerWidth <
-              768
-            ) {
-              return;
-            }
-
-            event.preventDefault();
-
-            setResizing(
-              true
-            );
-          }}
-          className="
-            absolute bottom-4 left-0 top-4
-            z-20 hidden w-2
-            -translate-x-1/2
-            cursor-ew-resize
-            items-center justify-center
-            md:flex
-          "
-          aria-label="Sohbet paneli genişliğini ayarla"
-          title="Sürükleyerek genişliği ayarla"
-        >
-          <span
-            className={`
-              h-16 w-1 rounded-full
-              transition
-              ${
-                resizing
-                  ? 'bg-blue-500'
-                  : 'bg-slate-300 hover:bg-blue-400 dark:bg-white/15'
-              }
-            `}
-          />
-        </button>
         <header
+          onPointerDown={
+            handleWindowDragStart
+          }
           className="
             flex min-h-[62px] shrink-0
             items-center gap-2
@@ -1055,7 +1372,10 @@ const GlobalChatPanel = ({
             backdrop-blur
             dark:border-white/[0.07]
             dark:bg-[#09182c]/95
+            md:cursor-grab
+            md:active:cursor-grabbing
           "
+          title="Pencereyi taşımak için sürükle"
         >
           {view ===
             'thread' ? (
@@ -1136,79 +1456,6 @@ const GlobalChatPanel = ({
                 </p>
               </>
             )}
-          </div>
-
-          <div className="hidden items-center gap-1 rounded-xl border border-slate-200 bg-slate-50/80 p-1 dark:border-white/[0.07] dark:bg-white/[0.035] md:flex">
-            <button
-              type="button"
-              onClick={() =>
-                setWidthPreset(
-                  340
-                )
-              }
-              className={`
-                rounded-lg px-2 py-1
-                text-[10px] font-semibold
-                transition
-                ${
-                  drawerWidth <
-                  380
-                    ? 'bg-white text-[#102f59] shadow-sm dark:bg-white/[0.08] dark:text-blue-300'
-                    : 'text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300'
-                }
-              `}
-              title="Dar görünüm"
-            >
-              Dar
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setWidthPreset(
-                  420
-                )
-              }
-              className={`
-                rounded-lg px-2 py-1
-                text-[10px] font-semibold
-                transition
-                ${
-                  drawerWidth >=
-                    380 &&
-                  drawerWidth <
-                    490
-                    ? 'bg-white text-[#102f59] shadow-sm dark:bg-white/[0.08] dark:text-blue-300'
-                    : 'text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300'
-                }
-              `}
-              title="Normal görünüm"
-            >
-              Normal
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setWidthPreset(
-                  540
-                )
-              }
-              className={`
-                rounded-lg px-2 py-1
-                text-[10px] font-semibold
-                transition
-                ${
-                  drawerWidth >=
-                  490
-                    ? 'bg-white text-[#102f59] shadow-sm dark:bg-white/[0.08] dark:text-blue-300'
-                    : 'text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300'
-                }
-              `}
-              title="Geniş görünüm"
-            >
-              Geniş
-            </button>
           </div>
 
           <button
@@ -1386,6 +1633,33 @@ const GlobalChatPanel = ({
             </div>
           )}
         </div>
+
+        <button
+          type="button"
+          onPointerDown={
+            handleResizeStart
+          }
+          className="
+            absolute bottom-0 right-0
+            z-30 hidden h-7 w-7
+            cursor-nwse-resize
+            items-end justify-end
+            rounded-tl-xl
+            md:flex
+          "
+          aria-label="Sohbet penceresini yeniden boyutlandır"
+          title="Köşeden tutup küçült / büyüt"
+        >
+          <span
+            className="
+              mb-1.5 mr-1.5 block
+              h-3 w-3
+              border-b-2 border-r-2
+              border-slate-400/70
+              dark:border-slate-400/50
+            "
+          />
+        </button>
       </section>
 
       <ChatMessageActionDialog
