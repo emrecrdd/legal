@@ -9,8 +9,8 @@ import {
 } from '../../models/index.js';
 
 import {
-  minioService,
-} from '../../integrations/minio.service.js';
+  chatStorage,
+} from './chat.storage.js';
 
 import {
   logger,
@@ -25,6 +25,260 @@ const MAX_CAPTION_LENGTH =
 
 const DOWNLOAD_URL_EXPIRY_SECONDS =
   10 * 60;
+
+
+const PDF_SIGNATURE =
+  Buffer.from(
+    '%PDF-',
+    'ascii'
+  );
+
+const OLE_SIGNATURE =
+  Buffer.from([
+    0xd0,
+    0xcf,
+    0x11,
+    0xe0,
+    0xa1,
+    0xb1,
+    0x1a,
+    0xe1,
+  ]);
+
+const ZIP_SIGNATURES = [
+  Buffer.from([
+    0x50,
+    0x4b,
+    0x03,
+    0x04,
+  ]),
+
+  Buffer.from([
+    0x50,
+    0x4b,
+    0x05,
+    0x06,
+  ]),
+
+  Buffer.from([
+    0x50,
+    0x4b,
+    0x07,
+    0x08,
+  ]),
+];
+
+const startsWithSignature = (
+  buffer,
+  signature
+) => (
+  Buffer.isBuffer(
+    buffer
+  ) &&
+  buffer.length >=
+    signature.length &&
+  buffer
+    .subarray(
+      0,
+      signature.length
+    )
+    .equals(
+      signature
+    )
+);
+
+const hasZipSignature = (
+  buffer
+) =>
+  ZIP_SIGNATURES.some(
+    (
+      signature
+    ) =>
+      startsWithSignature(
+        buffer,
+        signature
+      )
+  );
+
+const containsAscii = (
+  buffer,
+  value
+) => (
+  Buffer.isBuffer(
+    buffer
+  ) &&
+  buffer.includes(
+    Buffer.from(
+      value,
+      'utf8'
+    )
+  )
+);
+
+const getFileExtension = (
+  file
+) =>
+  path
+    .extname(
+      file?.originalname ||
+      ''
+    )
+    .toLowerCase();
+
+const normalizeOriginalName = (
+  value,
+  fallback =
+    'dosya'
+) => {
+  const normalized =
+    String(
+      value ||
+      fallback
+    )
+      .replace(
+        /\\/g,
+        '/'
+      )
+      .replace(
+        /[\u0000-\u001f\u007f]/g,
+        ''
+      );
+
+  return (
+    path.posix.basename(
+      normalized
+    )
+      .slice(
+        0,
+        255
+      ) ||
+    fallback
+  );
+};
+
+const assertFileContent = (
+  file
+) => {
+  if (
+    !file ||
+    !Buffer.isBuffer(
+      file.buffer
+    ) ||
+    file.buffer.length ===
+      0
+  ) {
+    throw createChatError(
+      'Dosya içeriği okunamadı.',
+      400,
+      'CHAT_INVALID_FILE_CONTENT'
+    );
+  }
+
+  const extension =
+    getFileExtension(
+      file
+    );
+
+  let valid =
+    false;
+
+  if (
+    extension ===
+    '.pdf'
+  ) {
+    valid =
+      startsWithSignature(
+        file.buffer,
+        PDF_SIGNATURE
+      );
+  }
+
+  if (
+    extension ===
+    '.doc'
+  ) {
+    valid =
+      startsWithSignature(
+        file.buffer,
+        OLE_SIGNATURE
+      );
+  }
+
+  if (
+    extension ===
+    '.docx'
+  ) {
+    valid =
+      hasZipSignature(
+        file.buffer
+      ) &&
+      containsAscii(
+        file.buffer,
+        '[Content_Types].xml'
+      ) &&
+      containsAscii(
+        file.buffer,
+        'word/'
+      );
+  }
+
+  if (
+    extension ===
+    '.udf'
+  ) {
+    /*
+     * Mevcut UDF görüntüleyici hem ZIP konteynerli UDF
+     * hem de raw XML UDF kabul ediyor. Chat doğrulaması
+     * aynı formatları destekler.
+     */
+    const beginning =
+      file.buffer
+        .subarray(
+          0,
+          Math.min(
+            file.buffer.length,
+            512
+          )
+        )
+        .toString(
+          'utf8'
+        )
+        .replace(
+          /^\uFEFF/,
+          ''
+        )
+        .trimStart();
+
+    const rawXmlUdf =
+      beginning.startsWith(
+        '<?xml'
+      ) ||
+      beginning.startsWith(
+        '<template'
+      );
+
+    const zipUdf =
+      hasZipSignature(
+        file.buffer
+      ) &&
+      containsAscii(
+        file.buffer,
+        'content.xml'
+      );
+
+    valid =
+      rawXmlUdf ||
+      zipUdf;
+  }
+
+  if (!valid) {
+    throw createChatError(
+      'Dosya uzantısı doğru görünse de dosya içeriği beklenen formatla uyuşmuyor.',
+      400,
+      'CHAT_INVALID_FILE_CONTENT'
+    );
+  }
+};
 
 const createChatError = (
   message,
@@ -288,8 +542,8 @@ const cleanupUploadedObjects =
       of uploadedObjects
     ) {
       try {
-        await minioService.deleteFile(
-          uploaded.filename
+        await chatStorage.deleteFile(
+          uploaded.key
         );
       } catch (
         cleanupError
@@ -298,7 +552,7 @@ const cleanupUploadedObjects =
           'Chat attachment rollback cleanup başarısız',
           {
             storageKey:
-              uploaded.filename,
+              uploaded.key,
 
             message:
               cleanupError?.message,
@@ -347,6 +601,10 @@ export const chatAttachmentService = {
       actor.id
     );
 
+    files.forEach(
+      assertFileContent
+    );
+
     const uploadedObjects =
       [];
 
@@ -356,18 +614,10 @@ export const chatAttachmentService = {
         of files
       ) {
         const uploaded =
-          await minioService.uploadFile(
+          await chatStorage.uploadFile(
             file,
-            `chat/${conversation.id}`
+            conversation.id
           );
-
-        if (!uploaded) {
-          throw createChatError(
-            'Dosya depolama servisi kullanılamıyor.',
-            503,
-            'CHAT_STORAGE_UNAVAILABLE'
-          );
-        }
 
         uploadedObjects.push(
           uploaded
@@ -446,11 +696,11 @@ export const chatAttachmentService = {
                       message.id,
 
                     storage_key:
-                      uploaded.filename,
+                      uploaded.key,
 
                     original_name:
-                      path.basename(
-                        sourceFile.originalname ||
+                      normalizeOriginalName(
+                        sourceFile.originalname,
                         `dosya${extension}`
                       ),
 
@@ -585,18 +835,21 @@ export const chatAttachmentService = {
     );
 
     const url =
-      await minioService.getSignedUrl(
-        attachment.storage_key,
-        DOWNLOAD_URL_EXPIRY_SECONDS
-      );
+      await chatStorage.getSignedDownloadUrl(
+        {
+          key:
+            attachment.storage_key,
 
-    if (!url) {
-      throw createChatError(
-        'Dosya depolama servisi kullanılamıyor.',
-        503,
-        'CHAT_STORAGE_UNAVAILABLE'
+          originalName:
+            attachment.original_name,
+
+          mimeType:
+            attachment.mime_type,
+
+          expiresIn:
+            DOWNLOAD_URL_EXPIRY_SECONDS,
+        }
       );
-    }
 
     return {
       id:

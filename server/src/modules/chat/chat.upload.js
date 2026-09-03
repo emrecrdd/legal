@@ -11,19 +11,70 @@ const CHAT_ALLOWED_FILE_TYPES =
   new Map([
     [
       'application/pdf',
-      ['.pdf'],
+      [
+        '.pdf',
+      ],
     ],
 
     [
       'application/msword',
-      ['.doc'],
+      [
+        '.doc',
+      ],
     ],
 
     [
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      ['.docx'],
+      [
+        '.docx',
+      ],
+    ],
+
+    /*
+     * Bazı browser/OS kombinasyonlarında DOCX generic MIME ile gelir.
+     * İçerik doğrulaması service katmanında ayrıca yapılır.
+     */
+    [
+      'application/zip',
+      [
+        '.docx',
+      ],
+    ],
+
+    [
+      'application/x-zip-compressed',
+      [
+        '.docx',
+      ],
+    ],
+
+    [
+      'application/octet-stream',
+      [
+        '.doc',
+        '.docx',
+      ],
     ],
   ]);
+
+const createUploadError = (
+  message,
+  code =
+    'CHAT_INVALID_FILE_TYPE'
+) => {
+  const error =
+    new Error(
+      message
+    );
+
+  error.statusCode =
+    400;
+
+  error.code =
+    code;
+
+  return error;
+};
 
 const storage =
   multer.memoryStorage();
@@ -44,6 +95,10 @@ const fileFilter = (
   /*
    * UYAP UDF dosyaları çoğu istemcide
    * application/octet-stream olarak gelir.
+   *
+   * Burada yalnızca aday olarak kabul edilir.
+   * Gerçek ZIP/raw-XML UDF doğrulaması
+   * chat.attachment.service.js içindedir.
    */
   if (
     extension ===
@@ -55,14 +110,20 @@ const fileFilter = (
     );
   }
 
+  const mimeType =
+    String(
+      file.mimetype ||
+      ''
+    ).toLowerCase();
+
   const allowedExtensions =
     CHAT_ALLOWED_FILE_TYPES.get(
-      file.mimetype
+      mimeType
     );
 
   if (!allowedExtensions) {
     return callback(
-      new Error(
+      createUploadError(
         'Sohbette yalnızca PDF, Word ve UDF dosyaları gönderilebilir.'
       )
     );
@@ -74,7 +135,7 @@ const fileFilter = (
     )
   ) {
     return callback(
-      new Error(
+      createUploadError(
         `Dosya uzantısı ile MIME türü uyuşmuyor: ${
           extension ||
           'uzantı yok'
