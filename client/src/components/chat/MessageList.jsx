@@ -109,13 +109,16 @@ const MessageList = ({
       ref={
         containerRef
       }
-      className="min-h-0 flex-1 overflow-y-auto bg-[#f3f5f7] px-3 py-5 dark:bg-[#061324] md:px-6"
+      className="min-h-0 flex-1 overflow-y-auto bg-[#e7edf3] px-3 py-5 dark:bg-[#061324] md:px-6"
       style={{
         backgroundImage:
-          'radial-gradient(circle at 1px 1px, rgba(15, 42, 76, 0.055) 1px, transparent 0), linear-gradient(135deg, rgba(255,255,255,0.58), rgba(255,255,255,0.08))',
+          'radial-gradient(circle at 14% 8%, rgba(181, 139, 54, 0.13), transparent 30%), radial-gradient(circle at 92% 92%, rgba(20, 57, 96, 0.13), transparent 34%), radial-gradient(circle at 1px 1px, rgba(20, 48, 82, 0.10) 1px, transparent 1.2px), linear-gradient(145deg, rgba(255,255,255,0.34), rgba(255,255,255,0.02))',
 
         backgroundSize:
-          '26px 26px, 100% 100%',
+          '100% 100%, 100% 100%, 24px 24px, 100% 100%',
+
+        backgroundAttachment:
+          'local',
       }}
     >
       {hasMore && (
@@ -150,8 +153,8 @@ const MessageList = ({
 
       {messages.length ===
       0 ? (
-        <div className="flex h-full min-h-[300px] items-center justify-center text-center">
-          <div>
+        <div className="flex h-full min-h-[300px] items-center justify-center px-4 text-center">
+          <div className="rounded-2xl border border-slate-300/60 bg-white/55 px-6 py-5 shadow-sm backdrop-blur-sm dark:border-white/[0.07] dark:bg-white/[0.035]">
             <p className="text-sm font-semibold text-gray-600 dark:text-slate-300">
               Henüz mesaj yok
             </p>

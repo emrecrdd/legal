@@ -676,7 +676,7 @@ const ChatPage = () => {
   return (
     <>
       <div className="mx-auto h-[calc(100vh-112px)] min-h-[560px] max-w-[1600px] px-3 pb-3 md:px-5 md:pb-5">
-        <div className="grid h-full min-h-0 overflow-hidden rounded-[22px] border border-slate-200/90 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.10)] ring-1 ring-slate-900/[0.02] dark:border-white/[0.07] dark:bg-[#08172b] dark:shadow-[0_20px_60px_rgba(0,0,0,0.30)] md:grid-cols-[328px_minmax(0,1fr)]">
+        <div className="grid h-full min-h-0 overflow-hidden rounded-[22px] border border-slate-300/70 bg-[#e9eef4] shadow-[0_18px_55px_rgba(15,23,42,0.12)] ring-1 ring-slate-900/[0.03] dark:border-white/[0.07] dark:bg-[#08172b] dark:shadow-[0_20px_60px_rgba(0,0,0,0.30)] md:grid-cols-[328px_minmax(0,1fr)]">
           <aside
             className={`
               min-h-0 border-r border-slate-200/90
@@ -721,6 +721,8 @@ const ChatPage = () => {
           <section
             className={`
               min-h-0 min-w-0
+              bg-[#e7edf3]
+              dark:bg-[#061324]
               ${
                 mobileConversationOpen
                   ? 'flex'
@@ -832,7 +834,7 @@ const ChatPage = () => {
 
                 {messagesQuery
                   .isLoading ? (
-                  <div className="flex min-h-0 flex-1 items-center justify-center bg-[#f4f6f8] dark:bg-[#061324]">
+                  <div className="flex min-h-0 flex-1 items-center justify-center bg-[#e7edf3] dark:bg-[#061324]">
                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-b-blue-600 dark:border-white/[0.08] dark:border-b-blue-500" />
                   </div>
                 ) : (

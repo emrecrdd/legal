@@ -380,7 +380,7 @@ const MessageInput = ({
     };
 
   return (
-    <div className="border-t border-slate-200/90 bg-white/95 p-3 shadow-[0_-8px_30px_rgba(15,23,42,0.035)] backdrop-blur dark:border-white/[0.06] dark:bg-[#09182c]/95">
+    <div className="border-t border-slate-300/70 bg-[#f2f5f8]/95 p-3 shadow-[0_-10px_32px_rgba(15,23,42,0.06)] backdrop-blur dark:border-white/[0.06] dark:bg-[#09182c]/95">
       {selectedFiles.length >
         0 && (
         <div className="mb-2 flex flex-wrap gap-2">
@@ -520,7 +520,7 @@ const MessageInput = ({
               max-h-32 min-h-10 w-full
               resize-none rounded-xl
               border border-slate-200
-              bg-slate-50/90 px-3 py-2.5
+              bg-white px-3 py-2.5
               text-sm leading-5
               text-slate-900 caret-[#102f59]
               outline-none transition
