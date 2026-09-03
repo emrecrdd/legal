@@ -934,6 +934,63 @@ const compareMessages = (
 
 export const chatService = {
   // ====================================================
+  // AVAILABLE CHAT USERS
+  // ====================================================
+
+  async getAvailableUsers(
+    actor
+  ) {
+    if (
+      !actor?.id ||
+      actor.is_active !==
+        true
+    ) {
+      throw createChatError(
+        'Kullanıcı bulunamadı.',
+        404,
+        'CHAT_USER_NOT_FOUND'
+      );
+    }
+
+    const users =
+      await User.findAll({
+        where: {
+          is_active:
+            true,
+
+          id: {
+            [Op.ne]:
+              actor.id,
+          },
+        },
+
+        attributes: [
+          'id',
+          'first_name',
+          'last_name',
+          'title',
+          'avatar',
+          'is_active',
+        ],
+
+        order: [
+          [
+            'first_name',
+            'ASC',
+          ],
+          [
+            'last_name',
+            'ASC',
+          ],
+        ],
+      });
+
+    return users.map(
+      serializeUser
+    );
+  },
+
+  // ====================================================
   // OFFICE GENERAL
   // ====================================================
 

@@ -15,6 +15,10 @@ import {
 } from './app/providers/auth.provider.jsx';
 
 import {
+  SocketProvider,
+} from './app/providers/socket.provider.jsx';
+
+import {
   ThemeProvider,
 } from './app/providers/theme.provider.jsx';
 
@@ -25,17 +29,19 @@ function App() {
     <BrowserRouter>
       <QueryProvider>
         <AuthProvider>
-          <ThemeProvider>
-            <AppRouter />
+          <SocketProvider>
+            <ThemeProvider>
+              <AppRouter />
 
-            <Toaster
-              position="top-right"
-              toastOptions={{
-                duration:
-                  3500,
-              }}
-            />
-          </ThemeProvider>
+              <Toaster
+                position="top-right"
+                toastOptions={{
+                  duration:
+                    3500,
+                }}
+              />
+            </ThemeProvider>
+          </SocketProvider>
         </AuthProvider>
       </QueryProvider>
     </BrowserRouter>

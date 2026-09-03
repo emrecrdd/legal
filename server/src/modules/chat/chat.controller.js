@@ -12,6 +12,34 @@ import {
 
 export const chatController = {
   // ====================================================
+  // AVAILABLE CHAT USERS
+  // ====================================================
+
+  async getUsers(
+    req,
+    res,
+    next
+  ) {
+    try {
+      const data =
+        await chatService.getAvailableUsers(
+          req.user
+        );
+
+      return res
+        .status(200)
+        .json({
+          success:
+            true,
+
+          data,
+        });
+    } catch (error) {
+      return next(error);
+    }
+  },
+
+  // ====================================================
   // OFFICE GENERAL
   // ====================================================
 

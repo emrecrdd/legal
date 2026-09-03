@@ -21,6 +21,7 @@ import {
   FolderKanban,
   Gavel,
   LayoutDashboard,
+  MessageCircle,
   Search,
   Settings,
   Info,
@@ -38,27 +39,40 @@ import {
 
 const navigationGroups = [
   {
-    label: 'Genel',
+  label: 'Genel',
 
-    items: [
-      {
-        path:
-          '/dashboard',
+  items: [
+    {
+      path:
+        '/dashboard',
 
-        label:
-          'Genel Bakış',
+      label:
+        'Genel Bakış',
 
-        icon:
-          LayoutDashboard,
+      icon:
+        LayoutDashboard,
 
-        /*
-         * Dashboard için özel permission gerekmiyor.
-         */
-        permission:
-          null,
-      },
-    ],
-  },
+      permission:
+        null,
+    },
+
+    {
+      path:
+        '/chat',
+
+      label:
+        'Sohbetler',
+
+      icon:
+        MessageCircle,
+
+      permission:
+        null,
+    },
+  ],
+},
+  
+
 
   {
     label:

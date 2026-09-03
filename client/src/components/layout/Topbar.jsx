@@ -76,6 +76,7 @@ const PAGE_TITLES = {
   '/users': 'Kullanıcılar',
   '/audit-logs': 'Denetim Logları',
   '/notifications': 'Bildirimler',
+  '/chat': 'Sohbetler',
   '/profile': 'Profil',
 };
 
@@ -141,6 +142,9 @@ const BREADCRUMBS = {
 
   '/notifications':
     'Bildirimler / Tümü',
+
+  '/chat':
+    'Sohbetler / Ofis İletişimi',
 
   '/profile':
     'Profil / Bilgilerim',
