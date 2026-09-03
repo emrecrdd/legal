@@ -10,6 +10,14 @@ import {
   User,
 } from '../../models/index.js';
 
+import {
+  chatStorage,
+} from './chat.storage.js';
+
+import {
+  logger,
+} from '../../config/logger.js';
+
 const OFFICE_CONVERSATION_NAME =
   'Ofis Genel';
 
@@ -1642,79 +1650,190 @@ export const chatService = {
     const sequelize =
       Conversation.sequelize;
 
-    return sequelize.transaction(
-      async (
-        transaction
-      ) => {
-        const message =
-          await Message.findOne({
-            where: {
-              id:
-                normalizedMessageId,
+    /*
+     * Storage objesini transaction içindeyken silmiyoruz.
+     *
+     * Aksi halde DB transaction rollback olursa mesaj geri gelir
+     * fakat fiziksel attachment dosyası kaybolmuş olur.
+     */
+    const {
+      data,
+      storageKeys,
+    } =
+      await sequelize.transaction(
+        async (
+          transaction
+        ) => {
+          const message =
+            await Message.findOne({
+              where: {
+                id:
+                  normalizedMessageId,
 
-              sender_id:
-                actor.id,
-            },
+                sender_id:
+                  actor.id,
+              },
 
-            transaction,
-          });
+              include: [
+                {
+                  model:
+                    MessageAttachment,
 
-        if (!message) {
-          throw createChatError(
-            'Mesaj bulunamadı.',
-            404,
-            'CHAT_MESSAGE_NOT_FOUND'
-          );
-        }
+                  as:
+                    'attachments',
 
-        await assertConversationAccess(
-          message.conversation_id,
-          actor,
-          {
-            transaction,
+                  required:
+                    false,
+
+                  attributes: [
+                    'id',
+                    'storage_key',
+                  ],
+                },
+              ],
+
+              transaction,
+            });
+
+          if (!message) {
+            throw createChatError(
+              'Mesaj bulunamadı.',
+              404,
+              'CHAT_MESSAGE_NOT_FOUND'
+            );
           }
-        );
 
-        /*
-         * Mesaj timeline'da "Bu mesaj silindi" olarak
-         * kalabilsin diye içerik temizlenir ve paranoid
-         * soft-delete uygulanır.
-         *
-         * Attachment storage objeleri bu fazda silinmez.
-         */
-        await message.update(
-          {
-            content:
-              null,
-          },
-          {
-            transaction,
-          }
-        );
-
-        await message.destroy({
-          transaction,
-        });
-
-        const deletedMessage =
-          await Message.findByPk(
-            message.id,
+          await assertConversationAccess(
+            message.conversation_id,
+            actor,
             {
-              paranoid:
-                false,
-
-              include:
-                messageIncludes,
-
               transaction,
             }
           );
 
-        return serializeMessage(
-          deletedMessage
+          const attachmentStorageKeys =
+            (
+              message.attachments ||
+              []
+            )
+              .map(
+                (
+                  attachment
+                ) =>
+                  attachment.storage_key
+              )
+              .filter(
+                Boolean
+              );
+
+          /*
+           * Timeline'da "Bu mesaj silindi" kalabilsin diye
+           * içerik temizlenir ve paranoid soft-delete uygulanır.
+           *
+           * Fiziksel Neon objeleri transaction commit olduktan
+           * sonra temizlenir.
+           */
+          await message.update(
+            {
+              content:
+                null,
+            },
+            {
+              transaction,
+            }
+          );
+
+          await message.destroy({
+            transaction,
+          });
+
+          const deletedMessage =
+            await Message.findByPk(
+              message.id,
+              {
+                paranoid:
+                  false,
+
+                include:
+                  messageIncludes,
+
+                transaction,
+              }
+            );
+
+          return {
+            data:
+              serializeMessage(
+                deletedMessage
+              ),
+
+            storageKeys:
+              attachmentStorageKeys,
+          };
+        }
+      );
+
+    /*
+     * DB commit tamamlandı.
+     *
+     * Storage cleanup best-effort yapılır:
+     * tek bir object silme hatası kullanıcıdaki message delete
+     * işlemini başarısız göstermemeli.
+     */
+    if (
+      Array.isArray(
+        storageKeys
+      ) &&
+      storageKeys.length >
+        0
+    ) {
+      const cleanupResults =
+        await Promise.allSettled(
+          storageKeys.map(
+            (
+              storageKey
+            ) =>
+              chatStorage.deleteFile(
+                storageKey
+              )
+          )
         );
-      }
-    );
+
+      cleanupResults.forEach(
+        (
+          result,
+          index
+        ) => {
+          if (
+            result.status ===
+            'rejected'
+          ) {
+            logger.error(
+              'Chat attachment storage cleanup başarısız',
+              {
+                messageId:
+                  normalizedMessageId,
+
+                storageKey:
+                  storageKeys[
+                    index
+                  ],
+
+                message:
+                  result.reason
+                    ?.message ||
+                  String(
+                    result.reason ||
+                    'Unknown error'
+                  ),
+              }
+            );
+          }
+        }
+      );
+    }
+
+    return data;
   },
 
   // ====================================================
