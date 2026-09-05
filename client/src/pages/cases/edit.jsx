@@ -368,6 +368,76 @@ const getCaseClientIds = (
     : [];
 };
 
+const getIstanbulTodayDateOnly =
+  () => {
+    const parts =
+      new Intl.DateTimeFormat(
+        'en-CA',
+        {
+          timeZone:
+            'Europe/Istanbul',
+
+          year:
+            'numeric',
+
+          month:
+            '2-digit',
+
+          day:
+            '2-digit',
+        }
+      ).formatToParts(
+        new Date()
+      );
+
+    const getPart =
+      (
+        type
+      ) =>
+        parts.find(
+          (
+            part
+          ) =>
+            part.type ===
+            type
+        )?.value;
+
+    return `${getPart(
+      'year'
+    )}-${getPart(
+      'month'
+    )}-${getPart(
+      'day'
+    )}`;
+  };
+
+const isFutureDate =
+  (
+    value
+  ) => {
+    if (!value) {
+      return false;
+    }
+
+    const normalized =
+      String(
+        value
+      ).trim();
+
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(
+        normalized
+      )
+    ) {
+      return false;
+    }
+
+    return (
+      normalized >
+      getIstanbulTodayDateOnly()
+    );
+  };
+
 const formatDateInput = (
   value
 ) => {
@@ -1908,6 +1978,20 @@ const CaseEdit = () => {
         }
       }
 
+      // ==================================================
+      // OPENING DATE
+      // ==================================================
+
+      if (
+        formData.opening_date &&
+        isFutureDate(
+          formData.opening_date
+        )
+      ) {
+        nextErrors.opening_date =
+          'Dava açılış tarihi bugünden ileri bir tarih olamaz';
+      }
+
       const assignedTo =
         normalizeId(
           formData.assigned_to
@@ -2416,6 +2500,9 @@ const CaseEdit = () => {
               label="Dava Açılış Tarihi"
               name="opening_date"
               type="date"
+              max={
+                getIstanbulTodayDateOnly()
+              }
               value={
                 formData.opening_date
               }

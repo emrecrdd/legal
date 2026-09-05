@@ -441,6 +441,115 @@ const assertClientIdsAccess =
   };
 
 // ======================================================
+// OPENING DATE VALIDATION
+// ======================================================
+
+const getIstanbulTodayDateOnly =
+  () => {
+    const parts =
+      new Intl.DateTimeFormat(
+        'en-CA',
+        {
+          timeZone:
+            'Europe/Istanbul',
+
+          year:
+            'numeric',
+
+          month:
+            '2-digit',
+
+          day:
+            '2-digit',
+        }
+      ).formatToParts(
+        new Date()
+      );
+
+    const getPart =
+      (
+        type
+      ) =>
+        parts.find(
+          (
+            part
+          ) =>
+            part.type ===
+            type
+        )?.value;
+
+    return `${getPart(
+      'year'
+    )}-${getPart(
+      'month'
+    )}-${getPart(
+      'day'
+    )}`;
+  };
+
+const validateOpeningDate =
+  (
+    value
+  ) => {
+    if (
+      value ===
+        undefined ||
+      value ===
+        null ||
+      value ===
+        ''
+    ) {
+      return;
+    }
+
+    const normalized =
+      String(
+        value
+      ).trim();
+
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(
+        normalized
+      )
+    ) {
+      throw new Error(
+        'Geçersiz dava açılış tarihi'
+      );
+    }
+
+    const parsed =
+      new Date(
+        `${normalized}T00:00:00.000Z`
+      );
+
+    if (
+      Number.isNaN(
+        parsed.getTime()
+      ) ||
+      parsed
+        .toISOString()
+        .slice(
+          0,
+          10
+        ) !==
+        normalized
+    ) {
+      throw new Error(
+        'Geçersiz dava açılış tarihi'
+      );
+    }
+
+    if (
+      normalized >
+      getIstanbulTodayDateOnly()
+    ) {
+      throw new Error(
+        'Dava açılış tarihi bugünden ileri bir tarih olamaz'
+      );
+    }
+  };
+
+// ======================================================
 // SERVICE
 // ======================================================
 
@@ -470,6 +579,10 @@ export const caseService = {
         'Case not found'
       );
     }
+
+    validateOpeningDate(
+      caseData.opening_date
+    );
 
     /*
      * Case.create'dan önce doğrulanır.
@@ -1114,6 +1227,18 @@ export const caseService = {
       ) {
         throw new Error(
           'Case not found'
+        );
+      }
+
+      if (
+        Object.prototype
+          .hasOwnProperty.call(
+            updateData,
+            'opening_date'
+          )
+      ) {
+        validateOpeningDate(
+          updateData.opening_date
         );
       }
 
