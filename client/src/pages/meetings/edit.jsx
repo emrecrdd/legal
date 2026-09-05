@@ -41,12 +41,13 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
+  Check,
   Link2,
   MapPin,
   Plus,
   Save,
   Trash2,
-  UserRound,
+  Users,
   UsersRound,
   Video,
   X,
@@ -67,7 +68,16 @@ const INITIAL_FORM = {
   meeting_type: 'other',
   case_id: '',
   client_id: '',
-  assigned_to: '',
+
+  /*
+   * Derkenar iç kullanıcı katılımcıları.
+   *
+   * meetings.attendees JSONB alanından ayrıdır:
+   * - attendee_ids: sistem kullanıcıları
+   * - attendees: harici / serbest katılımcılar
+   */
+  attendee_ids: [],
+
   status: 'scheduled',
   attendees: [],
   meeting_link: '',
@@ -369,9 +379,22 @@ const normalizeMeetingForm = (form) => ({
   client_id: normalizeId(
     form?.client_id
   ),
-  assigned_to: normalizeId(
-    form?.assigned_to
-  ),
+  attendee_ids: [
+    ...new Set(
+      Array.isArray(
+        form?.attendee_ids
+      )
+        ? form.attendee_ids
+            .map(
+              (participantId) =>
+                normalizeId(
+                  participantId
+                )
+            )
+            .filter(Boolean)
+        : []
+    ),
+  ].sort(),
   status: form?.status || 'scheduled',
   attendees: normalizeAttendees(
     form?.attendees
@@ -625,7 +648,17 @@ const MeetingEdit = () => {
   });
 
   const {
-    data: usersData,
+    data:
+      usersData,
+
+    isLoading:
+      usersLoading,
+
+    error:
+      usersError,
+
+    refetch:
+      refetchUsers,
   } = useQuery({
     queryKey: [
       'users',
@@ -881,6 +914,86 @@ const MeetingEdit = () => {
       isAdmin,
     ]);
 
+  const selectedParticipantUsers =
+    useMemo(() => {
+      const selectedIds =
+        Array.isArray(
+          formData.attendee_ids
+        )
+          ? formData.attendee_ids
+              .map(
+                (participantId) =>
+                  normalizeId(
+                    participantId
+                  )
+              )
+              .filter(Boolean)
+          : [];
+
+      if (
+        selectedIds.length ===
+        0
+      ) {
+        return [];
+      }
+
+      const meetingParticipants =
+        Array.isArray(
+          meeting?.participantUsers
+        )
+          ? meeting.participantUsers
+          : [];
+
+      const candidates = [
+        ...users,
+        ...meetingParticipants,
+      ];
+
+      const byId =
+        new Map();
+
+      candidates.forEach(
+        (person) => {
+          const personId =
+            normalizeId(
+              person?.id
+            );
+
+          if (
+            personId &&
+            !byId.has(
+              personId
+            )
+          ) {
+            byId.set(
+              personId,
+              person
+            );
+          }
+        }
+      );
+
+      return selectedIds.map(
+        (participantId) =>
+          byId.get(
+            participantId
+          ) || {
+            id:
+              participantId,
+
+            first_name:
+              'Kullanıcı',
+
+            last_name:
+              '',
+          }
+      );
+    }, [
+      formData.attendee_ids,
+      users,
+      meeting,
+    ]);
+
   // ======================================================
   // FORM INITIALIZATION
   // ======================================================
@@ -937,11 +1050,29 @@ const MeetingEdit = () => {
           meeting.client?.id
         ),
 
-      assigned_to:
-        normalizeId(
-          meeting.assigned_to ??
-          meeting.assignee?.id
+      attendee_ids: [
+        ...new Set(
+          (
+            Array.isArray(
+              meeting.participantUsers
+            ) &&
+            meeting.participantUsers.length >
+              0
+              ? meeting.participantUsers.map(
+                  (person) =>
+                    normalizeId(
+                      person?.id
+                    )
+                )
+              : [
+                  normalizeId(
+                    meeting.assigned_to ??
+                    meeting.assignee?.id
+                  ),
+                ]
+          ).filter(Boolean)
         ),
+      ],
 
       status:
         meeting.status ||
@@ -1340,6 +1471,157 @@ const MeetingEdit = () => {
     }
   };
 
+  const handleParticipantToggle =
+    (
+      participantId
+    ) => {
+      if (
+        !isAdmin ||
+        isPending
+      ) {
+        return;
+      }
+
+      const normalizedParticipantId =
+        normalizeId(
+          participantId
+        );
+
+      if (
+        !normalizedParticipantId
+      ) {
+        return;
+      }
+
+      setFormData(
+        (
+          current
+        ) => {
+          const currentIds =
+            Array.isArray(
+              current.attendee_ids
+            )
+              ? current.attendee_ids
+                  .map(
+                    (id) =>
+                      normalizeId(
+                        id
+                      )
+                  )
+                  .filter(Boolean)
+              : [];
+
+          const exists =
+            currentIds.includes(
+              normalizedParticipantId
+            );
+
+          return {
+            ...current,
+
+            attendee_ids:
+              exists
+                ? currentIds.filter(
+                    (id) =>
+                      id !==
+                      normalizedParticipantId
+                  )
+                : [
+                    ...currentIds,
+                    normalizedParticipantId,
+                  ],
+          };
+        }
+      );
+
+      if (
+        errors.attendee_ids
+      ) {
+        setErrors(
+          (
+            current
+          ) => ({
+            ...current,
+
+            attendee_ids:
+              '',
+          })
+        );
+      }
+    };
+
+  const handleSelectAllParticipants =
+    () => {
+      if (
+        !isAdmin ||
+        isPending
+      ) {
+        return;
+      }
+
+      const allIds =
+        assignableUsers
+          .map(
+            (person) =>
+              normalizeId(
+                person?.id
+              )
+          )
+          .filter(Boolean);
+
+      const selectedIds =
+        Array.isArray(
+          formData.attendee_ids
+        )
+          ? formData.attendee_ids
+              .map(
+                (id) =>
+                  normalizeId(
+                    id
+                  )
+              )
+              .filter(Boolean)
+          : [];
+
+      const allSelected =
+        allIds.length >
+          0 &&
+        allIds.every(
+          (participantId) =>
+            selectedIds.includes(
+              participantId
+            )
+        );
+
+      setFormData(
+        (
+          current
+        ) => ({
+          ...current,
+
+          attendee_ids:
+            allSelected
+              ? []
+              : allIds,
+        })
+      );
+
+      if (
+        errors.attendee_ids
+      ) {
+        setErrors(
+          (
+            current
+          ) => ({
+            ...current,
+
+            attendee_ids:
+              '',
+          })
+        );
+      }
+    };
+
   const handleAddAttendee =
     () => {
       const name =
@@ -1426,6 +1708,66 @@ const MeetingEdit = () => {
       ) {
         nextErrors.end_date =
           'Bitiş tarihi başlangıç tarihinden önce olamaz';
+      }
+
+      if (
+        isAdmin
+      ) {
+        const participantIds =
+          Array.isArray(
+            formData.attendee_ids
+          )
+            ? formData.attendee_ids
+                .map(
+                  (participantId) =>
+                    normalizeId(
+                      participantId
+                    )
+                )
+                .filter(Boolean)
+            : [];
+
+        if (
+          participantIds.length ===
+          0
+        ) {
+          nextErrors.attendee_ids =
+            'Toplantı en az 1 kişiye atanmalıdır';
+        } else if (
+          usersError
+        ) {
+          nextErrors.attendee_ids =
+            'Kullanıcı listesi yüklenemedi. Listeyi yenileyip tekrar deneyin.';
+        } else if (
+          !usersLoading
+        ) {
+          const validIds =
+            new Set(
+              assignableUsers
+                .map(
+                  (person) =>
+                    normalizeId(
+                      person?.id
+                    )
+                )
+                .filter(Boolean)
+            );
+
+          const hasInvalidParticipant =
+            participantIds.some(
+              (participantId) =>
+                !validIds.has(
+                  participantId
+                )
+            );
+
+          if (
+            hasInvalidParticipant
+          ) {
+            nextErrors.attendee_ids =
+              'Seçilen katılımcılardan biri artık atanabilir değil';
+          }
+        }
       }
 
       setErrors(
@@ -1535,17 +1877,31 @@ const MeetingEdit = () => {
     };
 
     /*
-     * Atanan kullanıcı edit ekranında
-     * yalnızca admin tarafından değiştirilsin.
+     * İç kullanıcı katılımcıları yalnızca admin tarafından
+     * değiştirilsin.
      *
-     * Non-admin kullanıcı mevcut atamayı
-     * yanlışlıkla kendi üzerine çekmesin.
+     * Non-admin kullanıcı toplantının katılımcı ilişkisini
+     * yanlışlıkla değiştirmesin.
      */
     if (isAdmin) {
-      submitData.assigned_to =
-        normalizeId(
-          formData.assigned_to
-        ) || null;
+      submitData.attendee_ids = [
+        ...new Set(
+          (
+            Array.isArray(
+              formData.attendee_ids
+            )
+              ? formData.attendee_ids
+              : []
+          )
+            .map(
+              (participantId) =>
+                normalizeId(
+                  participantId
+                )
+            )
+            .filter(Boolean)
+        ),
+      ];
     }
 
     updateMutation.mutate(
@@ -2352,87 +2708,411 @@ const MeetingEdit = () => {
 
           </div>
 
-          {/* ASSIGNEE */}
+          {/* INTERNAL PARTICIPANTS */}
 
           <div>
 
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
 
-              <span className="inline-flex items-center gap-1.5">
-                <UserRound className="h-4 w-4" />
+              <div className="flex items-center gap-2">
 
-                Atanan Avukat
-              </span>
+                <Users className="h-4 w-4 text-blue-600" />
 
-            </label>
+                <div>
 
-            {isAdmin ? (
-              <select
-                name="assigned_to"
-                value={
-                  formData.assigned_to
-                }
-                onChange={
-                  handleChange
-                }
-                disabled={
-                  updateMutation.isPending
-                }
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Toplantı Katılımcıları
+                  </p>
 
-                <option value="">
-                  Atanacak kişi seçin
-                </option>
+                  <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                    Toplantıya atanmış Derkenar kullanıcıları
+                  </p>
 
-                {assignableUsers.map(
-                  (person) => (
-                    <option
-                      key={
-                        person.id
-                      }
-                      value={
-                        person.id
-                      }
-                    >
-                      {
-                        person.first_name
-                      }{' '}
-                      {
-                        person.last_name
-                      }
+                </div>
 
-                      {person.role ===
-                        'admin' &&
-                        ' (Admin)'}
+              </div>
 
-                      {person.role ===
-                        'lawyer' &&
-                        ' (Avukat)'}
-
-                      {person.role ===
-                        'intern' &&
-                        ' (Stajyer)'}
-
-                      {person.role ===
-                        'secretary' &&
-                        ' (Sekreter)'}
-                    </option>
-                  )
+              {isAdmin &&
+                formData.attendee_ids.length >
+                  0 && (
+                  <Badge
+                    variant="primary"
+                  >
+                    {formData.attendee_ids.length}{' '}
+                    kişi seçildi
+                  </Badge>
                 )}
 
-              </select>
+            </div>
+
+            {isAdmin ? (
+              <div className="space-y-3">
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+
+                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                    Bir veya birden fazla kullanıcı seçebilirsiniz.
+                  </p>
+
+                  {assignableUsers.length >
+                    0 && (
+                    <button
+                      type="button"
+                      onClick={
+                        handleSelectAllParticipants
+                      }
+                      disabled={
+                        isPending
+                      }
+                      className="
+                        rounded-lg
+                        border
+                        border-gray-200
+                        bg-white
+                        px-3
+                        py-1.5
+                        text-xs
+                        font-medium
+                        text-gray-600
+                        transition
+                        hover:border-blue-200
+                        hover:bg-blue-50
+                        hover:text-blue-600
+                        disabled:cursor-not-allowed
+                        disabled:opacity-50
+                        dark:border-white/[0.08]
+                        dark:bg-white/[0.025]
+                        dark:text-slate-400
+                        dark:hover:border-blue-500/20
+                        dark:hover:bg-blue-500/[0.06]
+                        dark:hover:text-blue-400
+                      "
+                    >
+                      {assignableUsers.length >
+                        0 &&
+                      assignableUsers.every(
+                        (person) =>
+                          formData.attendee_ids
+                            .map(
+                              (participantId) =>
+                                normalizeId(
+                                  participantId
+                                )
+                            )
+                            .includes(
+                              normalizeId(
+                                person?.id
+                              )
+                            )
+                      )
+                        ? 'Seçimi Temizle'
+                        : 'Tümünü Seç'}
+                    </button>
+                  )}
+
+                </div>
+
+                {usersLoading && (
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-5 text-center text-sm text-gray-500 dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-400">
+                    Kullanıcılar yükleniyor...
+                  </div>
+                )}
+
+                {usersError &&
+                  !usersLoading && (
+                  <div className="rounded-xl border border-red-200 bg-red-50/60 p-4 dark:border-red-500/20 dark:bg-red-500/[0.04]">
+
+                    <p className="text-sm font-medium text-red-700 dark:text-red-300">
+                      Atanabilir kullanıcılar yüklenemedi.
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        refetchUsers?.()
+                      }
+                      className="mt-2 text-xs font-semibold text-red-700 underline underline-offset-2 dark:text-red-300"
+                    >
+                      Tekrar Dene
+                    </button>
+
+                  </div>
+                )}
+
+                {!usersLoading &&
+                  !usersError &&
+                  assignableUsers.length ===
+                    0 && (
+                    <div className="rounded-xl border border-dashed border-gray-200 p-5 text-center text-sm text-gray-500 dark:border-white/[0.08] dark:text-slate-400">
+                      Toplantıya atanabilecek aktif kullanıcı bulunamadı.
+                    </div>
+                  )}
+
+                {!usersLoading &&
+                  !usersError &&
+                  assignableUsers.length >
+                    0 && (
+                    <div className="grid gap-2 sm:grid-cols-2">
+
+                      {assignableUsers.map(
+                        (
+                          person
+                        ) => {
+                          const personId =
+                            normalizeId(
+                              person?.id
+                            );
+
+                          const selected =
+                            formData.attendee_ids
+                              .map(
+                                (participantId) =>
+                                  normalizeId(
+                                    participantId
+                                  )
+                              )
+                              .includes(
+                                personId
+                              );
+
+                          return (
+                            <button
+                              key={
+                                person.id
+                              }
+                              type="button"
+                              onClick={() =>
+                                handleParticipantToggle(
+                                  person.id
+                                )
+                              }
+                              disabled={
+                                isPending
+                              }
+                              className={`
+                                flex
+                                w-full
+                                items-center
+                                gap-3
+                                rounded-xl
+                                border
+                                p-3
+                                text-left
+                                transition
+                                disabled:cursor-not-allowed
+                                disabled:opacity-60
+                                ${
+                                  selected
+                                    ? `
+                                        border-blue-300
+                                        bg-blue-50/70
+                                        ring-1
+                                        ring-blue-500/10
+                                        dark:border-blue-500/30
+                                        dark:bg-blue-500/[0.07]
+                                      `
+                                    : `
+                                        border-gray-200
+                                        bg-white
+                                        hover:border-gray-300
+                                        hover:bg-gray-50
+                                        dark:border-white/[0.07]
+                                        dark:bg-white/[0.02]
+                                        dark:hover:bg-white/[0.04]
+                                      `
+                                }
+                              `}
+                            >
+
+                              <div
+                                className={`
+                                  flex
+                                  h-10
+                                  w-10
+                                  shrink-0
+                                  items-center
+                                  justify-center
+                                  rounded-full
+                                  text-xs
+                                  font-semibold
+                                  ${
+                                    selected
+                                      ? `
+                                          bg-blue-100
+                                          text-blue-700
+                                          dark:bg-blue-500/[0.12]
+                                          dark:text-blue-300
+                                        `
+                                      : `
+                                          bg-gray-100
+                                          text-gray-600
+                                          dark:bg-white/[0.06]
+                                          dark:text-slate-300
+                                        `
+                                  }
+                                `}
+                              >
+                                {person?.first_name?.[0] ||
+                                  ''}
+                                {person?.last_name?.[0] ||
+                                  ''}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+
+                                <p
+                                  className={`
+                                    truncate
+                                    text-sm
+                                    font-semibold
+                                    ${
+                                      selected
+                                        ? 'text-blue-900 dark:text-blue-200'
+                                        : 'text-gray-900 dark:text-white'
+                                    }
+                                  `}
+                                >
+                                  {person.first_name}{' '}
+                                  {person.last_name}
+                                </p>
+
+                                <p className="mt-1 truncate text-xs text-gray-500 dark:text-slate-500">
+                                  {person.role ===
+                                    'admin'
+                                    ? 'Yönetici'
+                                    : person.role ===
+                                        'lawyer'
+                                      ? 'Avukat'
+                                      : person.role ===
+                                          'intern'
+                                        ? 'Stajyer'
+                                        : person.role ===
+                                            'secretary'
+                                          ? 'Sekreter'
+                                          : person.role ||
+                                            'Kullanıcı'}
+                                </p>
+
+                              </div>
+
+                              <div
+                                className={`
+                                  flex
+                                  h-6
+                                  w-6
+                                  shrink-0
+                                  items-center
+                                  justify-center
+                                  rounded-full
+                                  border
+                                  transition
+                                  ${
+                                    selected
+                                      ? `
+                                          border-blue-600
+                                          bg-blue-600
+                                          text-white
+                                        `
+                                      : `
+                                          border-gray-300
+                                          bg-white
+                                          text-transparent
+                                          dark:border-white/[0.15]
+                                          dark:bg-white/[0.03]
+                                        `
+                                  }
+                                `}
+                              >
+                                <Check size={14} />
+                              </div>
+
+                            </button>
+                          );
+                        }
+                      )}
+
+                    </div>
+                  )}
+
+                {errors.attendee_ids && (
+                  <p className="text-sm text-red-600 dark:text-red-400">
+                    {errors.attendee_ids}
+                  </p>
+                )}
+
+              </div>
             ) : (
-              <div className="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-800">
+              <div className="space-y-2">
 
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {meeting.assignee
-                    ? `${meeting.assignee.first_name || ''} ${meeting.assignee.last_name || ''}`.trim()
-                    : 'Atanmadı'}
-                </p>
+                {selectedParticipantUsers.length >
+                  0 ? (
+                  selectedParticipantUsers.map(
+                    (
+                      person
+                    ) => (
+                      <div
+                        key={
+                          normalizeId(
+                            person?.id
+                          )
+                        }
+                        className="
+                          flex
+                          items-center
+                          justify-between
+                          gap-3
+                          rounded-xl
+                          border
+                          border-gray-100
+                          bg-gray-50
+                          p-3
+                          dark:border-white/[0.06]
+                          dark:bg-white/[0.025]
+                        "
+                      >
 
-                <p className="mt-1 text-xs text-gray-400">
-                  Atanan kişi yalnızca yönetici tarafından değiştirilebilir.
+                        <div className="flex min-w-0 items-center gap-3">
+
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 dark:bg-blue-500/[0.1] dark:text-blue-400">
+                            {person?.first_name?.[0] ||
+                              ''}
+                            {person?.last_name?.[0] ||
+                              ''}
+                          </div>
+
+                          <div className="min-w-0">
+
+                            <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
+                              {person?.first_name}{' '}
+                              {person?.last_name}
+                            </p>
+
+                            <p className="mt-0.5 text-xs text-gray-400">
+                              Toplantı katılımcısı
+                            </p>
+
+                          </div>
+
+                        </div>
+
+                        <Badge
+                          variant="primary"
+                          dot
+                        >
+                          Katılımcı
+                        </Badge>
+
+                      </div>
+                    )
+                  )
+                ) : (
+                  <div className="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-slate-400">
+                    Atanmış kullanıcı bulunamadı.
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-400">
+                  Katılımcı ataması yalnızca yönetici tarafından değiştirilebilir.
                 </p>
 
               </div>
@@ -2440,17 +3120,25 @@ const MeetingEdit = () => {
 
           </div>
 
-          {/* ATTENDEES */}
+          {/* EXTERNAL ATTENDEES */}
 
           <div>
 
             <div className="mb-2 flex items-center gap-2">
 
-              <UsersRound className="h-4 w-4 text-blue-600" />
+              <UsersRound className="h-4 w-4 text-emerald-600" />
 
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Katılımcılar
-              </label>
+              <div>
+
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Harici Katılımcılar
+                </label>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Derkenar kullanıcısı olmayan kişileri isteğe bağlı ekleyin
+                </p>
+
+              </div>
 
             </div>
 
