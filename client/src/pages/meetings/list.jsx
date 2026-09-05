@@ -142,6 +142,70 @@ const formatDate = (
   }
 };
 
+const getPersonName = (
+  person,
+  fallback = 'Kullanıcı'
+) => {
+  if (!person) {
+    return fallback;
+  }
+
+  const name = [
+    person.first_name,
+    person.last_name,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  return (
+    name ||
+    fallback
+  );
+};
+
+const getInternalParticipants = (
+  meeting
+) => {
+  if (
+    Array.isArray(
+      meeting?.participantUsers
+    ) &&
+    meeting.participantUsers.length >
+      0
+  ) {
+    return meeting.participantUsers;
+  }
+
+  /*
+   * Eski toplantılar için legacy fallback.
+   */
+  if (
+    meeting?.assignee
+  ) {
+    return [
+      meeting.assignee,
+    ];
+  }
+
+  return [];
+};
+
+const getParticipantNames = (
+  meeting
+) => {
+  return getInternalParticipants(
+    meeting
+  )
+    .map(
+      (person) =>
+        getPersonName(
+          person
+        )
+    )
+    .filter(Boolean);
+};
+
 const getCaseDisplayName = (
   caseItem
 ) => {
@@ -519,6 +583,10 @@ const MeetingsList = () => {
                 </Table.HeadCell>
 
                 <Table.HeadCell>
+                  Katılımcılar
+                </Table.HeadCell>
+
+                <Table.HeadCell>
                   Müvekkil
                 </Table.HeadCell>
 
@@ -597,6 +665,68 @@ const MeetingsList = () => {
                         )}
 
                       </div>
+
+                    </Table.Cell>
+
+                    {/* INTERNAL PARTICIPANTS */}
+
+                    <Table.Cell>
+
+                      {(() => {
+                        const participantNames =
+                          getParticipantNames(
+                            meeting
+                          );
+
+                        if (
+                          participantNames.length ===
+                          0
+                        ) {
+                          return (
+                            <span className="text-gray-400 dark:text-slate-600">
+                              -
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <div
+                            className="min-w-[150px]"
+                            title={
+                              participantNames.join(
+                                ', '
+                              )
+                            }
+                          >
+
+                            <div className="flex items-center gap-2">
+
+                              <Users
+                                size={14}
+                                className="shrink-0 text-gray-400 dark:text-slate-500"
+                              />
+
+                              <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                                {participantNames.length ===
+                                1
+                                  ? participantNames[0]
+                                  : `${participantNames.length} kişi`}
+                              </span>
+
+                            </div>
+
+                            {participantNames.length >
+                              1 && (
+                              <p className="mt-1 max-w-[180px] truncate text-xs text-gray-400 dark:text-slate-500">
+                                {participantNames.join(
+                                  ', '
+                                )}
+                              </p>
+                            )}
+
+                          </div>
+                        );
+                      })()}
 
                     </Table.Cell>
 
