@@ -878,6 +878,30 @@ export const chatAttachmentService = {
               }
             );
 
+            /*
+             * Birebir sohbet taraflardan biri tarafından listeden
+             * gizlenmişse yeni dosya mesajı sohbeti tekrar görünür yapar.
+             */
+            if (
+              currentConversation.type ===
+              'direct'
+            ) {
+              await ConversationMember.update(
+                {
+                  hidden_at:
+                    null,
+                },
+                {
+                  where: {
+                    conversation_id:
+                      currentConversation.id,
+                  },
+
+                  transaction,
+                }
+              );
+            }
+
             await ConversationMember.update(
               {
                 last_read_message_id:
