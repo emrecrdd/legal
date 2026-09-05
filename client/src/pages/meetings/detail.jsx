@@ -228,6 +228,64 @@ const getPersonName = (
 };
 
 // ======================================================
+// INTERNAL PARTICIPANT HELPERS
+// ======================================================
+
+const getInternalParticipants = (
+  meeting
+) => {
+  if (
+    Array.isArray(
+      meeting?.participantUsers
+    ) &&
+    meeting.participantUsers.length >
+      0
+  ) {
+    return meeting.participantUsers;
+  }
+
+  /*
+   * Legacy toplantılar için assigned_to / assignee fallback.
+   * Migration sonrası normal durumda participantUsers dolu gelir.
+   */
+  if (
+    meeting?.assignee
+  ) {
+    return [
+      meeting.assignee,
+    ];
+  }
+
+  return [];
+};
+
+const getParticipantSummary = (
+  participants
+) => {
+  if (
+    !Array.isArray(
+      participants
+    ) ||
+    participants.length ===
+      0
+  ) {
+    return 'Atanmadı';
+  }
+
+  if (
+    participants.length ===
+    1
+  ) {
+    return getPersonName(
+      participants[0],
+      'Atanmadı'
+    );
+  }
+
+  return `${participants.length} kişi`;
+};
+
+// ======================================================
 // CASE NAME HELPER
 // ======================================================
 
@@ -559,6 +617,11 @@ const MeetingDetail = () => {
 
   const MeetingTypeIcon =
     meetingType.icon;
+
+  const internalParticipants =
+    getInternalParticipants(
+      meeting
+    );
 
   // ======================================================
   // LOADING
@@ -943,7 +1006,7 @@ const MeetingDetail = () => {
 
         </div>
 
-        {/* ASSIGNEE */}
+        {/* INTERNAL PARTICIPANTS */}
 
         <div
           className="
@@ -962,22 +1025,38 @@ const MeetingDetail = () => {
 
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
 
-              <UserRound className="h-4 w-4" />
+              <UsersRound className="h-4 w-4" />
 
             </div>
 
-            <div>
+            <div className="min-w-0">
 
               <p className="text-xs text-gray-400">
-                Atanan Avukat
+                Toplantı Katılımcıları
               </p>
 
-              <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-                {getPersonName(
-                  meeting.assignee,
-                  'Atanmadı'
+              <p className="mt-1 truncate text-sm font-medium text-gray-900 dark:text-white">
+                {getParticipantSummary(
+                  internalParticipants
                 )}
               </p>
+
+              {internalParticipants.length >
+                1 && (
+                <p className="mt-1 truncate text-xs text-gray-400 dark:text-slate-500">
+                  {internalParticipants
+                    .map(
+                      (
+                        person
+                      ) =>
+                        getPersonName(
+                          person,
+                          'Kullanıcı'
+                        )
+                    )
+                    .join(', ')}
+                </p>
+              )}
 
             </div>
 
@@ -1302,7 +1381,55 @@ const MeetingDetail = () => {
 
             </div>
 
-            {/* ATTENDEES */}
+            {/* INTERNAL PARTICIPANTS */}
+
+            {internalParticipants.length >
+              0 && (
+              <>
+                <div className="border-t border-gray-100 dark:border-white/[0.05]" />
+
+                <div>
+
+                  <div className="flex items-center gap-2">
+
+                    <UsersRound className="h-4 w-4 text-blue-500 dark:text-blue-400" />
+
+                    <p className="text-xs text-gray-400">
+                      Derkenar Katılımcıları
+                    </p>
+
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+
+                    {internalParticipants.map(
+                      (
+                        person
+                      ) => (
+                        <Badge
+                          key={
+                            person?.id ||
+                            getPersonName(
+                              person
+                            )
+                          }
+                          variant="primary"
+                        >
+                          {getPersonName(
+                            person,
+                            'Kullanıcı'
+                          )}
+                        </Badge>
+                      )
+                    )}
+
+                  </div>
+
+                </div>
+              </>
+            )}
+
+            {/* EXTERNAL ATTENDEES */}
 
             {meeting.attendees &&
               meeting
@@ -1319,7 +1446,7 @@ const MeetingDetail = () => {
                       <UsersRound className="h-4 w-4 text-gray-400" />
 
                       <p className="text-xs text-gray-400">
-                        Katılımcılar
+                        Harici Katılımcılar
                       </p>
 
                     </div>
