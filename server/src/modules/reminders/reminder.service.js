@@ -872,6 +872,107 @@ class ReminderService {
   }
 
   // ====================================================
+  // MEETING PARTICIPANTS
+  // ====================================================
+
+  /**
+   * Toplantının hatırlatma alacak Derkenar kullanıcılarını bulur.
+   *
+   * Öncelik:
+   * 1. meeting.participantUsers yüklenmişse onu kullan.
+   * 2. Değilse belongsToMany getParticipantUsers() ile
+   *    meeting_attendees tablosunu sorgula.
+   * 3. Geçiş dönemi için assigned_to fallback'i.
+   * 4. Hiç katılımcı yoksa created_by fallback'i.
+   */
+  async getMeetingReminderUserIds(
+    meeting,
+    {
+      transaction = null,
+    } = {}
+  ) {
+    if (
+      !meeting?.id
+    ) {
+      return [];
+    }
+
+    let participantIds =
+      [];
+
+    if (
+      Array.isArray(
+        meeting.participantUsers
+      )
+    ) {
+      participantIds =
+        meeting.participantUsers
+          .map(
+            (user) =>
+              user?.id
+          )
+          .filter(
+            Boolean
+          );
+    } else if (
+      typeof meeting.getParticipantUsers ===
+      'function'
+    ) {
+      const participants =
+        await meeting.getParticipantUsers({
+          attributes: [
+            'id',
+          ],
+
+          joinTableAttributes:
+            [],
+
+          transaction,
+        });
+
+      participantIds =
+        participants
+          .map(
+            (user) =>
+              user?.id
+          )
+          .filter(
+            Boolean
+          );
+    }
+
+    participantIds =
+      normalizeUserIds(
+        participantIds
+      );
+
+    if (
+      participantIds.length >
+      0
+    ) {
+      return participantIds;
+    }
+
+    if (
+      meeting.assigned_to
+    ) {
+      return normalizeUserIds([
+        meeting.assigned_to,
+      ]);
+    }
+
+    if (
+      meeting.created_by
+    ) {
+      return normalizeUserIds([
+        meeting.created_by,
+      ]);
+    }
+
+    return [];
+  }
+
+  // ====================================================
   // MEETING REMINDERS
   // ====================================================
 
@@ -907,65 +1008,90 @@ class ReminderService {
       return [];
     }
 
-    /*
-     * Meeting sistemi şu an tek assignee mantığında.
-     * Bu davranışa dokunmuyoruz.
-     */
-    const userId =
-      meeting.assigned_to ||
-      meeting.created_by;
+    const userIds =
+      await this.getMeetingReminderUserIds(
+        meeting,
+        {
+          transaction,
+        }
+      );
 
-    if (!userId) {
+    if (
+      userIds.length ===
+      0
+    ) {
       return [];
     }
 
-    return this.createForSource({
-      userId,
+    const reminders =
+      [];
 
-      createdBy:
-        meeting.created_by,
+    /*
+     * Her toplantı katılımcısı için ayrı reminder oluşturulur.
+     * Deduplication key userId içerdiği için kayıtlar çakışmaz.
+     */
+    for (
+      const userId of
+      userIds
+    ) {
+      const userReminders =
+        await this.createForSource({
+          userId,
 
-      sourceType:
-        'meeting',
+          createdBy:
+            meeting.created_by,
 
-      sourceId:
-        meeting.id,
+          sourceType:
+            'meeting',
 
-      sourceTitle:
-        meeting.title,
+          sourceId:
+            meeting.id,
 
-      targetDate:
-        meeting.start_date,
+          sourceTitle:
+            meeting.title,
 
-      offsetsMinutes,
+          targetDate:
+            meeting.start_date,
 
-      channel,
+          offsetsMinutes,
 
-      metadata: {
-        meetingId:
-          meeting.id,
+          channel,
 
-        meetingType:
-          meeting.meeting_type,
+          metadata: {
+            meetingId:
+              meeting.id,
 
-        location:
-          meeting.location,
+            meetingType:
+              meeting.meeting_type,
 
-        meetingLink:
-          meeting.meeting_link,
+            location:
+              meeting.location,
 
-        caseId:
-          meeting.case_id,
+            meetingLink:
+              meeting.meeting_link,
 
-        clientId:
-          meeting.client_id,
+            caseId:
+              meeting.case_id,
 
-        link:
-          `/meetings/${meeting.id}`,
-      },
+            clientId:
+              meeting.client_id,
 
-      transaction,
-    });
+            participantUserId:
+              userId,
+
+            link:
+              `/meetings/${meeting.id}`,
+          },
+
+          transaction,
+        });
+
+      reminders.push(
+        ...userReminders
+      );
+    }
+
+    return reminders;
   }
 
   // ====================================================

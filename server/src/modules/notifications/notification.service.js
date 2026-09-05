@@ -52,7 +52,6 @@ const findOwnedNotification =
     ) {
       /*
        * Burada özellikle "yetkiniz yok" demiyoruz.
-       *
        * Böylece başka kullanıcıya ait bir notification
        * ID'sinin gerçekten var olup olmadığını sızdırmıyoruz.
        */
@@ -419,6 +418,39 @@ export const notificationService = {
         eventDate,
         eventType:
           'hearing',
+      }
+    );
+  },
+
+  // Toplantıya kullanıcı ekleme / atama bildirimi
+  async notifyMeetingAssigned(
+    userId,
+    meetingId,
+    meetingTitle,
+    assignedBy,
+    meetingDate = null
+  ) {
+    const dateStr =
+      formatDateForIstanbul(
+        meetingDate
+      );
+
+    const dateSuffix =
+      dateStr !== '-'
+        ? ` Toplantı tarihi: ${dateStr}.`
+        : '';
+
+    return this.create(
+      userId,
+      'meeting',
+      'Yeni Toplantı Atandı',
+      `${assignedBy} sizi "${meetingTitle}" toplantısına ekledi.${dateSuffix}`,
+      `/meetings/${meetingId}`,
+      {
+        meetingId,
+        meetingDate,
+        action:
+          'assigned',
       }
     );
   },

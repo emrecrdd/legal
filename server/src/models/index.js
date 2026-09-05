@@ -7,6 +7,7 @@ import { Task } from './Task.js';
 import { TaskAssignee } from './TaskAssignee.js';
 import { Event } from './Event.js';
 import { Meeting } from './Meeting.js';
+import { MeetingAttendee } from './MeetingAttendee.js';
 import { Payment } from './Payment.js';
 import { PaymentPlan } from './PaymentPlan.js';
 import { PaymentInstallment } from './PaymentInstallment.js';
@@ -38,6 +39,7 @@ const initModels = (sequelize) => {
 
   Event.initModel(sequelize);
   Meeting.initModel(sequelize);
+  MeetingAttendee.initModel(sequelize);
 
   PaymentPlan.initModel(sequelize);
   PaymentInstallment.initModel(sequelize);
@@ -259,6 +261,58 @@ MessageAttachment.initModel(sequelize);
   Meeting.belongsTo(User, {
     foreignKey: 'assigned_to',
     as: 'assignee',
+  });
+
+  // ======================================================
+  // MEETING PARTICIPANT ASSOCIATIONS
+  // ======================================================
+
+  /*
+   * Meeting modelinde zaten `attendees` adında JSONB alan bulunduğu için
+   * association alias'ı olarak `attendees` kullanılmıyor.
+   *
+   * - attendees JSONB: harici / serbest katılımcı bilgileri
+   * - participantUsers: Derkenar iç kullanıcı katılımcıları
+   *
+   * Legacy assigned_to ilişkisi geçiş sürecinde korunur.
+   */
+
+  User.belongsToMany(Meeting, {
+    through: MeetingAttendee,
+    foreignKey: 'user_id',
+    otherKey: 'meeting_id',
+    as: 'participatingMeetings',
+  });
+
+  Meeting.belongsToMany(User, {
+    through: MeetingAttendee,
+    foreignKey: 'meeting_id',
+    otherKey: 'user_id',
+    as: 'participantUsers',
+  });
+
+  Meeting.hasMany(MeetingAttendee, {
+    foreignKey: 'meeting_id',
+    as: 'participantRecords',
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE',
+  });
+
+  MeetingAttendee.belongsTo(Meeting, {
+    foreignKey: 'meeting_id',
+    as: 'meeting',
+  });
+
+  User.hasMany(MeetingAttendee, {
+    foreignKey: 'user_id',
+    as: 'meetingParticipantRecords',
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE',
+  });
+
+  MeetingAttendee.belongsTo(User, {
+    foreignKey: 'user_id',
+    as: 'user',
   });
 
   // ======================================================
@@ -1115,6 +1169,7 @@ export {
 
   Event,
   Meeting,
+  MeetingAttendee,
 
   Payment,
   PaymentPlan,

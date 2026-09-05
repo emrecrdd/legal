@@ -24,9 +24,17 @@ import {
 } from '../../config/database.js';
 
 import {
+  logger,
+} from '../../config/logger.js';
+
+import {
   paginate,
   getPaginationData,
 } from '../../utils/paginate.js';
+
+import {
+  notificationService,
+} from '../notifications/notification.service.js';
 
 import {
   reminderService,
@@ -151,6 +159,90 @@ const normalizeSearch = (
       0,
       150
     );
+};
+
+const normalizeUserIds = (
+  values = []
+) => {
+  return [
+    ...new Set(
+      values
+        .flatMap(
+          (value) =>
+            Array.isArray(
+              value
+            )
+              ? value
+              : [
+                  value,
+                ]
+        )
+        .map(
+          (value) =>
+            value
+              ? String(
+                  value
+                ).trim()
+              : null
+        )
+        .filter(
+          Boolean
+        )
+    ),
+  ];
+};
+
+const getRequestedParticipantIds = (
+  data = {}
+) => {
+  if (
+    Object.prototype.hasOwnProperty.call(
+      data,
+      'attendee_ids'
+    )
+  ) {
+    if (
+      !Array.isArray(
+        data.attendee_ids
+      )
+    ) {
+      throw new Error(
+        'Toplantı katılımcıları liste formatında olmalıdır'
+      );
+    }
+
+    return normalizeUserIds(
+      data.attendee_ids
+    );
+  }
+
+  if (
+    data?.assigned_to
+  ) {
+    return normalizeUserIds([
+      data.assigned_to,
+    ]);
+  }
+
+  return [];
+};
+
+const assertAtLeastOneMeetingParticipant = (
+  participantIds
+) => {
+  if (
+    !Array.isArray(
+      participantIds
+    ) ||
+    participantIds.length ===
+      0
+  ) {
+    throw new Error(
+      'Toplantı için en az bir katılımcı seçilmelidir'
+    );
+  }
+
+  return participantIds;
 };
 
 const parseDate = (
@@ -278,16 +370,6 @@ const hasMeetingStartDateChanged = (
   );
 };
 
-const assertMeetingAssigneeRequired = (
-  assignedTo
-) => {
-  if (!assignedTo) {
-    throw new Error(
-      'Toplantı için sorumlu kişi seçilmelidir'
-    );
-  }
-};
-
 const validateStatus = (
   status
 ) => {
@@ -324,10 +406,6 @@ const shouldHaveReminders = (
     Boolean(
       meeting?.start_date
     ) &&
-    Boolean(
-      meeting?.assigned_to ||
-        meeting?.created_by
-    ) &&
     !TERMINAL_STATUSES.has(
       meeting?.status
     )
@@ -353,6 +431,7 @@ const prepareMeetingData = (
   delete prepared.created_at;
   delete prepared.updated_at;
   delete prepared.deleted_at;
+  delete prepared.attendee_ids;
 
   if (
     Object.prototype.hasOwnProperty.call(
@@ -461,6 +540,25 @@ const requireMeetingUserId = (
   return userId;
 };
 
+const buildParticipantMembershipWhere = (
+  userId
+) => {
+  if (!userId) {
+    return {
+      id: null,
+    };
+  }
+
+  return {
+    id: {
+      [Op.in]:
+        sequelize.literal(
+          `(SELECT ma.meeting_id FROM meeting_attendees ma WHERE ma.user_id = ${sequelize.escape(userId)})`
+        ),
+    },
+  };
+};
+
 const buildMeetingAccessWhere = ({
   userId,
   canViewAllMeetings = false,
@@ -484,10 +582,17 @@ const buildMeetingAccessWhere = ({
           userId,
       },
 
+      /*
+       * Legacy kayıtlar / eski client uyumluluğu.
+       */
       {
         assigned_to:
           userId,
       },
+
+      buildParticipantMembershipWhere(
+        userId
+      ),
     ],
   };
 };
@@ -788,6 +893,157 @@ const validateAssignedUser =
     return user;
   };
 
+const validateMeetingParticipants =
+  async (
+    participantIds,
+    transaction = null
+  ) => {
+    const ids =
+      normalizeUserIds(
+        participantIds
+      );
+
+    if (
+      ids.length ===
+      0
+    ) {
+      return [];
+    }
+
+    const users =
+      await User.findAll({
+        where: {
+          id: {
+            [Op.in]:
+              ids,
+          },
+
+          is_active:
+            true,
+        },
+
+        attributes:
+          ASSIGNEE_ATTRIBUTES,
+
+        transaction,
+      });
+
+    if (
+      users.length !==
+      ids.length
+    ) {
+      throw new Error(
+        'Atanan kullanıcılardan biri bulunamadı veya aktif değil'
+      );
+    }
+
+    const byId =
+      new Map(
+        users.map(
+          (user) => [
+            user.id,
+            user,
+          ]
+        )
+      );
+
+    return ids.map(
+      (id) =>
+        byId.get(
+          id
+        )
+    );
+  };
+
+const loadMeetingParticipantUsers =
+  async (
+    meeting,
+    {
+      transaction = null,
+    } = {}
+  ) => {
+    if (!meeting?.id) {
+      return [];
+    }
+
+    if (
+      Array.isArray(
+        meeting.participantUsers
+      )
+    ) {
+      return meeting.participantUsers;
+    }
+
+    if (
+      typeof meeting.getParticipantUsers ===
+      'function'
+    ) {
+      const users =
+        await meeting.getParticipantUsers({
+          attributes:
+            ASSIGNEE_ATTRIBUTES,
+
+          joinTableAttributes:
+            [],
+
+          transaction,
+        });
+
+      meeting.setDataValue?.(
+        'participantUsers',
+        users
+      );
+
+      return users;
+    }
+
+    if (
+      meeting.assigned_to
+    ) {
+      const legacyUser =
+        await validateAssignedUser(
+          meeting.assigned_to,
+          transaction
+        );
+
+      return legacyUser
+        ? [
+            legacyUser,
+          ]
+        : [];
+    }
+
+    return [];
+  };
+
+const sameUserIdSet = (
+  left = [],
+  right = []
+) => {
+  const a =
+    normalizeUserIds(
+      left
+    ).sort();
+
+  const b =
+    normalizeUserIds(
+      right
+    ).sort();
+
+  return (
+    a.length ===
+      b.length &&
+    a.every(
+      (
+        value,
+        index
+      ) =>
+        value ===
+        b[index]
+    )
+  );
+};
+
 const validateMeetingRelations =
   async (
     {
@@ -848,6 +1104,7 @@ const buildIncludes = ({
   includeCase = true,
   includeCreator = true,
   includeAssignee = true,
+  includeParticipants = true,
 } = {}) => {
   const includes = [];
 
@@ -909,6 +1166,29 @@ const buildIncludes = ({
 
       attributes:
         ASSIGNEE_ATTRIBUTES,
+
+      required:
+        false,
+    });
+  }
+
+  if (
+    includeParticipants
+  ) {
+    includes.push({
+      model:
+        User,
+
+      as:
+        'participantUsers',
+
+      attributes:
+        ASSIGNEE_ATTRIBUTES,
+
+      through: {
+        attributes:
+          [],
+      },
 
       required:
         false,
@@ -1049,19 +1329,122 @@ const sanitizeMeetingsForAccess = (
 // ======================================================
 
 const getMeetingCalendarUserIds = (
-  meeting
+  meeting,
+  participants = []
 ) => {
-  return [
-    ...new Set(
-      [
-        meeting?.created_by,
-        meeting?.assigned_to,
-      ].filter(
-        Boolean
+  const participantIds =
+    normalizeUserIds(
+      participants.map(
+        (participant) =>
+          typeof participant ===
+          'string'
+            ? participant
+            : participant?.id
       )
-    ),
-  ];
+    );
+
+  return normalizeUserIds([
+    meeting?.created_by,
+
+    /*
+     * Legacy mirror alanı geçiş sürecinde korunuyor.
+     */
+    meeting?.assigned_to,
+
+    ...participantIds,
+  ]);
 };
+
+const getUserDisplayName = (
+  user
+) => {
+  const name = [
+    user?.first_name,
+    user?.last_name,
+  ]
+    .filter(
+      Boolean
+    )
+    .join(' ')
+    .trim();
+
+  return name ||
+    'Sistem';
+};
+
+const notifySafely =
+  async (
+    operation,
+    callback,
+    metadata = {}
+  ) => {
+    try {
+      await callback();
+    } catch (error) {
+      logger.error(
+        `Meeting notification failed: ${operation}`,
+        {
+          ...metadata,
+
+          message:
+            error.message,
+        }
+      );
+    }
+  };
+
+const notifyMeetingParticipants =
+  async (
+    meeting,
+    participants = []
+  ) => {
+    if (
+      !meeting?.id ||
+      participants.length ===
+        0
+    ) {
+      return;
+    }
+
+    const creator =
+      await User.findByPk(
+        meeting.created_by,
+        {
+          attributes:
+            USER_SUMMARY_ATTRIBUTES,
+        }
+      );
+
+    const creatorName =
+      getUserDisplayName(
+        creator
+      );
+
+    for (
+      const participant of
+      participants
+    ) {
+      /*
+       * Kendi oluşturduğu toplantıya kendisini ekleyen kullanıcıya
+       * gereksiz "size toplantı atandı" bildirimi göndermiyoruz.
+       */
+      if (
+        participant.id ===
+        meeting.created_by
+      ) {
+        continue;
+      }
+
+      await notificationService
+        .notifyMeetingAssigned(
+          participant.id,
+          meeting.id,
+          meeting.title,
+          creatorName,
+          meeting.start_date
+        );
+    }
+  };
 
 const buildMeetingGoogleDescription = (
   meeting
@@ -1269,6 +1652,13 @@ export const meetingService = {
         access
       );
 
+    const participantIds =
+      assertAtLeastOneMeetingParticipant(
+        getRequestedParticipantIds(
+          data || {}
+        )
+      );
+
     const {
       id,
       created_by,
@@ -1276,6 +1666,7 @@ export const meetingService = {
       updated_at,
       deleted_at,
       status,
+      attendee_ids,
       ...inputData
     } = data || {};
 
@@ -1290,6 +1681,14 @@ export const meetingService = {
     preparedData.status =
       'scheduled';
 
+    /*
+     * assigned_to artık source-of-truth değildir.
+     * Eski client / query uyumluluğu için ilk katılımcıyı
+     * legacy mirror alanında tutuyoruz.
+     */
+    preparedData.assigned_to =
+      participantIds[0];
+
     validateMeetingDates({
       startDate:
         preparedData.start_date,
@@ -1301,16 +1700,19 @@ export const meetingService = {
         true,
     });
 
-    assertMeetingAssigneeRequired(
-      preparedData.assigned_to
-    );
-
     const transaction =
       await sequelize.transaction();
 
     let meeting;
+    let participants = [];
 
     try {
+      participants =
+        await validateMeetingParticipants(
+          participantIds,
+          transaction
+        );
+
       await validateMeetingRelations(
         {
           caseId:
@@ -1339,6 +1741,18 @@ export const meetingService = {
           }
         );
 
+      await meeting.setParticipantUsers(
+        participants,
+        {
+          transaction,
+        }
+      );
+
+      meeting.setDataValue(
+        'participantUsers',
+        participants
+      );
+
       if (
         shouldHaveReminders(
           meeting
@@ -1360,10 +1774,33 @@ export const meetingService = {
       throw error;
     }
 
+    await notifySafely(
+      'meeting-assigned-on-create',
+      () =>
+        notifyMeetingParticipants(
+          meeting,
+          participants
+        ),
+      {
+        meetingId:
+          meeting.id,
+
+        participantIds:
+          participants.map(
+            (user) =>
+              user.id
+          ),
+
+        createdBy:
+          meeting.created_by,
+      }
+    );
+
     await syncMeetingToGoogleForUsersSafely(
       meeting,
       getMeetingCalendarUserIds(
-        meeting
+        meeting,
+        participants
       )
     );
 
@@ -1477,8 +1914,21 @@ export const meetingService = {
         );
       }
 
-      filters.assigned_to =
-        assigned_to;
+      filters[Op.and] = [
+        ...(filters[Op.and] || []),
+
+        {
+          [Op.or]: [
+            {
+              assigned_to,
+            },
+
+            buildParticipantMembershipWhere(
+              assigned_to
+            ),
+          ],
+        },
+      ];
     }
 
     if (
@@ -1648,8 +2098,11 @@ export const meetingService = {
       await sequelize.transaction();
 
     let meeting;
+    let previousParticipants = [];
+    let currentParticipants = [];
     let previousCalendarUserIds = [];
     let currentCalendarUserIds = [];
+    let newlyAddedParticipants = [];
 
     try {
       meeting =
@@ -1675,9 +2128,70 @@ export const meetingService = {
         );
       }
 
+      previousParticipants =
+        await loadMeetingParticipantUsers(
+          meeting,
+          {
+            transaction,
+          }
+        );
+
+      const previousParticipantIds =
+        normalizeUserIds(
+          previousParticipants.map(
+            (user) =>
+              user.id
+          )
+        );
+
       previousCalendarUserIds =
         getMeetingCalendarUserIds(
-          meeting
+          meeting,
+          previousParticipants
+        );
+
+      const participantUpdateRequested =
+        Object.prototype.hasOwnProperty.call(
+          data || {},
+          'attendee_ids'
+        ) ||
+        Object.prototype.hasOwnProperty.call(
+          data || {},
+          'assigned_to'
+        );
+
+      if (
+        participantUpdateRequested
+      ) {
+        const requestedParticipantIds =
+          assertAtLeastOneMeetingParticipant(
+            getRequestedParticipantIds(
+              data || {}
+            )
+          );
+
+        currentParticipants =
+          await validateMeetingParticipants(
+            requestedParticipantIds,
+            transaction
+          );
+      } else {
+        currentParticipants =
+          previousParticipants;
+      }
+
+      const currentParticipantIds =
+        normalizeUserIds(
+          currentParticipants.map(
+            (user) =>
+              user.id
+          )
+        );
+
+      const participantsChanged =
+        !sameUserIdSet(
+          previousParticipantIds,
+          currentParticipantIds
         );
 
       const preparedData =
@@ -1692,6 +2206,13 @@ export const meetingService = {
        * üzerinden değiştirilir.
        */
       delete preparedData.status;
+
+      if (
+        participantUpdateRequested
+      ) {
+        preparedData.assigned_to =
+          currentParticipantIds[0];
+      }
 
       const startDateChanged =
         hasMeetingStartDateChanged(
@@ -1710,26 +2231,9 @@ export const meetingService = {
             ? preparedData.end_date
             : meeting.end_date,
 
-        /*
-         * Zaten geçmişte kalmış eski bir toplantının başlık/not
-         * gibi başka alanlarını düzenlemeyi engellemiyoruz.
-         * Sadece başlangıç tarihi gerçekten değiştiriliyorsa
-         * geçmişe çekilmesine izin vermiyoruz.
-         */
         rejectPastStart:
           startDateChanged,
       });
-
-      if (
-        Object.prototype.hasOwnProperty.call(
-          preparedData,
-          'assigned_to'
-        )
-      ) {
-        assertMeetingAssigneeRequired(
-          preparedData.assigned_to
-        );
-      }
 
       const effectiveCaseId =
         preparedData.case_id !==
@@ -1748,11 +2252,10 @@ export const meetingService = {
             null;
 
       const effectiveAssignedTo =
-        preparedData.assigned_to !==
-        undefined
-          ? preparedData.assigned_to ||
-            null
+        participantUpdateRequested
+          ? currentParticipantIds[0]
           : meeting.assigned_to ||
+            currentParticipantIds[0] ||
             null;
 
       await validateMeetingRelations(
@@ -1787,9 +2290,6 @@ export const meetingService = {
               ).getTime()
             : null,
 
-        assignedTo:
-          meeting.assigned_to,
-
         status:
           meeting.status,
 
@@ -1802,6 +2302,22 @@ export const meetingService = {
         {
           transaction,
         }
+      );
+
+      if (
+        participantUpdateRequested
+      ) {
+        await meeting.setParticipantUsers(
+          currentParticipants,
+          {
+            transaction,
+          }
+        );
+      }
+
+      meeting.setDataValue(
+        'participantUsers',
+        currentParticipants
       );
 
       const currentValues = {
@@ -1819,9 +2335,6 @@ export const meetingService = {
               ).getTime()
             : null,
 
-        assignedTo:
-          meeting.assigned_to,
-
         status:
           meeting.status,
 
@@ -1834,12 +2347,11 @@ export const meetingService = {
           currentValues.startDate ||
         previousValues.endDate !==
           currentValues.endDate ||
-        previousValues.assignedTo !==
-          currentValues.assignedTo ||
         previousValues.status !==
           currentValues.status ||
         previousValues.title !==
-          currentValues.title;
+          currentValues.title ||
+        participantsChanged;
 
       if (
         TERMINAL_STATUSES.has(
@@ -1884,9 +2396,18 @@ export const meetingService = {
           });
       }
 
+      newlyAddedParticipants =
+        currentParticipants.filter(
+          (user) =>
+            !previousParticipantIds.includes(
+              user.id
+            )
+        );
+
       currentCalendarUserIds =
         getMeetingCalendarUserIds(
-          meeting
+          meeting,
+          currentParticipants
         );
 
       await transaction.commit();
@@ -1894,6 +2415,30 @@ export const meetingService = {
       await transaction.rollback();
 
       throw error;
+    }
+
+    if (
+      newlyAddedParticipants.length >
+      0
+    ) {
+      await notifySafely(
+        'meeting-assigned-on-update',
+        () =>
+          notifyMeetingParticipants(
+            meeting,
+            newlyAddedParticipants
+          ),
+        {
+          meetingId:
+            meeting.id,
+
+          participantIds:
+            newlyAddedParticipants.map(
+              (user) =>
+                user.id
+            ),
+        }
+      );
     }
 
     const removedCalendarUserIds =
@@ -1964,9 +2509,18 @@ export const meetingService = {
         );
       }
 
+      const participants =
+        await loadMeetingParticipantUsers(
+          meeting,
+          {
+            transaction,
+          }
+        );
+
       calendarUserIds =
         getMeetingCalendarUserIds(
-          meeting
+          meeting,
+          participants
         );
 
       await reminderService
@@ -2046,6 +2600,10 @@ export const meetingService = {
           assigned_to:
             userId,
         },
+
+        buildParticipantMembershipWhere(
+          userId
+        ),
       ],
     };
 
@@ -2478,6 +3036,10 @@ export const meetingService = {
               assigned_to:
                 userId,
             },
+
+            buildParticipantMembershipWhere(
+              userId
+            ),
           ],
 
           start_date: {
@@ -2582,9 +3144,18 @@ export const meetingService = {
         meeting.status ===
         status
       ) {
+        const participants =
+          await loadMeetingParticipantUsers(
+            meeting,
+            {
+              transaction,
+            }
+          );
+
         calendarUserIds =
           getMeetingCalendarUserIds(
-            meeting
+            meeting,
+            participants
           );
 
         await transaction.commit();
@@ -2649,9 +3220,18 @@ export const meetingService = {
           });
       }
 
+      const participants =
+        await loadMeetingParticipantUsers(
+          meeting,
+          {
+            transaction,
+          }
+        );
+
       calendarUserIds =
         getMeetingCalendarUserIds(
-          meeting
+          meeting,
+          participants
         );
 
       await transaction.commit();
