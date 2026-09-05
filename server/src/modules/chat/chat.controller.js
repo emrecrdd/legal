@@ -94,7 +94,34 @@ export const chatController = {
       return next(error);
     }
   },
+// ====================================================
+// DELETE / HIDE CONVERSATION
+// ====================================================
 
+async deleteConversation(
+  req,
+  res,
+  next
+) {
+  try {
+    const data =
+      await chatService.deleteConversation(
+        req.params.conversationId,
+        req.user
+      );
+
+    return res
+      .status(200)
+      .json({
+        success:
+          true,
+
+        data,
+      });
+  } catch (error) {
+    return next(error);
+  }
+},
   // ====================================================
   // DIRECT
   // ====================================================

@@ -55,7 +55,18 @@ const chatApi = {
       response
     );
   },
+async deleteConversation(
+  conversationId
+) {
+  const response =
+    await api.delete(
+      `${CHAT_BASE}/conversations/${conversationId}`
+    );
 
+  return unwrapBody(
+    response
+  );
+},
   async getMessages(
     conversationId,
     {

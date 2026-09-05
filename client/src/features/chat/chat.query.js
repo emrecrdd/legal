@@ -286,7 +286,51 @@ export const useEditChatMessage =
         },
     });
   };
+export const useDeleteChatConversation =
+  () => {
+    const queryClient =
+      useQueryClient();
 
+    return useMutation({
+      mutationFn:
+        (
+          conversationId
+        ) =>
+          chatApi.deleteConversation(
+            conversationId
+          ),
+
+      onSuccess:
+        (
+          result,
+          conversationId
+        ) => {
+          queryClient.removeQueries({
+            queryKey:
+              chatKeys.messages(
+                conversationId
+              ),
+          });
+
+          queryClient.invalidateQueries({
+            queryKey:
+              chatKeys.conversations,
+          });
+        },
+
+      onError:
+        (
+          error
+        ) => {
+          toast.error(
+            getErrorMessage(
+              error,
+              'Sohbet silinemedi'
+            )
+          );
+        },
+    });
+  };
 export const useDeleteChatMessage =
   () => {
     const queryClient =

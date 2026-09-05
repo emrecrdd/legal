@@ -1122,19 +1122,23 @@ export const chatService = {
       actor
     );
 
-    const memberships =
-      await ConversationMember.findAll({
-        where: {
-          user_id:
-            actor.id,
-        },
+   const memberships =
+  await ConversationMember.findAll({
+    where: {
+      user_id:
+        actor.id,
 
-        attributes: [
-          'id',
-          'conversation_id',
-          'last_read_message_id',
-        ],
-      });
+      hidden_at:
+        null,
+    },
+
+    attributes: [
+      'id',
+      'conversation_id',
+      'last_read_message_id',
+      'hidden_at',
+    ],
+  });
 
     if (
       memberships.length ===
@@ -1264,7 +1268,67 @@ export const chatService = {
 
     return result;
   },
+// ====================================================
+// HIDE DIRECT CONVERSATION
+// ====================================================
 
+async deleteConversation(
+  conversationId,
+  actor
+) {
+  const sequelize =
+    Conversation.sequelize;
+
+  return sequelize.transaction(
+    async (
+      transaction
+    ) => {
+      const {
+        conversation,
+        membership,
+      } =
+        await assertConversationAccess(
+          conversationId,
+          actor,
+          {
+            transaction,
+          }
+        );
+
+      if (
+        conversation.type !==
+        'direct'
+      ) {
+        throw createChatError(
+          'Ofis Genel sohbeti silinemez.',
+          400,
+          'CHAT_OFFICE_DELETE_NOT_ALLOWED'
+        );
+      }
+
+      const hiddenAt =
+        new Date();
+
+      await membership.update(
+        {
+          hidden_at:
+            hiddenAt,
+        },
+        {
+          transaction,
+        }
+      );
+
+      return {
+        conversation_id:
+          conversation.id,
+
+        hidden_at:
+          hiddenAt,
+      };
+    }
+  );
+},
   // ====================================================
   // DIRECT CONVERSATION
   // ====================================================
@@ -1396,7 +1460,23 @@ export const chatService = {
             transaction,
           }
         );
+await ConversationMember.update(
+  {
+    hidden_at:
+      null,
+  },
+  {
+    where: {
+      conversation_id:
+        conversation.id,
 
+      user_id:
+        actor.id,
+    },
+
+    transaction,
+  }
+);
         const membership =
           await ConversationMember.findOne({
             where: {
@@ -1588,7 +1668,25 @@ export const chatService = {
               transaction,
             }
           );
+if (
+  conversation.type ===
+  'direct'
+) {
+  await ConversationMember.update(
+    {
+      hidden_at:
+        null,
+    },
+    {
+      where: {
+        conversation_id:
+          conversation.id,
+      },
 
+      transaction,
+    }
+  );
+}
         /*
          * Kullanıcının kendi gönderdiği mesaj,
          * bu conversation için okunmuş kabul edilir.

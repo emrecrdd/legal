@@ -29,6 +29,11 @@ class ConversationMember extends Sequelize.Model {
           allowNull: false,
           defaultValue: DataTypes.NOW,
         },
+        hidden_at: {
+  type: DataTypes.DATE,
+  allowNull: true,
+  defaultValue: null,
+},
       },
       {
         sequelize,

@@ -48,7 +48,10 @@ router.get(
   '/conversations',
   chatController.getConversations
 );
-
+router.delete(
+  '/conversations/:conversationId',
+  chatController.deleteConversation
+);
 router.post(
   '/direct/:userId',
   chatController.openDirectConversation

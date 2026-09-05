@@ -26,6 +26,7 @@ import {
   useChatConversations,
   useChatMessages,
   useChatUsers,
+  useDeleteChatConversation,
   useDeleteChatMessage,
   useEditChatMessage,
   useMarkChatRead,
@@ -222,6 +223,9 @@ const ChatPage = () => {
 
   const deleteMessage =
     useDeleteChatMessage();
+
+  const deleteConversation =
+    useDeleteChatConversation();
 
   const markRead =
     useMarkChatRead();
@@ -436,6 +440,55 @@ const ChatPage = () => {
       setMobileConversationOpen(
         true
       );
+    };
+
+  const handleDeleteConversation =
+    async (
+      conversation
+    ) => {
+      if (
+        !conversation?.id ||
+        conversation.type !==
+          'direct'
+      ) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          `${conversation.display_name || 'Bu sohbet'} ile olan sohbeti silmek istediğinize emin misiniz?`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        await deleteConversation.mutateAsync(
+          conversation.id
+        );
+
+        if (
+          selectedConversationId ===
+          conversation.id
+        ) {
+          setSelectedConversationId(
+            null
+          );
+
+          setMobileConversationOpen(
+            false
+          );
+        }
+
+        toast.success(
+          'Sohbet silindi'
+        );
+      } catch {
+        /*
+         * Mutation hook hata toast'ını gösterir.
+         */
+      }
     };
 
   const handleOpenDirect =
@@ -725,6 +778,14 @@ const ChatPage = () => {
               }
               onSelect={
                 handleSelectConversation
+              }
+              onDelete={
+                handleDeleteConversation
+              }
+              deletingId={
+                deleteConversation.isPending
+                  ? deleteConversation.variables
+                  : null
               }
               onNewDirect={() =>
                 setDirectModalOpen(

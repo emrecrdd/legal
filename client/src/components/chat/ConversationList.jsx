@@ -1,6 +1,7 @@
 import {
   MessageCirclePlus,
   Search,
+  Trash2,
   Users,
 } from 'lucide-react';
 
@@ -105,6 +106,8 @@ const ConversationList = ({
   conversations,
   selectedId,
   onSelect,
+  onDelete,
+  deletingId,
   onNewDirect,
   searchValue,
   onSearchChange,
@@ -230,21 +233,18 @@ const ConversationList = ({
                     0
                   );
 
+                const deleting =
+                  deletingId ===
+                  conversation.id;
+
                 return (
-                  <button
+                  <div
                     key={
                       conversation.id
                     }
-                    type="button"
-                    onClick={() =>
-                      onSelect(
-                        conversation
-                      )
-                    }
                     className={`
-                      flex w-full items-center gap-3
-                      rounded-xl px-3 py-3
-                      text-left transition
+                      group flex w-full items-center
+                      rounded-xl transition
                       ${
                         selected
                           ? 'bg-[#eef3f9] shadow-sm ring-1 ring-[#d9e4f1] dark:bg-blue-500/[0.08] dark:ring-blue-500/15'
@@ -252,84 +252,145 @@ const ConversationList = ({
                       }
                     `}
                   >
-                    <div
-                      className={`
-                        flex h-10 w-10 shrink-0
-                        items-center justify-center
-                        rounded-xl text-xs font-bold
-                        ${
-                          conversation.type ===
-                          'office'
-                            ? 'border border-amber-200/70 bg-[#fbf4df] text-[#8a6518] dark:border-amber-400/10 dark:bg-amber-400/[0.08] dark:text-amber-300'
-                            : 'border border-slate-200 bg-white text-[#17345d] dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300'
-                        }
-                      `}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onSelect(
+                          conversation
+                        )
+                      }
+                      className="
+                        flex min-w-0 flex-1
+                        items-center gap-3
+                        rounded-xl px-3 py-3
+                        text-left
+                        focus:outline-none
+                        focus-visible:ring-2
+                        focus-visible:ring-blue-300
+                        dark:focus-visible:ring-blue-500/40
+                      "
                     >
-                      {getInitials(
-                        conversation
-                      )}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p
-                          className={`
-                            min-w-0 flex-1 truncate
-                            text-sm text-gray-900
-                            dark:text-white
-                            ${
-                              unread >
-                              0
-                                ? 'font-bold'
-                                : 'font-semibold'
-                            }
-                          `}
-                        >
-                          {
-                            conversation
-                              .display_name
+                      <div
+                        className={`
+                          flex h-10 w-10 shrink-0
+                          items-center justify-center
+                          rounded-xl text-xs font-bold
+                          ${
+                            conversation.type ===
+                            'office'
+                              ? 'border border-amber-200/70 bg-[#fbf4df] text-[#8a6518] dark:border-amber-400/10 dark:bg-amber-400/[0.08] dark:text-amber-300'
+                              : 'border border-slate-200 bg-white text-[#17345d] dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300'
                           }
-                        </p>
-
-                        <span className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-slate-600">
-                          {formatTime(
-                            conversation
-                              ?.last_message
-                              ?.created_at
-                          )}
-                        </span>
-                      </div>
-
-                      <div className="mt-1 flex items-center gap-2">
-                        <p
-                          className={`
-                            min-w-0 flex-1 truncate
-                            text-xs
-                            ${
-                              unread >
-                              0
-                                ? 'font-semibold text-gray-700 dark:text-slate-300'
-                                : 'text-gray-400 dark:text-slate-500'
-                            }
-                          `}
-                        >
-                          {getLastMessageText(
-                            conversation
-                          )}
-                        </p>
-
-                        {unread >
-                          0 && (
-                          <span className="flex min-h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[9px] font-bold text-white">
-                            {unread >
-                            99
-                              ? '99+'
-                              : unread}
-                          </span>
+                        `}
+                      >
+                        {getInitials(
+                          conversation
                         )}
                       </div>
-                    </div>
-                  </button>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p
+                            className={`
+                              min-w-0 flex-1 truncate
+                              text-sm text-gray-900
+                              dark:text-white
+                              ${
+                                unread >
+                                0
+                                  ? 'font-bold'
+                                  : 'font-semibold'
+                              }
+                            `}
+                          >
+                            {
+                              conversation
+                                .display_name
+                            }
+                          </p>
+
+                          <span className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-slate-600">
+                            {formatTime(
+                              conversation
+                                ?.last_message
+                                ?.created_at
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="mt-1 flex items-center gap-2">
+                          <p
+                            className={`
+                              min-w-0 flex-1 truncate
+                              text-xs
+                              ${
+                                unread >
+                                0
+                                  ? 'font-semibold text-gray-700 dark:text-slate-300'
+                                  : 'text-gray-400 dark:text-slate-500'
+                              }
+                            `}
+                          >
+                            {getLastMessageText(
+                              conversation
+                            )}
+                          </p>
+
+                          {unread >
+                            0 && (
+                            <span className="flex min-h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[9px] font-bold text-white">
+                              {unread >
+                              99
+                                ? '99+'
+                                : unread}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+
+                    {conversation.type ===
+                      'direct' && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onDelete(
+                            conversation
+                          )
+                        }
+                        disabled={
+                          deleting
+                        }
+                        className="
+                          mr-2 inline-flex h-8 w-8
+                          shrink-0 items-center
+                          justify-center rounded-lg
+                          text-slate-400
+                          opacity-100 transition
+                          hover:bg-red-50
+                          hover:text-red-600
+                          focus:outline-none
+                          focus-visible:ring-2
+                          focus-visible:ring-red-300
+                          disabled:cursor-not-allowed
+                          disabled:opacity-50
+                          dark:text-slate-500
+                          dark:hover:bg-red-500/10
+                          dark:hover:text-red-400
+                          dark:focus-visible:ring-red-500/30
+                          md:opacity-0
+                          md:group-hover:opacity-100
+                          md:focus:opacity-100
+                        "
+                        aria-label={`${conversation.display_name || 'Sohbet'} sohbetini sil`}
+                        title="Sohbeti sil"
+                      >
+                        <Trash2
+                          size={15}
+                        />
+                      </button>
+                    )}
+                  </div>
                 );
               }
             )}
