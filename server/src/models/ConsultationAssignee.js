@@ -52,6 +52,18 @@ class ConsultationAssignee extends Sequelize.Model {
           'consultation_assignees',
         timestamps:
           true,
+
+        /*
+         * consultation_assignees bir junction/assignment tablosudur.
+         * Migration yalnız created_at + updated_at oluşturur;
+         * deleted_at kolonu yoktur.
+         *
+         * Sequelize global config'te paranoid açık olsa bile
+         * bu model soft-delete kullanmamalıdır.
+         */
+        paranoid:
+          false,
+
         indexes: [
           {
             name:
