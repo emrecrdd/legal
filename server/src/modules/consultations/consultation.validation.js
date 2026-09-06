@@ -1206,6 +1206,19 @@ export const validateConsultationStatus = (
 // LIST QUERY
 // ======================================================
 
+const hasOptionalQueryValue = (
+  value
+) => {
+  return (
+    value !==
+      undefined &&
+    value !==
+      null &&
+    value !==
+      ''
+  );
+};
+
 export const validateConsultationListQuery = (
   req,
   res,
@@ -1302,8 +1315,9 @@ export const validateConsultationListQuery = (
   }
 
   if (
-    query.status !==
-      undefined &&
+    hasOptionalQueryValue(
+      query.status
+    ) &&
     !validateEnum(
       query.status,
       Object.values(
@@ -1319,8 +1333,9 @@ export const validateConsultationListQuery = (
   }
 
   if (
-    query.client_id !==
-      undefined &&
+    hasOptionalQueryValue(
+      query.client_id
+    ) &&
     !isValidUuid(
       query.client_id
     )
@@ -1333,8 +1348,9 @@ export const validateConsultationListQuery = (
   }
 
   if (
-    query.assigned_to !==
-      undefined &&
+    hasOptionalQueryValue(
+      query.assigned_to
+    ) &&
     !isValidUuid(
       query.assigned_to
     )
@@ -1347,8 +1363,9 @@ export const validateConsultationListQuery = (
   }
 
   if (
-    query.type !==
-      undefined &&
+    hasOptionalQueryValue(
+      query.type
+    ) &&
     !validateEnum(
       query.type,
       Object.values(
@@ -1364,8 +1381,9 @@ export const validateConsultationListQuery = (
   }
 
   if (
-    query.service_model !==
-      undefined &&
+    hasOptionalQueryValue(
+      query.service_model
+    ) &&
     !validateEnum(
       query.service_model,
       Object.values(
@@ -1381,8 +1399,9 @@ export const validateConsultationListQuery = (
   }
 
   if (
-    query.priority !==
-      undefined &&
+    hasOptionalQueryValue(
+      query.priority
+    ) &&
     !validateEnum(
       query.priority,
       Object.values(

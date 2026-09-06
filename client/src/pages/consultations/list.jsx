@@ -624,6 +624,79 @@ const ConsultationsList = () => {
   // QUERY
   // ====================================================
 
+  /*
+   * Boş opsiyonel filtreleri query string'e göndermiyoruz.
+   *
+   * Backend enum / UUID filtrelerini yalnızca gerçekten
+   * değer gönderildiğinde doğrulamalı. Axios'a status: ''
+   * veya assigned_to: '' vermek "?status=&assigned_to="
+   * üretip liste endpoint'ini gereksiz yere 400'e düşürüyordu.
+   */
+  const consultationQueryParams =
+    useMemo(
+      () => ({
+        page,
+
+        limit:
+          PAGE_LIMIT,
+
+        ...(
+          debouncedSearch
+            ?.trim()
+          ? {
+              search:
+                debouncedSearch.trim(),
+            }
+          : {}
+        ),
+
+        ...(
+          statusFilter
+          ? {
+              status:
+                statusFilter,
+            }
+          : {}
+        ),
+
+        ...(
+          legalAreaFilter
+            ?.trim()
+          ? {
+              legal_area:
+                legalAreaFilter.trim(),
+            }
+          : {}
+        ),
+
+        ...(
+          assigneeFilter
+          ? {
+              assigned_to:
+                assigneeFilter,
+            }
+          : {}
+        ),
+
+        ...(
+          typeFilter
+          ? {
+              type:
+                typeFilter,
+            }
+          : {}
+        ),
+      }),
+      [
+        page,
+        debouncedSearch,
+        statusFilter,
+        legalAreaFilter,
+        assigneeFilter,
+        typeFilter,
+      ]
+    );
+
   const {
     data,
     isLoading,
@@ -634,51 +707,13 @@ const ConsultationsList = () => {
     useQuery({
       queryKey: [
         'consultations',
-        {
-          page,
-
-          limit:
-            PAGE_LIMIT,
-
-          search:
-            debouncedSearch,
-
-          status:
-            statusFilter,
-
-          legal_area:
-            legalAreaFilter,
-
-          assigned_to:
-            assigneeFilter,
-
-          type:
-            typeFilter,
-        },
+        consultationQueryParams,
       ],
 
       queryFn: () =>
-        consultationApi.getAll({
-          page,
-
-          limit:
-            PAGE_LIMIT,
-
-          search:
-            debouncedSearch,
-
-          status:
-            statusFilter,
-
-          legal_area:
-            legalAreaFilter,
-
-          assigned_to:
-            assigneeFilter,
-
-          type:
-            typeFilter,
-        }),
+        consultationApi.getAll(
+          consultationQueryParams
+        ),
 
       staleTime:
         1000,
