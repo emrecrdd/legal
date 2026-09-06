@@ -341,6 +341,119 @@ const validateDate = (
   );
 };
 
+const getIstanbulDateOnly = (
+  date = new Date()
+) => {
+  const parts =
+    new Intl.DateTimeFormat(
+      'en-CA',
+      {
+        timeZone:
+          'Europe/Istanbul',
+        year:
+          'numeric',
+        month:
+          '2-digit',
+        day:
+          '2-digit',
+      }
+    ).formatToParts(
+      date
+    );
+
+  const getPart = (
+    type
+  ) =>
+    parts.find(
+      (
+        part
+      ) =>
+        part.type ===
+        type
+    )?.value;
+
+  return `${getPart(
+    'year'
+  )}-${getPart(
+    'month'
+  )}-${getPart(
+    'day'
+  )}`;
+};
+
+const validateCaseOpeningDate = (
+  value
+) => {
+  if (
+    value ===
+      undefined ||
+    value ===
+      null ||
+    value ===
+      ''
+  ) {
+    return null;
+  }
+
+  const normalized =
+    String(
+      value
+    ).trim();
+
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+      normalized
+    );
+
+  if (!match) {
+    return 'Geçersiz dava açılış tarihi';
+  }
+
+  const year =
+    Number(
+      match[1]
+    );
+
+  const month =
+    Number(
+      match[2]
+    );
+
+  const day =
+    Number(
+      match[3]
+    );
+
+  const parsed =
+    new Date(
+      Date.UTC(
+        year,
+        month - 1,
+        day
+      )
+    );
+
+  if (
+    parsed.getUTCFullYear() !==
+      year ||
+    parsed.getUTCMonth() !==
+      month - 1 ||
+    parsed.getUTCDate() !==
+      day
+  ) {
+    return 'Geçersiz dava açılış tarihi';
+  }
+
+  if (
+    normalized >
+    getIstanbulDateOnly()
+  ) {
+    return 'Dava açılış tarihi bugünden ileri bir tarih olamaz';
+  }
+
+  return null;
+};
+
 const ALLOWED_CREATE_FIELDS =
   new Set([
     'title',
@@ -1733,58 +1846,19 @@ export const validateConvertConsultationToCase = (
     );
   }
 
+  const openingDateError =
+    validateCaseOpeningDate(
+      body.opening_date
+    );
+
   if (
-    body.opening_date !==
-      undefined &&
-    body.opening_date !==
-      null &&
-    body.opening_date !==
-      ''
+    openingDateError
   ) {
-    if (
-      !validateDate(
-        body.opening_date
-      )
-    ) {
-      return fail(
-        res,
-        'Geçersiz dava açılış tarihi',
-        'opening_date'
-      );
-    }
-
-    const openingDate =
-      new Date(
-        body.opening_date
-      );
-
-    const today =
-      new Date();
-
-    openingDate.setHours(
-      0,
-      0,
-      0,
-      0
+    return fail(
+      res,
+      openingDateError,
+      'opening_date'
     );
-
-    today.setHours(
-      0,
-      0,
-      0,
-      0
-    );
-
-    if (
-      openingDate >
-      today
-    ) {
-      return fail(
-        res,
-        'Dava açılış tarihi bugünden ileri bir tarih olamaz',
-        'opening_date'
-      );
-    }
   }
 
   return next();
