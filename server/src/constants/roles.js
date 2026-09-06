@@ -507,12 +507,204 @@ export const hasRoleLevel = (
 };
 
 // ======================================================
-// BACKWARD COMPATIBILITY
-// Eski importlar bir anda kırılmasın.
+// BACKEND ROLE PERMISSIONS ALIAS
+//
+// auth.middleware.js PERMISSIONS[user.role] şeklinde
+// rol izin dizisini okur. Bu nedenle backend tarafında
+// PERMISSIONS, PERMISSION_KEYS değil ROLE_PERMISSIONS olmalıdır.
 // ======================================================
 
 export const PERMISSIONS =
-  PERMISSION_KEYS;
+  ROLE_PERMISSIONS;
+
+// ======================================================
+// PERMISSION PRESETS
+// ======================================================
+
+export const PERMISSION_PRESETS = {
+  STANDARD_LAWYER: {
+    label:
+      'Standart Avukat',
+
+    role:
+      ROLES.LAWYER,
+
+    overrides:
+      {},
+  },
+
+  SENIOR_LAWYER: {
+    label:
+      'Kıdemli Avukat',
+
+    role:
+      ROLES.LAWYER,
+
+    overrides: {
+      [PERMISSION_KEYS.DELETE_DOCUMENTS]:
+        true,
+
+      [PERMISSION_KEYS.DELETE_TASKS]:
+        true,
+
+      [PERMISSION_KEYS.ASSIGN_TASKS]:
+        true,
+
+      [PERMISSION_KEYS.VIEW_ALL_TASKS]:
+        true,
+
+      [PERMISSION_KEYS.VIEW_FINANCE_REPORTS]:
+        true,
+    },
+  },
+
+  MANAGING_LAWYER: {
+    label:
+      'Yönetici Avukat',
+
+    role:
+      ROLES.LAWYER,
+
+    overrides: {
+      [PERMISSION_KEYS.VIEW_ALL_CASES]:
+        true,
+
+      [PERMISSION_KEYS.VIEW_ALL_CONSULTATIONS]:
+        true,
+
+      [PERMISSION_KEYS.DELETE_CONSULTATIONS]:
+        true,
+
+      [PERMISSION_KEYS.DELETE_CLIENTS]:
+        true,
+
+      [PERMISSION_KEYS.DELETE_CASES]:
+        true,
+
+      [PERMISSION_KEYS.DELETE_DOCUMENTS]:
+        true,
+
+      [PERMISSION_KEYS.DELETE_TASKS]:
+        true,
+
+      [PERMISSION_KEYS.ASSIGN_TASKS]:
+        true,
+
+      [PERMISSION_KEYS.APPROVE_TASKS]:
+        true,
+
+      [PERMISSION_KEYS.VIEW_ALL_TASKS]:
+        true,
+
+      [PERMISSION_KEYS.VIEW_TEAM_PERFORMANCE]:
+        true,
+
+      [PERMISSION_KEYS.DELETE_MEETINGS]:
+        true,
+
+      [PERMISSION_KEYS.VIEW_FINANCE_REPORTS]:
+        true,
+
+      [PERMISSION_KEYS.EDIT_PAYMENTS]:
+        true,
+
+      [PERMISSION_KEYS.VIEW_AUDIT_LOGS]:
+        true,
+    },
+  },
+};
+
+// ======================================================
+// BACKEND VALIDATION / EFFECTIVE PERMISSION HELPERS
+// ======================================================
+
+export const isValidRole = (
+  role
+) => {
+  return ROLES_LIST.includes(
+    role
+  );
+};
+
+export const isValidPermission = (
+  permission
+) => {
+  return ALL_PERMISSIONS.includes(
+    permission
+  );
+};
+
+export const getRolePermissions = (
+  role
+) => {
+  return (
+    PERMISSIONS[
+      role
+    ] || []
+  );
+};
+
+export const getEffectivePermissions = (
+  role,
+  overrides = {}
+) => {
+  if (
+    role ===
+    ROLES.ADMIN
+  ) {
+    return ALL_PERMISSIONS;
+  }
+
+  const defaults =
+    new Set(
+      getRolePermissions(
+        role
+      )
+    );
+
+  for (
+    const [
+      permission,
+      enabled,
+    ] of Object.entries(
+      overrides || {}
+    )
+  ) {
+    if (
+      !isValidPermission(
+        permission
+      )
+    ) {
+      continue;
+    }
+
+    if (
+      enabled ===
+      true
+    ) {
+      defaults.add(
+        permission
+      );
+    }
+
+    if (
+      enabled ===
+      false
+    ) {
+      defaults.delete(
+        permission
+      );
+    }
+  }
+
+  return Array.from(
+    defaults
+  );
+};
+
+// ======================================================
+// DEFAULT EXPORT
+// ======================================================
 
 export default {
   ROLES,
@@ -526,6 +718,12 @@ export default {
   PERMISSIONS,
   ALL_PERMISSIONS,
   ROLE_PERMISSIONS,
+  PERMISSION_PRESETS,
+
+  isValidRole,
+  isValidPermission,
+  getRolePermissions,
+  getEffectivePermissions,
 
   hasPermission,
   hasAnyPermission,
