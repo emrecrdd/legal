@@ -1,10 +1,15 @@
 import express from 'express';
+
 import { consultationController } from './consultation.controller.js';
+
 import {
   authenticate,
   authorizePermission,
+  authorizeAnyPermission,
 } from '../../middlewares/auth.middleware.js';
+
 import { PERMISSION_KEYS } from '../../constants/roles.js';
+
 import {
   validateConsultationId,
   validateCreateConsultation,
@@ -18,6 +23,7 @@ import {
 } from './consultation.validation.js';
 
 const router = express.Router();
+
 router.use(authenticate);
 
 router.post(
@@ -38,6 +44,22 @@ router.get(
   '/statistics',
   authorizePermission(PERMISSION_KEYS.VIEW_CONSULTATIONS),
   consultationController.getStatistics
+);
+
+/*
+ * Bu statik route mutlaka /:id route'undan önce tanımlı olmalıdır.
+ *
+ * CREATE veya EDIT yetkilerinden herhangi birine sahip kullanıcı,
+ * danışmanlık sorumlusu seçebilmek için atanabilir kullanıcı listesini
+ * okuyabilir.
+ */
+router.get(
+  '/assignable-users',
+  authorizeAnyPermission(
+    PERMISSION_KEYS.CREATE_CONSULTATIONS,
+    PERMISSION_KEYS.EDIT_CONSULTATIONS
+  ),
+  consultationController.getAssignableUsers
 );
 
 router.get(
