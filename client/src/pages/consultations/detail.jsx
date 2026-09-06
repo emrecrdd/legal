@@ -782,48 +782,70 @@ const getActiveTasks = (
   );
 };
 
+const getIstanbulTodayDateInput = (
+  date = new Date()
+) => {
+  const parts =
+    new Intl.DateTimeFormat(
+      'en-CA',
+      {
+        timeZone:
+          'Europe/Istanbul',
+
+        year:
+          'numeric',
+
+        month:
+          '2-digit',
+
+        day:
+          '2-digit',
+      }
+    ).formatToParts(
+      date
+    );
+
+  const getPart =
+    (
+      type
+    ) =>
+      parts.find(
+        (
+          part
+        ) =>
+          part.type ===
+          type
+      )?.value;
+
+  return `${getPart(
+    'year'
+  )}-${getPart(
+    'month'
+  )}-${getPart(
+    'day'
+  )}`;
+};
+
 const isFutureDateInput = (
   value
 ) => {
-  if (
-    !value
-  ) {
-    return false;
-  }
-
-  const selected =
-    new Date(
-      `${value}T00:00:00`
-    );
+  const normalized =
+    String(
+      value ||
+      ''
+    ).trim();
 
   if (
-    Number.isNaN(
-      selected.getTime()
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      normalized
     )
   ) {
     return false;
   }
 
-  const today =
-    new Date();
-
-  selected.setHours(
-    0,
-    0,
-    0,
-    0
-  );
-
-  today.setHours(
-    0,
-    0,
-    0,
-    0
-  );
-
   return (
-    selected >
-    today
+    normalized >
+    getIstanbulTodayDateInput()
   );
 };
 
@@ -4245,6 +4267,9 @@ const ConsultationDetail = () => {
           type="date"
           value={
             caseForm.opening_date
+          }
+          max={
+            getIstanbulTodayDateInput()
           }
           onChange={
             handleCaseFormChange
