@@ -67,6 +67,7 @@ export const PERMISSION_KEYS = {
   DELETE_CLIENTS: 'delete_clients',
 
   VIEW_CASES: 'view_cases',
+  VIEW_ALL_CASES: 'view_all_cases',
   CREATE_CASES: 'create_cases',
   EDIT_CASES: 'edit_cases',
   DELETE_CASES: 'delete_cases',
