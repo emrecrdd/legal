@@ -117,6 +117,9 @@ export const API_ROUTES = {
     STATISTICS:
       '/consultations/statistics',
 
+    ASSIGNABLE_USERS:
+      '/consultations/assignable-users',
+
     UPDATE_STATUS:
       (id) =>
         `/consultations/${id}/status`,

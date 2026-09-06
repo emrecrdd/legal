@@ -1078,20 +1078,29 @@ export const useUpdateConsultation =
           ),
         ]);
 
-        toast.success(
-          'Danışmanlık başarıyla güncellendi'
-        );
+        if (
+          !variables?.silent
+        ) {
+          toast.success(
+            'Danışmanlık başarıyla güncellendi'
+          );
+        }
       },
 
       onError: (
-        error
+        error,
+        variables
       ) => {
-        toast.error(
-          getErrorMessage(
-            error,
-            'Danışmanlık güncellenemedi'
-          )
-        );
+        if (
+          !variables?.silent
+        ) {
+          toast.error(
+            getErrorMessage(
+              error,
+              'Danışmanlık güncellenemedi'
+            )
+          );
+        }
       },
     });
   };
@@ -1310,20 +1319,29 @@ export const useUpdateConsultationStatus =
           queryClient
         );
 
-        toast.success(
-          'Danışmanlık durumu güncellendi'
-        );
+        if (
+          !variables?.silent
+        ) {
+          toast.success(
+            'Danışmanlık durumu güncellendi'
+          );
+        }
       },
 
       onError: (
-        error
+        error,
+        variables
       ) => {
-        toast.error(
-          getErrorMessage(
-            error,
-            'Danışmanlık durumu güncellenemedi'
-          )
-        );
+        if (
+          !variables?.silent
+        ) {
+          toast.error(
+            getErrorMessage(
+              error,
+              'Danışmanlık durumu güncellenemedi'
+            )
+          );
+        }
       },
     });
   };
