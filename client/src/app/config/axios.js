@@ -199,10 +199,7 @@ const isNonRefreshableAuthRequest = (
       requestConfig,
       '/auth/login'
     ) ||
-    isAuthRoute(
-      requestConfig,
-      '/auth/register'
-    ) ||
+    
     isAuthRoute(
       requestConfig,
       '/auth/refresh-token'

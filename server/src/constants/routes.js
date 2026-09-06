@@ -5,7 +5,6 @@ export const ROUTES = {
   AUTH: {
     BASE: '/auth',
     LOGIN: '/login',
-    REGISTER: '/register',
     LOGOUT: '/logout',
     REFRESH_TOKEN: '/refresh-token',
     PROFILE: '/profile',

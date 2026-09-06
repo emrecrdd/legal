@@ -46,65 +46,7 @@ const passwordValidation = (
 // ======================================================
 
 export const authValidation = {
-  // ====================================================
-  // REGISTER
-  // ====================================================
-
-  register: [
-    body('email')
-      .trim()
-      .isEmail()
-      .withMessage(
-        'Geçerli bir e-posta adresi giriniz'
-      )
-      .normalizeEmail(),
-
-    passwordValidation(
-      'password',
-      'Şifre'
-    ),
-
-    body('first_name')
-      .trim()
-      .notEmpty()
-      .withMessage(
-        'Ad gereklidir'
-      )
-      .isLength({
-        min: 2,
-        max: 100,
-      })
-      .withMessage(
-        'Ad 2 ile 100 karakter arasında olmalıdır'
-      ),
-
-    body('last_name')
-      .trim()
-      .notEmpty()
-      .withMessage(
-        'Soyad gereklidir'
-      )
-      .isLength({
-        min: 2,
-        max: 100,
-      })
-      .withMessage(
-        'Soyad 2 ile 100 karakter arasında olmalıdır'
-      ),
-
-    body('role')
-      .optional()
-      .isIn([
-        'admin',
-        'lawyer',
-        'intern',
-        'secretary',
-      ])
-      .withMessage(
-        'Geçersiz kullanıcı rolü'
-      ),
-  ],
-
+  
   // ====================================================
   // LOGIN
   // ====================================================

@@ -249,19 +249,7 @@ export const AuthProvider = ({
       ]
     );
 
-  // ====================================================
-  // REGISTER
-  // ====================================================
-
-  const register =
-    useCallback(
-      (userData) => {
-        return authApi.register(
-          userData
-        );
-      },
-      []
-    );
+  
 
   // ====================================================
   // REFRESH
@@ -340,7 +328,7 @@ export const AuthProvider = ({
 
         login,
         logout,
-        register,
+       
         refreshToken,
 
         setUser,
@@ -353,7 +341,7 @@ export const AuthProvider = ({
 
         login,
         logout,
-        register,
+        
         refreshToken,
 
         setUser,

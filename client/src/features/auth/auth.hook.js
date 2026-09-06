@@ -114,68 +114,7 @@ const getLoginErrorMessage = (
   return 'Giriş işlemi tamamlanamadı. Lütfen tekrar deneyin.';
 };
 
-const getRegisterErrorMessage = (
-  error
-) => {
-  const status =
-    error?.response?.status;
 
-  const rawMessage =
-    getRawErrorMessage(
-      error
-    );
-
-  if (
-    status === 409 ||
-    /unique|already|exists|duplicate|kullanılıyor|kayıtlı/i.test(
-      rawMessage
-    )
-  ) {
-    return 'Bu e-posta adresi zaten kullanımda.';
-  }
-
-  if (
-    /en az 12 karakter/i.test(
-      rawMessage
-    )
-  ) {
-    return 'Şifre en az 12 karakter olmalıdır.';
-  }
-
-  if (
-    status === 429
-  ) {
-    return 'Kısa sürede çok fazla istek yapıldı. Lütfen biraz sonra tekrar deneyin.';
-  }
-
-  if (
-    isNetworkError(
-      error
-    )
-  ) {
-    return 'Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
-  }
-
-  if (
-    status >= 500 ||
-    isTechnicalMessage(
-      rawMessage
-    )
-  ) {
-    return 'Kayıt işlemi şu anda tamamlanamıyor. Lütfen tekrar deneyin.';
-  }
-
-  if (
-    rawMessage &&
-    /[çğıöşüÇĞİÖŞÜ]|geçersiz|zorunlu|şifre|e-posta|kayıt|kullanıcı/i.test(
-      rawMessage
-    )
-  ) {
-    return rawMessage;
-  }
-
-  return 'Kayıt işlemi tamamlanamadı. Lütfen bilgilerinizi kontrol edip tekrar deneyin.';
-};
 
 const getPasswordChangeErrorMessage = (
   error
@@ -279,41 +218,8 @@ export const useLogin = () => {
   });
 };
 
-// ======================================================
-// REGISTER
-// ======================================================
 
-export const useRegister = () => {
-  const {
-    register,
-  } =
-    useAuth();
 
-  return useMutation({
-    mutationFn: (
-      userData
-    ) =>
-      register(
-        userData
-      ),
-
-    onSuccess: () => {
-      toast.success(
-        'Kaydınız başarıyla oluşturuldu. Giriş yapabilirsiniz.'
-      );
-    },
-
-    onError: (
-      error
-    ) => {
-      toast.error(
-        getRegisterErrorMessage(
-          error
-        )
-      );
-    },
-  });
-};
 
 // ======================================================
 // PROFILE
