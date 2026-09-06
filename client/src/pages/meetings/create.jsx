@@ -20,11 +20,17 @@ import {
 } from '../../features/meetings/meeting.query.js';
 import caseApi from '../../features/cases/case.api.js';
 import clientApi from '../../features/clients/client.api.js';
+import consultationApi from '../../features/consultations/consultation.api.js';
 import userApi from '../../features/users/user.api.js';
 
 import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
 
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
@@ -80,16 +86,8 @@ const INITIAL_FORM = {
   meeting_type: 'other',
   case_id: '',
   client_id: '',
-
-  /*
-   * Derkenar iç kullanıcı katılımcıları.
-   *
-   * meetings.attendees JSONB alanından ayrıdır:
-   * - attendee_ids: sistem kullanıcıları
-   * - attendees: harici / serbest katılımcılar
-   */
-  attendee_ids: [],
-
+  consultation_id: '',
+  assigned_to: '',
   status: 'scheduled',
   attendees: [],
   meeting_link: '',
@@ -336,23 +334,15 @@ const normalizeMeetingForm = (
       form?.client_id
     ),
 
-  attendee_ids:
-    [
-      ...new Set(
-        Array.isArray(
-          form?.attendee_ids
-        )
-          ? form.attendee_ids
-              .map(
-                (id) =>
-                  normalizeId(
-                    id
-                  )
-              )
-              .filter(Boolean)
-          : []
-      ),
-    ].sort(),
+  consultation_id:
+    normalizeId(
+      form?.consultation_id
+    ),
+
+  assigned_to:
+    normalizeId(
+      form?.assigned_to
+    ),
 
   status:
     form?.status ||
@@ -426,8 +416,10 @@ const getMeetingFieldErrorMessage = (
       'İlişkili dava seçimini kontrol edin',
     client_id:
       'İlişkili müvekkil seçimini kontrol edin',
-    attendee_ids:
-      'Toplantı katılımcılarını kontrol edin',
+    consultation_id:
+      'İlişkili danışmanlık seçimini kontrol edin',
+    assigned_to:
+      'Sorumlu kişi seçimini kontrol edin',
     status:
       'Toplantı durumunu kontrol edin',
     attendees:
@@ -480,10 +472,7 @@ const getBackendFieldErrors = (
               .pop();
 
       const normalizedField =
-        fieldValue ===
-        'assigned_to'
-          ? 'attendee_ids'
-          : fieldValue;
+        fieldValue;
 
       if (
         !normalizedField ||
@@ -787,10 +776,30 @@ const MeetingCreate = () => {
       )
     );
 
+  const requestedConsultationId =
+    normalizeId(
+      searchParams.get(
+        'consultation_id'
+      ) ??
+      searchParams.get(
+        'consultation'
+      ) ??
+      searchParams.get(
+        'consultationId'
+      )
+    );
+
   const {
     user,
   } =
     useAuth();
+
+  const canViewConsultations =
+    hasPermission(
+      user,
+      PERMISSION_KEYS
+        .VIEW_CONSULTATIONS
+    );
 
   const prefillAppliedRef =
     useRef(false);
@@ -804,6 +813,9 @@ const MeetingCreate = () => {
 
       case_id:
         requestedCaseId,
+
+      consultation_id:
+        requestedConsultationId,
     });
 
   const [
@@ -819,6 +831,9 @@ const MeetingCreate = () => {
 
         case_id:
           requestedCaseId,
+
+        consultation_id:
+          requestedConsultationId,
       })
     );
 
@@ -984,6 +999,75 @@ const MeetingCreate = () => {
 
   const {
     data:
+      consultationsData,
+    isLoading:
+      consultationsLoading,
+    error:
+      consultationsError,
+    refetch:
+      refetchConsultations,
+  } =
+    useQuery({
+      queryKey: [
+        'consultations',
+        {
+          limit: 100,
+        },
+        'meeting-create',
+      ],
+
+      queryFn: () =>
+        consultationApi.getAll({
+          limit: 100,
+        }),
+
+      enabled:
+        canViewConsultations,
+
+      staleTime:
+        60 * 1000,
+    });
+
+  const {
+    data:
+      selectedConsultationData,
+    isLoading:
+      selectedConsultationLoading,
+    error:
+      selectedConsultationError,
+    refetch:
+      refetchSelectedConsultation,
+  } =
+    useQuery({
+      queryKey: [
+        'consultation',
+        normalizeId(
+          formData.consultation_id
+        ),
+      ],
+
+      queryFn: () =>
+        consultationApi.getOne(
+          normalizeId(
+            formData.consultation_id
+          )
+        ),
+
+      enabled:
+        Boolean(
+          canViewConsultations &&
+          formData.consultation_id
+        ),
+
+      staleTime:
+        60 * 1000,
+
+      retry:
+        false,
+    });
+
+  const {
+    data:
       usersData,
     isLoading:
       usersLoading,
@@ -1050,6 +1134,50 @@ const MeetingCreate = () => {
     }, [
       baseClients,
       requestedClient,
+    ]);
+
+  const baseConsultations =
+    getArrayPayload(
+      consultationsData
+    );
+
+  const selectedConsultationDetail =
+    getResponseItem(
+      selectedConsultationData
+    );
+
+  const consultations =
+    useMemo(() => {
+      const result = [
+        ...baseConsultations,
+      ];
+
+      const selectedId =
+        normalizeId(
+          selectedConsultationDetail?.id
+        );
+
+      if (
+        selectedId &&
+        !result.some(
+          (
+            consultation
+          ) =>
+            normalizeId(
+              consultation?.id
+            ) ===
+            selectedId
+        )
+      ) {
+        result.unshift(
+          selectedConsultationDetail
+        );
+      }
+
+      return result;
+    }, [
+      baseConsultations,
+      selectedConsultationDetail,
     ]);
 
   const users =
@@ -1166,6 +1294,33 @@ const MeetingCreate = () => {
       formData.client_id,
     ]);
 
+  const selectedConsultation =
+    useMemo(() => {
+      const selectedId =
+        normalizeId(
+          formData.consultation_id
+        );
+
+      if (
+        !selectedId
+      ) {
+        return null;
+      }
+
+      return consultations.find(
+        (
+          item
+        ) =>
+          normalizeId(
+            item?.id
+          ) ===
+          selectedId
+      ) || null;
+    }, [
+      consultations,
+      formData.consultation_id,
+    ]);
+
   useEffect(() => {
     if (
       prefillAppliedRef.current
@@ -1239,6 +1394,11 @@ const MeetingCreate = () => {
         requestedCaseId ||
         initialFormRef.current
           .case_id,
+
+      consultation_id:
+        requestedConsultationId ||
+        initialFormRef.current
+          .consultation_id,
     };
 
     setFormData(
@@ -1255,6 +1415,10 @@ const MeetingCreate = () => {
           requestedCaseId ||
           current.case_id,
 
+        consultation_id:
+          requestedConsultationId ||
+          current.consultation_id,
+
       })
     );
 
@@ -1263,6 +1427,7 @@ const MeetingCreate = () => {
   }, [
     requestedClientId,
     requestedCaseId,
+    requestedConsultationId,
     requestedClient,
     requestedClientLoading,
     requestedClientError,
@@ -1474,7 +1639,11 @@ const MeetingCreate = () => {
 
           if (
             name ===
-            'case_id'
+            'case_id' ||
+            name ===
+            'consultation_id' ||
+            name ===
+            'assigned_to'
           ) {
             return {
               ...current,
@@ -1504,163 +1673,6 @@ const MeetingCreate = () => {
           ) => ({
             ...current,
             [name]:
-              '',
-          })
-        );
-      }
-    };
-
-  // ====================================================
-  // INTERNAL MEETING PARTICIPANTS
-  // ====================================================
-
-  const handleParticipantToggle =
-    (
-      participantId
-    ) => {
-      if (
-        user?.role !==
-          'admin' ||
-        mutation.isPending
-      ) {
-        return;
-      }
-
-      const normalizedParticipantId =
-        normalizeId(
-          participantId
-        );
-
-      if (
-        !normalizedParticipantId
-      ) {
-        return;
-      }
-
-      setFormData(
-        (
-          current
-        ) => {
-          const currentIds =
-            Array.isArray(
-              current.attendee_ids
-            )
-              ? current.attendee_ids
-                  .map(
-                    (id) =>
-                      normalizeId(
-                        id
-                      )
-                  )
-                  .filter(Boolean)
-              : [];
-
-          const exists =
-            currentIds.includes(
-              normalizedParticipantId
-            );
-
-          return {
-            ...current,
-
-            attendee_ids:
-              exists
-                ? currentIds.filter(
-                    (id) =>
-                      id !==
-                      normalizedParticipantId
-                  )
-                : [
-                    ...currentIds,
-                    normalizedParticipantId,
-                  ],
-          };
-        }
-      );
-
-      if (
-        errors.attendee_ids
-      ) {
-        setErrors(
-          (
-            current
-          ) => ({
-            ...current,
-
-            attendee_ids:
-              '',
-          })
-        );
-      }
-    };
-
-  const handleSelectAllParticipants =
-    () => {
-      if (
-        user?.role !==
-          'admin' ||
-        mutation.isPending
-      ) {
-        return;
-      }
-
-      const allIds =
-        assignableUsers
-          .map(
-            (person) =>
-              normalizeId(
-                person?.id
-              )
-          )
-          .filter(Boolean);
-
-      const selectedIds =
-        Array.isArray(
-          formData.attendee_ids
-        )
-          ? formData.attendee_ids
-              .map(
-                (id) =>
-                  normalizeId(
-                    id
-                  )
-              )
-              .filter(Boolean)
-          : [];
-
-      const allSelected =
-        allIds.length >
-          0 &&
-        allIds.every(
-          (id) =>
-            selectedIds.includes(
-              id
-            )
-        );
-
-      setFormData(
-        (
-          current
-        ) => ({
-          ...current,
-
-          attendee_ids:
-            allSelected
-              ? []
-              : allIds,
-        })
-      );
-
-      if (
-        errors.attendee_ids
-      ) {
-        setErrors(
-          (
-            current
-          ) => ({
-            ...current,
-
-            attendee_ids:
               '',
           })
         );
@@ -1834,6 +1846,11 @@ const MeetingCreate = () => {
           formData.case_id
         );
 
+      const consultationId =
+        normalizeId(
+          formData.consultation_id
+        );
+
       if (
         !title
       ) {
@@ -1993,88 +2010,70 @@ const MeetingCreate = () => {
         }
       }
 
-      const attendeeIds =
-        user?.role ===
-          'admin'
-          ? [
-              ...new Set(
-                (
-                  Array.isArray(
-                    formData.attendee_ids
-                  )
-                    ? formData.attendee_ids
-                    : []
-                )
-                  .map(
-                    (id) =>
-                      normalizeId(
-                        id
-                      )
-                  )
-                  .filter(Boolean)
-              ),
-            ]
-          : normalizeId(
-              user?.id
-            )
-            ? [
-                normalizeId(
-                  user.id
-                ),
-              ]
-            : [];
-
       if (
-        attendeeIds.length ===
-        0
+        consultationId
       ) {
-        newErrors.attendee_ids =
-          user?.role ===
-            'admin'
-            ? 'Toplantı en az 1 kişiye atanmalıdır'
-            : 'Toplantı katılımcısı belirlenemedi. Oturumunuzu yenileyip tekrar deneyin.';
+        if (
+          !canViewConsultations
+        ) {
+          newErrors.consultation_id =
+            'Danışmanlık görüntüleme yetkiniz olmadan toplantı danışmanlığa bağlanamaz';
+        } else if (
+          selectedConsultationError
+        ) {
+          newErrors.consultation_id =
+            'Seçilen danışmanlık artık erişilebilir değil';
+        } else if (
+          !selectedConsultationLoading &&
+          !selectedConsultation
+        ) {
+          newErrors.consultation_id =
+            'Seçilen danışmanlık doğrulanamadı';
+        }
       }
 
-      if (
+      const assignedTo =
+        user?.role !==
+          'admin'
+          ? normalizeId(
+              user?.id
+            )
+          : normalizeId(
+              formData.assigned_to
+            );
+
+      if (!assignedTo) {
+        newErrors.assigned_to =
+          'Toplantı için sorumlu kişi seçilmelidir';
+      } else if (
         user?.role ===
           'admin' &&
-        attendeeIds.length >
-          0
+        !usersLoading
       ) {
+        const validAssigneeIds =
+          new Set(
+            assignableUsers
+              .map(
+                (person) =>
+                  normalizeId(
+                    person?.id
+                  )
+              )
+              .filter(Boolean)
+          );
+
         if (
           usersError
         ) {
-          newErrors.attendee_ids =
+          newErrors.assigned_to =
             'Kullanıcı listesi yüklenemedi. Listeyi yenileyip tekrar deneyin.';
         } else if (
-          !usersLoading
+          !validAssigneeIds.has(
+            assignedTo
+          )
         ) {
-          const validIds =
-            new Set(
-              assignableUsers
-                .map(
-                  (person) =>
-                    normalizeId(
-                      person?.id
-                    )
-                )
-                .filter(Boolean)
-            );
-
-          const hasInvalidParticipant =
-            attendeeIds.some(
-              (id) =>
-                !validIds.has(
-                  id
-                )
-            );
-
-          if (
-            hasInvalidParticipant
-          ) {
-            newErrors.attendee_ids =
-              'Seçilen katılımcılardan biri artık atanabilir değil';
-          }
+          newErrors.assigned_to =
+            'Seçilen kullanıcı artık atanabilir değil';
         }
       }
 
@@ -2136,8 +2135,13 @@ const MeetingCreate = () => {
           clientId ||
           null,
 
-        attendee_ids:
-          attendeeIds,
+        consultation_id:
+          consultationId ||
+          null,
+
+        assigned_to:
+          assignedTo ||
+          null,
 
         attendees:
           formData.attendees
@@ -2218,9 +2222,11 @@ const MeetingCreate = () => {
     );
 
   const cancelDestination =
-    requestedClientId
-      ? `/clients/${requestedClientId}`
-      : '/meetings';
+    requestedConsultationId
+      ? `/consultations/${requestedConsultationId}`
+      : requestedClientId
+        ? `/clients/${requestedClientId}`
+        : '/meetings';
 
   // ====================================================
   // NAVIGATION / DIALOGS
@@ -2557,9 +2563,11 @@ const MeetingCreate = () => {
         >
           <ArrowLeft className="h-3.5 w-3.5" />
 
-          {requestedClientId
-            ? 'Müvekkil Detayı'
-            : 'Toplantılar'}
+          {requestedConsultationId
+            ? 'Danışmanlık Detayı'
+            : requestedClientId
+              ? 'Müvekkil Detayı'
+              : 'Toplantılar'}
         </Link>
 
         <div className="mt-3 flex items-start gap-3">
@@ -2616,7 +2624,7 @@ const MeetingCreate = () => {
                 dark:text-slate-400
               "
             >
-              Toplantının zamanını, katılımcılarını ve ilişkili dava veya müvekkil kayıtlarını belirleyin.
+              Toplantının zamanını, katılımcılarını ve ilişkili danışmanlık, dava veya müvekkil kayıtlarını belirleyin.
             </p>
 
           </div>
@@ -3088,7 +3096,7 @@ const MeetingCreate = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Önce müvekkili, ardından o müvekkile ait davayı seçin
+                  Toplantıyı danışmanlıkla; gerekirse müvekkil ve dava kaydıyla ilişkilendirin
                 </p>
 
               </div>
@@ -3098,6 +3106,163 @@ const MeetingCreate = () => {
           </Card.Header>
 
           <Card.Body>
+
+            <div className="mb-5">
+
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                İlişkili Danışmanlık
+              </label>
+
+              <select
+                name="consultation_id"
+                value={
+                  formData.consultation_id
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  !canViewConsultations ||
+                  consultationsLoading ||
+                  mutation.isPending
+                }
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  text-sm
+                  text-gray-700
+                  outline-none
+                  disabled:cursor-not-allowed
+                  disabled:opacity-50
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                "
+              >
+                <option value="">
+                  {!canViewConsultations
+                    ? 'Danışmanlık görüntüleme yetkiniz yok'
+                    : consultationsLoading
+                      ? 'Danışmanlıklar yükleniyor...'
+                      : 'Danışmanlık seçin (isteğe bağlı)'}
+                </option>
+
+                {consultations.map(
+                  (
+                    consultation
+                  ) => (
+                    <option
+                      key={
+                        consultation.id
+                      }
+                      value={
+                        consultation.id
+                      }
+                    >
+                      {consultation.consultation_number
+                        ? `${consultation.consultation_number} · `
+                        : ''}
+                      {consultation.title ||
+                        'Danışmanlık'}
+                    </option>
+                  )
+                )}
+              </select>
+
+              {errors.consultation_id && (
+                <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                  {errors.consultation_id}
+                </p>
+              )}
+
+              {consultationsError &&
+                canViewConsultations && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/[0.06] dark:text-red-300">
+                  <span>
+                    Danışmanlık listesi yüklenemedi.
+                  </span>
+
+                  <button
+                    type="button"
+                    className="font-semibold underline underline-offset-2"
+                    disabled={
+                      consultationsLoading
+                    }
+                    onClick={() =>
+                      refetchConsultations?.()
+                    }
+                  >
+                    Tekrar Dene
+                  </button>
+                </div>
+              )}
+
+              {formData.consultation_id &&
+                selectedConsultationLoading && (
+                  <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
+                    Seçilen danışmanlık doğrulanıyor...
+                  </p>
+                )}
+
+              {formData.consultation_id &&
+                selectedConsultationError && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/[0.06] dark:text-amber-300">
+                    <span>
+                      Seçilen danışmanlık doğrulanamadı.
+                    </span>
+
+                    <button
+                      type="button"
+                      className="font-semibold underline underline-offset-2"
+                      disabled={
+                        selectedConsultationLoading
+                      }
+                      onClick={() =>
+                        refetchSelectedConsultation?.()
+                      }
+                    >
+                      Tekrar Dene
+                    </button>
+                  </div>
+                )}
+
+              {selectedConsultation && (
+                <div className="mt-3 rounded-lg border border-violet-100 bg-violet-50/50 p-3 dark:border-violet-500/15 dark:bg-violet-500/[0.04]">
+                  <div className="flex items-start gap-3">
+                    <BriefcaseBusiness
+                      size={15}
+                      className="mt-0.5 shrink-0 text-violet-600 dark:text-violet-400"
+                    />
+
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-gray-800 dark:text-slate-200">
+                        {selectedConsultation.consultation_number
+                          ? `${selectedConsultation.consultation_number} · `
+                          : ''}
+                        {selectedConsultation.title ||
+                          'Danışmanlık'}
+                      </p>
+
+                      <p className="mt-1 truncate text-[10px] text-gray-500 dark:text-slate-500">
+                        {selectedConsultation.client?.name ||
+                          selectedConsultation.prospect_name ||
+                          selectedConsultation.legal_area ||
+                          'Danışmanlık kaydı'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
 
@@ -3408,358 +3573,127 @@ const MeetingCreate = () => {
         </Card>
 
         {/* ==================================================
-            INTERNAL PARTICIPANTS
+            RESPONSIBLE USER
         ================================================== */}
 
         <Card>
 
           <Card.Header>
 
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
 
-              <div className="flex items-center gap-3">
-
-                <div
-                  className="
-                    flex
-                    h-9
-                    w-9
-                    items-center
-                    justify-center
-                    rounded-lg
-                    bg-blue-50
-                    text-blue-600
-                    dark:bg-blue-500/[0.08]
-                    dark:text-blue-400
-                  "
-                >
-                  <Users size={17} />
-                </div>
-
-                <div>
-
-                  <h2 className="font-semibold text-gray-900 dark:text-white">
-                    Toplantı Katılımcıları
-                  </h2>
-
-                  <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                    Toplantıya atanacak Derkenar kullanıcılarını seçin
-                  </p>
-
-                </div>
-
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  items-center
+                  justify-center
+                  rounded-lg
+                  bg-blue-50
+                  text-blue-600
+                  dark:bg-blue-500/[0.08]
+                  dark:text-blue-400
+                "
+              >
+                <UserRound size={17} />
               </div>
 
-              {user?.role ===
-                'admin' &&
-                formData.attendee_ids.length >
-                  0 && (
-                  <Badge
-                    variant="primary"
-                  >
-                    {formData.attendee_ids.length}{' '}
-                    kişi seçildi
-                  </Badge>
-                )}
+              <div>
+
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  Sorumlu Kişi
+                </h2>
+
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                  Toplantının takibinden sorumlu kullanıcı
+                </p>
+
+              </div>
 
             </div>
 
           </Card.Header>
 
-          <Card.Body className="space-y-4">
+          <Card.Body>
 
             {user?.role ===
             'admin' ? (
-              <>
+              <div>
 
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Atanan Kişi
+                </label>
 
-                  <div>
+                <select
+                  name="assigned_to"
+                  value={
+                    formData.assigned_to
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  disabled={
+                    usersLoading ||
+                    mutation.isPending
+                  }
+                  className="
+                    h-10
+                    w-full
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-3.5
+                    text-sm
+                    text-gray-700
+                    outline-none
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                    focus:border-blue-500
+                    focus:ring-2
+                    focus:ring-blue-500/10
+                    dark:border-white/[0.08]
+                    dark:bg-white/[0.035]
+                    dark:text-slate-300
+                  "
+                >
+                  <option value="">
+                    {usersLoading
+                      ? 'Kullanıcılar yükleniyor...'
+                      : 'Atanacak kişi seçin'}
+                  </option>
 
-                    <p className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                      Katılımcı Kullanıcılar
-                    </p>
-
-                    <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
-                      Toplantıya bir veya birden fazla kullanıcı atayabilirsiniz.
-                    </p>
-
-                  </div>
-
-                  {assignableUsers.length >
-                    0 && (
-                    <button
-                      type="button"
-                      onClick={
-                        handleSelectAllParticipants
-                      }
-                      disabled={
-                        mutation.isPending
-                      }
-                      className="
-                        rounded-lg
-                        border
-                        border-gray-200
-                        bg-white
-                        px-3
-                        py-1.5
-                        text-xs
-                        font-medium
-                        text-gray-600
-                        transition
-                        hover:border-blue-200
-                        hover:bg-blue-50
-                        hover:text-blue-600
-                        disabled:cursor-not-allowed
-                        disabled:opacity-50
-                        dark:border-white/[0.08]
-                        dark:bg-white/[0.025]
-                        dark:text-slate-400
-                        dark:hover:border-blue-500/20
-                        dark:hover:bg-blue-500/[0.06]
-                        dark:hover:text-blue-400
-                      "
-                    >
-                      {assignableUsers.every(
-                        (person) =>
-                          formData.attendee_ids
-                            .map(
-                              (id) =>
-                                normalizeId(
-                                  id
-                                )
-                            )
-                            .includes(
-                              normalizeId(
-                                person?.id
-                              )
-                            )
-                      )
-                        ? 'Seçimi Temizle'
-                        : 'Tümünü Seç'}
-                    </button>
-                  )}
-
-                </div>
-
-                {usersLoading && (
-                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-5 text-center text-sm text-gray-500 dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-400">
-                    Kullanıcılar yükleniyor...
-                  </div>
-                )}
-
-                {usersError &&
-                  !usersLoading && (
-                  <div className="rounded-xl border border-red-200 bg-red-50/60 p-4 dark:border-red-500/20 dark:bg-red-500/[0.04]">
-
-                    <p className="text-sm font-medium text-red-700 dark:text-red-300">
-                      Atanabilir kullanıcılar yüklenemedi.
-                    </p>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        refetchUsers?.()
-                      }
-                      className="mt-2 text-xs font-semibold text-red-700 underline underline-offset-2 dark:text-red-300"
-                    >
-                      Tekrar Dene
-                    </button>
-
-                  </div>
-                )}
-
-                {!usersLoading &&
-                  !usersError &&
-                  assignableUsers.length ===
-                    0 && (
-                    <div className="rounded-xl border border-dashed border-gray-200 p-5 text-center text-sm text-gray-500 dark:border-white/[0.08] dark:text-slate-400">
-                      Toplantıya atanabilecek aktif kullanıcı bulunamadı.
-                    </div>
-                  )}
-
-                {!usersLoading &&
-                  !usersError &&
-                  assignableUsers.length >
-                    0 && (
-                    <div className="grid gap-2 sm:grid-cols-2">
-
-                      {assignableUsers.map(
-                        (
-                          person
-                        ) => {
-                          const selected =
-                            formData.attendee_ids
-                              .map(
-                                (id) =>
-                                  normalizeId(
-                                    id
-                                  )
-                              )
-                              .includes(
-                                normalizeId(
-                                  person?.id
-                                )
-                              );
-
-                          return (
-                            <button
-                              key={
-                                person.id
-                              }
-                              type="button"
-                              onClick={() =>
-                                handleParticipantToggle(
-                                  person.id
-                                )
-                              }
-                              disabled={
-                                mutation.isPending
-                              }
-                              className={`
-                                flex
-                                w-full
-                                items-center
-                                gap-3
-                                rounded-xl
-                                border
-                                p-3
-                                text-left
-                                transition
-                                disabled:cursor-not-allowed
-                                disabled:opacity-60
-                                ${
-                                  selected
-                                    ? `
-                                        border-blue-300
-                                        bg-blue-50/70
-                                        ring-1
-                                        ring-blue-500/10
-                                        dark:border-blue-500/30
-                                        dark:bg-blue-500/[0.07]
-                                      `
-                                    : `
-                                        border-gray-200
-                                        bg-white
-                                        hover:border-gray-300
-                                        hover:bg-gray-50
-                                        dark:border-white/[0.07]
-                                        dark:bg-white/[0.02]
-                                        dark:hover:bg-white/[0.04]
-                                      `
-                                }
-                              `}
-                            >
-
-                              <div
-                                className={`
-                                  flex
-                                  h-10
-                                  w-10
-                                  shrink-0
-                                  items-center
-                                  justify-center
-                                  rounded-full
-                                  text-xs
-                                  font-semibold
-                                  ${
-                                    selected
-                                      ? `
-                                          bg-blue-100
-                                          text-blue-700
-                                          dark:bg-blue-500/[0.12]
-                                          dark:text-blue-300
-                                        `
-                                      : `
-                                          bg-gray-100
-                                          text-gray-600
-                                          dark:bg-white/[0.06]
-                                          dark:text-slate-300
-                                        `
-                                  }
-                                `}
-                              >
-                                {person?.first_name?.[0] ||
-                                  ''}
-                                {person?.last_name?.[0] ||
-                                  ''}
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-
-                                <p
-                                  className={`
-                                    truncate
-                                    text-sm
-                                    font-semibold
-                                    ${
-                                      selected
-                                        ? 'text-blue-900 dark:text-blue-200'
-                                        : 'text-gray-900 dark:text-white'
-                                    }
-                                  `}
-                                >
-                                  {person.first_name}{' '}
-                                  {person.last_name}
-                                </p>
-
-                                <p className="mt-1 truncate text-xs text-gray-500 dark:text-slate-500">
-                                  {getRoleLabel(
-                                    person.role
-                                  )}
-                                  {person.title
-                                    ? ` · ${person.title}`
-                                    : ''}
-                                </p>
-
-                              </div>
-
-                              <div
-                                className={`
-                                  flex
-                                  h-6
-                                  w-6
-                                  shrink-0
-                                  items-center
-                                  justify-center
-                                  rounded-full
-                                  border
-                                  transition
-                                  ${
-                                    selected
-                                      ? `
-                                          border-blue-600
-                                          bg-blue-600
-                                          text-white
-                                        `
-                                      : `
-                                          border-gray-300
-                                          bg-white
-                                          text-transparent
-                                          dark:border-white/[0.15]
-                                          dark:bg-white/[0.03]
-                                        `
-                                  }
-                                `}
-                              >
-                                <Check size={14} />
-                              </div>
-
-                            </button>
-                          );
+                  {assignableUsers.map(
+                    (
+                      person
+                    ) => (
+                      <option
+                        key={
+                          person.id
                         }
-                      )}
-
-                    </div>
+                        value={
+                          person.id
+                        }
+                      >
+                        {person.first_name}{' '}
+                        {person.last_name}
+                        {' · '}
+                        {getRoleLabel(
+                          person.role
+                        )}
+                      </option>
+                    )
                   )}
+                </select>
 
-                {errors.attendee_ids && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.attendee_ids}
+                {errors.assigned_to && (
+                  <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.assigned_to}
                   </p>
                 )}
 
-              </>
+              </div>
             ) : (
               <div
                 className="
@@ -3822,19 +3756,11 @@ const MeetingCreate = () => {
                   variant="primary"
                   dot
                 >
-                  Katılımcı
+                  Sorumlu
                 </Badge>
 
               </div>
             )}
-
-            {user?.role !==
-              'admin' &&
-              errors.attendee_ids && (
-                <p className="text-sm text-red-600 dark:text-red-400">
-                  {errors.attendee_ids}
-                </p>
-              )}
 
           </Card.Body>
 
