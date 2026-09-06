@@ -310,6 +310,34 @@ export const consultationRepository = {
     return user;
   },
 
+  async getAssignableUsers(options = {}) {
+    return User.findAll({
+      where: {
+        is_active: true,
+        role: {
+          [Op.in]: [
+            ROLES.ADMIN,
+            ROLES.LAWYER,
+            ROLES.INTERN,
+          ],
+        },
+      },
+      attributes: [
+        'id',
+        'first_name',
+        'last_name',
+        'email',
+        'role',
+        'title',
+      ],
+      order: [
+        ['first_name', 'ASC'],
+        ['last_name', 'ASC'],
+      ],
+      transaction: options.transaction,
+    });
+  },
+
   async getAssigneeRecords(consultationId, options = {}) {
     return ConsultationAssignee.findAll({
       where: { consultation_id: consultationId },
