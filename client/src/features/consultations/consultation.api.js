@@ -89,17 +89,6 @@ const consultationApi = {
   },
 
   // ======================================================
-  // ASSIGNABLE USERS
-  // ======================================================
-
-  getAssignableUsers:
-    () => {
-      return axios.get(
-        CONSULTATIONS.ASSIGNABLE_USERS
-      );
-    },
-
-  // ======================================================
   // STATISTICS
   // ======================================================
 
@@ -169,6 +158,28 @@ const consultationApi = {
       CONSULTATIONS.GET_DOCUMENTS(
         id
       )
+    );
+  },
+
+  getNotes: (
+    id
+  ) => {
+    return axios.get(
+      CONSULTATIONS.GET_NOTES(
+        id
+      )
+    );
+  },
+
+  addNote: (
+    id,
+    data
+  ) => {
+    return axios.post(
+      CONSULTATIONS.ADD_NOTE(
+        id
+      ),
+      data
     );
   },
 

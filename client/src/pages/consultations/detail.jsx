@@ -20,7 +20,9 @@ import {
   useConsultation,
   useConsultationDocuments,
   useConsultationMeetings,
+  useConsultationNotes,
   useConsultationTasks,
+  useAddConsultationNote,
   useConvertConsultationToCase,
   useConvertConsultationToClient,
   useUpdateConsultationStatus,
@@ -1034,6 +1036,12 @@ const ConsultationDetail = () => {
   ] =
     useState({});
 
+  const [
+    noteContent,
+    setNoteContent,
+  ] =
+    useState('');
+
   // ====================================================
   // PERMISSIONS
   // ====================================================
@@ -1122,6 +1130,13 @@ const ConsultationDetail = () => {
         .VIEW_NOTES
     );
 
+  const canCreateNotes =
+    hasPermission(
+      user,
+      PERMISSION_KEYS
+        .CREATE_NOTES
+    );
+
   const canViewAuditLogs =
     hasPermission(
       user,
@@ -1188,6 +1203,22 @@ const ConsultationDetail = () => {
   } =
     useConsultationDocuments(
       canViewDocuments
+        ? id
+        : null
+    );
+
+  const {
+    data:
+      notesData,
+    isLoading:
+      notesLoading,
+    error:
+      notesError,
+  } =
+    useConsultationNotes(
+      activeTab ===
+        'notes' &&
+      canViewNotes
         ? id
         : null
     );
@@ -1289,6 +1320,11 @@ const ConsultationDetail = () => {
   const documents =
     getArrayPayload(
       documentsData
+    );
+
+  const notes =
+    getArrayPayload(
+      notesData
     );
 
   const activityLogs =
@@ -1516,6 +1552,9 @@ const ConsultationDetail = () => {
   const convertCaseMutation =
     useConvertConsultationToCase();
 
+  const addNoteMutation =
+    useAddConsultationNote();
+
   // ====================================================
   // STATUS
   // ====================================================
@@ -1541,6 +1580,52 @@ const ConsultationDetail = () => {
         id,
         status,
       });
+    };
+
+  // ====================================================
+  // NOTES
+  // ====================================================
+
+  const handleAddNote =
+    () => {
+      if (
+        !canCreateNotes ||
+        addNoteMutation.isPending
+      ) {
+        return;
+      }
+
+      const content =
+        String(
+          noteContent ||
+          ''
+        ).trim();
+
+      if (
+        !content
+      ) {
+        toast.error(
+          'Not içeriği gereklidir'
+        );
+
+        return;
+      }
+
+      addNoteMutation.mutate(
+        {
+          id,
+          data: {
+            content,
+          },
+        },
+        {
+          onSuccess: () => {
+            setNoteContent(
+              ''
+            );
+          },
+        }
+      );
     };
 
   // ====================================================
@@ -3568,43 +3653,160 @@ const ConsultationDetail = () => {
 
           <Card.Header>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-4">
 
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
-                <MessageSquareText size={17} />
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400">
+                  <MessageSquareText size={17} />
+                </div>
+
+                <div>
+
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Notlar
+                  </h2>
+
+                  <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                    Danışmanlık dosyasına ait notlar
+                  </p>
+
+                </div>
+
               </div>
 
-              <div>
-
-                <h2 className="font-semibold text-gray-900 dark:text-white">
-                  Notlar
-                </h2>
-
-                <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Danışmanlık notları mevcut Note altyapısı üzerinden bağlanacak
-                </p>
-
-              </div>
+              {!notesLoading &&
+                !notesError && (
+                <Badge variant="default">
+                  {notes.length} not
+                </Badge>
+              )}
 
             </div>
 
           </Card.Header>
 
-          <Card.Body>
+          <Card.Body className="space-y-5">
 
-            <div className="rounded-xl border border-dashed border-gray-200 px-5 py-10 text-center dark:border-white/[0.07]">
+            {canCreateNotes && (
+              <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
 
-              <MessageSquareText className="mx-auto h-8 w-8 text-gray-300 dark:text-slate-600" />
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Yeni Not
+                </label>
 
-              <p className="mt-3 text-sm font-medium text-gray-900 dark:text-white">
-                Not verisi bu adımda sahte şekilde üretilmedi.
-              </p>
+                <textarea
+                  value={
+                    noteContent
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setNoteContent(
+                      event.target.value
+                    )
+                  }
+                  disabled={
+                    addNoteMutation.isPending
+                  }
+                  rows={4}
+                  placeholder="Danışmanlıkla ilgili notunuzu yazın..."
+                  className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm leading-6 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white dark:placeholder:text-slate-500"
+                />
 
-              <p className="mx-auto mt-1 max-w-xl text-sm leading-6 text-gray-500 dark:text-slate-500">
-                `notes.consultation_id` ilişkisi hazır. Not ekleme/listeleme, mevcut Notes yetki akışı doğrulanarak entegrasyon adımında bağlanacak.
-              </p>
+                <div className="mt-3 flex justify-end">
 
-            </div>
+                  <Button
+                    type="button"
+                    onClick={
+                      handleAddNote
+                    }
+                    loading={
+                      addNoteMutation.isPending
+                    }
+                    disabled={
+                      addNoteMutation.isPending ||
+                      !String(
+                        noteContent ||
+                        ''
+                      ).trim()
+                    }
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Not Ekle
+                  </Button>
+
+                </div>
+
+              </div>
+            )}
+
+            {notesLoading ? (
+              <div className="py-10 text-center text-sm text-gray-500">
+                Notlar yükleniyor...
+              </div>
+            ) : notesError ? (
+              <div className="py-10 text-center text-sm text-red-600 dark:text-red-400">
+                {relationErrorMessage(
+                  notesError,
+                  'Notlar yüklenemedi'
+                )}
+              </div>
+            ) : notes.length ===
+              0 ? (
+              <div className="rounded-xl border border-dashed border-gray-200 px-5 py-10 text-center dark:border-white/[0.07]">
+
+                <MessageSquareText className="mx-auto h-8 w-8 text-gray-300 dark:text-slate-600" />
+
+                <p className="mt-3 text-sm font-medium text-gray-900 dark:text-white">
+                  Henüz not eklenmemiş.
+                </p>
+
+                <p className="mx-auto mt-1 max-w-xl text-sm leading-6 text-gray-500 dark:text-slate-500">
+                  Bu danışmanlık dosyasına ait notlar burada görüntülenecek.
+                </p>
+
+              </div>
+            ) : (
+              <div className="space-y-3">
+
+                {notes.map(
+                  (
+                    note
+                  ) => (
+                    <div
+                      key={
+                        note.id
+                      }
+                      className="rounded-xl border border-gray-100 p-4 dark:border-white/[0.06]"
+                    >
+
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                          {getFullName(
+                            note.creator
+                          )}
+                        </p>
+
+                        <span className="text-xs text-gray-400 dark:text-slate-500">
+                          {formatDateTime(
+                            note.created_at
+                          )}
+                        </span>
+
+                      </div>
+
+                      <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-gray-600 dark:text-slate-300">
+                        {note.content}
+                      </p>
+
+                    </div>
+                  )
+                )}
+
+              </div>
+            )}
 
           </Card.Body>
 

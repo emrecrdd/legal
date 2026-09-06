@@ -1638,6 +1638,74 @@ export const validateConvertConsultationToClient = (req, res, next) => {
 // CONVERT TO CASE
 // ======================================================
 
+// ======================================================
+// NOTES
+// ======================================================
+
+export const validateConsultationNote = (
+  req,
+  res,
+  next
+) => {
+  const body =
+    req.body;
+
+  if (
+    !isPlainObject(
+      body
+    )
+  ) {
+    return fail(
+      res,
+      'Geçersiz istek gövdesi'
+    );
+  }
+
+  const fields =
+    Object.keys(
+      body
+    );
+
+  if (
+    fields.length !==
+      1 ||
+    !hasOwn(
+      body,
+      'content'
+    )
+  ) {
+    return fail(
+      res,
+      'Yalnızca content alanı gönderilebilir'
+    );
+  }
+
+  if (
+    typeof body.content !==
+      'string'
+  ) {
+    return fail(
+      res,
+      'Not içeriği metin olmalıdır',
+      'content'
+    );
+  }
+
+  if (
+    !normalizeText(
+      body.content
+    )
+  ) {
+    return fail(
+      res,
+      'Not içeriği gereklidir',
+      'content'
+    );
+  }
+
+  return next();
+};
+
 export const validateConvertConsultationToCase = (
   req,
   res,

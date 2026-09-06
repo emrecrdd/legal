@@ -544,6 +544,53 @@ export const consultationService = {
     return consultationRepository.getDocuments(id, actor);
   },
 
+  async getNotes(id, actor) {
+    return consultationRepository.getNotes(id, actor);
+  },
+
+  async addNote(id, data, actor) {
+    const actorId = getActorId(actor);
+    if (!actorId) throw new Error('Consultation not found');
+
+    const content = String(data?.content ?? '').trim();
+    if (!content) throw new Error('Not içeriği gereklidir');
+
+    return sequelize.transaction(async (transaction) => {
+      const consultation = await consultationRepository.findScopedInstance(
+        id,
+        actor,
+        { transaction, lock: transaction.LOCK.UPDATE }
+      );
+
+      if (!consultation) throw new Error('Consultation not found');
+
+      const note = await consultationRepository.addNoteRecord(
+        id,
+        actorId,
+        content,
+        { transaction }
+      );
+
+      await createAudit({
+        action: 'update',
+        consultationId: id,
+        actorId,
+        oldValues: null,
+        newValues: { note_id: note.id },
+        description: 'Danışmanlık notu eklendi',
+        metadata: {
+          event: 'consultation_note_added',
+          note_id: note.id,
+        },
+      }, transaction);
+
+      return consultationRepository.findNoteById(
+        note.id,
+        { transaction }
+      );
+    });
+  },
+
   async convertToClient(id, data, actor) {
     const actorId = getActorId(actor);
     if (!actorId) throw new Error('Consultation not found');

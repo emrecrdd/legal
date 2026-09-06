@@ -18,6 +18,7 @@ import {
   validateConsultationListQuery,
   validateConsultationAssignee,
   validateConsultationAssigneeUserId,
+  validateConsultationNote,
   validateConvertConsultationToClient,
   validateConvertConsultationToCase,
 } from './consultation.validation.js';
@@ -136,6 +137,27 @@ router.get(
   ),
   validateConsultationId,
   consultationController.getDocuments
+);
+
+router.get(
+  '/:id/notes',
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_CONSULTATIONS,
+    PERMISSION_KEYS.VIEW_NOTES
+  ),
+  validateConsultationId,
+  consultationController.getNotes
+);
+
+router.post(
+  '/:id/notes',
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_CONSULTATIONS,
+    PERMISSION_KEYS.CREATE_NOTES
+  ),
+  validateConsultationId,
+  validateConsultationNote,
+  consultationController.addNote
 );
 
 router.post(

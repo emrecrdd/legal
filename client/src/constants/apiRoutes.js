@@ -117,9 +117,6 @@ export const API_ROUTES = {
     STATISTICS:
       '/consultations/statistics',
 
-    ASSIGNABLE_USERS:
-      '/consultations/assignable-users',
-
     UPDATE_STATUS:
       (id) =>
         `/consultations/${id}/status`,
@@ -143,6 +140,14 @@ export const API_ROUTES = {
     GET_DOCUMENTS:
       (id) =>
         `/consultations/${id}/documents`,
+
+    GET_NOTES:
+      (id) =>
+        `/consultations/${id}/notes`,
+
+    ADD_NOTE:
+      (id) =>
+        `/consultations/${id}/notes`,
 
     CONVERT_TO_CLIENT:
       (id) =>

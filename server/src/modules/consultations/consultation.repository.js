@@ -11,6 +11,7 @@ import { Case } from '../../models/Case.js';
 import { Task } from '../../models/Task.js';
 import { Meeting } from '../../models/Meeting.js';
 import { Document } from '../../models/Document.js';
+import { Note } from '../../models/Note.js';
 import { sequelize } from '../../config/database.js';
 import { paginate, getPaginationData } from '../../utils/paginate.js';
 import {
@@ -522,6 +523,67 @@ export const consultationRepository = {
     return Document.findAll({
       where: { consultation_id: consultationId },
       order: [['created_at', 'DESC']],
+    });
+  },
+
+  async getNotes(consultationId, actor, options = {}) {
+    const consultation = await this.findScopedInstance(
+      consultationId,
+      actor,
+      { transaction: options.transaction }
+    );
+
+    if (!consultation) throw new Error('Consultation not found');
+
+    return Note.findAll({
+      where: { consultation_id: consultationId },
+      include: [
+        {
+          model: User,
+          as: 'creator',
+          attributes: [
+            'id',
+            'first_name',
+            'last_name',
+            'email',
+            'role',
+          ],
+          required: false,
+        },
+      ],
+      order: [['created_at', 'DESC']],
+      transaction: options.transaction,
+    });
+  },
+
+  async addNoteRecord(consultationId, actorId, content, options = {}) {
+    return Note.create(
+      {
+        consultation_id: consultationId,
+        created_by: actorId,
+        content,
+      },
+      { transaction: options.transaction }
+    );
+  },
+
+  async findNoteById(noteId, options = {}) {
+    return Note.findByPk(noteId, {
+      include: [
+        {
+          model: User,
+          as: 'creator',
+          attributes: [
+            'id',
+            'first_name',
+            'last_name',
+            'email',
+            'role',
+          ],
+          required: false,
+        },
+      ],
+      transaction: options.transaction,
     });
   },
 

@@ -369,6 +369,15 @@ export const CONSULTATION_QUERY_KEYS = {
       id
     ),
   ],
+
+  notes: (
+    id
+  ) => [
+    'consultation-notes',
+    normalizeId(
+      id
+    ),
+  ],
 };
 
 // ======================================================
@@ -449,6 +458,14 @@ const invalidateConsultationRelations =
         queryKey:
           CONSULTATION_QUERY_KEYS
             .documents(
+              normalizedId
+            ),
+      }),
+
+      queryClient.invalidateQueries({
+        queryKey:
+          CONSULTATION_QUERY_KEYS
+            .notes(
               normalizedId
             ),
       }),
@@ -826,6 +843,39 @@ export const useConsultationDocuments = (
   });
 };
 
+export const useConsultationNotes = (
+  consultationId
+) => {
+  const normalizedId =
+    normalizeId(
+      consultationId
+    );
+
+  return useQuery({
+    queryKey:
+      CONSULTATION_QUERY_KEYS
+        .notes(
+          normalizedId
+        ),
+
+    queryFn: () =>
+      consultationApi.getNotes(
+        normalizedId
+      ),
+
+    enabled:
+      Boolean(
+        normalizedId
+      ),
+
+    staleTime:
+      CACHE.NORMAL,
+
+    gcTime:
+      CACHE.GC,
+  });
+};
+
 // ======================================================
 // MUTATIONS
 // ======================================================
@@ -1028,29 +1078,20 @@ export const useUpdateConsultation =
           ),
         ]);
 
-        if (
-          !variables?.silent
-        ) {
-          toast.success(
-            'Danışmanlık başarıyla güncellendi'
-          );
-        }
+        toast.success(
+          'Danışmanlık başarıyla güncellendi'
+        );
       },
 
       onError: (
-        error,
-        variables
+        error
       ) => {
-        if (
-          !variables?.silent
-        ) {
-          toast.error(
-            getErrorMessage(
-              error,
-              'Danışmanlık güncellenemedi'
-            )
-          );
-        }
+        toast.error(
+          getErrorMessage(
+            error,
+            'Danışmanlık güncellenemedi'
+          )
+        );
       },
     });
   };
@@ -1269,29 +1310,20 @@ export const useUpdateConsultationStatus =
           queryClient
         );
 
-        if (
-          !variables?.silent
-        ) {
-          toast.success(
-            'Danışmanlık durumu güncellendi'
-          );
-        }
+        toast.success(
+          'Danışmanlık durumu güncellendi'
+        );
       },
 
       onError: (
-        error,
-        variables
+        error
       ) => {
-        if (
-          !variables?.silent
-        ) {
-          toast.error(
-            getErrorMessage(
-              error,
-              'Danışmanlık durumu güncellenemedi'
-            )
-          );
-        }
+        toast.error(
+          getErrorMessage(
+            error,
+            'Danışmanlık durumu güncellenemedi'
+          )
+        );
       },
     });
   };
@@ -1441,6 +1473,73 @@ export const useRemoveConsultationAssignee =
 // ======================================================
 // CONVERSION MUTATIONS
 // ======================================================
+
+export const useAddConsultationNote =
+  () => {
+    const queryClient =
+      useQueryClient();
+
+    return useMutation({
+      mutationFn: ({
+        id,
+        data,
+      }) =>
+        consultationApi.addNote(
+          normalizeId(
+            id
+          ),
+          normalizeMutationData(
+            data
+          )
+        ),
+
+      onSuccess: async (
+        _response,
+        variables
+      ) => {
+        const consultationId =
+          normalizeId(
+            variables?.id
+          );
+
+        if (
+          consultationId
+        ) {
+          await Promise.all([
+            queryClient.invalidateQueries({
+              queryKey:
+                CONSULTATION_QUERY_KEYS
+                  .notes(
+                    consultationId
+                  ),
+            }),
+
+            queryClient.invalidateQueries({
+              queryKey: [
+                'consultation-audit-logs',
+                consultationId,
+              ],
+            }),
+          ]);
+        }
+
+        toast.success(
+          'Not eklendi'
+        );
+      },
+
+      onError: (
+        error
+      ) => {
+        toast.error(
+          getErrorMessage(
+            error,
+            'Not eklenemedi'
+          )
+        );
+      },
+    });
+  };
 
 export const useConvertConsultationToClient =
   () => {
@@ -1793,6 +1892,7 @@ export default {
   useConsultationTasks,
   useConsultationMeetings,
   useConsultationDocuments,
+  useConsultationNotes,
 
   // Mutations
   useCreateConsultation,
@@ -1801,6 +1901,7 @@ export default {
   useUpdateConsultationStatus,
   useAddConsultationAssignee,
   useRemoveConsultationAssignee,
+  useAddConsultationNote,
   useConvertConsultationToClient,
   useConvertConsultationToCase,
 

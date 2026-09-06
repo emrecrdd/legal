@@ -34,7 +34,8 @@ const normalizeControllerError = (error) => {
     message === 'Danışmanlıkta en az bir sorumlu kalmalıdır' ||
     message === 'Geçersiz danışmanlık durumu' ||
     message === 'Davaya dönüştürüldü durumu yalnız davaya dönüştürme işlemiyle atanabilir' ||
-    message === 'Davaya dönüştürmeden önce müvekkile dönüştürülmelidir'
+    message === 'Davaya dönüştürmeden önce müvekkile dönüştürülmelidir' ||
+    message === 'Not içeriği gereklidir'
   ) {
 
     error.statusCode = error.statusCode || 400;
@@ -290,6 +291,48 @@ export const consultationController = {
     try {
 
       return ok(res, await consultationService.getDocuments(req.params.id, req.user));
+
+    } catch (error) {
+
+      return next(normalizeControllerError(error));
+
+    }
+
+  },
+
+  async getNotes(req, res, next) {
+
+    try {
+
+      return ok(res, await consultationService.getNotes(req.params.id, req.user));
+
+    } catch (error) {
+
+      return next(normalizeControllerError(error));
+
+    }
+
+  },
+
+  async addNote(req, res, next) {
+
+    try {
+
+      const data = await consultationService.addNote(
+        req.params.id,
+        req.body,
+        req.user
+      );
+
+      return res.status(201).json({
+
+        success: true,
+
+        message: 'Not eklendi',
+
+        data,
+
+      });
 
     } catch (error) {
 
