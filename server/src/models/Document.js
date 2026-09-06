@@ -176,6 +176,22 @@ class Document extends Sequelize.Model {
           },
         },
 
+        consultation_id: {
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
+
+          references: {
+            model:
+              'consultations',
+
+            key:
+              'id',
+          },
+        },
+
         power_of_attorney_id: {
           type:
             DataTypes.UUID,
@@ -268,6 +284,12 @@ class Document extends Sequelize.Model {
 
           {
             fields: [
+              'consultation_id',
+            ],
+          },
+
+          {
+            fields: [
               'uploaded_by',
             ],
           },
@@ -312,6 +334,13 @@ class Document extends Sequelize.Model {
           {
             fields: [
               'client_id',
+              'created_at',
+            ],
+          },
+
+          {
+            fields: [
+              'consultation_id',
               'created_at',
             ],
           },

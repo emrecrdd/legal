@@ -1317,7 +1317,8 @@ export const clientService = {
 
   async create(
     data,
-    actor
+    actor,
+    options = {}
   ) {
     try {
       const actorId =
@@ -1338,7 +1339,11 @@ export const clientService = {
       );
 
       return await Client.create(
-        preparedData
+        preparedData,
+        {
+          transaction:
+            options.transaction,
+        }
       );
     } catch (
       error

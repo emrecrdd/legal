@@ -99,6 +99,38 @@ export const PERMISSION_KEYS = {
   MANAGE_CASE_PARTIES:
     'manage_case_parties',
 
+
+    // ----------------------------------------------------
+// CONSULTATIONS
+// ----------------------------------------------------
+
+VIEW_CONSULTATIONS:
+  'view_consultations',
+
+/*
+ * Record-level erişim.
+ *
+ * Bu izin yoksa kullanıcı yalnızca:
+ *
+ * - created_by = kendi ID'si
+ * - consultation_assignees içinde user_id = kendi ID'si
+ *
+ * olan danışmanlıklara erişebilir.
+ */
+VIEW_ALL_CONSULTATIONS:
+  'view_all_consultations',
+
+CREATE_CONSULTATIONS:
+  'create_consultations',
+
+EDIT_CONSULTATIONS:
+  'edit_consultations',
+
+DELETE_CONSULTATIONS:
+  'delete_consultations',
+
+CONVERT_CONSULTATIONS:
+  'convert_consultations',
   // ----------------------------------------------------
   // DOCUMENTS
   // ----------------------------------------------------
@@ -369,6 +401,12 @@ export const PERMISSIONS = {
     PERMISSION_KEYS.CHANGE_CASE_STATUS,
     PERMISSION_KEYS.MANAGE_CASE_PARTIES,
 
+    // Consultations
+    PERMISSION_KEYS.VIEW_CONSULTATIONS,
+    PERMISSION_KEYS.CREATE_CONSULTATIONS,
+    PERMISSION_KEYS.EDIT_CONSULTATIONS,
+    PERMISSION_KEYS.CONVERT_CONSULTATIONS,
+
     // Documents
     PERMISSION_KEYS.VIEW_DOCUMENTS,
     PERMISSION_KEYS.UPLOAD_DOCUMENTS,
@@ -440,6 +478,11 @@ export const PERMISSIONS = {
     PERMISSION_KEYS.VIEW_CASES,
     PERMISSION_KEYS.EDIT_CASES,
 
+    // Consultations
+    PERMISSION_KEYS.VIEW_CONSULTATIONS,
+    PERMISSION_KEYS.CREATE_CONSULTATIONS,
+    PERMISSION_KEYS.EDIT_CONSULTATIONS,
+
     // Documents
     PERMISSION_KEYS.VIEW_DOCUMENTS,
     PERMISSION_KEYS.UPLOAD_DOCUMENTS,
@@ -501,6 +544,9 @@ export const PERMISSIONS = {
 
     // Cases
     PERMISSION_KEYS.VIEW_CASES,
+
+    // Consultations
+    PERMISSION_KEYS.VIEW_CONSULTATIONS,
 
     // Documents
     PERMISSION_KEYS.VIEW_DOCUMENTS,
@@ -570,6 +616,20 @@ export const PERMISSION_GROUPS = {
       PERMISSION_KEYS.DELETE_CASES,
       PERMISSION_KEYS.CHANGE_CASE_STATUS,
       PERMISSION_KEYS.MANAGE_CASE_PARTIES,
+    ],
+  },
+
+  consultations: {
+    label:
+      'Danışmanlıklar',
+
+    permissions: [
+      PERMISSION_KEYS.VIEW_CONSULTATIONS,
+      PERMISSION_KEYS.VIEW_ALL_CONSULTATIONS,
+      PERMISSION_KEYS.CREATE_CONSULTATIONS,
+      PERMISSION_KEYS.EDIT_CONSULTATIONS,
+      PERMISSION_KEYS.DELETE_CONSULTATIONS,
+      PERMISSION_KEYS.CONVERT_CONSULTATIONS,
     ],
   },
 
@@ -775,6 +835,12 @@ export const PERMISSION_PRESETS = {
        * görebilir.
        */
       [PERMISSION_KEYS.VIEW_ALL_CASES]:
+        true,
+
+      [PERMISSION_KEYS.VIEW_ALL_CONSULTATIONS]:
+        true,
+
+      [PERMISSION_KEYS.DELETE_CONSULTATIONS]:
         true,
 
       [PERMISSION_KEYS.DELETE_CLIENTS]:

@@ -1,5 +1,7 @@
 import { User } from './User.js';
 import { Client } from './Client.js';
+import { Consultation } from './Consultation.js';
+import { ConsultationAssignee } from './ConsultationAssignee.js';
 import { Case } from './Case.js';
 import { CaseParty } from './CaseParty.js';
 import { Document } from './Document.js';
@@ -30,6 +32,8 @@ const initModels = (sequelize) => {
 
   User.initModel(sequelize);
   Client.initModel(sequelize);
+  Consultation.initModel(sequelize);
+  ConsultationAssignee.initModel(sequelize);
   Case.initModel(sequelize);
   CaseParty.initModel(sequelize);
   Document.initModel(sequelize);
@@ -532,6 +536,160 @@ MessageAttachment.initModel(sequelize);
   Task.belongsTo(Client, {
     foreignKey: 'client_id',
     as: 'client',
+  });
+
+  // ======================================================
+  // CONSULTATION ASSOCIATIONS
+  // ======================================================
+
+  Client.hasMany(Consultation, {
+    foreignKey: 'client_id',
+    as: 'consultations',
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
+  });
+
+  Consultation.belongsTo(Client, {
+    foreignKey: 'client_id',
+    as: 'client',
+  });
+
+  User.hasMany(Consultation, {
+    foreignKey: 'created_by',
+    as: 'createdConsultations',
+    onUpdate: 'CASCADE',
+    onDelete: 'RESTRICT',
+  });
+
+  Consultation.belongsTo(User, {
+    foreignKey: 'created_by',
+    as: 'creator',
+  });
+
+  User.hasMany(Consultation, {
+    foreignKey: 'updated_by',
+    as: 'updatedConsultations',
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
+  });
+
+  Consultation.belongsTo(User, {
+    foreignKey: 'updated_by',
+    as: 'updater',
+  });
+
+  Case.hasMany(Consultation, {
+    foreignKey: 'converted_case_id',
+    as: 'sourceConsultations',
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
+  });
+
+  Consultation.belongsTo(Case, {
+    foreignKey: 'converted_case_id',
+    as: 'convertedCase',
+  });
+
+  User.belongsToMany(Consultation, {
+    through: ConsultationAssignee,
+    foreignKey: 'user_id',
+    otherKey: 'consultation_id',
+    as: 'assignedConsultations',
+  });
+
+  Consultation.belongsToMany(User, {
+    through: ConsultationAssignee,
+    foreignKey: 'consultation_id',
+    otherKey: 'user_id',
+    as: 'assignees',
+  });
+
+  Consultation.hasMany(ConsultationAssignee, {
+    foreignKey: 'consultation_id',
+    as: 'assignmentRecords',
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE',
+  });
+
+  ConsultationAssignee.belongsTo(Consultation, {
+    foreignKey: 'consultation_id',
+    as: 'consultation',
+  });
+
+  User.hasMany(ConsultationAssignee, {
+    foreignKey: 'user_id',
+    as: 'consultationAssignments',
+    onUpdate: 'CASCADE',
+    onDelete: 'RESTRICT',
+  });
+
+  ConsultationAssignee.belongsTo(User, {
+    foreignKey: 'user_id',
+    as: 'user',
+  });
+
+  User.hasMany(ConsultationAssignee, {
+    foreignKey: 'assigned_by',
+    as: 'createdConsultationAssignments',
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
+  });
+
+  ConsultationAssignee.belongsTo(User, {
+    foreignKey: 'assigned_by',
+    as: 'assigner',
+  });
+
+  // ======================================================
+  // CONSULTATION CHILD ASSOCIATIONS
+  // ======================================================
+
+  Consultation.hasMany(Task, {
+    foreignKey: 'consultation_id',
+    as: 'tasks',
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
+  });
+
+  Task.belongsTo(Consultation, {
+    foreignKey: 'consultation_id',
+    as: 'consultation',
+  });
+
+  Consultation.hasMany(Meeting, {
+    foreignKey: 'consultation_id',
+    as: 'meetings',
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
+  });
+
+  Meeting.belongsTo(Consultation, {
+    foreignKey: 'consultation_id',
+    as: 'consultation',
+  });
+
+  Consultation.hasMany(Document, {
+    foreignKey: 'consultation_id',
+    as: 'documents',
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
+  });
+
+  Document.belongsTo(Consultation, {
+    foreignKey: 'consultation_id',
+    as: 'consultation',
+  });
+
+  Consultation.hasMany(Note, {
+    foreignKey: 'consultation_id',
+    as: 'notes',
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
+  });
+
+  Note.belongsTo(Consultation, {
+    foreignKey: 'consultation_id',
+    as: 'consultation',
   });
 
   // ======================================================
@@ -1160,6 +1318,8 @@ export {
 
   User,
   Client,
+  Consultation,
+  ConsultationAssignee,
   Case,
   CaseParty,
   Document,

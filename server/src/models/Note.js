@@ -133,6 +133,22 @@ class Note extends Sequelize.Model {
           },
         },
 
+        consultation_id: {
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
+
+          references: {
+            model:
+              'consultations',
+
+            key:
+              'id',
+          },
+        },
+
         created_by: {
           type:
             DataTypes.UUID,
@@ -206,6 +222,12 @@ class Note extends Sequelize.Model {
 
           {
             fields: [
+              'consultation_id',
+            ],
+          },
+
+          {
+            fields: [
               'created_by',
             ],
           },
@@ -245,6 +267,13 @@ class Note extends Sequelize.Model {
           {
             fields: [
               'task_id',
+              'created_at',
+            ],
+          },
+
+          {
+            fields: [
+              'consultation_id',
               'created_at',
             ],
           },

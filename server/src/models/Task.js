@@ -132,6 +132,22 @@ class Task extends Sequelize.Model {
           },
         },
 
+        consultation_id: {
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
+
+          references: {
+            model:
+              'consultations',
+
+            key:
+              'id',
+          },
+        },
+
         parent_task_id: {
           type:
             DataTypes.UUID,
@@ -305,6 +321,12 @@ class Task extends Sequelize.Model {
           {
             fields: [
               'client_id',
+            ],
+          },
+
+          {
+            fields: [
+              'consultation_id',
             ],
           },
 

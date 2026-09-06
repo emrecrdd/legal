@@ -63,6 +63,10 @@ import {
 } from './modules/cases/case.routes.js';
 
 import {
+  consultationRoutes,
+} from './modules/consultations/consultation.routes.js';
+
+import {
   casePartyRoutes,
 } from './modules/case-parties/case-party.routes.js';
 
@@ -1050,6 +1054,11 @@ app.use(
 app.use(
   '/api/cases',
   caseRoutes
+);
+
+app.use(
+  '/api/consultations',
+  consultationRoutes
 );
 
 app.use(

@@ -280,6 +280,22 @@ class Meeting extends Sequelize.Model {
           },
         },
 
+        consultation_id: {
+          type:
+            DataTypes.UUID,
+
+          allowNull:
+            true,
+
+          references: {
+            model:
+              'consultations',
+
+            key:
+              'id',
+          },
+        },
+
         created_by: {
           type:
             DataTypes.UUID,
@@ -339,6 +355,12 @@ class Meeting extends Sequelize.Model {
 
           {
             fields: [
+              'consultation_id',
+            ],
+          },
+
+          {
+            fields: [
               'created_by',
             ],
           },
@@ -385,6 +407,13 @@ class Meeting extends Sequelize.Model {
           {
             fields: [
               'case_id',
+              'start_date',
+            ],
+          },
+
+          {
+            fields: [
+              'consultation_id',
               'start_date',
             ],
           },
