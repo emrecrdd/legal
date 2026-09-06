@@ -22,20 +22,10 @@ import {
 } from '../../features/documents/document.query.js';
 
 import caseApi from '../../features/cases/case.api.js';
-import clientApi from '../../features/import consultationApi from '../../features/consultations/consultation.api.js';
-
+import clientApi from '../../features/import consultationApi f
 import {
   powerOfAttorneyApi,
 } from '../../features/power-of-attorney/powerOfAttorney.api.js';
-
-import {
-  useAuth,
-} from '../../app/providers/auth.provider.jsx';
-
-import {
-  PERMISSION_KEYS,
-  hasPermission,
-} from '../../constants/roles.js';
 
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
@@ -445,11 +435,6 @@ const normalizeUploadFormForComparison = (
       form?.client_id
     ),
 
-  consultation_id:
-    normalizeId(
-      form?.consultation_id
-    ),
-
   power_of_attorney_id:
     normalizeId(
       form?.power_of_attorney_id
@@ -471,18 +456,6 @@ const DocumentUpload = () => {
 
   const queryClient =
     useQueryClient();
-
-  const {
-    user,
-  } =
-    useAuth();
-
-  const canViewConsultations =
-    hasPermission(
-      user,
-      PERMISSION_KEYS
-        .VIEW_CONSULTATIONS
-    );
 
   const [
     searchParams,
@@ -510,19 +483,6 @@ const DocumentUpload = () => {
         normalizeId(
           searchParams.get(
             'client'
-          )
-        ),
-
-      consultation_id:
-        normalizeId(
-          searchParams.get(
-            'consultation_id'
-          ) ??
-          searchParams.get(
-            'consultation'
-          ) ??
-          searchParams.get(
-            'consultationId'
           )
         ),
 
@@ -601,75 +561,6 @@ const DocumentUpload = () => {
   // ======================================================
   // RELATED DATA
   // ======================================================
-
-  const {
-    data:
-      consultationsData,
-    isLoading:
-      consultationsLoading,
-    isError:
-      consultationsError,
-    refetch:
-      refetchConsultations,
-  } =
-    useQuery({
-      queryKey: [
-        'consultations',
-        {
-          limit: 100,
-        },
-        'document-upload',
-      ],
-
-      queryFn: () =>
-        consultationApi.getAll({
-          limit: 100,
-        }),
-
-      enabled:
-        canViewConsultations,
-
-      staleTime:
-        5 * 60 * 1000,
-    });
-
-  const {
-    data:
-      selectedConsultationData,
-    isLoading:
-      selectedConsultationLoading,
-    isError:
-      selectedConsultationError,
-    refetch:
-      refetchSelectedConsultation,
-  } =
-    useQuery({
-      queryKey: [
-        'consultation',
-        normalizeId(
-          formData.consultation_id
-        ),
-      ],
-
-      queryFn: () =>
-        consultationApi.getOne(
-          normalizeId(
-            formData.consultation_id
-          )
-        ),
-
-      enabled:
-        Boolean(
-          canViewConsultations &&
-          formData.consultation_id
-        ),
-
-      staleTime:
-        60 * 1000,
-
-      retry:
-        false,
-    });
 
   const {
     data:
@@ -800,53 +691,6 @@ const DocumentUpload = () => {
   // ======================================================
   // DATA
   // ======================================================
-
-  const baseConsultations =
-    getArrayPayload(
-      consultationsData
-    );
-
-  const selectedConsultationDetail =
-    selectedConsultationData
-      ?.data
-      ?.data ??
-    selectedConsultationData
-      ?.data ??
-    null;
-
-  const consultations =
-    useMemo(() => {
-      const result = [
-        ...baseConsultations,
-      ];
-
-      const selectedId =
-        normalizeId(
-          selectedConsultationDetail?.id
-        );
-
-      if (
-        selectedId &&
-        !result.some(
-          (
-            consultation
-          ) =>
-            normalizeId(
-              consultation?.id
-            ) ===
-            selectedId
-        )
-      ) {
-        result.unshift(
-          selectedConsultationDetail
-        );
-      }
-
-      return result;
-    }, [
-      baseConsultations,
-      selectedConsultationDetail,
-    ]);
 
   const cases =
     getArrayPayload(
@@ -982,33 +826,6 @@ const DocumentUpload = () => {
       formData.client_id,
     ]);
 
-  const selectedConsultation =
-    useMemo(() => {
-      const selectedId =
-        normalizeId(
-          formData.consultation_id
-        );
-
-      if (
-        !selectedId
-      ) {
-        return null;
-      }
-
-      return consultations.find(
-        (
-          consultation
-        ) =>
-          normalizeId(
-            consultation?.id
-          ) ===
-          selectedId
-      ) || null;
-    }, [
-      consultations,
-      formData.consultation_id,
-    ]);
-
   const selectedCase =
     useMemo(() => {
       return relationCases.find(
@@ -1074,16 +891,6 @@ const DocumentUpload = () => {
 
   const getReturnPath =
     () => {
-      const consultationId =
-        normalizeId(
-          formData.consultation_id
-        );
-
-      const consultationId =
-        normalizeId(
-          formData.consultation_id
-        );
-
       const caseId =
         normalizeId(
           formData.case_id
@@ -1093,12 +900,6 @@ const DocumentUpload = () => {
         normalizeId(
           formData.client_id
         );
-
-      if (
-        consultationId
-      ) {
-        return `/consultations/${consultationId}`;
-      }
 
       if (caseId) {
         return `/cases/${caseId}`;
@@ -1178,7 +979,6 @@ const DocumentUpload = () => {
           : [
               'client_id',
               'case_id',
-              'consultation_id',
               'power_of_attorney_id',
             ].includes(
               name
@@ -1623,19 +1423,6 @@ const DocumentUpload = () => {
 
       if (
         normalizeId(
-          formData.consultation_id
-        )
-      ) {
-        payload.append(
-          'consultation_id',
-          normalizeId(
-            formData.consultation_id
-          )
-        );
-      }
-
-      if (
-        normalizeId(
           formData.power_of_attorney_id
         )
       ) {
@@ -1713,11 +1500,6 @@ const DocumentUpload = () => {
 
   const refreshRelatedQueries =
     async () => {
-      const consultationId =
-        normalizeId(
-          formData.consultation_id
-        );
-
       const caseId =
         normalizeId(
           formData.case_id
@@ -1760,26 +1542,6 @@ const DocumentUpload = () => {
           ],
         }),
       ];
-
-      if (
-        consultationId
-      ) {
-        promises.push(
-          queryClient.invalidateQueries({
-            queryKey: [
-              'consultation-documents',
-              consultationId,
-            ],
-          }),
-
-          queryClient.invalidateQueries({
-            queryKey: [
-              'consultation',
-              consultationId,
-            ],
-          })
-        );
-      }
 
       if (
         caseId
@@ -1831,11 +1593,6 @@ const DocumentUpload = () => {
 
   const redirectAfterUpload =
     () => {
-      const consultationId =
-        normalizeId(
-          formData.consultation_id
-        );
-
       const caseId =
         normalizeId(
           formData.case_id
@@ -1845,16 +1602,6 @@ const DocumentUpload = () => {
         normalizeId(
           formData.client_id
         );
-
-      if (
-        consultationId
-      ) {
-        navigate(
-          `/consultations/${consultationId}`
-        );
-
-        return;
-      }
 
       if (
         caseId
@@ -1962,28 +1709,6 @@ const DocumentUpload = () => {
       ) {
         nextErrors.client_id =
           'Seçilen müvekkil artık erişilemiyor';
-      }
-
-      if (
-        consultationId
-      ) {
-        if (
-          !canViewConsultations
-        ) {
-          nextErrors.consultation_id =
-            'Danışmanlık görüntüleme yetkiniz olmadan belge danışmanlığa bağlanamaz';
-        } else if (
-          selectedConsultationError
-        ) {
-          nextErrors.consultation_id =
-            'Seçilen danışmanlık artık erişilebilir değil';
-        } else if (
-          !selectedConsultationLoading &&
-          !selectedConsultation
-        ) {
-          nextErrors.consultation_id =
-            'Seçilen danışmanlık doğrulanamadı';
-        }
       }
 
       if (
@@ -2411,13 +2136,11 @@ const DocumentUpload = () => {
         >
           <ArrowLeft className="h-3.5 w-3.5" />
 
-          {formData.consultation_id
-            ? 'Danışmanlığa Dön'
-            : formData.case_id
-              ? 'Davaya Dön'
-              : formData.client_id
-                ? 'Müvekkile Dön'
-                : 'Belgeler'}
+          {formData.case_id
+            ? 'Davaya Dön'
+            : formData.client_id
+              ? 'Müvekkile Dön'
+              : 'Belgeler'}
         </Link>
 
         <div className="mt-3 flex items-start gap-3">
@@ -2476,7 +2199,7 @@ const DocumentUpload = () => {
                 dark:text-slate-400
               "
             >
-              Dosyaları sisteme ekleyin, ilişkili danışmanlık, dava veya müvekkili belirleyin ve erişim kapsamını yönetin.
+              Dosyaları sisteme ekleyin, ilişkili dava veya müvekkili belirleyin ve erişim kapsamını yönetin.
             </p>
 
           </div>
@@ -3184,7 +2907,7 @@ const DocumentUpload = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Belgeyi danışmanlık, müvekkil, dava veya vekaletname kaydıyla ilişkilendirin
+                  Belgeyi müvekkil, dava veya vekaletname kaydıyla ilişkilendirin
                 </p>
 
               </div>
@@ -3194,195 +2917,6 @@ const DocumentUpload = () => {
           </Card.Header>
 
           <Card.Body className="space-y-4">
-
-            <div>
-
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                Danışmanlık
-              </label>
-
-              <select
-                name="consultation_id"
-                value={
-                  formData.consultation_id
-                }
-                onChange={
-                  handleChange
-                }
-                disabled={
-                  !canViewConsultations ||
-                  consultationsLoading ||
-                  isUploading
-                }
-                className="
-                  h-10
-                  w-full
-                  rounded-lg
-                  border
-                  border-gray-200
-                  bg-white
-                  px-3.5
-                  text-sm
-                  text-gray-700
-                  outline-none
-                  disabled:cursor-not-allowed
-                  disabled:opacity-50
-                  focus:border-blue-500
-                  focus:ring-2
-                  focus:ring-blue-500/10
-                  dark:border-white/[0.08]
-                  dark:bg-white/[0.035]
-                  dark:text-slate-300
-                "
-              >
-
-                <option value="">
-                  {!canViewConsultations
-                    ? 'Danışmanlık görüntüleme yetkiniz yok'
-                    : consultationsLoading
-                      ? 'Danışmanlıklar yükleniyor...'
-                      : consultationsError
-                        ? 'Danışmanlıklar yüklenemedi'
-                        : 'İlişki yok'}
-                </option>
-
-                {consultations.map(
-                  (
-                    consultation
-                  ) => (
-                    <option
-                      key={
-                        consultation.id
-                      }
-                      value={
-                        normalizeId(
-                          consultation.id
-                        )
-                      }
-                    >
-                      {consultation.consultation_number
-                        ? `${consultation.consultation_number} · `
-                        : ''}
-                      {consultation.title ||
-                        'Danışmanlık'}
-                    </option>
-                  )
-                )}
-
-              </select>
-
-              {errors.consultation_id && (
-                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                  {errors.consultation_id}
-                </p>
-              )}
-
-              {consultationsError &&
-                canViewConsultations && (
-                <div className="mt-2 flex items-center gap-2">
-
-                  <p className="text-xs text-red-600 dark:text-red-400">
-                    Danışmanlık listesi alınamadı.
-                  </p>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      refetchConsultations?.()
-                    }
-                    disabled={
-                      consultationsLoading ||
-                      isUploading
-                    }
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Tekrar Dene
-                  </Button>
-
-                </div>
-              )}
-
-              {formData.consultation_id &&
-                selectedConsultationLoading && (
-                  <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
-                    Seçilen danışmanlık doğrulanıyor...
-                  </p>
-                )}
-
-              {formData.consultation_id &&
-                selectedConsultationError && (
-                  <div className="mt-2 flex items-center gap-2">
-
-                    <p className="text-xs text-red-600 dark:text-red-400">
-                      Seçilen danışmanlık doğrulanamadı.
-                    </p>
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        refetchSelectedConsultation?.()
-                      }
-                      disabled={
-                        selectedConsultationLoading ||
-                        isUploading
-                      }
-                    >
-                      <RefreshCw className="h-3.5 w-3.5" />
-                      Tekrar Dene
-                    </Button>
-
-                  </div>
-                )}
-
-              {selectedConsultation && (
-                <div
-                  className="
-                    mt-3
-                    flex
-                    items-center
-                    gap-3
-                    rounded-lg
-                    border
-                    border-violet-100
-                    bg-violet-50/50
-                    p-3
-                    dark:border-violet-500/15
-                    dark:bg-violet-500/[0.04]
-                  "
-                >
-
-                  <BriefcaseBusiness
-                    size={15}
-                    className="shrink-0 text-violet-500"
-                  />
-
-                  <div className="min-w-0">
-
-                    <p className="truncate text-xs font-semibold text-gray-700 dark:text-slate-300">
-                      {selectedConsultation.consultation_number
-                        ? `${selectedConsultation.consultation_number} · `
-                        : ''}
-                      {selectedConsultation.title ||
-                        'Danışmanlık'}
-                    </p>
-
-                    <p className="mt-1 truncate text-[10px] text-gray-500 dark:text-slate-500">
-                      {selectedConsultation.client?.name ||
-                        selectedConsultation.prospect_name ||
-                        selectedConsultation.legal_area ||
-                        'Danışmanlık kaydı'}
-                    </p>
-
-                  </div>
-
-                </div>
-              )}
-
-            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
 
@@ -4012,11 +3546,7 @@ const DocumentUpload = () => {
 
               <p className="mt-1 text-sm font-medium text-gray-700 dark:text-slate-300">
                 {[
-                  formData.consultation_id
-                    ? 'Danışmanlık'
-                    : null,
-          gap-3
-                rounded-xl
+        rounded-xl
                 border
                 border-gray-100
                 bg-gray-50/60
