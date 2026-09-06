@@ -44,6 +44,8 @@ const INITIAL_FORM = {
   is_active: true,
 };
 
+const PASSWORD_MIN_LENGTH = 12;
+
 const ROLE_OPTIONS = [
   {
     value: 'lawyer',
@@ -171,7 +173,7 @@ const getBackendFieldErrors = (
       role:
         'Geçerli bir rol seçin',
       password:
-        'Şifre en az 8 karakter olmalıdır',
+        `Şifre en az ${PASSWORD_MIN_LENGTH} karakter olmalıdır`,
       confirm_password:
         'Şifre tekrarını kontrol edin',
       is_active:
@@ -248,6 +250,114 @@ const getBackendFieldErrors = (
       },
       {}
     );
+  }
+
+  return {};
+};
+
+
+const getTopLevelBackendFieldErrors = (
+  error
+) => {
+  const status =
+    error?.response?.status;
+
+  const rawMessage = String(
+    error?.response?.data?.message ??
+      ''
+  ).trim();
+
+  if (!rawMessage) {
+    return {};
+  }
+
+  if (
+    status === 409 ||
+    /e-?posta.*(zaten|kullanılıyor|kullanımda|kayıtlı)|duplicate|unique/i.test(
+      rawMessage
+    )
+  ) {
+    return {
+      email:
+        'Bu e-posta adresi zaten kullanımda.',
+    };
+  }
+
+  if (
+    /şifre.*(en az|min(?:imum)?)/i.test(
+      rawMessage
+    )
+  ) {
+    return {
+      password:
+        `Şifre en az ${PASSWORD_MIN_LENGTH} karakter olmalıdır.`,
+    };
+  }
+
+  if (
+    /şifre.*çok uzun/i.test(
+      rawMessage
+    )
+  ) {
+    return {
+      password:
+        'Şifre çok uzun. Lütfen daha kısa bir şifre kullanın.',
+    };
+  }
+
+  if (
+    /şifre.*boşluk/i.test(
+      rawMessage
+    )
+  ) {
+    return {
+      password:
+        'Şifre yalnızca boşluklardan oluşamaz.',
+    };
+  }
+
+  if (
+    /geçerli.*e-?posta|e-?posta.*geçerli/i.test(
+      rawMessage
+    )
+  ) {
+    return {
+      email:
+        'Geçerli bir e-posta adresi girin.',
+    };
+  }
+
+  if (
+    /^ad (gereklidir|boş olamaz)/i.test(
+      rawMessage
+    )
+  ) {
+    return {
+      first_name:
+        'Ad gereklidir.',
+    };
+  }
+
+  if (
+    /^soyad (gereklidir|boş olamaz)/i.test(
+      rawMessage
+    )
+  ) {
+    return {
+      last_name:
+        'Soyad gereklidir.',
+    };
+  }
+
+  if (
+    /geçersiz kullanıcı rolü|geçerli bir rol/i.test(
+      rawMessage
+    )
+  ) {
+    return {
+      role:
+        'Geçerli bir rol seçin.',
+    };
   }
 
   return {};
@@ -365,6 +475,9 @@ const UserCreate = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const formRef =
+    useRef(null);
+
   const leaveDialogRef =
     useRef(null);
 
@@ -413,6 +526,37 @@ const UserCreate = () => {
       ]
     );
 
+  const focusField = (
+    fieldName
+  ) => {
+    if (!fieldName) {
+      return;
+    }
+
+    window.requestAnimationFrame(
+      () => {
+        const element =
+          formRef.current
+            ?.querySelector(
+              `[name="${fieldName}"]`
+            );
+
+        if (!element) {
+          return;
+        }
+
+        element.focus({
+          preventScroll: true,
+        });
+
+        element.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }
+    );
+  };
+
   const createMutation =
     useMutation({
       mutationFn: (data) =>
@@ -431,27 +575,43 @@ const UserCreate = () => {
       },
 
       onError: (error) => {
-        const fieldErrors =
-          getBackendFieldErrors(
+        const fieldErrors = {
+          ...getBackendFieldErrors(
             error
-          );
+          ),
+          ...getTopLevelBackendFieldErrors(
+            error
+          ),
+        };
 
-        if (
+        const firstErrorField =
           Object.keys(
             fieldErrors
-          ).length > 0
-        ) {
+          )[0];
+
+        if (firstErrorField) {
           setErrors(
             (current) => ({
               ...current,
               ...fieldErrors,
             })
           );
+
+          focusField(
+            firstErrorField
+          );
+
+          toast.error(
+            'Hatalı alanları kontrol edin.'
+          );
+
+          return;
         }
 
         toast.error(
           getUserCreateErrorMessage(
-            error
+            error,
+            'İşlem tamamlanamadı. Lütfen tekrar deneyin.'
           )
         );
       },
@@ -697,10 +857,17 @@ const UserCreate = () => {
       nextErrors.password =
         'Şifre gereklidir';
     } else if (
-      formData.password.length < 8
+      formData.password.trim().length ===
+      0
     ) {
       nextErrors.password =
-        'Şifre en az 8 karakter olmalıdır';
+        'Şifre yalnızca boşluklardan oluşamaz';
+    } else if (
+      formData.password.length <
+      PASSWORD_MIN_LENGTH
+    ) {
+      nextErrors.password =
+        `Şifre en az ${PASSWORD_MIN_LENGTH} karakter olmalıdır`;
     }
 
     if (
@@ -723,8 +890,14 @@ const UserCreate = () => {
         nextErrors
       ).length > 0
     ) {
+      focusField(
+        Object.keys(
+          nextErrors
+        )[0]
+      );
+
       toast.error(
-        'Formdaki eksik veya hatalı alanları kontrol edin'
+        'Hatalı alanları kontrol edin.'
       );
 
       return false;
@@ -839,7 +1012,9 @@ const UserCreate = () => {
 
       <Card>
         <form
+          ref={formRef}
           onSubmit={handleSubmit}
+          noValidate
           className="space-y-6 p-6"
         >
 
@@ -943,12 +1118,16 @@ const UserCreate = () => {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+              <label
+                htmlFor="user-create-password"
+                className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300"
+              >
                 Geçici Şifre *
               </label>
 
               <div className="relative">
                 <input
+                  id="user-create-password"
                   type={
                     showPassword
                       ? 'text'
@@ -958,8 +1137,18 @@ const UserCreate = () => {
                   value={formData.password}
                   onChange={handleChange}
                   disabled={createMutation.isPending}
-                  placeholder="En az 8 karakter"
+                  placeholder="En az 12 karakter"
                   autoComplete="new-password"
+                  aria-invalid={
+                    Boolean(
+                      errors.password
+                    )
+                  }
+                  aria-describedby={
+                    errors.password
+                      ? 'user-create-password-error'
+                      : 'user-create-password-help'
+                  }
                   className={`
                     h-10
                     w-full
@@ -1009,9 +1198,19 @@ const UserCreate = () => {
                 </button>
               </div>
 
-              {errors.password && (
-                <p className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+              {errors.password ? (
+                <p
+                  id="user-create-password-error"
+                  className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400"
+                >
                   {errors.password}
+                </p>
+              ) : (
+                <p
+                  id="user-create-password-help"
+                  className="mt-1.5 text-xs text-gray-500 dark:text-slate-400"
+                >
+                  En az 12 karakter kullanın.
                 </p>
               )}
             </div>

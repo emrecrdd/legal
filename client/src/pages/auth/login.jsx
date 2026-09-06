@@ -1,4 +1,5 @@
 import {
+  useRef,
   useState,
 } from 'react';
 
@@ -31,6 +32,12 @@ const Login = () => {
 
   const login =
     useLogin();
+
+  const emailInputRef =
+    useRef(null);
+
+  const passwordInputRef =
+    useRef(null);
 
   const [
     showPassword,
@@ -93,6 +100,29 @@ const Login = () => {
     }
   };
 
+  const focusFirstInvalidField = (
+    nextErrors
+  ) => {
+    window.requestAnimationFrame(
+      () => {
+        if (
+          nextErrors.email
+        ) {
+          emailInputRef.current
+            ?.focus?.();
+          return;
+        }
+
+        if (
+          nextErrors.password
+        ) {
+          passwordInputRef.current
+            ?.focus?.();
+        }
+      }
+    );
+  };
+
   // ======================================================
   // VALIDATION
   // ======================================================
@@ -129,6 +159,17 @@ const Login = () => {
       setErrors(
         nextErrors
       );
+
+      if (
+        Object.keys(
+          nextErrors
+        ).length >
+        0
+      ) {
+        focusFirstInvalidField(
+          nextErrors
+        );
+      }
 
       return (
         Object.keys(
@@ -178,10 +219,40 @@ const Login = () => {
               true,
           }
         );
-      } catch {
+      } catch (
+        error
+      ) {
         /*
-         * Hata mesajını auth hook yönetiyor.
+         * Toast / genel API hata mesajını auth hook yönetir.
+         * Burada yalnızca kullanıcıya düzeltilebilir alan hatasını
+         * form üzerinde görünür hale getiriyoruz.
          */
+        const message =
+          String(
+            error?.response
+              ?.data?.message ||
+            error?.message ||
+            ''
+          ).trim();
+
+        if (
+          /e-posta veya şifre hatalı/i.test(
+            message
+          )
+        ) {
+          const nextErrors = {
+            password:
+              'E-posta veya şifre hatalı',
+          };
+
+          setErrors(
+            nextErrors
+          );
+
+          focusFirstInvalidField(
+            nextErrors
+          );
+        }
       }
     };
 
@@ -259,6 +330,7 @@ const Login = () => {
         onSubmit={
           handleSubmit
         }
+        noValidate
         className="space-y-5"
       >
 
@@ -296,6 +368,9 @@ const Login = () => {
             />
 
             <input
+              ref={
+                emailInputRef
+              }
               id="login-email"
               type="email"
               name="email"
@@ -316,6 +391,11 @@ const Login = () => {
                 Boolean(
                   errors.email
                 )
+              }
+              aria-describedby={
+                errors.email
+                  ? 'login-email-error'
+                  : undefined
               }
               className={`
                 h-11
@@ -350,7 +430,11 @@ const Login = () => {
           </div>
 
           {errors.email && (
-            <p className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+            <p
+              id="login-email-error"
+              role="alert"
+              className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400"
+            >
               {errors.email}
             </p>
           )}
@@ -408,6 +492,9 @@ const Login = () => {
             />
 
             <input
+              ref={
+                passwordInputRef
+              }
               id="login-password"
               type={
                 showPassword
@@ -430,6 +517,11 @@ const Login = () => {
                 Boolean(
                   errors.password
                 )
+              }
+              aria-describedby={
+                errors.password
+                  ? 'login-password-error'
+                  : undefined
               }
               className={`
                 h-11
@@ -514,7 +606,11 @@ const Login = () => {
           </div>
 
           {errors.password && (
-            <p className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+            <p
+              id="login-password-error"
+              role="alert"
+              className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400"
+            >
               {errors.password}
             </p>
           )}

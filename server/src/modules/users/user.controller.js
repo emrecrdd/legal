@@ -63,6 +63,48 @@ const isValidEmail = (
   );
 };
 
+
+const PASSWORD_MIN_LENGTH = 12;
+const BCRYPT_MAX_PASSWORD_BYTES = 72;
+
+const getPasswordValidationError = (
+  password
+) => {
+  if (
+    typeof password !==
+      'string' ||
+    password.length === 0
+  ) {
+    return 'Şifre gereklidir';
+  }
+
+  if (
+    password.trim().length ===
+    0
+  ) {
+    return 'Şifre yalnızca boşluklardan oluşamaz';
+  }
+
+  if (
+    password.length <
+    PASSWORD_MIN_LENGTH
+  ) {
+    return `Şifre en az ${PASSWORD_MIN_LENGTH} karakter olmalıdır`;
+  }
+
+  if (
+    Buffer.byteLength(
+      password,
+      'utf8'
+    ) >
+    BCRYPT_MAX_PASSWORD_BYTES
+  ) {
+    return 'Şifre çok uzun. Lütfen daha kısa bir şifre kullanın.';
+  }
+
+  return null;
+};
+
 const getSafeUser = (
   user
 ) => {
@@ -530,14 +572,17 @@ export const userController = {
         );
       }
 
+      const passwordValidationError =
+        getPasswordValidationError(
+          password
+        );
+
       if (
-        !password ||
-        password.length <
-          8
+        passwordValidationError
       ) {
         return errorResponse(
           res,
-          'Şifre en az 8 karakter olmalıdır',
+          passwordValidationError,
           400
         );
       }

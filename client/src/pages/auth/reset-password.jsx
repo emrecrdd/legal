@@ -1,4 +1,5 @@
 import {
+  useRef,
   useState,
 } from 'react';
 
@@ -27,6 +28,100 @@ import Button from '../../components/ui/Button.jsx';
 
 import toast from 'react-hot-toast';
 
+const PASSWORD_MIN_LENGTH = 12;
+
+const getResetPasswordFieldErrors = (
+  error
+) => {
+  const rawMessage = String(
+    error?.response?.data?.message ??
+      ''
+  ).trim();
+
+  if (!rawMessage) {
+    return {};
+  }
+
+  if (
+    /şifre.*(en az|min(?:imum)?)/i.test(
+      rawMessage
+    )
+  ) {
+    return {
+      password:
+        `Şifre en az ${PASSWORD_MIN_LENGTH} karakter olmalıdır.`,
+    };
+  }
+
+  if (
+    /şifre.*çok uzun/i.test(
+      rawMessage
+    )
+  ) {
+    return {
+      password:
+        'Şifre çok uzun. Lütfen daha kısa bir şifre kullanın.',
+    };
+  }
+
+  if (
+    /şifre.*boşluk/i.test(
+      rawMessage
+    )
+  ) {
+    return {
+      password:
+        'Şifre yalnızca boşluklardan oluşamaz.',
+    };
+  }
+
+  return {};
+};
+
+const getResetPasswordErrorMessage = (
+  error
+) => {
+  const status =
+    error?.response?.status;
+
+  const rawMessage = String(
+    error?.response?.data?.message ??
+      error?.message ??
+      ''
+  ).trim();
+
+  if (
+    /bağlant.*(geçersiz|süresi dolmuş)|token.*(invalid|expired)/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Şifre sıfırlama bağlantısı geçersiz veya süresi dolmuş. Yeni bir bağlantı isteyin.';
+  }
+
+  if (status === 429) {
+    return 'Kısa sürede çok fazla istek yapıldı. Lütfen biraz sonra tekrar deneyin.';
+  }
+
+  if (
+    /network error|failed to fetch|timeout|econnrefused|enotfound/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+  }
+
+  if (
+    status >= 500 ||
+    /sequelize|constraint|database|sql|stack|syntaxerror|typeerror|referenceerror|axios|request failed|status code|postgres|column|relation/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Şifre şu anda güncellenemiyor. Lütfen tekrar deneyin.';
+  }
+
+  return 'Şifre güncellenemedi. Lütfen tekrar deneyin.';
+};
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -44,6 +139,9 @@ const ResetPassword = () => {
 
   const navigate =
     useNavigate();
+
+  const formRef =
+    useRef(null);
 
   const [
     showPassword,
@@ -71,6 +169,37 @@ const ResetPassword = () => {
     setErrors,
   ] =
     useState({});
+
+  const focusField = (
+    fieldName
+  ) => {
+    if (!fieldName) {
+      return;
+    }
+
+    window.requestAnimationFrame(
+      () => {
+        const element =
+          formRef.current
+            ?.querySelector(
+              `[name="${fieldName}"]`
+            );
+
+        if (!element) {
+          return;
+        }
+
+        element.focus({
+          preventScroll: true,
+        });
+
+        element.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }
+    );
+  };
 
   // ======================================================
   // MUTATION
@@ -104,13 +233,39 @@ const ResetPassword = () => {
       onError: (
         error
       ) => {
+        const fieldErrors =
+          getResetPasswordFieldErrors(
+            error
+          );
+
+        const firstErrorField =
+          Object.keys(
+            fieldErrors
+          )[0];
+
+        if (firstErrorField) {
+          setErrors(
+            (current) => ({
+              ...current,
+              ...fieldErrors,
+            })
+          );
+
+          focusField(
+            firstErrorField
+          );
+
+          toast.error(
+            'Şifre bilgilerini kontrol edin.'
+          );
+
+          return;
+        }
+
         toast.error(
-          error
-            ?.response
-            ?.data
-            ?.message ||
-          error?.message ||
-          'Şifre değiştirilemedi'
+          getResetPasswordErrorMessage(
+            error
+          )
         );
       },
     });
@@ -153,6 +308,21 @@ const ResetPassword = () => {
         })
       );
     }
+
+    if (
+      name === 'password' &&
+      errors.confirmPassword
+    ) {
+      setErrors(
+        (
+          current
+        ) => ({
+          ...current,
+          confirmPassword:
+            '',
+        })
+      );
+    }
   };
 
   // ======================================================
@@ -170,11 +340,17 @@ const ResetPassword = () => {
         nextErrors.password =
           'Yeni şifre gereklidir';
       } else if (
-        formData.password.length <
-        8
+        formData.password.trim().length ===
+        0
       ) {
         nextErrors.password =
-          'Şifre en az 8 karakter olmalıdır';
+          'Şifre yalnızca boşluklardan oluşamaz';
+      } else if (
+        formData.password.length <
+        PASSWORD_MIN_LENGTH
+      ) {
+        nextErrors.password =
+          `Şifre en az ${PASSWORD_MIN_LENGTH} karakter olmalıdır`;
       }
 
       if (
@@ -194,12 +370,24 @@ const ResetPassword = () => {
         nextErrors
       );
 
-      return (
+      const firstErrorField =
         Object.keys(
           nextErrors
-        ).length ===
-        0
-      );
+        )[0];
+
+      if (firstErrorField) {
+        focusField(
+          firstErrorField
+        );
+
+        toast.error(
+          'Hatalı alanları kontrol edin.'
+        );
+
+        return false;
+      }
+
+      return true;
     };
 
   // ======================================================
@@ -433,9 +621,11 @@ const ResetPassword = () => {
       {/* FORM */}
 
       <form
+        ref={formRef}
         onSubmit={
           handleSubmit
         }
+        noValidate
         className="space-y-5"
       >
 
@@ -495,6 +685,11 @@ const ResetPassword = () => {
                 Boolean(
                   errors.password
                 )
+              }
+              aria-describedby={
+                errors.password
+                  ? 'reset-password-error'
+                  : 'reset-password-help'
               }
               className={`
                 h-11
@@ -573,15 +768,19 @@ const ResetPassword = () => {
 
           </div>
 
-          {errors.password && (
-            <p className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+          {errors.password ? (
+            <p
+              id="reset-password-error"
+              className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400"
+            >
               {errors.password}
             </p>
-          )}
-
-          {!errors.password && (
-            <p className="mt-1.5 text-xs text-gray-400 dark:text-slate-500">
-              En az 8 karakter kullanın.
+          ) : (
+            <p
+              id="reset-password-help"
+              className="mt-1.5 text-xs text-gray-500 dark:text-slate-400"
+            >
+              En az 12 karakter kullanın.
             </p>
           )}
 
@@ -643,6 +842,11 @@ const ResetPassword = () => {
                 Boolean(
                   errors.confirmPassword
                 )
+              }
+              aria-describedby={
+                errors.confirmPassword
+                  ? 'reset-password-confirm-error'
+                  : undefined
               }
               className={`
                 h-11
@@ -722,7 +926,10 @@ const ResetPassword = () => {
           </div>
 
           {errors.confirmPassword && (
-            <p className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+            <p
+              id="reset-password-confirm-error"
+              className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400"
+            >
               {errors.confirmPassword}
             </p>
           )}
