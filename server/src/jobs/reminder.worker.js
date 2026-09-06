@@ -803,17 +803,27 @@ if (
       source.type ===
       'meeting'
     ) {
-      if (
-        sourceRecord.meeting_type
-      ) {
-        details.push({
-          label:
-            'Toplantı Türü',
+     if (
+  sourceRecord.meeting_type
+) {
+  const meetingTypeLabels = {
+    client: 'Müvekkil Görüşmesi',
+    internal: 'İç Toplantı',
+    phone: 'Telefon Görüşmesi',
+    other: 'Diğer',
+  };
 
-          value:
-            sourceRecord.meeting_type,
-        });
-      }
+  details.push({
+    label:
+      'Toplantı Türü',
+
+    value:
+      meetingTypeLabels[
+        sourceRecord.meeting_type
+      ] ||
+      'Diğer',
+  });
+}
 
       if (
         sourceRecord.location
