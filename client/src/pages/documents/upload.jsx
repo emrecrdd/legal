@@ -22,8 +22,7 @@ import {
 } from '../../features/documents/document.query.js';
 
 import caseApi from '../../features/cases/case.api.js';
-import clientApi from '../../features/clients/client.api.js';
-import consultationApi from '../../features/consultations/consultation.api.js';
+import clientApi from '../../features/import consultationApi from '../../features/consultations/consultation.api.js';
 
 import {
   powerOfAttorneyApi,
@@ -1075,6 +1074,11 @@ const DocumentUpload = () => {
 
   const getReturnPath =
     () => {
+      const consultationId =
+        normalizeId(
+          formData.consultation_id
+        );
+
       const consultationId =
         normalizeId(
           formData.consultation_id
@@ -4011,6 +4015,130 @@ const DocumentUpload = () => {
                   formData.consultation_id
                     ? 'Danışmanlık'
                     : null,
+          gap-3
+                rounded-xl
+                border
+                border-gray-100
+                bg-gray-50/60
+                p-4
+                transition
+                hover:border-blue-200
+                dark:border-white/[0.05]
+                dark:bg-white/[0.02]
+              "
+            >
+
+              <input
+                id="document-general-access"
+                type="checkbox"
+                name="is_public"
+                checked={
+                  formData.is_public
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  isUploading
+                }
+                className="
+                  mt-0.5
+                  h-4
+                  w-4
+                  rounded
+                  border-gray-300
+                  text-blue-600
+                  focus:ring-blue-500
+                "
+              />
+
+              <div>
+
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Büro içi genel erişim
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-500">
+                  Etkin olduğunda belge, sistemde bu belgeyi görüntüleme yetkisine sahip diğer kullanıcılar tarafından erişilebilir olur. İnternet üzerinde herkese açık hale gelmez.
+                </p>
+
+              </div>
+
+            </label>
+
+          </Card.Body>
+
+        </Card>
+
+        {/* ==================================================
+            SUMMARY
+        ================================================== */}
+
+        {files.length >
+          0 && (
+          <div
+            className="
+              grid
+              gap-3
+              rounded-xl
+              border
+              border-gray-200
+              bg-gray-50/50
+              p-4
+              dark:border-white/[0.07]
+              dark:bg-white/[0.015]
+              sm:grid-cols-4
+            "
+          >
+
+            <div>
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+                Dosya
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-700 dark:text-slate-300">
+                {files.length} adet
+              </p>
+
+            </div>
+
+            <div>
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+                Boyut
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-700 dark:text-slate-300">
+                {formatFileSize(
+                  totalFileSize
+                )}
+              </p>
+
+            </div>
+
+            <div>
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+                Kategori
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-700 dark:text-slate-300">
+                {getCategoryLabel(
+                  formData.category
+                )}
+              </p>
+
+            </div>
+
+            <div>
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
+                İlişki
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-700 dark:text-slate-300">
+                {[
                   formData.client_id
                     ? 'Müvekkil'
                     : null,
