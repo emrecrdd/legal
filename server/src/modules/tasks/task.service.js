@@ -29,6 +29,14 @@ import {
 } from '../../models/Client.js';
 
 import {
+  Consultation,
+} from '../../models/Consultation.js';
+
+import {
+  ConsultationAssignee,
+} from '../../models/ConsultationAssignee.js';
+
+import {
   sequelize,
 } from '../../config/database.js';
 
@@ -44,10 +52,6 @@ import {
 import {
   notificationService,
 } from '../notifications/notification.service.js';
-
-import {
-  emailService,
-} from '../../integrations/email.service.js';
 
 import {
   reminderService,
@@ -148,106 +152,6 @@ const getRequestedAssigneeIds = (
   }
 
   return [];
-};
-
-const assertAtLeastOneTaskAssignee = (
-  assigneeIds
-) => {
-  const ids =
-    normalizeAssigneeIds(
-      assigneeIds
-    );
-
-  if (
-    ids.length === 0
-  ) {
-    throw new Error(
-      'Görev en az 1 kişiye atanmalıdır'
-    );
-  }
-
-  return ids;
-};
-
-const getTaskDueDateTime = (
-  value
-) => {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ''
-  ) {
-    return null;
-  }
-
-  const date =
-    value instanceof Date
-      ? new Date(
-          value.getTime()
-        )
-      : new Date(
-          value
-        );
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    throw new Error(
-      'Geçerli bir görev son tarihi girilmelidir'
-    );
-  }
-
-  return date;
-};
-
-/*
- * datetime-local alanı dakika hassasiyetinde çalıştığı için
- * aynı dakika içindeki saniye farkını geçmiş tarih saymıyoruz.
- */
-const isTaskDueDateInPast = (
-  value
-) => {
-  const date =
-    getTaskDueDateTime(
-      value
-    );
-
-  if (!date) {
-    return false;
-  }
-
-  const dueMinute =
-    Math.floor(
-      date.getTime() /
-        60000
-    );
-
-  const currentMinute =
-    Math.floor(
-      Date.now() /
-        60000
-    );
-
-  return (
-    dueMinute <
-    currentMinute
-  );
-};
-
-const assertTaskDueDateNotPast = (
-  value
-) => {
-  if (
-    isTaskDueDateInPast(
-      value
-    )
-  ) {
-    throw new Error(
-      'Görevin son tarihi geçmiş bir tarih olamaz'
-    );
-  }
 };
 
 const validateAssignees =
@@ -825,73 +729,6 @@ const notifySafely =
       );
     }
   };
-
-
-const formatNotificationDateTime = (
-  value
-) => {
-  if (!value) {
-    return 'belirtilmedi';
-  }
-
-  const date =
-    value instanceof Date
-      ? value
-      : new Date(
-          value
-        );
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return 'belirtilmedi';
-  }
-
-  return new Intl.DateTimeFormat(
-    'tr-TR',
-    {
-      timeZone:
-        'Europe/Istanbul',
-      day:
-        '2-digit',
-      month:
-        '2-digit',
-      year:
-        'numeric',
-      hour:
-        '2-digit',
-      minute:
-        '2-digit',
-      hour12:
-        false,
-    }
-  ).format(
-    date
-  );
-};
-
-const formatNotificationSchedule = (
-  startDate,
-  endDate = null
-) => {
-  const startText =
-    formatNotificationDateTime(
-      startDate
-    );
-
-  if (!endDate) {
-    return startText;
-  }
-
-  const endText =
-    formatNotificationDateTime(
-      endDate
-    );
-
-  return `${startText} - ${endText}`;
-};
 // ======================================================
 // GOOGLE CALENDAR HELPERS
 // ======================================================
@@ -1374,11 +1211,110 @@ const assertCaseClientRelation =
     }
   };
 
+const assertConsultationAccessForTask =
+  async (
+    consultationId,
+    access = {},
+    {
+      transaction,
+    } = {}
+  ) => {
+    if (
+      !consultationId
+    ) {
+      return null;
+    }
+
+    const userId =
+      access?.userId;
+
+    if (
+      !userId
+    ) {
+      throw new Error(
+        'Danışmanlık erişim yetkiniz bulunmuyor'
+      );
+    }
+
+    if (
+      !access
+        ?.canViewConsultations
+    ) {
+      throw new Error(
+        'Danışmanlık erişim yetkiniz bulunmuyor'
+      );
+    }
+
+    const consultation =
+      await Consultation.findOne({
+        where: {
+          id:
+            consultationId,
+        },
+
+        transaction,
+      });
+
+    if (
+      !consultation
+    ) {
+      throw new Error(
+        'Consultation not found'
+      );
+    }
+
+    if (
+      access
+        ?.canViewAllConsultations ||
+      String(
+        consultation.created_by
+      ) ===
+      String(
+        userId
+      )
+    ) {
+      return consultation;
+    }
+
+    const assignment =
+      await ConsultationAssignee.findOne({
+        where: {
+          consultation_id:
+            consultation.id,
+
+          user_id:
+            userId,
+        },
+
+        attributes: [
+          'id',
+        ],
+
+        transaction,
+      });
+
+    if (
+      !assignment
+    ) {
+      /*
+       * Record-scope dışındaki danışmanlığın varlığını
+       * ifşa etme. Consultation modülündeki davranışla
+       * aynı şekilde 404'e map edilecek mesaj kullanılır.
+       */
+      throw new Error(
+        'Consultation not found'
+      );
+    }
+
+    return consultation;
+  };
+
 const validateTaskRelations =
   async (
     {
       caseId,
       clientId,
+      consultationId,
     },
     access = {},
     {
@@ -1398,6 +1334,18 @@ const validateTaskRelations =
     if (clientId) {
       await assertClientAccessForTask(
         clientId,
+        access,
+        {
+          transaction,
+        }
+      );
+    }
+
+    if (
+      consultationId
+    ) {
+      await assertConsultationAccessForTask(
+        consultationId,
         access,
         {
           transaction,
@@ -1640,15 +1588,9 @@ export const taskService = {
 
   try {
     const assigneeIds =
-      assertAtLeastOneTaskAssignee(
-        getRequestedAssigneeIds(
-          data
-        )
+      getRequestedAssigneeIds(
+        data
       );
-
-    assertTaskDueDateNotPast(
-      data?.due_date
-    );
 
     assignees =
       await validateAssignees(
@@ -1693,6 +1635,10 @@ export const taskService = {
 
         clientId:
           taskData.client_id ||
+          null,
+
+        consultationId:
+          taskData.consultation_id ||
           null,
       },
       access,
@@ -2329,12 +2275,6 @@ if (
 
     let task;
     let calendarUserIds = [];
-    let dueDateChangedOnUpdate =
-      false;
-    let previousDueDateForNotification =
-      null;
-    let dateUpdateAssigneeIds =
-      [];
 
     try {
       task =
@@ -2433,41 +2373,6 @@ if (
   );
 }
 
-      if (
-        Object.prototype.hasOwnProperty.call(
-          safeData,
-          'due_date'
-        )
-      ) {
-        const nextDueDate =
-          getTaskDueDateTime(
-            safeData.due_date
-          );
-
-        const currentDueDate =
-          getTaskDueDateTime(
-            task.due_date
-          );
-
-        const dueDateChanged =
-          (
-            nextDueDate
-              ?.getTime() ??
-            null
-          ) !==
-          (
-            currentDueDate
-              ?.getTime() ??
-            null
-          );
-
-        if (dueDateChanged) {
-          assertTaskDueDateNotPast(
-            safeData.due_date
-          );
-        }
-      }
-
       const previousValues = {
         dueDate:
           task.due_date
@@ -2499,20 +2404,9 @@ if (
           task.title,
       };
 
-      dueDateChangedOnUpdate =
-        previousValues.dueDate !==
-          currentValues.dueDate;
-
-      previousDueDateForNotification =
-        previousValues.dueDate !==
-          null
-          ? new Date(
-              previousValues.dueDate
-            )
-          : null;
-
       const schedulingChanged =
-        dueDateChangedOnUpdate ||
+        previousValues.dueDate !==
+          currentValues.dueDate ||
         previousValues.title !==
           currentValues.title;
 
@@ -2564,9 +2458,6 @@ if (
           }
         );
 
-      dateUpdateAssigneeIds =
-        assigneeIds;
-
       calendarUserIds =
         getTaskCalendarUserIds(
           task,
@@ -2578,115 +2469,6 @@ if (
       await transaction.rollback();
 
       throw error;
-    }
-
-    // ==================================================
-    // DUE DATE CHANGE: APP NOTIFICATION + EMAIL
-    // ==================================================
-
-    if (
-      dueDateChangedOnUpdate &&
-      dateUpdateAssigneeIds.length >
-        0
-    ) {
-      const previousDateText =
-        formatNotificationDateTime(
-          previousDueDateForNotification
-        );
-
-      const currentDateText =
-        formatNotificationDateTime(
-          task.due_date
-        );
-
-      const dateChangeMessage =
-        `"${task.title}" görevinin son tarihi değiştirildi: ${previousDateText} → ${currentDateText}.`;
-
-      await notifySafely(
-        'task-due-date-updated',
-
-        async () => {
-          for (
-            const userId of
-            dateUpdateAssigneeIds
-          ) {
-            await notificationService.create(
-              userId,
-              'task',
-              'Görev Tarihi Güncellendi',
-              dateChangeMessage,
-              `/tasks/${task.id}`,
-              {
-                taskId:
-                  task.id,
-                previousDueDate:
-                  previousDueDateForNotification,
-                dueDate:
-                  task.due_date,
-                action:
-                  'schedule_updated',
-              }
-            );
-          }
-        },
-
-        {
-          taskId:
-            task.id,
-          recipientIds:
-            dateUpdateAssigneeIds,
-        }
-      );
-
-      await notifySafely(
-        'task-due-date-updated-email',
-
-        async () => {
-          const recipients =
-            await User.findAll({
-              where: {
-                id: {
-                  [Op.in]:
-                    dateUpdateAssigneeIds,
-                },
-                is_active:
-                  true,
-              },
-              attributes: [
-                'id',
-                'first_name',
-                'last_name',
-                'email',
-              ],
-            });
-
-          await Promise.all(
-            recipients
-              .filter(
-                (user) =>
-                  Boolean(
-                    user?.email
-                  )
-              )
-              .map(
-                (user) =>
-                  emailService.sendNotification(
-                    user,
-                    'Görev Tarihi Güncellendi',
-                    dateChangeMessage,
-                    `/tasks/${task.id}`
-                  )
-              )
-          );
-        },
-
-        {
-          taskId:
-            task.id,
-          recipientIds:
-            dateUpdateAssigneeIds,
-        }
-      );
     }
 
     // ==================================================
@@ -3024,7 +2806,7 @@ if (
       }
 
       const normalizedIds =
-        assertAtLeastOneTaskAssignee(
+        normalizeAssigneeIds(
           assigneeIds
         );
 
@@ -3163,60 +2945,6 @@ if (
 
           previousAssignees:
             previousAssigneeIds,
-        }
-      );
-    }
-
-    // ==================================================
-    // EMAIL NEWLY ADDED USERS
-    // ==================================================
-
-    if (
-      newlyAdded.length >
-      0
-    ) {
-      await notifySafely(
-        'task-assigned-email',
-
-        async () => {
-          const assignerName =
-            typeof assignedBy ===
-              'string' &&
-            assignedBy.trim()
-              ? assignedBy.trim()
-              : 'Sistem';
-
-          await Promise.all(
-            newlyAdded
-              .filter(
-                (user) =>
-                  Boolean(
-                    user?.email
-                  )
-              )
-              .map(
-                (user) =>
-                  emailService.sendNotification(
-                    user,
-                    'Yeni Görev Atandı',
-                    `${assignerName} size "${task.title}" görevini atadı. Son tarih: ${formatNotificationDateTime(
-                      task.due_date
-                    )}.`,
-                    `/tasks/${task.id}`
-                  )
-              )
-          );
-        },
-
-        {
-          taskId:
-            task.id,
-
-          recipientIds:
-            newlyAdded.map(
-              (user) =>
-                user.id
-            ),
         }
       );
     }

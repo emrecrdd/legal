@@ -122,6 +122,26 @@ const isUdfFilename = (
   );
 };
 
+const getDocumentErrorStatus = (
+  error,
+  fallback = 400
+) => {
+  const status =
+    Number(
+      error?.statusCode
+    );
+
+  return Number.isInteger(
+    status
+  ) &&
+  status >=
+    400 &&
+  status <=
+    599
+    ? status
+    : fallback;
+};
+
 // ======================================================
 // CONTROLLER
 // ======================================================
@@ -194,7 +214,9 @@ export const documentController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getDocumentErrorStatus(
+          error
+        )
       );
     }
   },
@@ -281,6 +303,11 @@ export const documentController = {
 
             error:
               error.message,
+
+            status_code:
+              getDocumentErrorStatus(
+                error
+              ),
           });
         }
       }
@@ -289,7 +316,23 @@ export const documentController = {
         documents.length >
         0
           ? 201
-          : 400;
+          : errors.some(
+              (
+                item
+              ) =>
+                item.status_code ===
+                403
+            )
+            ? 403
+            : errors.some(
+                (
+                  item
+                ) =>
+                  item.status_code ===
+                  404
+              )
+              ? 404
+              : 400;
 
       return successResponse(
         res,
@@ -323,7 +366,9 @@ export const documentController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getDocumentErrorStatus(
+          error
+        )
       );
     }
   },
@@ -396,7 +441,9 @@ export const documentController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getDocumentErrorStatus(
+          error
+        )
       );
     }
   },
@@ -417,6 +464,7 @@ export const documentController = {
         category,
         case_id,
         client_id,
+        consultation_id,
         power_of_attorney_id,
         include_archived,
       } = req.query;
@@ -429,6 +477,7 @@ export const documentController = {
           category,
           case_id,
           client_id,
+          consultation_id,
           power_of_attorney_id,
           include_archived,
 
@@ -453,7 +502,9 @@ export const documentController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getDocumentErrorStatus(
+          error
+        )
       );
     }
   },
@@ -603,7 +654,9 @@ export const documentController = {
       return errorResponse(
         res,
         error.message,
-        400
+        getDocumentErrorStatus(
+          error
+        )
       );
     }
   },

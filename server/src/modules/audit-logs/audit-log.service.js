@@ -1,119 +1,399 @@
-import { AuditLog } from '../../models/AuditLog.js';
-import { User } from '../../models/User.js';
-import { Op } from 'sequelize';
-import { paginate, getPaginationData } from '../../utils/paginate.js';
+import {
+  AuditLog,
+} from '../../models/AuditLog.js';
+
+import {
+  User,
+} from '../../models/User.js';
+
+import {
+  Consultation,
+} from '../../models/Consultation.js';
+
+import {
+  ConsultationAssignee,
+} from '../../models/ConsultationAssignee.js';
+
+import {
+  Op,
+  Sequelize,
+} from 'sequelize';
+
+import {
+  paginate,
+  getPaginationData,
+} from '../../utils/paginate.js';
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const createNotFoundError =
+  (
+    message =
+      'Loglar bulunamadı'
+  ) => {
+    const error =
+      new Error(
+        message
+      );
+
+    error.statusCode =
+      404;
+
+    return error;
+  };
+
+const assertConsultationAuditAccess =
+  async ({
+    consultationId,
+    actorId,
+    canViewConsultations = false,
+    canViewAllConsultations = false,
+  }) => {
+    if (
+      !consultationId ||
+      !actorId ||
+      !canViewConsultations
+    ) {
+      throw createNotFoundError();
+    }
+
+    const consultation =
+      await Consultation.findOne({
+        where: {
+          id:
+            consultationId,
+        },
+
+        attributes: [
+          'id',
+          'created_by',
+        ],
+      });
+
+    if (
+      !consultation
+    ) {
+      throw createNotFoundError();
+    }
+
+    if (
+      canViewAllConsultations ||
+      String(
+        consultation.created_by
+      ) ===
+      String(
+        actorId
+      )
+    ) {
+      return consultation;
+    }
+
+    const assignment =
+      await ConsultationAssignee.findOne({
+        where: {
+          consultation_id:
+            consultationId,
+
+          user_id:
+            actorId,
+        },
+
+        attributes: [
+          'id',
+        ],
+      });
+
+    if (
+      !assignment
+    ) {
+      throw createNotFoundError();
+    }
+
+    return consultation;
+  };
+
+// ======================================================
+// SERVICE
+// ======================================================
 
 export const auditLogService = {
-  // ✅ Tüm logları getir (filtreli)
-  async findAll({ page = 1, limit = 20, action, entity_type, startDate, endDate, search }) {
-    const where = {};
+  async findAll({
+    page = 1,
+    limit = 20,
+    action,
+    entity_type,
+    entity_id,
+    startDate,
+    endDate,
+    search,
+    actorId,
+    canViewConsultations = false,
+    canViewAllConsultations = false,
+  }) {
+    const where =
+      {};
 
-    if (action) {
-      where.action = action;
+    if (
+      action
+    ) {
+      where.action =
+        action;
     }
 
-    if (entity_type) {
-      where.entity_type = entity_type;
+    if (
+      entity_type
+    ) {
+      where.entity_type =
+        entity_type;
     }
 
-    if (startDate && endDate) {
+    if (
+      entity_id
+    ) {
+      where.entity_id =
+        entity_id;
+    }
+
+    if (
+      entity_type ===
+        'consultation' &&
+      entity_id
+    ) {
+      await assertConsultationAuditAccess({
+        consultationId:
+          entity_id,
+
+        actorId,
+
+        canViewConsultations,
+
+        canViewAllConsultations,
+      });
+    }
+
+    if (
+      startDate &&
+      endDate
+    ) {
       where.created_at = {
-        [Op.between]: [new Date(startDate), new Date(endDate)],
+        [Op.between]: [
+          new Date(
+            startDate
+          ),
+
+          new Date(
+            endDate
+          ),
+        ],
       };
     }
 
-    if (search) {
-      where[Op.or] = [
-        { description: { [Op.iLike]: `%${search}%` } },
-        { entity_id: { [Op.iLike]: `%${search}%` } },
+    if (
+      search
+    ) {
+      where[
+        Op.or
+      ] = [
+        {
+          description: {
+            [Op.iLike]:
+              `%${search}%`,
+          },
+        },
+
+        Sequelize.where(
+          Sequelize.cast(
+            Sequelize.col(
+              'entity_id'
+            ),
+            'text'
+          ),
+          {
+            [Op.iLike]:
+              `%${search}%`,
+          }
+        ),
       ];
     }
 
-    const query = paginate({ where, order: [['created_at', 'DESC']] }, page, limit);
-    const { count, rows } = await AuditLog.findAndCountAll({
-      ...query,
-      include: [
+    const query =
+      paginate(
         {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'first_name', 'last_name', 'email'],
-        },
-      ],
-    });
+          where,
 
-    const pagination = getPaginationData(count, page, limit);
+          order: [
+            [
+              'created_at',
+              'DESC',
+            ],
+          ],
+        },
+        page,
+        limit
+      );
+
+    const {
+      count,
+      rows,
+    } =
+      await AuditLog.findAndCountAll({
+        ...query,
+
+        include: [
+          {
+            model:
+              User,
+
+            as:
+              'user',
+
+            attributes: [
+              'id',
+              'first_name',
+              'last_name',
+              'email',
+            ],
+          },
+        ],
+      });
+
+    const pagination =
+      getPaginationData(
+        count,
+        page,
+        limit
+      );
 
     return {
-      data: rows,
+      data:
+        rows,
+
       pagination,
     };
   },
 
-  // ✅ Tek bir log getir
-  async findOne(id) {
-    const log = await AuditLog.findByPk(id, {
-      include: [
+  async findOne(
+    id
+  ) {
+    const log =
+      await AuditLog.findByPk(
+        id,
         {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'first_name', 'last_name', 'email'],
-        },
-      ],
-    });
+          include: [
+            {
+              model:
+                User,
 
-    if (!log) {
-      throw new Error('Log bulunamadı');
+              as:
+                'user',
+
+              attributes: [
+                'id',
+                'first_name',
+                'last_name',
+                'email',
+              ],
+            },
+          ],
+        }
+      );
+
+    if (
+      !log
+    ) {
+      throw new Error(
+        'Log bulunamadı'
+      );
     }
 
     return log;
   },
 
-  // ✅ YENİ: Log sil (tekil)
-  async remove(id) {
-    const log = await AuditLog.findByPk(id);
+  async remove(
+    id
+  ) {
+    const log =
+      await AuditLog.findByPk(
+        id
+      );
 
-    if (!log) {
-      throw new Error('Log bulunamadı');
+    if (
+      !log
+    ) {
+      throw new Error(
+        'Log bulunamadı'
+      );
     }
 
     await log.destroy();
+
     return log;
   },
 
-  // ✅ YENİ: Toplu log sil
-  async removeMany(ids) {
-    if (!ids || ids.length === 0) {
-      throw new Error('Silinecek log seçilmedi');
+  async removeMany(
+    ids
+  ) {
+    if (
+      !ids ||
+      ids.length ===
+        0
+    ) {
+      throw new Error(
+        'Silinecek log seçilmedi'
+      );
     }
 
-    const result = await AuditLog.destroy({
-      where: {
-        id: {
-          [Op.in]: ids,
+    const result =
+      await AuditLog.destroy({
+        where: {
+          id: {
+            [Op.in]:
+              ids,
+          },
         },
-      },
-    });
+      });
 
-    if (result === 0) {
-      throw new Error('Loglar bulunamadı');
+    if (
+      result ===
+      0
+    ) {
+      throw new Error(
+        'Loglar bulunamadı'
+      );
     }
 
-    return { deletedCount: result };
+    return {
+      deletedCount:
+        result,
+    };
   },
 
-  // ✅ YENİ: Eski logları temizle (belirli günden öncekileri sil)
-  async cleanOldLogs(days = 30) {
-    const date = new Date();
-    date.setDate(date.getDate() - days);
+  async cleanOldLogs(
+    days = 30
+  ) {
+    const date =
+      new Date();
 
-    const result = await AuditLog.destroy({
-      where: {
-        created_at: {
-          [Op.lt]: date,
+    date.setDate(
+      date.getDate() -
+      days
+    );
+
+    const result =
+      await AuditLog.destroy({
+        where: {
+          created_at: {
+            [Op.lt]:
+              date,
+          },
         },
-      },
-    });
+      });
 
-    return { deletedCount: result };
+    return {
+      deletedCount:
+        result,
+    };
   },
 };

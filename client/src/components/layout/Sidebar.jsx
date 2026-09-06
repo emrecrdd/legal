@@ -13,6 +13,7 @@ import {
 } from '../../constants/roles.js';
 
 import {
+  BriefcaseBusiness,
   CalendarDays,
   CheckSquare2,
   ClipboardList,
@@ -105,6 +106,20 @@ const navigationGroups = [
 
         permission:
           PERMISSION_KEYS.VIEW_CASES,
+      },
+
+      {
+        path:
+          '/consultations',
+
+        label:
+          'Danışmanlıklar',
+
+        icon:
+          BriefcaseBusiness,
+
+        permission:
+          PERMISSION_KEYS.VIEW_CONSULTATIONS,
       },
 
       {

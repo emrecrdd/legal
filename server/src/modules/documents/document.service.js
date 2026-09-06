@@ -41,6 +41,14 @@ import {
 } from '../../models/Client.js';
 
 import {
+  Consultation,
+} from '../../models/Consultation.js';
+
+import {
+  ConsultationAssignee,
+} from '../../models/ConsultationAssignee.js';
+
+import {
   PowerOfAttorney,
 } from '../../models/PowerOfAttorney.js';
 
@@ -718,6 +726,51 @@ const canViewAllCases = (
   );
 };
 
+const canViewConsultations = (
+  actor
+) => {
+  return (
+    isAdmin(
+      actor
+    ) ||
+    getActorPermissions(
+      actor
+    ).includes(
+      PERMISSION_KEYS.VIEW_CONSULTATIONS
+    )
+  );
+};
+
+const canViewAllConsultations = (
+  actor
+) => {
+  return (
+    isAdmin(
+      actor
+    ) ||
+    getActorPermissions(
+      actor
+    ).includes(
+      PERMISSION_KEYS.VIEW_ALL_CONSULTATIONS
+    )
+  );
+};
+
+const createServiceError = (
+  message,
+  statusCode
+) => {
+  const error =
+    new Error(
+      message
+    );
+
+  error.statusCode =
+    statusCode;
+
+  return error;
+};
+
 // ======================================================
 // WHERE HELPERS
 // ======================================================
@@ -949,6 +1002,107 @@ const assertClientAccess =
   };
 
 // ======================================================
+// CONSULTATION ACCESS
+// ======================================================
+
+const assertConsultationAccess =
+  async (
+    consultationId,
+    actor,
+    options = {}
+  ) => {
+    if (
+      !consultationId
+    ) {
+      return null;
+    }
+
+    const actorId =
+      requireActor(
+        actor
+      );
+
+    if (
+      !canViewConsultations(
+        actor
+      )
+    ) {
+      throw createServiceError(
+        'Danışmanlık erişim yetkiniz bulunmuyor',
+        403
+      );
+    }
+
+    const consultation =
+      await Consultation.findOne({
+        where: {
+          id:
+            consultationId,
+        },
+
+        attributes: [
+          'id',
+          'created_by',
+        ],
+
+        transaction:
+          options.transaction,
+      });
+
+    if (
+      !consultation
+    ) {
+      throw createServiceError(
+        'Consultation not found',
+        404
+      );
+    }
+
+    if (
+      canViewAllConsultations(
+        actor
+      ) ||
+      String(
+        consultation.created_by
+      ) ===
+      String(
+        actorId
+      )
+    ) {
+      return consultation;
+    }
+
+    const assignment =
+      await ConsultationAssignee.findOne({
+        where: {
+          consultation_id:
+            consultation.id,
+
+          user_id:
+            actorId,
+        },
+
+        attributes: [
+          'id',
+        ],
+
+        transaction:
+          options.transaction,
+      });
+
+    if (
+      !assignment
+    ) {
+      throw createServiceError(
+        'Consultation not found',
+        404
+      );
+    }
+
+    return consultation;
+  };
+
+// ======================================================
 // DOCUMENT QUERY ACCESS
 // ======================================================
 
@@ -1003,6 +1157,80 @@ const buildDocumentAccessWhere = (
           ],
         };
 
+  const accessScopes = [
+    caseLinkedScope,
+  ];
+
+  if (
+    canViewConsultations(
+      actor
+    )
+  ) {
+    const consultationLinkedScope =
+      canViewAllConsultations(
+        actor
+      )
+        ? {
+            [Op.and]: [
+              {
+                case_id:
+                  null,
+              },
+
+              {
+                consultation_id: {
+                  [Op.ne]:
+                    null,
+                },
+              },
+            ],
+          }
+        : {
+            [Op.and]: [
+              {
+                case_id:
+                  null,
+              },
+
+              {
+                consultation_id: {
+                  [Op.ne]:
+                    null,
+                },
+              },
+
+              Sequelize.where(
+                Sequelize.literal(
+                  `
+                    EXISTS (
+                      SELECT 1
+                      FROM consultations consultation_scope
+                      LEFT JOIN consultation_assignees consultation_assignment
+                        ON consultation_assignment.consultation_id = consultation_scope.id
+                       AND consultation_assignment.user_id = ${sequelize.escape(
+                         actorId
+                       )}
+                      WHERE consultation_scope.id = "Document"."consultation_id"
+                        AND consultation_scope.deleted_at IS NULL
+                        AND (
+                          consultation_scope.created_by = ${sequelize.escape(
+                            actorId
+                          )}
+                          OR consultation_assignment.id IS NOT NULL
+                        )
+                    )
+                  `
+                ),
+                true
+              ),
+            ],
+          };
+
+    accessScopes.push(
+      consultationLinkedScope
+    );
+  }
+
   const clientCasePredicate =
     canViewAllCases(
       actor
@@ -1044,6 +1272,11 @@ const buildDocumentAccessWhere = (
       },
 
       {
+        consultation_id:
+          null,
+      },
+
+      {
         client_id: {
           [Op.ne]:
             null,
@@ -1076,6 +1309,11 @@ const buildDocumentAccessWhere = (
       },
 
       {
+        consultation_id:
+          null,
+      },
+
+      {
         client_id:
           null,
       },
@@ -1087,12 +1325,14 @@ const buildDocumentAccessWhere = (
     ],
   };
 
+  accessScopes.push(
+    clientLinkedScope,
+    standaloneScope
+  );
+
   return {
-    [Op.or]: [
-      caseLinkedScope,
-      clientLinkedScope,
-      standaloneScope,
-    ],
+    [Op.or]:
+      accessScopes,
   };
 };
 
@@ -1217,6 +1457,25 @@ const assertDocumentAccess =
       } catch {
         throw new Error(
           'Document not found'
+        );
+      }
+    }
+
+    if (
+      document.consultation_id
+    ) {
+      try {
+        await assertConsultationAccess(
+          document.consultation_id,
+          actor,
+          options
+        );
+
+        return document;
+      } catch {
+        throw createServiceError(
+          'Document not found',
+          404
         );
       }
     }
@@ -1348,6 +1607,27 @@ const documentIncludes = [
 
   {
     model:
+      Consultation,
+
+    as:
+      'consultation',
+
+    attributes: [
+      'id',
+      'consultation_number',
+      'title',
+      'client_id',
+      'prospect_name',
+      'legal_area',
+      'status',
+    ],
+
+    required:
+      false,
+  },
+
+  {
+    model:
       PowerOfAttorney,
 
     as:
@@ -1409,6 +1689,15 @@ export const documentService = {
     ) {
       await assertClientAccess(
         documentData.client_id,
+        actor
+      );
+    }
+
+    if (
+      documentData.consultation_id
+    ) {
+      await assertConsultationAccess(
+        documentData.consultation_id,
         actor
       );
     }
@@ -1498,6 +1787,10 @@ export const documentService = {
 
             client_id:
               documentData.client_id ||
+              null,
+
+            consultation_id:
+              documentData.consultation_id ||
               null,
 
             power_of_attorney_id:
@@ -1619,6 +1912,13 @@ export const documentService = {
           null
         : rootDocument.client_id;
 
+    const targetConsultationId =
+      versionData.consultation_id !==
+      undefined
+        ? versionData.consultation_id ||
+          null
+        : rootDocument.consultation_id;
+
     if (
       targetCaseId
     ) {
@@ -1633,6 +1933,15 @@ export const documentService = {
     ) {
       await assertClientAccess(
         targetClientId,
+        actor
+      );
+    }
+
+    if (
+      targetConsultationId
+    ) {
+      await assertConsultationAccess(
+        targetConsultationId,
         actor
       );
     }
@@ -1758,6 +2067,9 @@ export const documentService = {
             client_id:
               targetClientId,
 
+            consultation_id:
+              targetConsultationId,
+
             power_of_attorney_id:
               versionData.power_of_attorney_id !==
               undefined
@@ -1830,6 +2142,7 @@ export const documentService = {
     category,
     case_id,
     client_id,
+    consultation_id,
     power_of_attorney_id,
     include_archived = false,
     actor,
@@ -1895,6 +2208,13 @@ export const documentService = {
     ) {
       filters.client_id =
         client_id;
+    }
+
+    if (
+      consultation_id
+    ) {
+      filters.consultation_id =
+        consultation_id;
     }
 
     if (
@@ -2030,6 +2350,7 @@ export const documentService = {
       'category',
       'case_id',
       'client_id',
+      'consultation_id',
       'power_of_attorney_id',
       'tags',
       'is_public',
@@ -2073,6 +2394,17 @@ export const documentService = {
     ) {
       await assertClientAccess(
         updateData.client_id,
+        actor
+      );
+    }
+
+    if (
+      updateData.consultation_id !==
+        undefined &&
+      updateData.consultation_id
+    ) {
+      await assertConsultationAccess(
+        updateData.consultation_id,
         actor
       );
     }
@@ -2137,6 +2469,15 @@ export const documentService = {
     ) {
       updateData.client_id =
         updateData.client_id ||
+        null;
+    }
+
+    if (
+      updateData.consultation_id !==
+      undefined
+    ) {
+      updateData.consultation_id =
+        updateData.consultation_id ||
         null;
     }
 

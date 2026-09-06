@@ -12,6 +12,10 @@ import {
 } from 'react-router-dom';
 
 import {
+  useQuery,
+} from '@tanstack/react-query';
+
+import {
   useCases,
 } from '../../features/cases/case.query.js';
 
@@ -19,6 +23,8 @@ import {
   useClients,
   useClientCaseHistory,
 } from '../../features/clients/client.query.js';
+
+import consultationApi from '../../features/consultations/consultation.api.js';
 
 import {
   useCreateTask,
@@ -79,6 +85,7 @@ const INITIAL_FORM = {
 
   case_id: '',
   client_id: '',
+  consultation_id: '',
   estimated_hours: '',
   note: '',
 };
@@ -374,6 +381,11 @@ const normalizeTaskCreateForm = (
       form?.client_id || ''
     ),
 
+  consultation_id:
+    String(
+      form?.consultation_id || ''
+    ),
+
   estimated_hours:
     String(
       form?.estimated_hours ?? ''
@@ -402,6 +414,8 @@ const TASK_FIELD_FALLBACKS = {
     'İlişkili davayı kontrol edin',
   client_id:
     'İlişkili müvekkili kontrol edin',
+  consultation_id:
+    'İlişkili danışmanlığı kontrol edin',
   estimated_hours:
     'Tahmini çalışma süresini kontrol edin',
   note:
@@ -591,6 +605,11 @@ const TaskCreate = () => {
               'client_id'
             ) || '',
 
+          consultation_id:
+            searchParams.get(
+              'consultation_id'
+            ) || '',
+
           note:
             searchParams.get(
               'note'
@@ -673,6 +692,12 @@ const TaskCreate = () => {
       PERMISSION_KEYS.VIEW_CLIENTS
     );
 
+  const canViewConsultations =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_CONSULTATIONS
+    );
+
   // ====================================================
   // QUERY PARAM PREFILL
   // ====================================================
@@ -740,6 +765,73 @@ const TaskCreate = () => {
 
   const {
     data:
+      consultationsData,
+    isLoading:
+      consultationsLoading,
+    isError:
+      consultationsError,
+    refetch:
+      refetchConsultations,
+  } =
+    useQuery({
+      queryKey: [
+        'consultations',
+        {
+          limit:
+            100,
+        },
+        'task-create',
+      ],
+
+      queryFn: () =>
+        consultationApi.getAll({
+          limit:
+            100,
+        }),
+
+      enabled:
+        canViewConsultations,
+
+      staleTime:
+        60 * 1000,
+    });
+
+  const {
+    data:
+      selectedConsultationData,
+    isLoading:
+      selectedConsultationLoading,
+    isError:
+      selectedConsultationError,
+    refetch:
+      refetchSelectedConsultation,
+  } =
+    useQuery({
+      queryKey: [
+        'consultation',
+        String(
+          formData.consultation_id ||
+          ''
+        ),
+      ],
+
+      queryFn: () =>
+        consultationApi.getOne(
+          formData.consultation_id
+        ),
+
+      enabled:
+        Boolean(
+          canViewConsultations &&
+          formData.consultation_id
+        ),
+
+      staleTime:
+        60 * 1000,
+    });
+
+  const {
+    data:
       clientCasesData,
     isLoading:
       clientCasesLoading,
@@ -791,6 +883,25 @@ const TaskCreate = () => {
           .data
           .data
       : [];
+
+  const consultations =
+    Array.isArray(
+      consultationsData
+        ?.data
+        ?.data
+    )
+      ? consultationsData
+          .data
+          .data
+      : [];
+
+  const selectedConsultationDetail =
+    selectedConsultationData
+      ?.data
+      ?.data ??
+    selectedConsultationData
+      ?.data ??
+    null;
 
   // ====================================================
   // RELATION CASES
@@ -907,6 +1018,45 @@ const TaskCreate = () => {
       canViewClients,
     ]);
 
+  const selectedConsultation =
+    useMemo(() => {
+      if (
+        !canViewConsultations ||
+        !formData.consultation_id
+      ) {
+        return null;
+      }
+
+      if (
+        selectedConsultationDetail &&
+        String(
+          selectedConsultationDetail.id
+        ) ===
+        String(
+          formData.consultation_id
+        )
+      ) {
+        return selectedConsultationDetail;
+      }
+
+      return consultations.find(
+        (
+          item
+        ) =>
+          String(
+            item.id
+          ) ===
+          String(
+            formData.consultation_id
+          )
+      ) || null;
+    }, [
+      canViewConsultations,
+      formData.consultation_id,
+      selectedConsultationDetail,
+      consultations,
+    ]);
+
   const selectedAssignees =
     useMemo(() => {
       if (
@@ -965,6 +1115,13 @@ const TaskCreate = () => {
 
   const getCancelDestination =
     () => {
+      if (
+        canViewConsultations &&
+        formData.consultation_id
+      ) {
+        return `/consultations/${formData.consultation_id}`;
+      }
+
       if (
         canViewCases &&
         formData.case_id
@@ -1292,6 +1449,14 @@ const TaskCreate = () => {
 
       if (
         name ===
+          'consultation_id' &&
+        !canViewConsultations
+      ) {
+        return;
+      }
+
+      if (
+        name ===
           'client_id' &&
         !canViewClients
       ) {
@@ -1586,6 +1751,46 @@ const TaskCreate = () => {
             : 'Seçilen dava artık erişilebilir değil';
       }
 
+      const consultationChangedFromInitial =
+        String(
+          formData.consultation_id ||
+          ''
+        ) !==
+        String(
+          initialFormRef.current
+            ?.consultation_id ||
+          ''
+        );
+
+      if (
+        formData.consultation_id
+      ) {
+        if (
+          !canViewConsultations
+        ) {
+          newErrors.consultation_id =
+            'Danışmanlık görüntüleme yetkiniz olmadan görev danışmanlığa bağlanamaz';
+        } else if (
+          selectedConsultationError
+        ) {
+          newErrors.consultation_id =
+            'Seçilen danışmanlık doğrulanamadı';
+        } else if (
+          !selectedConsultationLoading &&
+          !selectedConsultation
+        ) {
+          newErrors.consultation_id =
+            'Seçilen danışmanlık artık erişilebilir değil';
+        } else if (
+          consultationChangedFromInitial &&
+          consultationsError &&
+          !selectedConsultation
+        ) {
+          newErrors.consultation_id =
+            'Danışmanlık listesi doğrulanamadı';
+        }
+      }
+
       if (
         canAssignTasks &&
         formData.assignee_ids.length ===
@@ -1702,6 +1907,14 @@ const TaskCreate = () => {
           canViewClients
             ? (
                 formData.client_id ||
+                null
+              )
+            : null,
+
+        consultation_id:
+          canViewConsultations
+            ? (
+                formData.consultation_id ||
                 null
               )
             : null,
@@ -2750,7 +2963,7 @@ const TaskCreate = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Görevi dava veya müvekkil kaydıyla ilişkilendirin
+                  Görevi danışmanlık, dava veya müvekkil kaydıyla ilişkilendirin
                 </p>
 
               </div>
@@ -2760,6 +2973,171 @@ const TaskCreate = () => {
           </Card.Header>
 
           <Card.Body>
+
+            <div className="mb-5">
+
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                İlişkili Danışmanlık
+              </label>
+
+              <select
+                name="consultation_id"
+                value={
+                  formData.consultation_id
+                }
+                onChange={
+                  handleChange
+                }
+                disabled={
+                  consultationsLoading ||
+                  consultationsError ||
+                  !canViewConsultations
+                }
+                className="
+                  h-10
+                  w-full
+                  rounded-lg
+                  border
+                  border-gray-200
+                  bg-white
+                  px-3.5
+                  text-sm
+                  text-gray-700
+                  outline-none
+                  disabled:cursor-not-allowed
+                  disabled:opacity-50
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-500/10
+                  dark:border-white/[0.08]
+                  dark:bg-white/[0.035]
+                  dark:text-slate-300
+                "
+              >
+
+                <option value="">
+                  {!canViewConsultations
+                    ? 'Danışmanlık görüntüleme yetkiniz yok'
+                    : consultationsLoading
+                      ? 'Danışmanlıklar yükleniyor...'
+                      : consultationsError
+                        ? 'Danışmanlıklar yüklenemedi'
+                        : 'Danışmanlık seçin (isteğe bağlı)'}
+                </option>
+
+                {canViewConsultations &&
+                  consultations.map(
+                    (
+                      consultation
+                    ) => (
+                      <option
+                        key={
+                          consultation.id
+                        }
+                        value={
+                          consultation.id
+                        }
+                      >
+                        {consultation.consultation_number
+                          ? `${consultation.consultation_number} · `
+                          : ''}
+                        {consultation.title ||
+                          'Danışmanlık'}
+                      </option>
+                    )
+                  )}
+
+              </select>
+
+              {consultationsError &&
+                canViewConsultations && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-red-600 dark:text-red-400">
+
+                  <span>
+                    Danışmanlık listesi yüklenemedi.
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      refetchConsultations()
+                    }
+                    className="font-semibold underline underline-offset-2"
+                  >
+                    Tekrar Dene
+                  </button>
+
+                </div>
+              )}
+
+              {errors.consultation_id && (
+                <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                  {errors.consultation_id}
+                </p>
+              )}
+
+              {formData.consultation_id &&
+                selectedConsultationLoading && (
+                  <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
+                    Seçilen danışmanlık doğrulanıyor...
+                  </p>
+                )}
+
+              {formData.consultation_id &&
+                selectedConsultationError && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-red-600 dark:text-red-400">
+
+                    <span>
+                      Seçilen danışmanlık yüklenemedi.
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        refetchSelectedConsultation()
+                      }
+                      className="font-semibold underline underline-offset-2"
+                    >
+                      Tekrar Dene
+                    </button>
+
+                  </div>
+                )}
+
+              {selectedConsultation && (
+                <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/50 p-3 dark:border-blue-500/15 dark:bg-blue-500/[0.04]">
+
+                  <div className="flex items-start gap-3">
+
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-500/[0.10] dark:text-blue-400">
+                      <BriefcaseBusiness size={15} />
+                    </div>
+
+                    <div className="min-w-0">
+
+                      <p className="truncate text-xs font-semibold text-gray-800 dark:text-slate-200">
+                        {selectedConsultation.consultation_number
+                          ? `${selectedConsultation.consultation_number} · `
+                          : ''}
+                        {selectedConsultation.title ||
+                          'Danışmanlık'}
+                      </p>
+
+                      <p className="mt-1 truncate text-[10px] text-gray-500 dark:text-slate-500">
+                        {selectedConsultation.client?.name ||
+                          selectedConsultation.prospect_name ||
+                          selectedConsultation.legal_area ||
+                          'Danışmanlık kaydı'}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+              )}
+
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
 

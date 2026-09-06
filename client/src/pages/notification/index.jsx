@@ -28,6 +28,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Bell,
+  BriefcaseBusiness,
   BellOff,
   BellRing,
   CalendarDays,
@@ -89,6 +90,14 @@ const TYPE_CONFIG = {
       'bg-amber-50 text-amber-600 dark:bg-amber-500/[0.08] dark:text-amber-400',
   },
 
+  consultation: {
+    label: 'Danışmanlık',
+    variant: 'info',
+    icon: BriefcaseBusiness,
+    iconClass:
+      'bg-cyan-50 text-cyan-600 dark:bg-cyan-500/[0.08] dark:text-cyan-400',
+  },
+
   system: {
     label: 'Sistem',
     variant: 'default',
@@ -113,6 +122,14 @@ const TYPE_CONFIG = {
 const getTypeConfig = (
   notification
 ) => {
+  if (
+    notification?.metadata?.entityType ===
+      'consultation' ||
+    notification?.metadata?.consultationId
+  ) {
+    return TYPE_CONFIG.consultation;
+  }
+
   if (
     notification?.type === 'event' &&
     notification?.metadata?.eventType === 'hearing'
@@ -743,7 +760,7 @@ const NotificationsPage = () => {
                   dark:text-slate-400
                 "
               >
-              Görev, dava, duruşma, toplantı ve sistem bildirimlerinizi takip edin.
+              Görev, dava, danışmanlık, duruşma, toplantı ve sistem bildirimlerinizi takip edin.
               </p>
 
               <div className="mt-2 flex flex-wrap items-center gap-2">

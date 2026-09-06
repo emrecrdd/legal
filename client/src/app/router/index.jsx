@@ -70,6 +70,15 @@ import CaseCreate from '../../pages/cases/create.jsx';
 import CaseEdit from '../../pages/cases/edit.jsx';
 
 // ======================================================
+// CONSULTATIONS
+// ======================================================
+
+import ConsultationsList from '../../pages/consultations/list.jsx';
+import ConsultationDetail from '../../pages/consultations/detail.jsx';
+import ConsultationCreate from '../../pages/consultations/create.jsx';
+import ConsultationEdit from '../../pages/consultations/edit.jsx';
+
+// ======================================================
 // CASE PARTIES
 // ======================================================
 
@@ -501,6 +510,72 @@ const AppRouter = () => {
               path="/cases/:id/edit"
               element={
                 <CaseEdit />
+              }
+            />
+          </Route>
+
+          {/* ==================================================
+              CONSULTATIONS - VIEW
+          ================================================== */}
+
+          <Route
+            element={
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.VIEW_CONSULTATIONS
+                }
+              />
+            }
+          >
+            <Route
+              path="/consultations"
+              element={
+                <ConsultationsList />
+              }
+            />
+
+            <Route
+              path="/consultations/:id"
+              element={
+                <ConsultationDetail />
+              }
+            />
+          </Route>
+
+          {/* CONSULTATIONS - CREATE */}
+
+          <Route
+            element={
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.CREATE_CONSULTATIONS
+                }
+              />
+            }
+          >
+            <Route
+              path="/consultations/create"
+              element={
+                <ConsultationCreate />
+              }
+            />
+          </Route>
+
+          {/* CONSULTATIONS - EDIT */}
+
+          <Route
+            element={
+              <PrivateRoute
+                requiredPermission={
+                  PERMISSION_KEYS.EDIT_CONSULTATIONS
+                }
+              />
+            }
+          >
+            <Route
+              path="/consultations/:id/edit"
+              element={
+                <ConsultationEdit />
               }
             />
           </Route>

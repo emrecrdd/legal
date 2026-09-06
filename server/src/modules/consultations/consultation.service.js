@@ -108,19 +108,12 @@ const notifyConsultation = async ({
 }) => {
   if (!userId || userId === getActorId(actor)) return;
 
-  const transferred = action === 'transferred';
-  await notificationService.create(
+  await notificationService.notifyConsultationAssigned(
     userId,
-    'system',
-    transferred ? 'Danışmanlık Size Devredildi' : 'Danışmanlığa Atandınız',
-    transferred
-      ? `${getActorDisplayName(actor)} "${consultationTitle}" danışmanlığını size devretti.`
-      : `${getActorDisplayName(actor)} sizi "${consultationTitle}" danışmanlığına atadı.`,
-    `/consultations/${consultationId}`,
-    {
-      consultationId,
-      action,
-    }
+    consultationId,
+    consultationTitle,
+    getActorDisplayName(actor),
+    action
   );
 };
 
@@ -183,6 +176,10 @@ const markClientCreateError = (error) => {
 };
 
 export const consultationService = {
+  async getAssignableUsers() {
+    return consultationRepository.getAssignableUsers();
+  },
+
   async create(data, actor) {
     const actorId = getActorId(actor);
     if (!actorId) throw new Error('Consultation not found');
@@ -650,16 +647,93 @@ export const consultationService = {
       const oldStatus =
         consultation.status;
 
+      const judiciaryType =
+        normalizeNullableText(
+          data?.judiciary_type
+        );
+
+      const judiciaryUnit =
+        normalizeNullableText(
+          data?.judiciary_unit
+        );
+
+      if (
+        !judiciaryType ||
+        !judiciaryUnit
+      ) {
+        const error =
+          new Error(
+            'Yargı türü ve yargı birimi gereklidir'
+          );
+
+        error.statusCode =
+          400;
+
+        throw error;
+      }
+
+      const caseTitle =
+        `${judiciaryType} - ${judiciaryUnit}`;
+
       const newCase = await consultationRepository.createCaseFromConsultation(
         {
-          title: normalizeNullableText(data?.title) || consultation.title,
-          subject: hasOwn(data || {}, 'subject') ? data.subject : null,
-          description: hasOwn(data || {}, 'description')
-            ? data.description
-            : consultation.description,
-          priority: data?.priority || consultation.priority || 'normal',
-          assigned_to: assignedTo,
-          created_by: actorId,
+          title:
+            caseTitle,
+
+          judiciary_type:
+            judiciaryType,
+
+          judiciary_unit:
+            judiciaryUnit,
+
+          court_name:
+            normalizeNullableText(
+              data?.court_name
+            ),
+
+          case_number:
+            normalizeNullableText(
+              data?.case_number
+            ),
+
+          subject:
+            hasOwn(
+              data || {},
+              'subject'
+            )
+              ? normalizeNullableText(
+                  data.subject
+                )
+              : consultation.title,
+
+          description:
+            hasOwn(
+              data || {},
+              'description'
+            )
+              ? normalizeNullableText(
+                  data.description
+                )
+              : consultation.description,
+
+          status:
+            'preparation',
+
+          priority:
+            data?.priority ||
+            consultation.priority ||
+            'normal',
+
+          assigned_to:
+            assignedTo,
+
+          opening_date:
+            normalizeNullableText(
+              data?.opening_date
+            ),
+
+          created_by:
+            actorId,
         },
         consultation.client_id,
         { transaction }
@@ -704,9 +778,28 @@ export const consultationService = {
 
       return {
         caseId: newCase.id,
+        caseTitle: newCase.title,
+        consultationTitle: consultation.title,
+        assignedTo,
         linked,
       };
     });
+
+    if (
+      result.assignedTo &&
+      result.assignedTo !== actorId
+    ) {
+      await Promise.allSettled([
+        notificationService.notifyConsultationConvertedToCase(
+          result.assignedTo,
+          id,
+          result.consultationTitle,
+          result.caseId,
+          result.caseTitle,
+          getActorDisplayName(actor)
+        ),
+      ]);
+    }
 
     return {
       consultation: await consultationRepository.findOne(id, actor),

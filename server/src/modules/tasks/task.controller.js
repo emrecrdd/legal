@@ -189,6 +189,18 @@ const getTaskAccessContext = (
         user,
         PERMISSION_KEYS.VIEW_ALL_CASES
       ),
+
+    canViewConsultations:
+      hasPermission(
+        user,
+        PERMISSION_KEYS.VIEW_CONSULTATIONS
+      ),
+
+    canViewAllConsultations:
+      hasPermission(
+        user,
+        PERMISSION_KEYS.VIEW_ALL_CONSULTATIONS
+      ),
   };
 };
 

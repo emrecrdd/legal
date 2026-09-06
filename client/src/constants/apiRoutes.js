@@ -14,7 +14,7 @@ export const API_ROUTES = {
 
   AUTH: {
     LOGIN: '/auth/login',
-    
+
     LOGOUT: '/auth/logout',
     REFRESH_TOKEN: '/auth/refresh-token',
 
@@ -103,6 +103,54 @@ export const API_ROUTES = {
     GET_NOTES:
       (id) =>
         `/cases/${id}/notes`,
+  },
+
+  // ====================================================
+  // CONSULTATIONS
+  // ====================================================
+
+  CONSULTATIONS: {
+    ...createCrudRoutes(
+      '/consultations'
+    ),
+
+    STATISTICS:
+      '/consultations/statistics',
+
+    ASSIGNABLE_USERS:
+      '/consultations/assignable-users',
+
+    UPDATE_STATUS:
+      (id) =>
+        `/consultations/${id}/status`,
+
+    ADD_ASSIGNEE:
+      (id) =>
+        `/consultations/${id}/assignees`,
+
+    REMOVE_ASSIGNEE:
+      (id, userId) =>
+        `/consultations/${id}/assignees/${userId}`,
+
+    GET_TASKS:
+      (id) =>
+        `/consultations/${id}/tasks`,
+
+    GET_MEETINGS:
+      (id) =>
+        `/consultations/${id}/meetings`,
+
+    GET_DOCUMENTS:
+      (id) =>
+        `/consultations/${id}/documents`,
+
+    CONVERT_TO_CLIENT:
+      (id) =>
+        `/consultations/${id}/convert-to-client`,
+
+    CONVERT_TO_CASE:
+      (id) =>
+        `/consultations/${id}/convert-to-case`,
   },
 
   // ====================================================

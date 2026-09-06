@@ -60,160 +60,6 @@ const getResponseItem = (
   );
 };
 
-const isLikelyTechnicalMeetingMessage = (
-  message
-) => {
-  const value =
-    String(
-      message ||
-      ''
-    ).trim();
-
-  if (!value) {
-    return false;
-  }
-
-  return /sequelize|validation error|constraint|foreign key|unique constraint|notnull|invalid input syntax|uuid|database|sql|column|relation .* does not exist|syntax error|axioserror|network error|request failed with status code|econn|etimedout|timeout|cannot read properties|typeerror|referenceerror|stack trace/i.test(
-    value
-  );
-};
-
-const isSafeTurkishMeetingMessage = (
-  message
-) => {
-  const value =
-    String(
-      message ||
-      ''
-    ).trim();
-
-  if (
-    !value ||
-    isLikelyTechnicalMeetingMessage(
-      value
-    )
-  ) {
-    return false;
-  }
-
-  return /[çğıöşüÇĞİÖŞÜ]|toplantı|kullanıcı|müvekkil|dava|atan|sorumlu|başlangıç|bitiş|tarih|konum|bağlantı|katılımcı|durum|erişim|yetki|işlem|bulunamadı|gereklidir|geçersiz/i.test(
-    value
-  );
-};
-
-const getMeetingErrorMessage = (
-  error,
-  fallback
-) => {
-  const status =
-    Number(
-      error?.response
-        ?.status
-    ) ||
-    null;
-
-  const backendMessage =
-    String(
-      error?.response
-        ?.data
-        ?.message ||
-      ''
-    ).trim();
-
-  /*
-   * Backend business-rule mesajları Türkçe ve güvenliyse
-   * aynen kullanıcıya taşınır. Örn:
-   * - Toplantı için sorumlu kişi seçilmelidir
-   * - Toplantı başlangıç tarihi geçmiş bir tarih olamaz
-   */
-  if (
-    isSafeTurkishMeetingMessage(
-      backendMessage
-    )
-  ) {
-    return backendMessage;
-  }
-
-  if (
-    backendMessage
-      .toLowerCase() ===
-    'meeting not found'
-  ) {
-    return 'Toplantı bulunamadı veya artık erişilebilir değil';
-  }
-
-  if (status === 401) {
-    return 'Oturumunuz sona ermiş olabilir. Lütfen yeniden giriş yapın.';
-  }
-
-  if (status === 403) {
-    return 'Bu işlem için gerekli yetkiye sahip değilsiniz';
-  }
-
-  if (status === 404) {
-    return 'Toplantı bulunamadı veya artık erişilebilir değil';
-  }
-
-  if (status === 409) {
-    return 'Bu işlem mevcut toplantı durumu nedeniyle tamamlanamadı';
-  }
-
-  if (status === 429) {
-    return 'Çok fazla istek gönderildi. Lütfen kısa bir süre sonra tekrar deneyin.';
-  }
-
-  if (
-    status &&
-    status >= 500
-  ) {
-    return 'Sunucu tarafında geçici bir sorun oluştu. Lütfen tekrar deneyin.';
-  }
-
-  if (
-    !error?.response &&
-    (
-      error?.code ===
-        'ERR_NETWORK' ||
-      /network|failed to fetch|econn|timeout/i.test(
-        String(
-          error?.message ||
-          ''
-        )
-      )
-    )
-  ) {
-    return 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
-  }
-
-  const localMessage =
-    String(
-      error?.message ||
-      ''
-    ).trim();
-
-  if (
-    isSafeTurkishMeetingMessage(
-      localMessage
-    )
-  ) {
-    return localMessage;
-  }
-
-  return fallback;
-};
-
-const failure = (
-  error,
-  fallback
-) => {
-  toast.error(
-    getMeetingErrorMessage(
-      error,
-      fallback
-    )
-  );
-};
-
 const getMeetingRelationIds = (
   source
 ) => {
@@ -233,6 +79,12 @@ const getMeetingRelationIds = (
       normalizeId(
         item?.case_id ??
         item?.case?.id
+      ),
+
+    consultationId:
+      normalizeId(
+        item?.consultation_id ??
+        item?.consultation?.id
       ),
   };
 };
@@ -274,6 +126,8 @@ const getExistingMeetingRelations =
           '',
         caseId:
           '',
+        consultationId:
+          '',
       };
     }
   };
@@ -284,6 +138,7 @@ const invalidateMeetingRelations =
     {
       clientIds = [],
       caseIds = [],
+      consultationIds = [],
     } = {}
   ) => {
     const normalizedClientIds = [
@@ -301,6 +156,18 @@ const invalidateMeetingRelations =
     const normalizedCaseIds = [
       ...new Set(
         caseIds
+          .map(
+            normalizeId
+          )
+          .filter(
+            Boolean
+          )
+      ),
+    ];
+
+    const normalizedConsultationIds = [
+      ...new Set(
+        consultationIds
           .map(
             normalizeId
           )
@@ -358,6 +225,28 @@ const invalidateMeetingRelations =
             queryKey: [
               'case',
               caseId,
+            ],
+          })
+        );
+      }
+    );
+
+    normalizedConsultationIds.forEach(
+      (
+        consultationId
+      ) => {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: [
+              'consultation-meetings',
+              consultationId,
+            ],
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'consultation',
+              consultationId,
             ],
           })
         );
@@ -764,6 +653,28 @@ export const useCreateMeeting =
           });
         }
 
+        if (
+          variables?.consultation_id
+        ) {
+          queryClient.invalidateQueries({
+            queryKey: [
+              'consultation-meetings',
+              normalizeId(
+                variables.consultation_id
+              ),
+            ],
+          });
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'consultation',
+              normalizeId(
+                variables.consultation_id
+              ),
+            ],
+          });
+        }
+
         toast.success(
           'Toplantı başarıyla oluşturuldu'
         );
@@ -772,9 +683,10 @@ export const useCreateMeeting =
       onError: (
         error
       ) => {
-        failure(
-          error,
-          'Toplantı oluşturulamadı'
+        toast.error(
+          error?.response
+            ?.data?.message ||
+            'Toplantı oluşturulamadı'
         );
       },
     });
@@ -814,6 +726,8 @@ export const useUpdateMeeting =
               '',
             oldCaseId:
               '',
+            oldConsultationId:
+              '',
           };
         }
 
@@ -829,6 +743,7 @@ export const useUpdateMeeting =
         const {
           clientId,
           caseId,
+          consultationId,
         } =
           await getExistingMeetingRelations(
             queryClient,
@@ -840,6 +755,8 @@ export const useUpdateMeeting =
             clientId,
           oldCaseId:
             caseId,
+          oldConsultationId:
+            consultationId,
         };
       },
 
@@ -870,6 +787,12 @@ export const useUpdateMeeting =
             variables?.data?.case_id
           );
 
+        const newConsultationId =
+          normalizeId(
+            responseRelations.consultationId ||
+            variables?.data?.consultation_id
+          );
+
         const oldClientId =
           normalizeId(
             context?.oldClientId
@@ -878,6 +801,11 @@ export const useUpdateMeeting =
         const oldCaseId =
           normalizeId(
             context?.oldCaseId
+          );
+
+        const oldConsultationId =
+          normalizeId(
+            context?.oldConsultationId
           );
 
         await Promise.all([
@@ -935,6 +863,11 @@ export const useUpdateMeeting =
                 oldCaseId,
                 newCaseId,
               ],
+
+              consultationIds: [
+                oldConsultationId,
+                newConsultationId,
+              ],
             }
           ),
         ]);
@@ -947,8 +880,10 @@ export const useUpdateMeeting =
       onError: (
         error
       ) => {
-        failure(
-          error,
+        toast.error(
+          error?.response
+            ?.data?.message ||
+          error?.message ||
           'Toplantı güncellenemedi'
         );
       },
@@ -988,6 +923,8 @@ export const useUpdateMeetingStatus =
             clientId:
               '',
             caseId:
+              '',
+            consultationId:
               '',
           };
         }
@@ -1070,6 +1007,10 @@ export const useUpdateMeetingStatus =
               caseIds: [
                 context?.caseId,
               ],
+
+              consultationIds: [
+                context?.consultationId,
+              ],
             }
           ),
         ]);
@@ -1082,8 +1023,10 @@ export const useUpdateMeetingStatus =
       onError: (
         error
       ) => {
-        failure(
-          error,
+        toast.error(
+          error?.response
+            ?.data?.message ||
+          error?.message ||
           'Toplantı durumu güncellenemedi'
         );
       },
@@ -1184,6 +1127,18 @@ export const useDeleteMeeting =
           ],
         });
 
+        queryClient.invalidateQueries({
+          queryKey: [
+            'consultation-meetings',
+          ],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: [
+            'consultation',
+          ],
+        });
+
         toast.success(
           'Toplantı kaldırıldı'
         );
@@ -1192,9 +1147,10 @@ export const useDeleteMeeting =
       onError: (
         error
       ) => {
-        failure(
-          error,
-          'Toplantı kaldırılamadı'
+        toast.error(
+          error?.response
+            ?.data?.message ||
+            'Toplantı kaldırılamadı'
         );
       },
     });

@@ -16,6 +16,14 @@ import {
 } from '../../models/Client.js';
 
 import {
+  Consultation,
+} from '../../models/Consultation.js';
+
+import {
+  ConsultationAssignee,
+} from '../../models/ConsultationAssignee.js';
+
+import {
   User,
 } from '../../models/User.js';
 
@@ -24,21 +32,9 @@ import {
 } from '../../config/database.js';
 
 import {
-  logger,
-} from '../../config/logger.js';
-
-import {
   paginate,
   getPaginationData,
 } from '../../utils/paginate.js';
-
-import {
-  notificationService,
-} from '../notifications/notification.service.js';
-
-import {
-  emailService,
-} from '../../integrations/email.service.js';
 
 import {
   reminderService,
@@ -163,90 +159,6 @@ const normalizeSearch = (
       0,
       150
     );
-};
-
-const normalizeUserIds = (
-  values = []
-) => {
-  return [
-    ...new Set(
-      values
-        .flatMap(
-          (value) =>
-            Array.isArray(
-              value
-            )
-              ? value
-              : [
-                  value,
-                ]
-        )
-        .map(
-          (value) =>
-            value
-              ? String(
-                  value
-                ).trim()
-              : null
-        )
-        .filter(
-          Boolean
-        )
-    ),
-  ];
-};
-
-const getRequestedParticipantIds = (
-  data = {}
-) => {
-  if (
-    Object.prototype.hasOwnProperty.call(
-      data,
-      'attendee_ids'
-    )
-  ) {
-    if (
-      !Array.isArray(
-        data.attendee_ids
-      )
-    ) {
-      throw new Error(
-        'Toplantı katılımcıları liste formatında olmalıdır'
-      );
-    }
-
-    return normalizeUserIds(
-      data.attendee_ids
-    );
-  }
-
-  if (
-    data?.assigned_to
-  ) {
-    return normalizeUserIds([
-      data.assigned_to,
-    ]);
-  }
-
-  return [];
-};
-
-const assertAtLeastOneMeetingParticipant = (
-  participantIds
-) => {
-  if (
-    !Array.isArray(
-      participantIds
-    ) ||
-    participantIds.length ===
-      0
-  ) {
-    throw new Error(
-      'Toplantı için en az bir katılımcı seçilmelidir'
-    );
-  }
-
-  return participantIds;
 };
 
 const parseDate = (
@@ -374,6 +286,16 @@ const hasMeetingStartDateChanged = (
   );
 };
 
+const assertMeetingAssigneeRequired = (
+  assignedTo
+) => {
+  if (!assignedTo) {
+    throw new Error(
+      'Toplantı için sorumlu kişi seçilmelidir'
+    );
+  }
+};
+
 const validateStatus = (
   status
 ) => {
@@ -410,6 +332,10 @@ const shouldHaveReminders = (
     Boolean(
       meeting?.start_date
     ) &&
+    Boolean(
+      meeting?.assigned_to ||
+        meeting?.created_by
+    ) &&
     !TERMINAL_STATUSES.has(
       meeting?.status
     )
@@ -435,7 +361,6 @@ const prepareMeetingData = (
   delete prepared.created_at;
   delete prepared.updated_at;
   delete prepared.deleted_at;
-  delete prepared.attendee_ids;
 
   if (
     Object.prototype.hasOwnProperty.call(
@@ -544,25 +469,6 @@ const requireMeetingUserId = (
   return userId;
 };
 
-const buildParticipantMembershipWhere = (
-  userId
-) => {
-  if (!userId) {
-    return {
-      id: null,
-    };
-  }
-
-  return {
-    id: {
-      [Op.in]:
-        sequelize.literal(
-          `(SELECT ma.meeting_id FROM meeting_attendees ma WHERE ma.user_id = ${sequelize.escape(userId)})`
-        ),
-    },
-  };
-};
-
 const buildMeetingAccessWhere = ({
   userId,
   canViewAllMeetings = false,
@@ -586,17 +492,10 @@ const buildMeetingAccessWhere = ({
           userId,
       },
 
-      /*
-       * Legacy kayıtlar / eski client uyumluluğu.
-       */
       {
         assigned_to:
           userId,
       },
-
-      buildParticipantMembershipWhere(
-        userId
-      ),
     ],
   };
 };
@@ -897,162 +796,108 @@ const validateAssignedUser =
     return user;
   };
 
-const validateMeetingParticipants =
+const assertConsultationAccessForMeeting =
   async (
-    participantIds,
-    transaction = null
+    consultationId,
+    access = {},
+    {
+      transaction = null,
+    } = {}
   ) => {
-    const ids =
-      normalizeUserIds(
-        participantIds
+    if (
+      !consultationId
+    ) {
+      return null;
+    }
+
+    const userId =
+      requireMeetingUserId(
+        access
       );
 
     if (
-      ids.length ===
-      0
+      !access
+        ?.canViewConsultations
     ) {
-      return [];
+      throw new Error(
+        'Danışmanlık erişim yetkiniz bulunmuyor'
+      );
     }
 
-    const users =
-      await User.findAll({
+    const consultation =
+      await Consultation.findOne({
         where: {
-          id: {
-            [Op.in]:
-              ids,
-          },
-
-          is_active:
-            true,
+          id:
+            consultationId,
         },
 
-        attributes:
-          ASSIGNEE_ATTRIBUTES,
+        attributes: [
+          'id',
+          'created_by',
+        ],
 
         transaction,
       });
 
     if (
-      users.length !==
-      ids.length
+      !consultation
     ) {
       throw new Error(
-        'Atanan kullanıcılardan biri bulunamadı veya aktif değil'
+        'Consultation not found'
       );
-    }
-
-    const byId =
-      new Map(
-        users.map(
-          (user) => [
-            user.id,
-            user,
-          ]
-        )
-      );
-
-    return ids.map(
-      (id) =>
-        byId.get(
-          id
-        )
-    );
-  };
-
-const loadMeetingParticipantUsers =
-  async (
-    meeting,
-    {
-      transaction = null,
-    } = {}
-  ) => {
-    if (!meeting?.id) {
-      return [];
     }
 
     if (
-      Array.isArray(
-        meeting.participantUsers
+      access
+        ?.canViewAllConsultations ||
+      String(
+        consultation.created_by
+      ) ===
+      String(
+        userId
       )
     ) {
-      return meeting.participantUsers;
+      return consultation;
     }
 
+    const assignment =
+      await ConsultationAssignee.findOne({
+        where: {
+          consultation_id:
+            consultation.id,
+
+          user_id:
+            userId,
+        },
+
+        attributes: [
+          'id',
+        ],
+
+        transaction,
+      });
+
     if (
-      typeof meeting.getParticipantUsers ===
-      'function'
+      !assignment
     ) {
-      const users =
-        await meeting.getParticipantUsers({
-          attributes:
-            ASSIGNEE_ATTRIBUTES,
-
-          joinTableAttributes:
-            [],
-
-          transaction,
-        });
-
-      meeting.setDataValue?.(
-        'participantUsers',
-        users
+      /*
+       * Danışmanlık record-scope dışındaysa varlığını ifşa etmiyoruz.
+       * Consultation modülündeki 404 davranışı korunur.
+       */
+      throw new Error(
+        'Consultation not found'
       );
-
-      return users;
     }
 
-    if (
-      meeting.assigned_to
-    ) {
-      const legacyUser =
-        await validateAssignedUser(
-          meeting.assigned_to,
-          transaction
-        );
-
-      return legacyUser
-        ? [
-            legacyUser,
-          ]
-        : [];
-    }
-
-    return [];
+    return consultation;
   };
-
-const sameUserIdSet = (
-  left = [],
-  right = []
-) => {
-  const a =
-    normalizeUserIds(
-      left
-    ).sort();
-
-  const b =
-    normalizeUserIds(
-      right
-    ).sort();
-
-  return (
-    a.length ===
-      b.length &&
-    a.every(
-      (
-        value,
-        index
-      ) =>
-        value ===
-        b[index]
-    )
-  );
-};
 
 const validateMeetingRelations =
   async (
     {
       caseId,
       clientId,
+      consultationId,
       assignedTo,
     },
     access = {},
@@ -1073,6 +918,18 @@ const validateMeetingRelations =
     if (clientId) {
       await assertClientAccessForMeeting(
         clientId,
+        access,
+        {
+          transaction,
+        }
+      );
+    }
+
+    if (
+      consultationId
+    ) {
+      await assertConsultationAccessForMeeting(
+        consultationId,
         access,
         {
           transaction,
@@ -1108,7 +965,6 @@ const buildIncludes = ({
   includeCase = true,
   includeCreator = true,
   includeAssignee = true,
-  includeParticipants = true,
 } = {}) => {
   const includes = [];
 
@@ -1170,29 +1026,6 @@ const buildIncludes = ({
 
       attributes:
         ASSIGNEE_ATTRIBUTES,
-
-      required:
-        false,
-    });
-  }
-
-  if (
-    includeParticipants
-  ) {
-    includes.push({
-      model:
-        User,
-
-      as:
-        'participantUsers',
-
-      attributes:
-        ASSIGNEE_ATTRIBUTES,
-
-      through: {
-        attributes:
-          [],
-      },
 
       required:
         false,
@@ -1333,189 +1166,19 @@ const sanitizeMeetingsForAccess = (
 // ======================================================
 
 const getMeetingCalendarUserIds = (
-  meeting,
-  participants = []
+  meeting
 ) => {
-  const participantIds =
-    normalizeUserIds(
-      participants.map(
-        (participant) =>
-          typeof participant ===
-          'string'
-            ? participant
-            : participant?.id
+  return [
+    ...new Set(
+      [
+        meeting?.created_by,
+        meeting?.assigned_to,
+      ].filter(
+        Boolean
       )
-    );
-
-  return normalizeUserIds([
-    meeting?.created_by,
-
-    /*
-     * Legacy mirror alanı geçiş sürecinde korunuyor.
-     */
-    meeting?.assigned_to,
-
-    ...participantIds,
-  ]);
+    ),
+  ];
 };
-
-const getUserDisplayName = (
-  user
-) => {
-  const name = [
-    user?.first_name,
-    user?.last_name,
-  ]
-    .filter(
-      Boolean
-    )
-    .join(' ')
-    .trim();
-
-  return name ||
-    'Sistem';
-};
-
-const notifySafely =
-  async (
-    operation,
-    callback,
-    metadata = {}
-  ) => {
-    try {
-      await callback();
-    } catch (error) {
-      logger.error(
-        `Meeting notification failed: ${operation}`,
-        {
-          ...metadata,
-
-          message:
-            error.message,
-        }
-      );
-    }
-  };
-
-
-const formatNotificationDateTime = (
-  value
-) => {
-  if (!value) {
-    return 'belirtilmedi';
-  }
-
-  const date =
-    value instanceof Date
-      ? value
-      : new Date(
-          value
-        );
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return 'belirtilmedi';
-  }
-
-  return new Intl.DateTimeFormat(
-    'tr-TR',
-    {
-      timeZone:
-        'Europe/Istanbul',
-      day:
-        '2-digit',
-      month:
-        '2-digit',
-      year:
-        'numeric',
-      hour:
-        '2-digit',
-      minute:
-        '2-digit',
-      hour12:
-        false,
-    }
-  ).format(
-    date
-  );
-};
-
-const formatNotificationSchedule = (
-  startDate,
-  endDate = null
-) => {
-  const startText =
-    formatNotificationDateTime(
-      startDate
-    );
-
-  if (!endDate) {
-    return startText;
-  }
-
-  const endText =
-    formatNotificationDateTime(
-      endDate
-    );
-
-  return `${startText} - ${endText}`;
-};
-
-const notifyMeetingParticipants =
-  async (
-    meeting,
-    participants = []
-  ) => {
-    if (
-      !meeting?.id ||
-      participants.length ===
-        0
-    ) {
-      return;
-    }
-
-    const creator =
-      await User.findByPk(
-        meeting.created_by,
-        {
-          attributes:
-            USER_SUMMARY_ATTRIBUTES,
-        }
-      );
-
-    const creatorName =
-      getUserDisplayName(
-        creator
-      );
-
-    for (
-      const participant of
-      participants
-    ) {
-      /*
-       * Kendi oluşturduğu toplantıya kendisini ekleyen kullanıcıya
-       * gereksiz "size toplantı atandı" bildirimi göndermiyoruz.
-       */
-      if (
-        participant.id ===
-        meeting.created_by
-      ) {
-        continue;
-      }
-
-      await notificationService
-        .notifyMeetingAssigned(
-          participant.id,
-          meeting.id,
-          meeting.title,
-          creatorName,
-          meeting.start_date
-        );
-    }
-  };
 
 const buildMeetingGoogleDescription = (
   meeting
@@ -1723,13 +1386,6 @@ export const meetingService = {
         access
       );
 
-    const participantIds =
-      assertAtLeastOneMeetingParticipant(
-        getRequestedParticipantIds(
-          data || {}
-        )
-      );
-
     const {
       id,
       created_by,
@@ -1737,7 +1393,6 @@ export const meetingService = {
       updated_at,
       deleted_at,
       status,
-      attendee_ids,
       ...inputData
     } = data || {};
 
@@ -1752,14 +1407,6 @@ export const meetingService = {
     preparedData.status =
       'scheduled';
 
-    /*
-     * assigned_to artık source-of-truth değildir.
-     * Eski client / query uyumluluğu için ilk katılımcıyı
-     * legacy mirror alanında tutuyoruz.
-     */
-    preparedData.assigned_to =
-      participantIds[0];
-
     validateMeetingDates({
       startDate:
         preparedData.start_date,
@@ -1771,19 +1418,16 @@ export const meetingService = {
         true,
     });
 
+    assertMeetingAssigneeRequired(
+      preparedData.assigned_to
+    );
+
     const transaction =
       await sequelize.transaction();
 
     let meeting;
-    let participants = [];
 
     try {
-      participants =
-        await validateMeetingParticipants(
-          participantIds,
-          transaction
-        );
-
       await validateMeetingRelations(
         {
           caseId:
@@ -1792,6 +1436,10 @@ export const meetingService = {
 
           clientId:
             preparedData.client_id ||
+            null,
+
+          consultationId:
+            preparedData.consultation_id ||
             null,
 
           assignedTo:
@@ -1811,18 +1459,6 @@ export const meetingService = {
             transaction,
           }
         );
-
-      await meeting.setParticipantUsers(
-        participants,
-        {
-          transaction,
-        }
-      );
-
-      meeting.setDataValue(
-        'participantUsers',
-        participants
-      );
 
       if (
         shouldHaveReminders(
@@ -1845,33 +1481,10 @@ export const meetingService = {
       throw error;
     }
 
-    await notifySafely(
-      'meeting-assigned-on-create',
-      () =>
-        notifyMeetingParticipants(
-          meeting,
-          participants
-        ),
-      {
-        meetingId:
-          meeting.id,
-
-        participantIds:
-          participants.map(
-            (user) =>
-              user.id
-          ),
-
-        createdBy:
-          meeting.created_by,
-      }
-    );
-
     await syncMeetingToGoogleForUsersSafely(
       meeting,
       getMeetingCalendarUserIds(
-        meeting,
-        participants
+        meeting
       )
     );
 
@@ -1985,21 +1598,8 @@ export const meetingService = {
         );
       }
 
-      filters[Op.and] = [
-        ...(filters[Op.and] || []),
-
-        {
-          [Op.or]: [
-            {
-              assigned_to,
-            },
-
-            buildParticipantMembershipWhere(
-              assigned_to
-            ),
-          ],
-        },
-      ];
+      filters.assigned_to =
+        assigned_to;
     }
 
     if (
@@ -2169,17 +1769,8 @@ export const meetingService = {
       await sequelize.transaction();
 
     let meeting;
-    let previousParticipants = [];
-    let currentParticipants = [];
     let previousCalendarUserIds = [];
     let currentCalendarUserIds = [];
-    let newlyAddedParticipants = [];
-    let meetingScheduleChanged =
-      false;
-    let previousMeetingStart =
-      null;
-    let previousMeetingEnd =
-      null;
 
     try {
       meeting =
@@ -2205,70 +1796,9 @@ export const meetingService = {
         );
       }
 
-      previousParticipants =
-        await loadMeetingParticipantUsers(
-          meeting,
-          {
-            transaction,
-          }
-        );
-
-      const previousParticipantIds =
-        normalizeUserIds(
-          previousParticipants.map(
-            (user) =>
-              user.id
-          )
-        );
-
       previousCalendarUserIds =
         getMeetingCalendarUserIds(
-          meeting,
-          previousParticipants
-        );
-
-      const participantUpdateRequested =
-        Object.prototype.hasOwnProperty.call(
-          data || {},
-          'attendee_ids'
-        ) ||
-        Object.prototype.hasOwnProperty.call(
-          data || {},
-          'assigned_to'
-        );
-
-      if (
-        participantUpdateRequested
-      ) {
-        const requestedParticipantIds =
-          assertAtLeastOneMeetingParticipant(
-            getRequestedParticipantIds(
-              data || {}
-            )
-          );
-
-        currentParticipants =
-          await validateMeetingParticipants(
-            requestedParticipantIds,
-            transaction
-          );
-      } else {
-        currentParticipants =
-          previousParticipants;
-      }
-
-      const currentParticipantIds =
-        normalizeUserIds(
-          currentParticipants.map(
-            (user) =>
-              user.id
-          )
-        );
-
-      const participantsChanged =
-        !sameUserIdSet(
-          previousParticipantIds,
-          currentParticipantIds
+          meeting
         );
 
       const preparedData =
@@ -2283,13 +1813,6 @@ export const meetingService = {
        * üzerinden değiştirilir.
        */
       delete preparedData.status;
-
-      if (
-        participantUpdateRequested
-      ) {
-        preparedData.assigned_to =
-          currentParticipantIds[0];
-      }
 
       const startDateChanged =
         hasMeetingStartDateChanged(
@@ -2308,9 +1831,26 @@ export const meetingService = {
             ? preparedData.end_date
             : meeting.end_date,
 
+        /*
+         * Zaten geçmişte kalmış eski bir toplantının başlık/not
+         * gibi başka alanlarını düzenlemeyi engellemiyoruz.
+         * Sadece başlangıç tarihi gerçekten değiştiriliyorsa
+         * geçmişe çekilmesine izin vermiyoruz.
+         */
         rejectPastStart:
           startDateChanged,
       });
+
+      if (
+        Object.prototype.hasOwnProperty.call(
+          preparedData,
+          'assigned_to'
+        )
+      ) {
+        assertMeetingAssigneeRequired(
+          preparedData.assigned_to
+        );
+      }
 
       const effectiveCaseId =
         preparedData.case_id !==
@@ -2328,11 +1868,20 @@ export const meetingService = {
           : meeting.client_id ||
             null;
 
+      const effectiveConsultationId =
+        preparedData.consultation_id !==
+        undefined
+          ? preparedData.consultation_id ||
+            null
+          : meeting.consultation_id ||
+            null;
+
       const effectiveAssignedTo =
-        participantUpdateRequested
-          ? currentParticipantIds[0]
+        preparedData.assigned_to !==
+        undefined
+          ? preparedData.assigned_to ||
+            null
           : meeting.assigned_to ||
-            currentParticipantIds[0] ||
             null;
 
       await validateMeetingRelations(
@@ -2342,6 +1891,9 @@ export const meetingService = {
 
           clientId:
             effectiveClientId,
+
+          consultationId:
+            effectiveConsultationId,
 
           assignedTo:
             effectiveAssignedTo,
@@ -2367,6 +1919,9 @@ export const meetingService = {
               ).getTime()
             : null,
 
+        assignedTo:
+          meeting.assigned_to,
+
         status:
           meeting.status,
 
@@ -2379,22 +1934,6 @@ export const meetingService = {
         {
           transaction,
         }
-      );
-
-      if (
-        participantUpdateRequested
-      ) {
-        await meeting.setParticipantUsers(
-          currentParticipants,
-          {
-            transaction,
-          }
-        );
-      }
-
-      meeting.setDataValue(
-        'participantUsers',
-        currentParticipants
       );
 
       const currentValues = {
@@ -2412,6 +1951,9 @@ export const meetingService = {
               ).getTime()
             : null,
 
+        assignedTo:
+          meeting.assigned_to,
+
         status:
           meeting.status,
 
@@ -2419,39 +1961,17 @@ export const meetingService = {
           meeting.title,
       };
 
-      meetingScheduleChanged =
+      const schedulingChanged =
         previousValues.startDate !==
           currentValues.startDate ||
         previousValues.endDate !==
-          currentValues.endDate;
-
-      if (
-        meetingScheduleChanged
-      ) {
-        previousMeetingStart =
-          previousValues.startDate !==
-            null
-            ? new Date(
-                previousValues.startDate
-              )
-            : null;
-
-        previousMeetingEnd =
-          previousValues.endDate !==
-            null
-            ? new Date(
-                previousValues.endDate
-              )
-            : null;
-      }
-
-      const schedulingChanged =
-        meetingScheduleChanged ||
+          currentValues.endDate ||
+        previousValues.assignedTo !==
+          currentValues.assignedTo ||
         previousValues.status !==
           currentValues.status ||
         previousValues.title !==
-          currentValues.title ||
-        participantsChanged;
+          currentValues.title;
 
       if (
         TERMINAL_STATUSES.has(
@@ -2496,18 +2016,9 @@ export const meetingService = {
           });
       }
 
-      newlyAddedParticipants =
-        currentParticipants.filter(
-          (user) =>
-            !previousParticipantIds.includes(
-              user.id
-            )
-        );
-
       currentCalendarUserIds =
         getMeetingCalendarUserIds(
-          meeting,
-          currentParticipants
+          meeting
         );
 
       await transaction.commit();
@@ -2515,214 +2026,6 @@ export const meetingService = {
       await transaction.rollback();
 
       throw error;
-    }
-
-    if (
-      newlyAddedParticipants.length >
-      0
-    ) {
-      await notifySafely(
-        'meeting-assigned-on-update',
-        () =>
-          notifyMeetingParticipants(
-            meeting,
-            newlyAddedParticipants
-          ),
-        {
-          meetingId:
-            meeting.id,
-
-          participantIds:
-            newlyAddedParticipants.map(
-              (user) =>
-                user.id
-            ),
-        }
-      );
-    }
-
-    if (
-      newlyAddedParticipants.length >
-      0
-    ) {
-      await notifySafely(
-        'meeting-assigned-email-on-update',
-
-        async () => {
-          const emailRecipients =
-            newlyAddedParticipants.filter(
-              (participant) =>
-                Boolean(
-                  participant?.email
-                ) &&
-                participant.id !==
-                  meeting.created_by
-            );
-
-          await Promise.all(
-            emailRecipients.map(
-              (participant) =>
-                emailService.sendNotification(
-                  participant,
-                  'Toplantıya Eklendiniz',
-                  `"${meeting.title}" toplantısına katılımcı olarak eklendiniz. Toplantı zamanı: ${formatNotificationSchedule(
-                    meeting.start_date,
-                    meeting.end_date
-                  )}.`,
-                  `/meetings/${meeting.id}`
-                )
-            )
-          );
-        },
-
-        {
-          meetingId:
-            meeting.id,
-
-          recipientIds:
-            newlyAddedParticipants
-              .filter(
-                (participant) =>
-                  participant.id !==
-                  meeting.created_by
-              )
-              .map(
-                (participant) =>
-                  participant.id
-              ),
-        }
-      );
-    }
-
-    if (
-      meetingScheduleChanged
-    ) {
-      const newlyAddedIds =
-        new Set(
-          newlyAddedParticipants.map(
-            (participant) =>
-              participant.id
-          )
-        );
-
-      /*
-       * Aynı update'te hem tarih değişip hem yeni kişi eklendiyse
-       * yeni kişiye ikinci bir "tarih değişti" bildirimi/maili
-       * göndermiyoruz. Yeni kişi yalnız "toplantıya eklendiniz"
-       * mesajını alır; o mesaj güncel toplantı zamanını da içerir.
-       */
-      const scheduleRecipients =
-        currentParticipants.filter(
-          (participant) =>
-            !newlyAddedIds.has(
-              participant.id
-            )
-        );
-
-      if (
-        scheduleRecipients.length >
-          0
-      ) {
-        const previousScheduleText =
-          formatNotificationSchedule(
-            previousMeetingStart,
-            previousMeetingEnd
-          );
-
-        const currentScheduleText =
-          formatNotificationSchedule(
-            meeting.start_date,
-            meeting.end_date
-          );
-
-        const scheduleChangeMessage =
-          `"${meeting.title}" toplantısının tarih/saat bilgisi değiştirildi: ${previousScheduleText} → ${currentScheduleText}.`;
-
-        await notifySafely(
-          'meeting-schedule-updated',
-
-          async () => {
-            for (
-              const participant of
-              scheduleRecipients
-            ) {
-              await notificationService.create(
-                participant.id,
-                'meeting',
-                'Toplantı Tarihi Güncellendi',
-                scheduleChangeMessage,
-                `/meetings/${meeting.id}`,
-                {
-                  meetingId:
-                    meeting.id,
-                  previousStartDate:
-                    previousMeetingStart,
-                  previousEndDate:
-                    previousMeetingEnd,
-                  startDate:
-                    meeting.start_date,
-                  endDate:
-                    meeting.end_date,
-                  action:
-                    'schedule_updated',
-                }
-              );
-            }
-          },
-
-          {
-            meetingId:
-              meeting.id,
-            recipientIds:
-              scheduleRecipients.map(
-                (participant) =>
-                  participant.id
-              ),
-          }
-        );
-
-        await notifySafely(
-          'meeting-schedule-updated-email',
-
-          async () => {
-            await Promise.all(
-              scheduleRecipients
-                .filter(
-                  (participant) =>
-                    Boolean(
-                      participant?.email
-                    )
-                )
-                .map(
-                  (participant) =>
-                    emailService.sendNotification(
-                      participant,
-                      'Toplantı Tarihi Güncellendi',
-                      scheduleChangeMessage,
-                      `/meetings/${meeting.id}`
-                    )
-                )
-            );
-          },
-
-          {
-            meetingId:
-              meeting.id,
-            recipientIds:
-              scheduleRecipients
-                .filter(
-                  (participant) =>
-                    Boolean(
-                      participant?.email
-                    )
-                )
-                .map(
-                  (participant) =>
-                    participant.id
-                ),
-          }
-        );
-      }
     }
 
     const removedCalendarUserIds =
@@ -2793,18 +2096,9 @@ export const meetingService = {
         );
       }
 
-      const participants =
-        await loadMeetingParticipantUsers(
-          meeting,
-          {
-            transaction,
-          }
-        );
-
       calendarUserIds =
         getMeetingCalendarUserIds(
-          meeting,
-          participants
+          meeting
         );
 
       await reminderService
@@ -2884,10 +2178,6 @@ export const meetingService = {
           assigned_to:
             userId,
         },
-
-        buildParticipantMembershipWhere(
-          userId
-        ),
       ],
     };
 
@@ -3320,10 +2610,6 @@ export const meetingService = {
               assigned_to:
                 userId,
             },
-
-            buildParticipantMembershipWhere(
-              userId
-            ),
           ],
 
           start_date: {
@@ -3428,18 +2714,9 @@ export const meetingService = {
         meeting.status ===
         status
       ) {
-        const participants =
-          await loadMeetingParticipantUsers(
-            meeting,
-            {
-              transaction,
-            }
-          );
-
         calendarUserIds =
           getMeetingCalendarUserIds(
-            meeting,
-            participants
+            meeting
           );
 
         await transaction.commit();
@@ -3504,18 +2781,9 @@ export const meetingService = {
           });
       }
 
-      const participants =
-        await loadMeetingParticipantUsers(
-          meeting,
-          {
-            transaction,
-          }
-        );
-
       calendarUserIds =
         getMeetingCalendarUserIds(
-          meeting,
-          participants
+          meeting
         );
 
       await transaction.commit();

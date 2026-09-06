@@ -1506,46 +1506,265 @@ export const validateConvertConsultationToClient = (req, res, next) => {
 // CONVERT TO CASE
 // ======================================================
 
-export const validateConvertConsultationToCase = (req, res, next) => {
-  const body = req.body;
-  if (!isPlainObject(body)) return fail(res, 'Geçersiz istek gövdesi');
+export const validateConvertConsultationToCase = (
+  req,
+  res,
+  next
+) => {
+  const body =
+    req.body;
 
-  const allowed = new Set([
-    'title',
-    'subject',
-    'description',
-    'priority',
-    'assigned_to',
-  ]);
-
-  const unknown = Object.keys(body).find((key) => !allowed.has(key));
-  if (unknown) return fail(res, `Desteklenmeyen alan: ${unknown}`, unknown);
-
-  if (!isValidUuid(body.assigned_to)) {
-    return fail(res, 'Davaya atanacak avukat seçilmelidir', 'assigned_to');
+  if (
+    !isPlainObject(
+      body
+    )
+  ) {
+    return fail(
+      res,
+      'Geçersiz istek gövdesi'
+    );
   }
 
-  if (body.title !== undefined) {
-    const title = normalizeText(body.title);
-    if (title.length < 2 || title.length > 255) {
-      return fail(res, 'Dava başlığı 2-255 karakter arasında olmalıdır', 'title');
+  const allowed =
+    new Set([
+      'judiciary_type',
+      'judiciary_unit',
+      'court_name',
+      'case_number',
+      'subject',
+      'description',
+      'priority',
+      'assigned_to',
+      'opening_date',
+    ]);
+
+  const unknown =
+    Object.keys(
+      body
+    ).find(
+      (
+        key
+      ) =>
+        !allowed.has(
+          key
+        )
+    );
+
+  if (
+    unknown
+  ) {
+    return fail(
+      res,
+      `Desteklenmeyen alan: ${unknown}`,
+      unknown
+    );
+  }
+
+  const judiciaryType =
+    normalizeText(
+      body.judiciary_type
+    );
+
+  if (
+    !judiciaryType
+  ) {
+    return fail(
+      res,
+      'Yargı türü gereklidir',
+      'judiciary_type'
+    );
+  }
+
+  if (
+    judiciaryType.length >
+    100
+  ) {
+    return fail(
+      res,
+      'Yargı türü en fazla 100 karakter olabilir',
+      'judiciary_type'
+    );
+  }
+
+  const judiciaryUnit =
+    normalizeText(
+      body.judiciary_unit
+    );
+
+  if (
+    !judiciaryUnit
+  ) {
+    return fail(
+      res,
+      'Yargı birimi gereklidir',
+      'judiciary_unit'
+    );
+  }
+
+  if (
+    judiciaryUnit.length >
+    150
+  ) {
+    return fail(
+      res,
+      'Yargı birimi en fazla 150 karakter olabilir',
+      'judiciary_unit'
+    );
+  }
+
+  const optionalTextLimits = {
+    court_name:
+      200,
+
+    case_number:
+      100,
+
+    subject:
+      255,
+
+    description:
+      5000,
+  };
+
+  for (
+    const [
+      field,
+      maxLength,
+    ] of
+    Object.entries(
+      optionalTextLimits
+    )
+  ) {
+    if (
+      body[field] ===
+        undefined ||
+      body[field] ===
+        null
+    ) {
+      continue;
+    }
+
+    if (
+      typeof body[field] !==
+      'string'
+    ) {
+      return fail(
+        res,
+        `${field} metin olmalıdır`,
+        field
+      );
+    }
+
+    if (
+      normalizeText(
+        body[field]
+      ).length >
+      maxLength
+    ) {
+      const labels = {
+        court_name:
+          'Mahkeme adı',
+
+        case_number:
+          'Dosya / esas numarası',
+
+        subject:
+          'Dava konusu',
+
+        description:
+          'Açıklama',
+      };
+
+      return fail(
+        res,
+        `${labels[field]} en fazla ${maxLength} karakter olabilir`,
+        field
+      );
     }
   }
 
   if (
-    body.priority !== undefined &&
-    !['low', 'normal', 'high', 'critical'].includes(body.priority)
+    !isValidUuid(
+      body.assigned_to
+    )
   ) {
-    return fail(res, 'Geçersiz dava önceliği', 'priority');
+    return fail(
+      res,
+      'Davaya atanacak avukat seçilmelidir',
+      'assigned_to'
+    );
   }
 
-  for (const field of ['subject', 'description']) {
+  if (
+    body.priority !==
+      undefined &&
+    ![
+      'low',
+      'normal',
+      'high',
+      'critical',
+    ].includes(
+      body.priority
+    )
+  ) {
+    return fail(
+      res,
+      'Geçersiz dava önceliği',
+      'priority'
+    );
+  }
+
+  if (
+    body.opening_date !==
+      undefined &&
+    body.opening_date !==
+      null &&
+    body.opening_date !==
+      ''
+  ) {
     if (
-      body[field] !== undefined &&
-      body[field] !== null &&
-      typeof body[field] !== 'string'
+      !validateDate(
+        body.opening_date
+      )
     ) {
-      return fail(res, `${field} metin olmalıdır`, field);
+      return fail(
+        res,
+        'Geçersiz dava açılış tarihi',
+        'opening_date'
+      );
+    }
+
+    const openingDate =
+      new Date(
+        body.opening_date
+      );
+
+    const today =
+      new Date();
+
+    openingDate.setHours(
+      0,
+      0,
+      0,
+      0
+    );
+
+    today.setHours(
+      0,
+      0,
+      0,
+      0
+    );
+
+    if (
+      openingDate >
+      today
+    ) {
+      return fail(
+        res,
+        'Dava açılış tarihi bugünden ileri bir tarih olamaz',
+        'opening_date'
+      );
     }
   }
 

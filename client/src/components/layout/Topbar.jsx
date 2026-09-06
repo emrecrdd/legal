@@ -64,6 +64,7 @@ const PAGE_TITLES = {
   '/dashboard': 'Genel Bakış',
   '/clients': 'Müvekkiller',
   '/cases': 'Davalar',
+  '/consultations': 'Danışmanlıklar',
   '/documents': 'Belgeler',
   '/templates': 'Şablonlar',
   '/meetings': 'Toplantılar',
@@ -94,6 +95,12 @@ const BREADCRUMBS = {
 
   '/cases/create':
     'Davalar / Yeni Dava',
+
+  '/consultations':
+    'Danışmanlıklar / Listeleme',
+
+  '/consultations/create':
+    'Danışmanlıklar / Yeni Danışmanlık',
 
   '/documents':
     'Belgeler / Listeleme',

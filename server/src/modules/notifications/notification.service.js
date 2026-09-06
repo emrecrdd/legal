@@ -9,20 +9,12 @@ import {
 
 let ioInstance = null;
 
-// ======================================================
-// SOCKET INSTANCE
-// ======================================================
-
 export const setIo = (
   io
 ) => {
   ioInstance =
     io;
 };
-
-// ======================================================
-// HELPERS
-// ======================================================
 
 const findOwnedNotification =
   async (
@@ -50,11 +42,6 @@ const findOwnedNotification =
     if (
       !notification
     ) {
-      /*
-       * Burada özellikle "yetkiniz yok" demiyoruz.
-       * Böylece başka kullanıcıya ait bir notification
-       * ID'sinin gerçekten var olup olmadığını sızdırmıyoruz.
-       */
       throw new Error(
         'Bildirim bulunamadı'
       );
@@ -92,15 +79,7 @@ const formatDateForIstanbul = (
   );
 };
 
-// ======================================================
-// SERVICE
-// ======================================================
-
 export const notificationService = {
-  // ====================================================
-  // CREATE
-  // ====================================================
-
   async create(
     userId,
     type,
@@ -127,10 +106,6 @@ export const notificationService = {
         read:
           false,
       });
-
-    // ==================================================
-    // REAL-TIME SOCKET DELIVERY
-    // ==================================================
 
     if (
       ioInstance
@@ -171,10 +146,6 @@ export const notificationService = {
 
     return notification;
   },
-
-  // ====================================================
-  // USER NOTIFICATIONS
-  // ====================================================
 
   async getByUser(
     userId,
@@ -235,10 +206,6 @@ export const notificationService = {
     };
   },
 
-  // ====================================================
-  // UNREAD COUNT
-  // ====================================================
-
   async getUnreadCount(
     userId
   ) {
@@ -253,10 +220,6 @@ export const notificationService = {
     });
   },
 
-  // ====================================================
-  // GET ONE
-  // ====================================================
-
   async getOne(
     id,
     userId
@@ -266,10 +229,6 @@ export const notificationService = {
       userId
     );
   },
-
-  // ====================================================
-  // MARK AS READ
-  // ====================================================
 
   async markAsRead(
     id,
@@ -293,10 +252,6 @@ export const notificationService = {
 
     return notification;
   },
-
-  // ====================================================
-  // MARK ALL AS READ
-  // ====================================================
 
   async markAllAsRead(
     userId
@@ -329,10 +284,6 @@ export const notificationService = {
     };
   },
 
-  // ====================================================
-  // REMOVE ONE
-  // ====================================================
-
   async remove(
     id,
     userId
@@ -347,10 +298,6 @@ export const notificationService = {
 
     return notification;
   },
-
-  // ====================================================
-  // REMOVE ALL
-  // ====================================================
 
   async removeAll(
     userId
@@ -372,11 +319,6 @@ export const notificationService = {
     };
   },
 
-  // ====================================================
-  // TRIGGERS
-  // ====================================================
-
-  // Görev atama bildirimi
   async notifyTaskAssigned(
     userId,
     taskId,
@@ -395,7 +337,6 @@ export const notificationService = {
     );
   },
 
-  // Duruşma hatırlatıcı
   async notifyHearingReminder(
     userId,
     eventId,
@@ -422,7 +363,6 @@ export const notificationService = {
     );
   },
 
-  // Toplantıya kullanıcı ekleme / atama bildirimi
   async notifyMeetingAssigned(
     userId,
     meetingId,
@@ -455,7 +395,6 @@ export const notificationService = {
     );
   },
 
-  // Toplantı hatırlatıcı
   async notifyMeetingReminder(
     userId,
     meetingId,
@@ -480,7 +419,69 @@ export const notificationService = {
     );
   },
 
-  // Yeni belge bildirimi
+  async notifyConsultationAssigned(
+    userId,
+    consultationId,
+    consultationTitle,
+    assignedBy,
+    action = 'assigned'
+  ) {
+    const transferred =
+      action ===
+      'transferred';
+
+    return this.create(
+      userId,
+      'system',
+      transferred
+        ? 'Danışmanlık Size Devredildi'
+        : 'Danışmanlığa Atandınız',
+      transferred
+        ? `${assignedBy} "${consultationTitle}" danışmanlığını size devretti.`
+        : `${assignedBy} sizi "${consultationTitle}" danışmanlığına atadı.`,
+      `/consultations/${consultationId}`,
+      {
+        entityType:
+          'consultation',
+
+        consultationId,
+
+        action:
+          transferred
+            ? 'transferred'
+            : 'assigned',
+      }
+    );
+  },
+
+  async notifyConsultationConvertedToCase(
+    userId,
+    consultationId,
+    consultationTitle,
+    caseId,
+    caseTitle,
+    convertedBy
+  ) {
+    return this.create(
+      userId,
+      'system',
+      'Danışmanlık Davaya Dönüştürüldü',
+      `${convertedBy} "${consultationTitle}" danışmanlığını "${caseTitle}" davasına dönüştürdü ve davayı size atadı.`,
+      `/cases/${caseId}`,
+      {
+        entityType:
+          'consultation',
+
+        consultationId,
+
+        caseId,
+
+        action:
+          'converted_to_case',
+      }
+    );
+  },
+
   async notifyDocumentUploaded(
     userId,
     documentId,
@@ -505,7 +506,6 @@ export const notificationService = {
     );
   },
 
-  // Dava durumu değişikliği
   async notifyCaseStatusChanged(
     userId,
     caseId,
