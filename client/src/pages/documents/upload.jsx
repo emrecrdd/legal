@@ -1080,11 +1080,6 @@ const DocumentUpload = () => {
           formData.consultation_id
         );
 
-      const consultationId =
-        normalizeId(
-          formData.consultation_id
-        );
-
       const caseId =
         normalizeId(
           formData.case_id
