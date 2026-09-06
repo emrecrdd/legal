@@ -37,6 +37,10 @@ import {
 } from '../notifications/notification.service.js';
 
 import {
+  emailService,
+} from '../../integrations/email.service.js';
+
+import {
   reminderService,
 } from '../reminders/reminder.service.js';
 
@@ -1393,6 +1397,73 @@ const notifySafely =
     }
   };
 
+
+const formatNotificationDateTime = (
+  value
+) => {
+  if (!value) {
+    return 'belirtilmedi';
+  }
+
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(
+          value
+        );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return 'belirtilmedi';
+  }
+
+  return new Intl.DateTimeFormat(
+    'tr-TR',
+    {
+      timeZone:
+        'Europe/Istanbul',
+      day:
+        '2-digit',
+      month:
+        '2-digit',
+      year:
+        'numeric',
+      hour:
+        '2-digit',
+      minute:
+        '2-digit',
+      hour12:
+        false,
+    }
+  ).format(
+    date
+  );
+};
+
+const formatNotificationSchedule = (
+  startDate,
+  endDate = null
+) => {
+  const startText =
+    formatNotificationDateTime(
+      startDate
+    );
+
+  if (!endDate) {
+    return startText;
+  }
+
+  const endText =
+    formatNotificationDateTime(
+      endDate
+    );
+
+  return `${startText} - ${endText}`;
+};
+
 const notifyMeetingParticipants =
   async (
     meeting,
@@ -2103,6 +2174,12 @@ export const meetingService = {
     let previousCalendarUserIds = [];
     let currentCalendarUserIds = [];
     let newlyAddedParticipants = [];
+    let meetingScheduleChanged =
+      false;
+    let previousMeetingStart =
+      null;
+    let previousMeetingEnd =
+      null;
 
     try {
       meeting =
@@ -2342,11 +2419,34 @@ export const meetingService = {
           meeting.title,
       };
 
-      const schedulingChanged =
+      meetingScheduleChanged =
         previousValues.startDate !==
           currentValues.startDate ||
         previousValues.endDate !==
-          currentValues.endDate ||
+          currentValues.endDate;
+
+      if (
+        meetingScheduleChanged
+      ) {
+        previousMeetingStart =
+          previousValues.startDate !==
+            null
+            ? new Date(
+                previousValues.startDate
+              )
+            : null;
+
+        previousMeetingEnd =
+          previousValues.endDate !==
+            null
+            ? new Date(
+                previousValues.endDate
+              )
+            : null;
+      }
+
+      const schedulingChanged =
+        meetingScheduleChanged ||
         previousValues.status !==
           currentValues.status ||
         previousValues.title !==
@@ -2439,6 +2539,190 @@ export const meetingService = {
             ),
         }
       );
+    }
+
+    if (
+      newlyAddedParticipants.length >
+      0
+    ) {
+      await notifySafely(
+        'meeting-assigned-email-on-update',
+
+        async () => {
+          const emailRecipients =
+            newlyAddedParticipants.filter(
+              (participant) =>
+                Boolean(
+                  participant?.email
+                ) &&
+                participant.id !==
+                  meeting.created_by
+            );
+
+          await Promise.all(
+            emailRecipients.map(
+              (participant) =>
+                emailService.sendNotification(
+                  participant,
+                  'Toplantıya Eklendiniz',
+                  `"${meeting.title}" toplantısına katılımcı olarak eklendiniz. Toplantı zamanı: ${formatNotificationSchedule(
+                    meeting.start_date,
+                    meeting.end_date
+                  )}.`,
+                  `/meetings/${meeting.id}`
+                )
+            )
+          );
+        },
+
+        {
+          meetingId:
+            meeting.id,
+
+          recipientIds:
+            newlyAddedParticipants
+              .filter(
+                (participant) =>
+                  participant.id !==
+                  meeting.created_by
+              )
+              .map(
+                (participant) =>
+                  participant.id
+              ),
+        }
+      );
+    }
+
+    if (
+      meetingScheduleChanged
+    ) {
+      const newlyAddedIds =
+        new Set(
+          newlyAddedParticipants.map(
+            (participant) =>
+              participant.id
+          )
+        );
+
+      /*
+       * Aynı update'te hem tarih değişip hem yeni kişi eklendiyse
+       * yeni kişiye ikinci bir "tarih değişti" bildirimi/maili
+       * göndermiyoruz. Yeni kişi yalnız "toplantıya eklendiniz"
+       * mesajını alır; o mesaj güncel toplantı zamanını da içerir.
+       */
+      const scheduleRecipients =
+        currentParticipants.filter(
+          (participant) =>
+            !newlyAddedIds.has(
+              participant.id
+            )
+        );
+
+      if (
+        scheduleRecipients.length >
+          0
+      ) {
+        const previousScheduleText =
+          formatNotificationSchedule(
+            previousMeetingStart,
+            previousMeetingEnd
+          );
+
+        const currentScheduleText =
+          formatNotificationSchedule(
+            meeting.start_date,
+            meeting.end_date
+          );
+
+        const scheduleChangeMessage =
+          `"${meeting.title}" toplantısının tarih/saat bilgisi değiştirildi: ${previousScheduleText} → ${currentScheduleText}.`;
+
+        await notifySafely(
+          'meeting-schedule-updated',
+
+          async () => {
+            for (
+              const participant of
+              scheduleRecipients
+            ) {
+              await notificationService.create(
+                participant.id,
+                'meeting',
+                'Toplantı Tarihi Güncellendi',
+                scheduleChangeMessage,
+                `/meetings/${meeting.id}`,
+                {
+                  meetingId:
+                    meeting.id,
+                  previousStartDate:
+                    previousMeetingStart,
+                  previousEndDate:
+                    previousMeetingEnd,
+                  startDate:
+                    meeting.start_date,
+                  endDate:
+                    meeting.end_date,
+                  action:
+                    'schedule_updated',
+                }
+              );
+            }
+          },
+
+          {
+            meetingId:
+              meeting.id,
+            recipientIds:
+              scheduleRecipients.map(
+                (participant) =>
+                  participant.id
+              ),
+          }
+        );
+
+        await notifySafely(
+          'meeting-schedule-updated-email',
+
+          async () => {
+            await Promise.all(
+              scheduleRecipients
+                .filter(
+                  (participant) =>
+                    Boolean(
+                      participant?.email
+                    )
+                )
+                .map(
+                  (participant) =>
+                    emailService.sendNotification(
+                      participant,
+                      'Toplantı Tarihi Güncellendi',
+                      scheduleChangeMessage,
+                      `/meetings/${meeting.id}`
+                    )
+                )
+            );
+          },
+
+          {
+            meetingId:
+              meeting.id,
+            recipientIds:
+              scheduleRecipients
+                .filter(
+                  (participant) =>
+                    Boolean(
+                      participant?.email
+                    )
+                )
+                .map(
+                  (participant) =>
+                    participant.id
+                ),
+          }
+        );
+      }
     }
 
     const removedCalendarUserIds =

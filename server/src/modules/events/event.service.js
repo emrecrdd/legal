@@ -40,6 +40,10 @@ import {
 } from '../notifications/notification.service.js';
 
 import {
+  emailService,
+} from '../../integrations/email.service.js';
+
+import {
   reminderService,
 } from '../reminders/reminder.service.js';
 
@@ -274,6 +278,73 @@ const notifySafely = async (
       }
     );
   }
+};
+
+
+const formatNotificationDateTime = (
+  value
+) => {
+  if (!value) {
+    return 'belirtilmedi';
+  }
+
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(
+          value
+        );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return 'belirtilmedi';
+  }
+
+  return new Intl.DateTimeFormat(
+    'tr-TR',
+    {
+      timeZone:
+        'Europe/Istanbul',
+      day:
+        '2-digit',
+      month:
+        '2-digit',
+      year:
+        'numeric',
+      hour:
+        '2-digit',
+      minute:
+        '2-digit',
+      hour12:
+        false,
+    }
+  ).format(
+    date
+  );
+};
+
+const formatNotificationSchedule = (
+  startDate,
+  endDate = null
+) => {
+  const startText =
+    formatNotificationDateTime(
+      startDate
+    );
+
+  if (!endDate) {
+    return startText;
+  }
+
+  const endText =
+    formatNotificationDateTime(
+      endDate
+    );
+
+  return `${startText} - ${endText}`;
 };
 
 // ======================================================
@@ -1759,6 +1830,12 @@ export const eventService = {
     let previousAssignedTo;
     let shouldNotifyAssignee =
       false;
+    let hearingScheduleChanged =
+      false;
+    let previousHearingStart =
+      null;
+    let previousHearingEnd =
+      null;
 
     let previousCalendarUserIds =
       [];
@@ -1922,6 +1999,36 @@ export const eventService = {
           event.reminder_minutes,
       };
 
+      hearingScheduleChanged =
+        event.event_type ===
+          'hearing' &&
+        (
+          previousValues.startDate !==
+            currentValues.startDate ||
+          previousValues.endDate !==
+            currentValues.endDate
+        );
+
+      if (
+        hearingScheduleChanged
+      ) {
+        previousHearingStart =
+          previousValues.startDate !==
+            null
+            ? new Date(
+                previousValues.startDate
+              )
+            : null;
+
+        previousHearingEnd =
+          previousValues.endDate !==
+            null
+            ? new Date(
+                previousValues.endDate
+              )
+            : null;
+      }
+
       const schedulingChanged =
         previousValues.startDate !==
           currentValues.startDate ||
@@ -2025,6 +2132,152 @@ export const eventService = {
 
           previousAssignedTo,
 
+          assignedTo:
+            event.assigned_to,
+        }
+      );
+    }
+
+    if (
+      shouldNotifyAssignee
+    ) {
+      await notifySafely(
+        'hearing-reassigned-email',
+
+        async () => {
+          const assignedUser =
+            await User.findByPk(
+              event.assigned_to,
+              {
+                attributes: [
+                  'id',
+                  'first_name',
+                  'last_name',
+                  'email',
+                ],
+              }
+            );
+
+          if (
+            !assignedUser?.email
+          ) {
+            return;
+          }
+
+          await emailService.sendNotification(
+            assignedUser,
+            'Duruşmaya Atandınız',
+            `"${event.title}" duruşmasına sorumlu olarak atandınız. Duruşma zamanı: ${formatNotificationSchedule(
+              event.start_date,
+              event.end_date
+            )}.`,
+            `/events/${event.id}`
+          );
+        },
+
+        {
+          eventId:
+            event.id,
+
+          previousAssignedTo,
+
+          assignedTo:
+            event.assigned_to,
+        }
+      );
+    }
+
+    if (
+      hearingScheduleChanged &&
+      !shouldNotifyAssignee &&
+      event.assigned_to
+    ) {
+      const previousScheduleText =
+        formatNotificationSchedule(
+          previousHearingStart,
+          previousHearingEnd
+        );
+
+      const currentScheduleText =
+        formatNotificationSchedule(
+          event.start_date,
+          event.end_date
+        );
+
+      const scheduleChangeMessage =
+        `"${event.title}" duruşmasının tarih/saat bilgisi değiştirildi: ${previousScheduleText} → ${currentScheduleText}.`;
+
+      await notifySafely(
+        'hearing-schedule-updated',
+
+        async () => {
+          await notificationService.create(
+            event.assigned_to,
+            'event',
+            'Duruşma Tarihi Güncellendi',
+            scheduleChangeMessage,
+            `/events/${event.id}`,
+            {
+              eventId:
+                event.id,
+              eventType:
+                'hearing',
+              previousStartDate:
+                previousHearingStart,
+              previousEndDate:
+                previousHearingEnd,
+              startDate:
+                event.start_date,
+              endDate:
+                event.end_date,
+              action:
+                'schedule_updated',
+            }
+          );
+        },
+
+        {
+          eventId:
+            event.id,
+          assignedTo:
+            event.assigned_to,
+        }
+      );
+
+      await notifySafely(
+        'hearing-schedule-updated-email',
+
+        async () => {
+          const assignedUser =
+            await User.findByPk(
+              event.assigned_to,
+              {
+                attributes: [
+                  'id',
+                  'first_name',
+                  'last_name',
+                  'email',
+                ],
+              }
+            );
+
+          if (
+            !assignedUser?.email
+          ) {
+            return;
+          }
+
+          await emailService.sendNotification(
+            assignedUser,
+            'Duruşma Tarihi Güncellendi',
+            scheduleChangeMessage,
+            `/events/${event.id}`
+          );
+        },
+
+        {
+          eventId:
+            event.id,
           assignedTo:
             event.assigned_to,
         }

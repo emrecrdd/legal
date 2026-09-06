@@ -46,6 +46,10 @@ import {
 } from '../notifications/notification.service.js';
 
 import {
+  emailService,
+} from '../../integrations/email.service.js';
+
+import {
   reminderService,
 } from '../reminders/reminder.service.js';
 import {
@@ -821,6 +825,73 @@ const notifySafely =
       );
     }
   };
+
+
+const formatNotificationDateTime = (
+  value
+) => {
+  if (!value) {
+    return 'belirtilmedi';
+  }
+
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(
+          value
+        );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return 'belirtilmedi';
+  }
+
+  return new Intl.DateTimeFormat(
+    'tr-TR',
+    {
+      timeZone:
+        'Europe/Istanbul',
+      day:
+        '2-digit',
+      month:
+        '2-digit',
+      year:
+        'numeric',
+      hour:
+        '2-digit',
+      minute:
+        '2-digit',
+      hour12:
+        false,
+    }
+  ).format(
+    date
+  );
+};
+
+const formatNotificationSchedule = (
+  startDate,
+  endDate = null
+) => {
+  const startText =
+    formatNotificationDateTime(
+      startDate
+    );
+
+  if (!endDate) {
+    return startText;
+  }
+
+  const endText =
+    formatNotificationDateTime(
+      endDate
+    );
+
+  return `${startText} - ${endText}`;
+};
 // ======================================================
 // GOOGLE CALENDAR HELPERS
 // ======================================================
@@ -2258,6 +2329,12 @@ if (
 
     let task;
     let calendarUserIds = [];
+    let dueDateChangedOnUpdate =
+      false;
+    let previousDueDateForNotification =
+      null;
+    let dateUpdateAssigneeIds =
+      [];
 
     try {
       task =
@@ -2422,9 +2499,20 @@ if (
           task.title,
       };
 
-      const schedulingChanged =
+      dueDateChangedOnUpdate =
         previousValues.dueDate !==
-          currentValues.dueDate ||
+          currentValues.dueDate;
+
+      previousDueDateForNotification =
+        previousValues.dueDate !==
+          null
+          ? new Date(
+              previousValues.dueDate
+            )
+          : null;
+
+      const schedulingChanged =
+        dueDateChangedOnUpdate ||
         previousValues.title !==
           currentValues.title;
 
@@ -2476,6 +2564,9 @@ if (
           }
         );
 
+      dateUpdateAssigneeIds =
+        assigneeIds;
+
       calendarUserIds =
         getTaskCalendarUserIds(
           task,
@@ -2487,6 +2578,115 @@ if (
       await transaction.rollback();
 
       throw error;
+    }
+
+    // ==================================================
+    // DUE DATE CHANGE: APP NOTIFICATION + EMAIL
+    // ==================================================
+
+    if (
+      dueDateChangedOnUpdate &&
+      dateUpdateAssigneeIds.length >
+        0
+    ) {
+      const previousDateText =
+        formatNotificationDateTime(
+          previousDueDateForNotification
+        );
+
+      const currentDateText =
+        formatNotificationDateTime(
+          task.due_date
+        );
+
+      const dateChangeMessage =
+        `"${task.title}" görevinin son tarihi değiştirildi: ${previousDateText} → ${currentDateText}.`;
+
+      await notifySafely(
+        'task-due-date-updated',
+
+        async () => {
+          for (
+            const userId of
+            dateUpdateAssigneeIds
+          ) {
+            await notificationService.create(
+              userId,
+              'task',
+              'Görev Tarihi Güncellendi',
+              dateChangeMessage,
+              `/tasks/${task.id}`,
+              {
+                taskId:
+                  task.id,
+                previousDueDate:
+                  previousDueDateForNotification,
+                dueDate:
+                  task.due_date,
+                action:
+                  'schedule_updated',
+              }
+            );
+          }
+        },
+
+        {
+          taskId:
+            task.id,
+          recipientIds:
+            dateUpdateAssigneeIds,
+        }
+      );
+
+      await notifySafely(
+        'task-due-date-updated-email',
+
+        async () => {
+          const recipients =
+            await User.findAll({
+              where: {
+                id: {
+                  [Op.in]:
+                    dateUpdateAssigneeIds,
+                },
+                is_active:
+                  true,
+              },
+              attributes: [
+                'id',
+                'first_name',
+                'last_name',
+                'email',
+              ],
+            });
+
+          await Promise.all(
+            recipients
+              .filter(
+                (user) =>
+                  Boolean(
+                    user?.email
+                  )
+              )
+              .map(
+                (user) =>
+                  emailService.sendNotification(
+                    user,
+                    'Görev Tarihi Güncellendi',
+                    dateChangeMessage,
+                    `/tasks/${task.id}`
+                  )
+              )
+          );
+        },
+
+        {
+          taskId:
+            task.id,
+          recipientIds:
+            dateUpdateAssigneeIds,
+        }
+      );
     }
 
     // ==================================================
@@ -2963,6 +3163,60 @@ if (
 
           previousAssignees:
             previousAssigneeIds,
+        }
+      );
+    }
+
+    // ==================================================
+    // EMAIL NEWLY ADDED USERS
+    // ==================================================
+
+    if (
+      newlyAdded.length >
+      0
+    ) {
+      await notifySafely(
+        'task-assigned-email',
+
+        async () => {
+          const assignerName =
+            typeof assignedBy ===
+              'string' &&
+            assignedBy.trim()
+              ? assignedBy.trim()
+              : 'Sistem';
+
+          await Promise.all(
+            newlyAdded
+              .filter(
+                (user) =>
+                  Boolean(
+                    user?.email
+                  )
+              )
+              .map(
+                (user) =>
+                  emailService.sendNotification(
+                    user,
+                    'Yeni Görev Atandı',
+                    `${assignerName} size "${task.title}" görevini atadı. Son tarih: ${formatNotificationDateTime(
+                      task.due_date
+                    )}.`,
+                    `/tasks/${task.id}`
+                  )
+              )
+          );
+        },
+
+        {
+          taskId:
+            task.id,
+
+          recipientIds:
+            newlyAdded.map(
+              (user) =>
+                user.id
+            ),
         }
       );
     }
