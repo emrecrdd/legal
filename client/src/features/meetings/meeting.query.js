@@ -571,109 +571,86 @@ export const useCreateMeeting =
           data
         ),
 
-      onSuccess: (
-        _,
+      onSuccess: async (
+        response,
         variables
       ) => {
-        queryClient.invalidateQueries({
-          queryKey:
-            MEETING_QUERY_KEYS.all,
-        });
+        const responseRelations =
+          getMeetingRelationIds(
+            response
+          );
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'my-meetings',
-          ],
-        });
+        const clientId =
+          normalizeId(
+            responseRelations.clientId ||
+            variables?.client_id
+          );
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'upcoming-meetings',
-          ],
-        });
+        const caseId =
+          normalizeId(
+            responseRelations.caseId ||
+            variables?.case_id
+          );
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'calendar-meetings',
-          ],
-        });
+        const consultationId =
+          normalizeId(
+            responseRelations.consultationId ||
+            variables?.consultation_id
+          );
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'dashboard-meetings',
-          ],
-        });
-
-        queryClient.invalidateQueries({
-          queryKey: [
-            'dashboard-monthly-meetings',
-          ],
-        });
-
-        if (
-          variables?.client_id
-        ) {
+        await Promise.all([
           queryClient.invalidateQueries({
-            queryKey: [
-              'client-meetings',
-              variables.client_id,
-            ],
-          });
+            queryKey:
+              MEETING_QUERY_KEYS.all,
+          }),
 
           queryClient.invalidateQueries({
             queryKey: [
-              'client-meeting-timeline',
-              variables.client_id,
+              'my-meetings',
             ],
-          });
+          }),
 
           queryClient.invalidateQueries({
             queryKey: [
-              'client',
-              variables.client_id,
+              'upcoming-meetings',
             ],
-          });
-        }
-
-        if (
-          variables?.case_id
-        ) {
-          queryClient.invalidateQueries({
-            queryKey: [
-              'case-meetings',
-              variables.case_id,
-            ],
-          });
+          }),
 
           queryClient.invalidateQueries({
             queryKey: [
-              'case',
-              variables.case_id,
+              'calendar-meetings',
             ],
-          });
-        }
-
-        if (
-          variables?.consultation_id
-        ) {
-          queryClient.invalidateQueries({
-            queryKey: [
-              'consultation-meetings',
-              normalizeId(
-                variables.consultation_id
-              ),
-            ],
-          });
+          }),
 
           queryClient.invalidateQueries({
             queryKey: [
-              'consultation',
-              normalizeId(
-                variables.consultation_id
-              ),
+              'dashboard-meetings',
             ],
-          });
-        }
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'dashboard-monthly-meetings',
+            ],
+          }),
+
+          invalidateMeetingRelations(
+            queryClient,
+            {
+              clientIds: [
+                clientId,
+              ],
+
+              caseIds: [
+                caseId,
+              ],
+
+              consultationIds: [
+                consultationId,
+              ],
+            }
+          ),
+        ]);
 
         toast.success(
           'Toplantı başarıyla oluşturuldu'
@@ -1050,94 +1027,112 @@ export const useDeleteMeeting =
           id
         ),
 
-      onSuccess: (
-        _,
-        id
+      onMutate: async (
+        rawId
       ) => {
-        queryClient.invalidateQueries({
+        const id =
+          normalizeId(
+            rawId
+          );
+
+        if (!id) {
+          return {
+            clientId:
+              '',
+            caseId:
+              '',
+            consultationId:
+              '',
+          };
+        }
+
+        await queryClient.cancelQueries({
           queryKey:
-            MEETING_QUERY_KEYS.all,
+            MEETING_QUERY_KEYS.detail(
+              id
+            ),
+          exact:
+            true,
         });
+
+        return getExistingMeetingRelations(
+          queryClient,
+          id
+        );
+      },
+
+      onSuccess: async (
+        _response,
+        rawId,
+        context
+      ) => {
+        const id =
+          normalizeId(
+            rawId
+          );
 
         queryClient.removeQueries({
           queryKey:
             MEETING_QUERY_KEYS.detail(
               id
             ),
-          exact: true,
+          exact:
+            true,
         });
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'my-meetings',
-          ],
-        });
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey:
+              MEETING_QUERY_KEYS.all,
+          }),
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'upcoming-meetings',
-          ],
-        });
+          queryClient.invalidateQueries({
+            queryKey: [
+              'my-meetings',
+            ],
+          }),
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'calendar-meetings',
-          ],
-        });
+          queryClient.invalidateQueries({
+            queryKey: [
+              'upcoming-meetings',
+            ],
+          }),
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'dashboard-meetings',
-          ],
-        });
+          queryClient.invalidateQueries({
+            queryKey: [
+              'calendar-meetings',
+            ],
+          }),
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'dashboard-monthly-meetings',
-          ],
-        });
+          queryClient.invalidateQueries({
+            queryKey: [
+              'dashboard-meetings',
+            ],
+          }),
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'client-meetings',
-          ],
-        });
+          queryClient.invalidateQueries({
+            queryKey: [
+              'dashboard-monthly-meetings',
+            ],
+          }),
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'client-meeting-timeline',
-          ],
-        });
+          invalidateMeetingRelations(
+            queryClient,
+            {
+              clientIds: [
+                context?.clientId,
+              ],
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'case-meetings',
-          ],
-        });
+              caseIds: [
+                context?.caseId,
+              ],
 
-        queryClient.invalidateQueries({
-          queryKey: [
-            'client',
-          ],
-        });
-
-        queryClient.invalidateQueries({
-          queryKey: [
-            'case',
-          ],
-        });
-
-        queryClient.invalidateQueries({
-          queryKey: [
-            'consultation-meetings',
-          ],
-        });
-
-        queryClient.invalidateQueries({
-          queryKey: [
-            'consultation',
-          ],
-        });
+              consultationIds: [
+                context?.consultationId,
+              ],
+            }
+          ),
+        ]);
 
         toast.success(
           'Toplantı kaldırıldı'
