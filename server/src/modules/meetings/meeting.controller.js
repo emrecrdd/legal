@@ -65,6 +65,181 @@ const getHttpStatusFromError = (
   return fallback;
 };
 
+
+const getMeetingErrorMessage = (
+  error,
+  fallback =
+    'İşlem gerçekleştirilemedi'
+) => {
+  const validationMessage =
+    Array.isArray(
+      error?.errors
+    )
+      ? error.errors
+          .map(
+            (item) =>
+              String(
+                item?.message ||
+                ''
+              ).trim()
+          )
+          .find(
+            Boolean
+          )
+      : '';
+
+  if (
+    validationMessage
+  ) {
+    return validationMessage;
+  }
+
+  const rawMessage =
+    String(
+      error?.message ||
+      ''
+    ).trim();
+
+  if (!rawMessage) {
+    return fallback;
+  }
+
+  const normalized =
+    rawMessage.toLocaleLowerCase(
+      'tr-TR'
+    );
+
+  if (
+    normalized.includes(
+      'meeting not found'
+    )
+  ) {
+    return 'Toplantı kaydı bulunamadı.';
+  }
+
+  if (
+    normalized.includes(
+      'case not found'
+    )
+  ) {
+    return 'Seçilen dava bulunamadı veya bu kayda erişim yetkiniz yok.';
+  }
+
+  if (
+    normalized.includes(
+      'client not found'
+    )
+  ) {
+    return 'Seçilen müvekkil bulunamadı veya bu kayda erişim yetkiniz yok.';
+  }
+
+  if (
+    normalized.includes(
+      'consultation not found'
+    )
+  ) {
+    return 'Seçilen danışmanlık bulunamadı veya bu kayda erişim yetkiniz yok.';
+  }
+
+  if (
+    normalized.includes(
+      'user not found'
+    ) ||
+    normalized.includes(
+      'assignee not found'
+    )
+  ) {
+    return 'Seçilen sorumlu kullanıcı bulunamadı veya artık erişilebilir değil.';
+  }
+
+  if (
+    normalized.includes(
+      'forbidden'
+    ) ||
+    normalized.includes(
+      'unauthorized'
+    ) ||
+    normalized.includes(
+      'permission denied'
+    ) ||
+    normalized.includes(
+      'access denied'
+    )
+  ) {
+    return 'Bu işlem için yetkiniz bulunmuyor.';
+  }
+
+  if (
+    normalized.includes(
+      'invalid meeting status'
+    ) ||
+    normalized.includes(
+      'invalid status'
+    )
+  ) {
+    return 'Geçerli bir toplantı durumu seçilmelidir.';
+  }
+
+  if (
+    normalized.includes(
+      'invalid meeting type'
+    ) ||
+    normalized.includes(
+      'invalid meeting_type'
+    )
+  ) {
+    return 'Geçerli bir toplantı türü seçilmelidir.';
+  }
+
+  if (
+    /validation error:\s*/i.test(
+      rawMessage
+    )
+  ) {
+    const cleaned =
+      rawMessage.replace(
+        /^validation error:\s*/i,
+        ''
+      ).trim();
+
+    if (
+      cleaned &&
+      !/validation\s+(?:len|notempty|is_in|isin|notnull)/i.test(
+        cleaned
+      )
+    ) {
+      return cleaned;
+    }
+
+    return 'Toplantı bilgileri doğrulanamadı. Lütfen formdaki alanları kontrol edin.';
+  }
+
+  if (
+    /sequelize|constraint|foreign key|duplicate key|invalid input syntax|not-null violation|cannot read propert|stack trace|internal server error|econn|socket|request failed with status code/i.test(
+      rawMessage
+    )
+  ) {
+    return 'Toplantı işlemi tamamlanamadı. Lütfen bilgileri kontrol edip tekrar deneyin.';
+  }
+
+  /*
+   * Service katmanında bilinçli olarak üretilmiş Türkçe
+   * iş kuralı mesajlarını kullanıcıya gösterebiliriz.
+   */
+  if (
+    /[çğıöşüİ]/u.test(
+      rawMessage
+    ) ||
+    /\b(toplantı|tarih|müvekkil|dava|danışmanlık|yetki|katılımcı|bağlantı|kullanıcı)\b/i.test(
+      rawMessage
+    )
+  ) {
+    return rawMessage;
+  }
+
+  return fallback;
+};
+
 const hasOptionalPermission = (
   user,
   permissionKey
@@ -268,7 +443,7 @@ export const meetingController = {
       return successResponse(
         res,
         meeting,
-        'Meeting created successfully',
+        'Toplantı başarıyla oluşturuldu',
         201
       );
     } catch (error) {
@@ -279,7 +454,10 @@ export const meetingController = {
 
       return errorResponse(
         res,
-        error.message,
+        getMeetingErrorMessage(
+          error,
+          'Toplantı oluşturulamadı'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -341,7 +519,7 @@ export const meetingController = {
         res,
         result.data,
         result.pagination,
-        'Meetings fetched successfully'
+        'Toplantılar başarıyla getirildi'
       );
     } catch (error) {
       logger.error(
@@ -351,7 +529,10 @@ export const meetingController = {
 
       return errorResponse(
         res,
-        error.message,
+        getMeetingErrorMessage(
+          error,
+          'Toplantılar getirilemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -382,7 +563,7 @@ export const meetingController = {
       return successResponse(
         res,
         meeting,
-        'Meeting fetched successfully'
+        'Toplantı başarıyla getirildi'
       );
     } catch (error) {
       logger.error(
@@ -392,7 +573,10 @@ export const meetingController = {
 
       return errorResponse(
         res,
-        error.message,
+        getMeetingErrorMessage(
+          error,
+          'Toplantı getirilemedi'
+        ),
         getHttpStatusFromError(
           error,
           404
@@ -639,8 +823,10 @@ export const meetingController = {
 
       return errorResponse(
         res,
-        error.message ||
-          'Toplantı takvim dosyası oluşturulamadı',
+        getMeetingErrorMessage(
+          error,
+          'Toplantı takvim dosyası oluşturulamadı'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -685,7 +871,7 @@ export const meetingController = {
       return successResponse(
         res,
         meeting,
-        'Meeting updated successfully'
+        'Toplantı başarıyla güncellendi'
       );
     } catch (error) {
       logger.error(
@@ -695,7 +881,10 @@ export const meetingController = {
 
       return errorResponse(
         res,
-        error.message,
+        getMeetingErrorMessage(
+          error,
+          'Toplantı güncellenemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -745,7 +934,7 @@ export const meetingController = {
       return successResponse(
         res,
         null,
-        'Meeting deleted successfully'
+        'Toplantı başarıyla silindi'
       );
     } catch (error) {
       logger.error(
@@ -755,7 +944,10 @@ export const meetingController = {
 
       return errorResponse(
         res,
-        error.message,
+        getMeetingErrorMessage(
+          error,
+          'Toplantı silinemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -801,7 +993,7 @@ export const meetingController = {
         res,
         result.data,
         result.pagination,
-        'My meetings fetched successfully'
+        'Toplantılarınız başarıyla getirildi'
       );
     } catch (error) {
       logger.error(
@@ -811,7 +1003,10 @@ export const meetingController = {
 
       return errorResponse(
         res,
-        error.message,
+        getMeetingErrorMessage(
+          error,
+          'Toplantılarınız getirilemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -852,7 +1047,7 @@ export const meetingController = {
         res,
         result.data,
         result.pagination,
-        'Case meetings fetched successfully'
+        'Davaya ait toplantılar başarıyla getirildi'
       );
     } catch (error) {
       logger.error(
@@ -862,7 +1057,10 @@ export const meetingController = {
 
       return errorResponse(
         res,
-        error.message,
+        getMeetingErrorMessage(
+          error,
+          'Davaya ait toplantılar getirilemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -903,7 +1101,7 @@ export const meetingController = {
         res,
         result.data,
         result.pagination,
-        'Client meetings fetched successfully'
+        'Müvekkile ait toplantılar başarıyla getirildi'
       );
     } catch (error) {
       logger.error(
@@ -913,7 +1111,10 @@ export const meetingController = {
 
       return errorResponse(
         res,
-        error.message,
+        getMeetingErrorMessage(
+          error,
+          'Müvekkile ait toplantılar getirilemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -956,7 +1157,7 @@ export const meetingController = {
       return successResponse(
         res,
         timeline,
-        'Client meeting timeline fetched successfully'
+        'Müvekkil toplantı zaman çizelgesi başarıyla getirildi'
       );
     } catch (error) {
       logger.error(
@@ -966,7 +1167,10 @@ export const meetingController = {
 
       return errorResponse(
         res,
-        error.message,
+        getMeetingErrorMessage(
+          error,
+          'Müvekkil toplantı zaman çizelgesi getirilemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -1002,7 +1206,7 @@ export const meetingController = {
       return successResponse(
         res,
         meetings,
-        'Upcoming meetings fetched successfully'
+        'Yaklaşan toplantılar başarıyla getirildi'
       );
     } catch (error) {
       logger.error(
@@ -1012,7 +1216,10 @@ export const meetingController = {
 
       return errorResponse(
         res,
-        error.message,
+        getMeetingErrorMessage(
+          error,
+          'Yaklaşan toplantılar getirilemedi'
+        ),
         getHttpStatusFromError(
           error
         )
@@ -1036,7 +1243,7 @@ export const meetingController = {
       if (!status) {
         return errorResponse(
           res,
-          'Meeting status is required',
+          'Toplantı durumu zorunludur',
           400
         );
       }
@@ -1069,7 +1276,7 @@ export const meetingController = {
       return successResponse(
         res,
         meeting,
-        'Meeting status updated successfully'
+        'Toplantı durumu başarıyla güncellendi'
       );
     } catch (error) {
       logger.error(
@@ -1079,7 +1286,10 @@ export const meetingController = {
 
       return errorResponse(
         res,
-        error.message,
+        getMeetingErrorMessage(
+          error,
+          'Toplantı durumu güncellenemedi'
+        ),
         getHttpStatusFromError(
           error
         )
