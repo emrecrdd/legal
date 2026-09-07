@@ -343,6 +343,10 @@ export const CONSULTATION_QUERY_KEYS = {
     'consultation-statistics',
   ],
 
+  assignableUsers: () => [
+    'consultation-assignable-users',
+  ],
+
   tasks: (
     id
   ) => [
@@ -717,19 +721,11 @@ export const useConsultation = (
     gcTime:
       CACHE.GC,
 
-    /*
-     * Danışmanlık detayı başka modüllerdeki dönüşüm/ilişki işlemlerinden
-     * etkilenebilir. Kısa süre içinde geri dönüldüğünde eski embedded veri
-     * gösterilmemesi için detail de her dönüşte tazelenir.
-     */
     refetchOnMount:
-      'always',
+      true,
 
     refetchOnWindowFocus:
-      'always',
-
-    refetchOnReconnect:
-      'always',
+      true,
   });
 };
 
@@ -751,6 +747,31 @@ export const useConsultationStatistics =
         CACHE.GC_LONG,
     });
   };
+
+export const useConsultationAssignableUsers = (
+  enabled = true
+) => {
+  return useQuery({
+    queryKey:
+      CONSULTATION_QUERY_KEYS
+        .assignableUsers(),
+
+    queryFn: () =>
+      consultationApi
+        .getAssignableUsers(),
+
+    enabled:
+      Boolean(
+        enabled
+      ),
+
+    staleTime:
+      CACHE.NORMAL,
+
+    gcTime:
+      CACHE.GC,
+  });
+};
 
 export const useConsultationTasks = (
   consultationId
@@ -782,21 +803,6 @@ export const useConsultationTasks = (
 
     gcTime:
       CACHE.GC,
-
-    /*
-     * Danışmanlık ilişkileri başka modüllerde (Görev/Toplantı/Belge)
-     * değiştirilebilir. Kullanıcı danışmanlığa geri geldiğinde 5 dakikalık
-     * staleTime yüzünden eski listeyi görmemesi için her mount/focus/reconnect
-     * noktasında relation sorgusunu tazeliyoruz.
-     */
-    refetchOnMount:
-      'always',
-
-    refetchOnWindowFocus:
-      'always',
-
-    refetchOnReconnect:
-      'always',
   });
 };
 
@@ -830,21 +836,6 @@ export const useConsultationMeetings = (
 
     gcTime:
       CACHE.GC,
-
-    /*
-     * Danışmanlık ilişkileri başka modüllerde (Görev/Toplantı/Belge)
-     * değiştirilebilir. Kullanıcı danışmanlığa geri geldiğinde 5 dakikalık
-     * staleTime yüzünden eski listeyi görmemesi için her mount/focus/reconnect
-     * noktasında relation sorgusunu tazeliyoruz.
-     */
-    refetchOnMount:
-      'always',
-
-    refetchOnWindowFocus:
-      'always',
-
-    refetchOnReconnect:
-      'always',
   });
 };
 
@@ -878,21 +869,6 @@ export const useConsultationDocuments = (
 
     gcTime:
       CACHE.GC,
-
-    /*
-     * Danışmanlık ilişkileri başka modüllerde (Görev/Toplantı/Belge)
-     * değiştirilebilir. Kullanıcı danışmanlığa geri geldiğinde 5 dakikalık
-     * staleTime yüzünden eski listeyi görmemesi için her mount/focus/reconnect
-     * noktasında relation sorgusunu tazeliyoruz.
-     */
-    refetchOnMount:
-      'always',
-
-    refetchOnWindowFocus:
-      'always',
-
-    refetchOnReconnect:
-      'always',
   });
 };
 
@@ -1960,6 +1936,7 @@ export default {
   useConsultations,
   useConsultation,
   useConsultationStatistics,
+  useConsultationAssignableUsers,
   useConsultationTasks,
   useConsultationMeetings,
   useConsultationDocuments,
