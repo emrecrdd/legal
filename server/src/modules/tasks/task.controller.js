@@ -887,6 +887,12 @@ export const taskController = {
 
             canViewAllCases:
               access.canViewAllCases,
+
+            canViewConsultations:
+              access.canViewConsultations,
+
+            canViewAllConsultations:
+              access.canViewAllConsultations,
           }
         );
 

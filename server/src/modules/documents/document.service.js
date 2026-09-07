@@ -2132,6 +2132,53 @@ export const documentService = {
   },
 
   // ====================================================
+  // CONSULTATION DOCUMENTS
+  // ====================================================
+
+  async getByConsultation(
+    consultationId,
+    actor
+  ) {
+    /*
+     * Önce consultation domain erişimi fail-closed doğrulanır.
+     * Sonra document read scope ayrıca uygulanır.
+     */
+    await assertConsultationAccess(
+      consultationId,
+      actor
+    );
+
+    const where =
+      combineWhere(
+        {
+          consultation_id:
+            consultationId,
+
+          is_archived:
+            false,
+        },
+
+        buildDocumentReadAccessWhere(
+          actor
+        )
+      );
+
+    return Document.findAll({
+      where,
+
+      include:
+        documentIncludes,
+
+      order: [
+        [
+          'created_at',
+          'DESC',
+        ],
+      ],
+    });
+  },
+
+  // ====================================================
   // FIND ALL
   // ====================================================
 

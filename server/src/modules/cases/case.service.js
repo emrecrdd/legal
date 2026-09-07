@@ -550,6 +550,85 @@ const validateOpeningDate =
   };
 
 // ======================================================
+// CASE CREATE CORE
+// ======================================================
+
+const createCaseRecord = async (
+  data,
+  actor,
+  transaction
+) => {
+  const {
+    client_ids,
+    ...caseData
+  } = data || {};
+
+  const actorId =
+    getActorId(
+      actor
+    );
+
+  if (
+    !actorId
+  ) {
+    throw new Error(
+      'Case not found'
+    );
+  }
+
+  if (
+    !transaction
+  ) {
+    throw new Error(
+      'Case transaction is required'
+    );
+  }
+
+  validateOpeningDate(
+    caseData.opening_date
+  );
+
+  const safeClientIds =
+    Array.isArray(
+      client_ids
+    )
+      ? await assertClientIdsAccess(
+          client_ids,
+          actor,
+          {
+            transaction,
+          }
+        )
+      : [];
+
+  const newCase =
+    await Case.create(
+      {
+        ...caseData,
+        created_by:
+          actorId,
+      },
+      {
+        transaction,
+      }
+    );
+
+  if (
+    safeClientIds.length >
+    0
+  ) {
+    await newCase.setClients(
+      safeClientIds,
+      {
+        transaction,
+      }
+    );
+  }
+
+  return newCase;
+};
+
+// ======================================================
 // SERVICE
 // ======================================================
 
@@ -562,70 +641,16 @@ export const caseService = {
     data,
     actor
   ) {
-    const {
-      client_ids,
-      ...caseData
-    } = data;
-
-    const actorId =
-      getActorId(
-        actor
-      );
-
-    if (
-      !actorId
-    ) {
-      throw new Error(
-        'Case not found'
-      );
-    }
-
-    validateOpeningDate(
-      caseData.opening_date
-    );
-
-    /*
-     * Case.create'dan önce doğrulanır.
-     * Yabancı client UUID'si verilirse dava hiç oluşmaz.
-     */
-    const safeClientIds =
-      Array.isArray(
-        client_ids
-      )
-        ? await assertClientIdsAccess(
-            client_ids,
-            actor
-          )
-        : [];
-
     const transaction =
       await sequelize.transaction();
 
     try {
       const newCase =
-        await Case.create(
-          {
-            ...caseData,
-
-            created_by:
-              actorId,
-          },
-          {
-            transaction,
-          }
+        await createCaseRecord(
+          data,
+          actor,
+          transaction
         );
-
-      if (
-        safeClientIds.length >
-        0
-      ) {
-        await newCase.setClients(
-          safeClientIds,
-          {
-            transaction,
-          }
-        );
-      }
 
       await transaction.commit();
 
@@ -640,6 +665,29 @@ export const caseService = {
 
       throw error;
     }
+  },
+
+  async createFromConsultation(
+    data,
+    actor,
+    options = {}
+  ) {
+    const transaction =
+      options.transaction;
+
+    if (
+      !transaction
+    ) {
+      throw new Error(
+        'Case transaction is required'
+      );
+    }
+
+    return createCaseRecord(
+      data,
+      actor,
+      transaction
+    );
   },
 
   // ====================================================

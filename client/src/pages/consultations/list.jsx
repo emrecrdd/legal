@@ -9,10 +9,6 @@ import {
 } from 'react-router-dom';
 
 import {
-  useQuery,
-} from '@tanstack/react-query';
-
-import {
   ArrowLeft,
   ArrowRight,
   BriefcaseBusiness,
@@ -22,7 +18,24 @@ import {
   UserRound,
 } from 'lucide-react';
 
-import consultationApi from '../../features/consultations/consultation.api.js';
+import {
+  useConsultationAssignableUsers,
+  useConsultations,
+  useConsultationStatistics,
+} from '../../features/consultations/consultation.query.js';
+
+import {
+  CONSULTATION_STATUS_OPTIONS,
+  CONSULTATION_TYPE_OPTIONS,
+  formatConsultationMoney,
+  getConsultationStatusLabel,
+  getConsultationStatusVariant,
+  getConsultationTypeLabel,
+} from '../../features/consultations/consultation.constants.js';
+
+import {
+  CONSULTATION_PERMISSION_KEYS,
+} from '../../features/consultations/consultation.permissions.js';
 
 import {
   useDebounce,
@@ -33,7 +46,6 @@ import {
 } from '../../app/providers/auth.provider.jsx';
 
 import {
-  PERMISSION_KEYS,
   hasPermission,
 } from '../../constants/roles.js';
 
@@ -58,42 +70,7 @@ const STATUSES = [
     value: '',
     label: 'Tüm Durumlar',
   },
-  {
-    value: 'new',
-    label: 'Yeni Talep',
-  },
-  {
-    value: 'evaluating',
-    label: 'Ön Değerlendirme',
-  },
-  {
-    value: 'meeting_scheduled',
-    label: 'Görüşme Planlandı',
-  },
-  {
-    value: 'in_progress',
-    label: 'Devam Ediyor',
-  },
-  {
-    value: 'waiting_client',
-    label: 'Müvekkilden Bekleniyor',
-  },
-  {
-    value: 'completed',
-    label: 'Tamamlandı',
-  },
-  {
-    value: 'converted_to_case',
-    label: 'Davaya Dönüştü',
-  },
-  {
-    value: 'rejected',
-    label: 'Reddedildi',
-  },
-  {
-    value: 'cancelled',
-    label: 'İptal',
-  },
+  ...CONSULTATION_STATUS_OPTIONS,
 ];
 
 const CONSULTATION_TYPES = [
@@ -101,38 +78,7 @@ const CONSULTATION_TYPES = [
     value: '',
     label: 'Tüm Türler',
   },
-  {
-    value: 'oral',
-    label: 'Sözlü Danışmanlık',
-  },
-  {
-    value: 'written_opinion',
-    label: 'Yazılı Hukuki Görüş',
-  },
-  {
-    value: 'contract_review',
-    label: 'Sözleşme İnceleme',
-  },
-  {
-    value: 'contract_drafting',
-    label: 'Sözleşme Hazırlama',
-  },
-  {
-    value: 'notice_petition',
-    label: 'İhtar / İhbar / Dilekçe',
-  },
-  {
-    value: 'corporate',
-    label: 'Şirket Danışmanlığı',
-  },
-  {
-    value: 'continuous',
-    label: 'Sürekli Hukuki Danışmanlık',
-  },
-  {
-    value: 'other',
-    label: 'Diğer',
-  },
+  ...CONSULTATION_TYPE_OPTIONS,
 ];
 
 // ======================================================
@@ -172,75 +118,14 @@ const normalizeId = (
   );
 };
 
-const getStatusLabel = (
-  status
-) => {
-  return (
-    STATUSES.find(
-      (
-        item
-      ) =>
-        item.value ===
-        status
-    )?.label ||
-    status ||
-    '-'
-  );
-};
+const getStatusLabel =
+  getConsultationStatusLabel;
 
-const getStatusVariant = (
-  status
-) => {
-  const variants = {
-    new:
-      'primary',
+const getStatusVariant =
+  getConsultationStatusVariant;
 
-    evaluating:
-      'warning',
-
-    meeting_scheduled:
-      'info',
-
-    in_progress:
-      'success',
-
-    waiting_client:
-      'warning',
-
-    completed:
-      'default',
-
-    converted_to_case:
-      'success',
-
-    rejected:
-      'danger',
-
-    cancelled:
-      'danger',
-  };
-
-  return (
-    variants[status] ||
-    'default'
-  );
-};
-
-const getTypeLabel = (
-  type
-) => {
-  return (
-    CONSULTATION_TYPES.find(
-      (
-        item
-      ) =>
-        item.value ===
-        type
-    )?.label ||
-    type ||
-    '-'
-  );
-};
+const getTypeLabel =
+  getConsultationTypeLabel;
 
 const getFullName = (
   user
@@ -329,49 +214,10 @@ const formatMoney = (
     return 'Ücretsiz';
   }
 
-  const amount =
-    Number(
-      consultation
-        ?.agreed_fee
-    );
-
-  if (
-    !Number.isFinite(
-      amount
-    )
-  ) {
-    return '-';
-  }
-
-  const currency =
-    String(
-      consultation
-        ?.currency ||
-      'TRY'
-    )
-      .trim()
-      .toUpperCase();
-
-  try {
-    return new Intl.NumberFormat(
-      'tr-TR',
-      {
-        style:
-          'currency',
-
-        currency,
-
-        maximumFractionDigits:
-          2,
-      }
-    ).format(
-      amount
-    );
-  } catch {
-    return `${amount.toLocaleString(
-      'tr-TR'
-    )} ${currency}`;
-  }
+  return formatConsultationMoney(
+    consultation?.agreed_fee,
+    consultation?.currency
+  );
 };
 
 const formatExactDateTime = (
@@ -528,6 +374,34 @@ const formatRelativeDate = (
   );
 };
 
+const getArrayPayload = (
+  response
+) => {
+  const payload =
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    [];
+
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload?.data)) {
+    return payload.data;
+  }
+
+  if (Array.isArray(payload?.items)) {
+    return payload.items;
+  }
+
+  if (Array.isArray(payload?.results)) {
+    return payload.results;
+  }
+
+  return [];
+};
+
 const getStatisticsPayload = (
   response
 ) => {
@@ -551,7 +425,7 @@ const ConsultationsList = () => {
   const canCreate =
     hasPermission(
       user,
-      PERMISSION_KEYS.CREATE_CONSULTATIONS
+      CONSULTATION_PERMISSION_KEYS.CREATE
     );
 
   // ====================================================
@@ -603,10 +477,9 @@ const ConsultationsList = () => {
     );
 
   /*
-   * Backend'de ayrı bir "consultation assignable users"
-   * endpoint'i olmadığı için filtre seçeneklerini güvenli
-   * şekilde görüntülenmiş danışmanlıklardaki assignee'lerden
-   * biriktiriyoruz.
+   * Assignable users backend endpoint'inden alınır.
+   * Ayrıca eski/inaktif assignee'ler filtrede kaybolmasın diye
+   * görüntülenen kayıtların assignee'leri de bu sözlüğe eklenir.
    */
   const [
     knownAssignees,
@@ -704,26 +577,9 @@ const ConsultationsList = () => {
     refetch,
     isFetching,
   } =
-    useQuery({
-      queryKey: [
-        'consultations',
-        consultationQueryParams,
-      ],
-
-      queryFn: () =>
-        consultationApi.getAll(
-          consultationQueryParams
-        ),
-
-      staleTime:
-        1000,
-
-      placeholderData:
-        (
-          previousData
-        ) =>
-          previousData,
-    });
+    useConsultations(
+      consultationQueryParams
+    );
 
   const {
     data:
@@ -731,18 +587,13 @@ const ConsultationsList = () => {
     isLoading:
       statisticsLoading,
   } =
-    useQuery({
-      queryKey: [
-        'consultation-statistics',
-      ],
+    useConsultationStatistics();
 
-      queryFn: () =>
-        consultationApi
-          .getStatistics(),
-
-      staleTime:
-        30 * 1000,
-    });
+  const {
+    data:
+      assignableUsersData,
+  } =
+    useConsultationAssignableUsers();
 
   // ====================================================
   // DATA
@@ -761,6 +612,11 @@ const ConsultationsList = () => {
     data
       ?.data
       ?.pagination;
+
+  const assignableUsers =
+    getArrayPayload(
+      assignableUsersData
+    );
 
   const statistics =
     getStatisticsPayload(
@@ -862,13 +718,6 @@ const ConsultationsList = () => {
   // ====================================================
 
   useEffect(() => {
-    if (
-      consultations.length ===
-      0
-    ) {
-      return;
-    }
-
     setKnownAssignees(
       (
         current
@@ -876,6 +725,34 @@ const ConsultationsList = () => {
         const next = {
           ...current,
         };
+
+        assignableUsers.forEach(
+          (
+            assignee
+          ) => {
+            const id =
+              normalizeId(
+                assignee?.id
+              );
+
+            if (
+              !id
+            ) {
+              return;
+            }
+
+            next[id] = {
+              id,
+
+              name:
+                getFullName(
+                  assignee
+                ) ||
+                assignee?.email ||
+                'Kullanıcı',
+            };
+          }
+        );
 
         consultations.forEach(
           (
@@ -962,6 +839,7 @@ const ConsultationsList = () => {
       }
     );
   }, [
+    assignableUsers,
     consultations,
   ]);
 

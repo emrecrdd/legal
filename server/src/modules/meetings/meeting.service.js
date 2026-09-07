@@ -811,6 +811,89 @@ const assertClientAccessForMeeting =
     return client;
   };
 
+const assertConsultationAccessForMeeting =
+  async (
+    consultationId,
+    access = {},
+    {
+      transaction = null,
+    } = {}
+  ) => {
+    if (!consultationId) {
+      return null;
+    }
+
+    const userId =
+      requireMeetingUserId(
+        access
+      );
+
+    if (
+      !access?.canViewConsultations &&
+      !access?.canViewAllConsultations
+    ) {
+      throw new Error(
+        'Meeting not found'
+      );
+    }
+
+    const consultationAccessCondition =
+      access?.canViewAllConsultations
+        ? ''
+        : `
+          AND (
+            c.created_by = :userId
+            OR EXISTS (
+              SELECT 1
+              FROM consultation_assignees ca
+              WHERE ca.consultation_id = c.id
+                AND ca.user_id = :userId
+            )
+          )
+        `;
+
+    const rows =
+      await sequelize.query(
+        `
+          SELECT
+            c.id,
+            c.client_id,
+            c.converted_case_id
+
+          FROM consultations c
+
+          WHERE c.id = :consultationId
+            AND c.deleted_at IS NULL
+
+          ${consultationAccessCondition}
+
+          LIMIT 1
+        `,
+        {
+          replacements: {
+            consultationId,
+            userId,
+          },
+
+          type:
+            QueryTypes.SELECT,
+
+          transaction,
+        }
+      );
+
+    if (
+      rows.length ===
+      0
+    ) {
+      throw new Error(
+        'Meeting not found'
+      );
+    }
+
+    return rows[0];
+  };
+
 const assertCaseClientRelation =
   async (
     caseId,
@@ -1049,6 +1132,7 @@ const validateMeetingRelations =
     {
       caseId,
       clientId,
+      consultationId,
       assignedTo,
     },
     access = {},
@@ -1069,6 +1153,16 @@ const validateMeetingRelations =
     if (clientId) {
       await assertClientAccessForMeeting(
         clientId,
+        access,
+        {
+          transaction,
+        }
+      );
+    }
+
+    if (consultationId) {
+      await assertConsultationAccessForMeeting(
+        consultationId,
         access,
         {
           transaction,
@@ -1723,6 +1817,10 @@ export const meetingService = {
             preparedData.client_id ||
             null,
 
+          consultationId:
+            preparedData.consultation_id ||
+            null,
+
           assignedTo:
             preparedData.assigned_to ||
             null,
@@ -2040,6 +2138,68 @@ export const meetingService = {
   },
 
   // ====================================================
+  // BY CONSULTATION
+  // ====================================================
+
+  async getByConsultation(
+    consultationId,
+    access = {}
+  ) {
+    requireMeetingUserId(
+      access
+    );
+
+    await assertConsultationAccessForMeeting(
+      consultationId,
+      access
+    );
+
+    const meetings =
+      await Meeting.findAll({
+        where:
+          applyMeetingAccessScope(
+            {
+              consultation_id:
+                consultationId,
+            },
+            access
+          ),
+
+        include:
+          buildIncludes(),
+
+        order: [
+          [
+            'start_date',
+            'ASC',
+          ],
+          [
+            'created_at',
+            'DESC',
+          ],
+        ],
+      });
+
+    const visibleMeetings =
+      meetings.filter(
+        (meeting) =>
+          (!meeting.case_id ||
+            Boolean(
+              meeting.case
+            )) &&
+          (!meeting.client_id ||
+            Boolean(
+              meeting.client
+            ))
+      );
+
+    return sanitizeMeetingsForAccess(
+      visibleMeetings,
+      access
+    );
+  },
+
+  // ====================================================
   // DETAIL
   // ====================================================
 
@@ -2251,6 +2411,14 @@ export const meetingService = {
           : meeting.client_id ||
             null;
 
+      const effectiveConsultationId =
+        preparedData.consultation_id !==
+        undefined
+          ? preparedData.consultation_id ||
+            null
+          : meeting.consultation_id ||
+            null;
+
       const effectiveAssignedTo =
         participantUpdateRequested
           ? currentParticipantIds[0]
@@ -2265,6 +2433,9 @@ export const meetingService = {
 
           clientId:
             effectiveClientId,
+
+          consultationId:
+            effectiveConsultationId,
 
           assignedTo:
             effectiveAssignedTo,

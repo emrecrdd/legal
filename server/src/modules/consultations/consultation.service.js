@@ -1,17 +1,264 @@
 import { sequelize } from '../../config/database.js';
 import { consultationRepository } from './consultation.repository.js';
 import { clientService } from '../clients/client.service.js';
+import { caseService } from '../cases/case.service.js';
+import { meetingService } from '../meetings/meeting.service.js';
+import { taskService } from '../tasks/task.service.js';
+import { documentService } from '../documents/document.service.js';
 import { notificationService } from '../notifications/notification.service.js';
 import { AuditLog } from '../../models/AuditLog.js';
-import { CONSULTATION_STATUS } from '../../constants/consultation.js';
+import {
+  CONSULTATION_STATUS,
+  CONSULTATION_BILLING_TYPE,
+} from '../../constants/consultation.js';
+import {
+  ROLES,
+  PERMISSION_KEYS,
+  getEffectivePermissions,
+} from '../../constants/roles.js';
 
 const getActorId = (actor) => actor?.id || null;
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+
+const getMeetingAccessFromActor = (actor) => {
+  const actorId =
+    getActorId(
+      actor
+    );
+
+  if (!actorId) {
+    throw new Error(
+      'Consultation not found'
+    );
+  }
+
+  const permissions =
+    getEffectivePermissions(
+      actor.role,
+      actor.permissions || {}
+    );
+
+  const isAdmin =
+    actor.role ===
+    ROLES.ADMIN;
+
+  return {
+    userId:
+      actorId,
+
+    canViewAllMeetings:
+      isAdmin ||
+      permissions.includes(
+        PERMISSION_KEYS.VIEW_ALL_MEETINGS
+      ),
+
+    canViewAllCases:
+      isAdmin ||
+      permissions.includes(
+        PERMISSION_KEYS.VIEW_ALL_CASES
+      ),
+
+    canViewConsultations:
+      isAdmin ||
+      permissions.includes(
+        PERMISSION_KEYS.VIEW_CONSULTATIONS
+      ),
+
+    canViewAllConsultations:
+      isAdmin ||
+      permissions.includes(
+        PERMISSION_KEYS.VIEW_ALL_CONSULTATIONS
+      ),
+  };
+};
+
+const getTaskAccessFromActor = (actor) => {
+  const actorId =
+    getActorId(
+      actor
+    );
+
+  if (!actorId) {
+    throw new Error(
+      'Consultation not found'
+    );
+  }
+
+  const permissions =
+    getEffectivePermissions(
+      actor.role,
+      actor.permissions || {}
+    );
+
+  const isAdmin =
+    actor.role ===
+    ROLES.ADMIN;
+
+  return {
+    userId:
+      actorId,
+
+    canViewAllTasks:
+      isAdmin ||
+      permissions.includes(
+        PERMISSION_KEYS.VIEW_ALL_TASKS
+      ),
+
+    canViewAllCases:
+      isAdmin ||
+      permissions.includes(
+        PERMISSION_KEYS.VIEW_ALL_CASES
+      ),
+
+    canViewConsultations:
+      isAdmin ||
+      permissions.includes(
+        PERMISSION_KEYS.VIEW_CONSULTATIONS
+      ),
+
+    canViewAllConsultations:
+      isAdmin ||
+      permissions.includes(
+        PERMISSION_KEYS.VIEW_ALL_CONSULTATIONS
+      ),
+  };
+};
 
 const normalizeNullableText = (value) => {
   if (value === undefined || value === null) return null;
   const normalized = String(value).trim();
   return normalized || null;
+};
+
+const TERMINAL_CONSULTATION_STATUSES = new Set([
+  CONSULTATION_STATUS.COMPLETED,
+  CONSULTATION_STATUS.CONVERTED_TO_CASE,
+  CONSULTATION_STATUS.REJECTED,
+  CONSULTATION_STATUS.CANCELLED,
+]);
+
+const CONSULTATION_STATUS_TRANSITIONS =
+  Object.freeze({
+    [CONSULTATION_STATUS.NEW]:
+      new Set([
+        CONSULTATION_STATUS.EVALUATING,
+        CONSULTATION_STATUS.MEETING_SCHEDULED,
+        CONSULTATION_STATUS.IN_PROGRESS,
+        CONSULTATION_STATUS.REJECTED,
+        CONSULTATION_STATUS.CANCELLED,
+      ]),
+
+    [CONSULTATION_STATUS.EVALUATING]:
+      new Set([
+        CONSULTATION_STATUS.MEETING_SCHEDULED,
+        CONSULTATION_STATUS.IN_PROGRESS,
+        CONSULTATION_STATUS.WAITING_CLIENT,
+        CONSULTATION_STATUS.COMPLETED,
+        CONSULTATION_STATUS.REJECTED,
+        CONSULTATION_STATUS.CANCELLED,
+      ]),
+
+    [CONSULTATION_STATUS.MEETING_SCHEDULED]:
+      new Set([
+        CONSULTATION_STATUS.EVALUATING,
+        CONSULTATION_STATUS.IN_PROGRESS,
+        CONSULTATION_STATUS.WAITING_CLIENT,
+        CONSULTATION_STATUS.COMPLETED,
+        CONSULTATION_STATUS.REJECTED,
+        CONSULTATION_STATUS.CANCELLED,
+      ]),
+
+    [CONSULTATION_STATUS.IN_PROGRESS]:
+      new Set([
+        CONSULTATION_STATUS.MEETING_SCHEDULED,
+        CONSULTATION_STATUS.WAITING_CLIENT,
+        CONSULTATION_STATUS.COMPLETED,
+        CONSULTATION_STATUS.REJECTED,
+        CONSULTATION_STATUS.CANCELLED,
+      ]),
+
+    [CONSULTATION_STATUS.WAITING_CLIENT]:
+      new Set([
+        CONSULTATION_STATUS.MEETING_SCHEDULED,
+        CONSULTATION_STATUS.IN_PROGRESS,
+        CONSULTATION_STATUS.COMPLETED,
+        CONSULTATION_STATUS.REJECTED,
+        CONSULTATION_STATUS.CANCELLED,
+      ]),
+  });
+
+const assertConsultationStatusTransition = (
+  fromStatus,
+  toStatus
+) => {
+  if (
+    fromStatus ===
+    toStatus
+  ) {
+    return;
+  }
+
+  const allowed =
+    CONSULTATION_STATUS_TRANSITIONS[
+      fromStatus
+    ];
+
+  if (
+    !allowed ||
+    !allowed.has(
+      toStatus
+    )
+  ) {
+    const error =
+      new Error(
+        `Geçersiz danışmanlık durum geçişi: ${fromStatus} -> ${toStatus}`
+      );
+
+    error.statusCode =
+      409;
+
+    throw error;
+  }
+};
+
+const assertConsultationMutable = (
+  consultation
+) => {
+  if (
+    TERMINAL_CONSULTATION_STATUSES.has(
+      consultation?.status
+    )
+  ) {
+    const error =
+      new Error(
+        'Kapanmış danışmanlık güncellenemez'
+      );
+
+    error.statusCode =
+      409;
+
+    throw error;
+  }
+};
+
+const assertConsultationDeletable = (
+  consultation
+) => {
+  if (
+    consultation?.converted_case_id ||
+    consultation?.status ===
+      CONSULTATION_STATUS.CONVERTED_TO_CASE
+  ) {
+    const error =
+      new Error(
+        'Davaya dönüştürülmüş danışmanlık silinemez'
+      );
+
+    error.statusCode =
+      409;
+
+    throw error;
+  }
 };
 
 const getActorDisplayName = (actor) => {
@@ -49,30 +296,109 @@ const normalizeAssignments = (value) => {
   return normalized;
 };
 
-const sanitizeCreateData = (data) => {
-  const payload = { ...data };
-  delete payload.id;
-  delete payload.consultation_number;
-  delete payload.created_by;
-  delete payload.updated_by;
-  delete payload.deleted_at;
-  delete payload.completed_at;
-  delete payload.converted_case_id;
-  payload.status = CONSULTATION_STATUS.NEW;
+const CONSULTATION_MUTABLE_FIELDS =
+  Object.freeze([
+    'title',
+    'description',
+    'client_id',
+    'prospect_name',
+    'prospect_email',
+    'prospect_phone',
+    'legal_area',
+    'consultation_type',
+    'consultation_mode',
+    'service_model',
+    'priority',
+    'billing_type',
+    'agreed_fee',
+    'currency',
+    'source',
+    'opened_at',
+    'metadata',
+  ]);
+
+const pickConsultationMutableFields = (
+  data
+) => {
+  const source =
+    data &&
+    typeof data === 'object' &&
+    !Array.isArray(data)
+      ? data
+      : {};
+
+  const payload = {};
+
+  for (
+    const field of
+    CONSULTATION_MUTABLE_FIELDS
+  ) {
+    if (
+      hasOwn(
+        source,
+        field
+      )
+    ) {
+      payload[field] =
+        source[field];
+    }
+  }
+
   return payload;
 };
 
-const sanitizeUpdateData = (data) => {
-  const payload = { ...data };
-  delete payload.id;
-  delete payload.consultation_number;
-  delete payload.created_by;
-  delete payload.updated_by;
-  delete payload.deleted_at;
-  delete payload.converted_case_id;
-  delete payload.completed_at;
-  delete payload.status;
+const normalizeConsultationBilling = (
+  payload
+) => {
+  if (
+    payload.billing_type ===
+    CONSULTATION_BILLING_TYPE.FREE
+  ) {
+    payload.agreed_fee = null;
+  }
+
   return payload;
+};
+
+const sanitizeCreateData = (
+  data
+) => {
+  const payload =
+    pickConsultationMutableFields(
+      data
+    );
+
+  /*
+   * Status istemciden alınmaz.
+   * Yeni danışmanlık her zaman NEW olarak başlar.
+   */
+  payload.status =
+    CONSULTATION_STATUS.NEW;
+
+  return normalizeConsultationBilling(
+    payload
+  );
+};
+
+const sanitizeUpdateData = (
+  data
+) => {
+  /*
+   * Bu yol yalnız business/mutable alanları kabul eder.
+   *
+   * id, consultation_number, status, completed_at,
+   * converted_case_id, created_by, updated_by,
+   * deleted_at ve bilinmeyen alanlar hiçbir şekilde
+   * repository/model update payload'una taşınmaz.
+   */
+  const payload =
+    pickConsultationMutableFields(
+      data
+    );
+
+  return normalizeConsultationBilling(
+    payload
+  );
 };
 
 const createAudit = async ({
@@ -275,6 +601,10 @@ export const consultationService = {
 
       if (!consultation) throw new Error('Consultation not found');
 
+      assertConsultationMutable(
+        consultation
+      );
+
       const oldValues = consultation.toJSON();
       const oldAssignments = shouldUpdateAssignees
         ? await consultationRepository.getAssigneeRecords(id, { transaction })
@@ -361,6 +691,10 @@ export const consultationService = {
       );
       if (!consultation) throw new Error('Consultation not found');
 
+      assertConsultationDeletable(
+        consultation
+      );
+
       await createAudit({
         action: 'delete',
         consultationId: id,
@@ -396,6 +730,24 @@ export const consultationService = {
       if (!consultation) throw new Error('Consultation not found');
 
       const oldStatus = consultation.status;
+
+      if (oldStatus === normalizedStatus) {
+        return;
+      }
+
+      if (TERMINAL_CONSULTATION_STATUSES.has(oldStatus)) {
+        const error = new Error(
+          'Kapanmış danışmanlığın durumu değiştirilemez'
+        );
+        error.statusCode = 409;
+        throw error;
+      }
+
+      assertConsultationStatusTransition(
+        oldStatus,
+        normalizedStatus
+      );
+
       const completedAt = normalizedStatus === CONSULTATION_STATUS.COMPLETED
         ? (consultation.completed_at || new Date())
         : null;
@@ -440,6 +792,10 @@ export const consultationService = {
         { transaction, lock: transaction.LOCK.UPDATE }
       );
       if (!consultation) throw new Error('Consultation not found');
+
+      assertConsultationMutable(
+        consultation
+      );
 
       await consultationRepository.assertEligibleAssignees(
         [assignment.user_id],
@@ -508,6 +864,10 @@ export const consultationService = {
       );
       if (!consultation) throw new Error('Consultation not found');
 
+      assertConsultationMutable(
+        consultation
+      );
+
       const current = await consultationRepository.getAssigneeRecords(id, { transaction });
       const target = current.find((item) => item.user_id === userId);
       if (!target) throw new Error('Assignee not found');
@@ -533,15 +893,76 @@ export const consultationService = {
   },
 
   async getTasks(id, actor) {
-    return consultationRepository.getTasks(id, actor);
+    /*
+     * Önce consultation domain erişimi fail-closed doğrulanır.
+     * Ardından Task servisi kendi record-level scope'unu uygular.
+     */
+    const consultation =
+      await consultationRepository.findScopedInstance(
+        id,
+        actor
+      );
+
+    if (!consultation) {
+      throw new Error(
+        'Consultation not found'
+      );
+    }
+
+    return taskService.getByConsultation(
+      id,
+      getTaskAccessFromActor(
+        actor
+      )
+    );
   },
 
   async getMeetings(id, actor) {
-    return consultationRepository.getMeetings(id, actor);
+    /*
+     * Önce consultation domain erişimi fail-closed doğrulanır.
+     * Ardından Meeting servisi kendi record-level scope'unu uygular.
+     */
+    const consultation =
+      await consultationRepository.findScopedInstance(
+        id,
+        actor
+      );
+
+    if (!consultation) {
+      throw new Error(
+        'Consultation not found'
+      );
+    }
+
+    return meetingService.getByConsultation(
+      id,
+      getMeetingAccessFromActor(
+        actor
+      )
+    );
   },
 
   async getDocuments(id, actor) {
-    return consultationRepository.getDocuments(id, actor);
+    /*
+     * Önce consultation erişimi kendi domain'inde doğrulanır.
+     * Ardından Document servisi kendi read-access scope'unu uygular.
+     */
+    const consultation =
+      await consultationRepository.findScopedInstance(
+        id,
+        actor
+      );
+
+    if (!consultation) {
+      throw new Error(
+        'Consultation not found'
+      );
+    }
+
+    return documentService.getByConsultation(
+      id,
+      actor
+    );
   },
 
   async getNotes(id, actor) {
@@ -681,6 +1102,22 @@ export const consultationService = {
         throw error;
       }
 
+      if (
+        TERMINAL_CONSULTATION_STATUSES.has(
+          consultation.status
+        )
+      ) {
+        const error =
+          new Error(
+            'Terminal durumdaki danışmanlık davaya dönüştürülemez'
+          );
+
+        error.statusCode =
+          409;
+
+        throw error;
+      }
+
       if (!consultation.client_id) {
         throw new Error('Davaya dönüştürmeden önce müvekkile dönüştürülmelidir');
       }
@@ -704,13 +1141,25 @@ export const consultationService = {
           data?.judiciary_unit
         );
 
+      const courtName =
+        normalizeNullableText(
+          data?.court_name
+        );
+
+      const caseNumber =
+        normalizeNullableText(
+          data?.case_number
+        );
+
       if (
         !judiciaryType ||
-        !judiciaryUnit
+        !judiciaryUnit ||
+        !courtName ||
+        !caseNumber
       ) {
         const error =
           new Error(
-            'Yargı türü ve yargı birimi gereklidir'
+            'Yargı türü, yargı birimi, mahkeme ve dosya numarası gereklidir'
           );
 
         error.statusCode =
@@ -720,9 +1169,9 @@ export const consultationService = {
       }
 
       const caseTitle =
-        `${judiciaryType} - ${judiciaryUnit}`;
+        `${courtName} · ${caseNumber}`;
 
-      const newCase = await consultationRepository.createCaseFromConsultation(
+      const newCase = await caseService.createFromConsultation(
         {
           title:
             caseTitle,
@@ -734,14 +1183,10 @@ export const consultationService = {
             judiciaryUnit,
 
           court_name:
-            normalizeNullableText(
-              data?.court_name
-            ),
+            courtName,
 
           case_number:
-            normalizeNullableText(
-              data?.case_number
-            ),
+            caseNumber,
 
           subject:
             hasOwn(
@@ -779,10 +1224,11 @@ export const consultationService = {
               data?.opening_date
             ),
 
-          created_by:
-            actorId,
+          client_ids: [
+            consultation.client_id,
+          ],
         },
-        consultation.client_id,
+        actor,
         { transaction }
       );
 

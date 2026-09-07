@@ -2442,6 +2442,10 @@ if (
   Object.prototype.hasOwnProperty.call(
     safeData,
     'client_id'
+  ) ||
+  Object.prototype.hasOwnProperty.call(
+    safeData,
+    'consultation_id'
   )
 ) {
   const effectiveCaseId =
@@ -2464,6 +2468,16 @@ if (
       : task.client_id ||
         null;
 
+  const effectiveConsultationId =
+    Object.prototype.hasOwnProperty.call(
+      safeData,
+      'consultation_id'
+    )
+      ? safeData.consultation_id ||
+        null
+      : task.consultation_id ||
+        null;
+
   await validateTaskRelations(
     {
       caseId:
@@ -2471,6 +2485,9 @@ if (
 
       clientId:
         effectiveClientId,
+
+      consultationId:
+        effectiveConsultationId,
     },
     access,
     {
@@ -3282,6 +3299,57 @@ if (
           limitNum
         ),
     };
+  },
+
+  // ====================================================
+  // CONSULTATION TASKS
+  // ====================================================
+
+  async getByConsultation(
+    consultationId,
+    access = {}
+  ) {
+    await assertConsultationAccessForTask(
+      consultationId,
+      access
+    );
+
+    const where =
+      applyTaskAccessScope(
+        {
+          consultation_id:
+            consultationId,
+        },
+        {
+          userId:
+            access.userId,
+
+          canViewAllTasks:
+            access.canViewAllTasks === true,
+        }
+      );
+
+    return Task.findAll({
+      where,
+
+      include:
+        LIST_INCLUDE,
+
+      order: [
+        [
+          'priority',
+          'DESC',
+        ],
+        [
+          'due_date',
+          'ASC',
+        ],
+        [
+          'created_at',
+          'DESC',
+        ],
+      ],
+    });
   },
 
   // ====================================================

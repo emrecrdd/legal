@@ -170,31 +170,41 @@ const getNextConsultationNumber = async (transaction) => {
   }
 
   const year = getIstanbulYear();
-  const lockKey = `consultation-number:${year}`;
 
-  await sequelize.query(
-    `SELECT pg_advisory_xact_lock(hashtext(:lockKey)::bigint)`,
-    {
-      replacements: { lockKey },
-      transaction,
-    }
-  );
-
-  const pattern = `^DNS-${year}-[0-9]{6}$`;
   const [rows] = await sequelize.query(
     `
-      SELECT COALESCE(MAX(RIGHT(consultation_number, 6)::integer), 0) AS last_number
-      FROM consultations
-      WHERE consultation_number ~ :pattern
+      INSERT INTO consultation_counters (
+        year,
+        last_value,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        :year,
+        1,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+      ON CONFLICT (year)
+      DO UPDATE
+      SET
+        last_value = consultation_counters.last_value + 1,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING last_value
     `,
     {
-      replacements: { pattern },
+      replacements: { year },
       transaction,
     }
   );
 
-  const next = Number(rows?.[0]?.last_number || 0) + 1;
-  return `DNS-${year}-${String(next).padStart(6, '0')}`;
+  const nextNumber = Number(rows?.[0]?.last_value);
+
+  if (!Number.isInteger(nextNumber) || nextNumber <= 0) {
+    throw new Error('Danışmanlık numarası üretilemedi');
+  }
+
+  return `DNS-${year}-${String(nextNumber).padStart(6, '0')}`;
 };
 
 const buildAssignedToWhere = (userId) => {
@@ -350,22 +360,252 @@ export const consultationRepository = {
     });
   },
 
-  async replaceAssignees(consultationId, assignments, assignedBy, options = {}) {
-    await ConsultationAssignee.destroy({
-      where: { consultation_id: consultationId },
-      force: true,
-      transaction: options.transaction,
-    });
+  async replaceAssignees(
+    consultationId,
+    assignments,
+    assignedBy,
+    options = {}
+  ) {
+    const transaction =
+      options.transaction;
 
-    await ConsultationAssignee.bulkCreate(
-      assignments.map((assignment) => ({
-        consultation_id: consultationId,
-        user_id: assignment.user_id,
-        is_primary: assignment.is_primary === true,
-        assigned_by: assignedBy || null,
-      })),
-      { transaction: options.transaction }
-    );
+    const normalizedAssignments =
+      Array.isArray(assignments)
+        ? assignments.map(
+            (assignment) => ({
+              user_id:
+                assignment.user_id,
+              is_primary:
+                assignment.is_primary ===
+                true,
+            })
+          )
+        : [];
+
+    const currentRecords =
+      await ConsultationAssignee.findAll({
+        where: {
+          consultation_id:
+            consultationId,
+        },
+
+        attributes: [
+          'id',
+          'user_id',
+          'is_primary',
+          'assigned_by',
+          'created_at',
+        ],
+
+        transaction,
+
+        ...(transaction
+          ? {
+              lock:
+                transaction.LOCK.UPDATE,
+            }
+          : {}),
+      });
+
+    const currentByUserId =
+      new Map(
+        currentRecords.map(
+          (record) => [
+            String(
+              record.user_id
+            ),
+            record,
+          ]
+        )
+      );
+
+    const targetByUserId =
+      new Map(
+        normalizedAssignments.map(
+          (assignment) => [
+            String(
+              assignment.user_id
+            ),
+            assignment,
+          ]
+        )
+      );
+
+    const removedUserIds =
+      currentRecords
+        .filter(
+          (record) =>
+            !targetByUserId.has(
+              String(
+                record.user_id
+              )
+            )
+        )
+        .map(
+          (record) =>
+            record.user_id
+        );
+
+    if (
+      removedUserIds.length >
+      0
+    ) {
+      await ConsultationAssignee.destroy({
+        where: {
+          consultation_id:
+            consultationId,
+
+          user_id: {
+            [Op.in]:
+              removedUserIds,
+          },
+        },
+
+        force:
+          true,
+
+        transaction,
+      });
+    }
+
+    const currentPrimary =
+      currentRecords.find(
+        (record) =>
+          record.is_primary ===
+          true
+      ) ||
+      null;
+
+    const targetPrimary =
+      normalizedAssignments.find(
+        (assignment) =>
+          assignment.is_primary ===
+          true
+      ) ||
+      null;
+
+    const currentPrimaryId =
+      currentPrimary
+        ? String(
+            currentPrimary.user_id
+          )
+        : null;
+
+    const targetPrimaryId =
+      targetPrimary
+        ? String(
+            targetPrimary.user_id
+          )
+        : null;
+
+    /*
+     * Partial unique index nedeniyle yeni primary'yi
+     * set etmeden önce eski primary temizlenir.
+     */
+    if (
+      currentPrimaryId !==
+      targetPrimaryId
+    ) {
+      await ConsultationAssignee.update(
+        {
+          is_primary:
+            false,
+        },
+        {
+          where: {
+            consultation_id:
+              consultationId,
+
+            is_primary:
+              true,
+          },
+
+          transaction,
+        }
+      );
+    }
+
+    const retainedUpdates =
+      normalizedAssignments.filter(
+        (assignment) =>
+          currentByUserId.has(
+            String(
+              assignment.user_id
+            )
+          )
+      );
+
+    for (
+      const assignment of
+      retainedUpdates
+    ) {
+      const current =
+        currentByUserId.get(
+          String(
+            assignment.user_id
+          )
+        );
+
+      if (
+        current.is_primary !==
+        assignment.is_primary
+      ) {
+        await ConsultationAssignee.update(
+          {
+            is_primary:
+              assignment.is_primary,
+          },
+          {
+            where: {
+              consultation_id:
+                consultationId,
+
+              user_id:
+                assignment.user_id,
+            },
+
+            transaction,
+          }
+        );
+      }
+    }
+
+    const newAssignments =
+      normalizedAssignments.filter(
+        (assignment) =>
+          !currentByUserId.has(
+            String(
+              assignment.user_id
+            )
+          )
+      );
+
+    if (
+      newAssignments.length >
+      0
+    ) {
+      await ConsultationAssignee.bulkCreate(
+        newAssignments.map(
+          (assignment) => ({
+            consultation_id:
+              consultationId,
+
+            user_id:
+              assignment.user_id,
+
+            is_primary:
+              assignment.is_primary,
+
+            assigned_by:
+              assignedBy ||
+              null,
+          })
+        ),
+        {
+          transaction,
+        }
+      );
+    }
   },
 
   async clearPrimaryAssignee(consultationId, options = {}) {
@@ -496,35 +736,8 @@ export const consultationRepository = {
     return consultation.destroy({ transaction: options.transaction });
   },
 
-  async getTasks(consultationId, actor) {
-    const consultation = await this.findScopedInstance(consultationId, actor);
-    if (!consultation) throw new Error('Consultation not found');
 
-    return Task.findAll({
-      where: { consultation_id: consultationId },
-      order: [['created_at', 'DESC']],
-    });
-  },
 
-  async getMeetings(consultationId, actor) {
-    const consultation = await this.findScopedInstance(consultationId, actor);
-    if (!consultation) throw new Error('Consultation not found');
-
-    return Meeting.findAll({
-      where: { consultation_id: consultationId },
-      order: [['start_date', 'ASC'], ['created_at', 'DESC']],
-    });
-  },
-
-  async getDocuments(consultationId, actor) {
-    const consultation = await this.findScopedInstance(consultationId, actor);
-    if (!consultation) throw new Error('Consultation not found');
-
-    return Document.findAll({
-      where: { consultation_id: consultationId },
-      order: [['created_at', 'DESC']],
-    });
-  },
 
   async getNotes(consultationId, actor, options = {}) {
     const consultation = await this.findScopedInstance(
@@ -586,21 +799,6 @@ export const consultationRepository = {
       transaction: options.transaction,
     });
   },
-
-  async createCaseFromConsultation(caseData, clientId, options = {}) {
-    const newCase = await Case.create(
-      caseData,
-      { transaction: options.transaction }
-    );
-
-    await newCase.setClients(
-      [clientId],
-      { transaction: options.transaction }
-    );
-
-    return newCase;
-  },
-
   async linkChildrenToCase(consultationId, caseId, options = {}) {
     const transaction = options.transaction;
     const where = {

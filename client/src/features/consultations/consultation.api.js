@@ -1,226 +1,62 @@
 import axios from '../../app/config/axios.js';
+import { API_ROUTES } from '../../constants/apiRoutes.js';
 
-import {
-  API_ROUTES,
-} from '../../constants/apiRoutes.js';
-
-const {
-  CONSULTATIONS,
-} = API_ROUTES;
+const { CONSULTATIONS } = API_ROUTES;
 
 const consultationApi = {
-  // ======================================================
-  // CONSULTATIONS
-  // ======================================================
+  getAll: (params = {}) =>
+    axios.get(CONSULTATIONS.GET_ALL, { params }),
 
-  getAll: (
-    params = {}
-  ) => {
-    return axios.get(
-      CONSULTATIONS.GET_ALL,
-      {
-        params,
-      }
-    );
-  },
+  getOne: (id) =>
+    axios.get(CONSULTATIONS.GET_ONE(id)),
 
-  getOne: (
-    id
-  ) => {
-    return axios.get(
-      CONSULTATIONS.GET_ONE(
-        id
-      )
-    );
-  },
+  create: (data) =>
+    axios.post(CONSULTATIONS.CREATE, data),
 
-  create: (
-    data
-  ) => {
-    return axios.post(
-      CONSULTATIONS.CREATE,
-      data
-    );
-  },
+  // Backend normal consultation update'i PATCH ile kabul eder.
+  update: (id, data) =>
+    axios.patch(CONSULTATIONS.UPDATE(id), data),
 
-  // ======================================================
-  // UPDATE
-  // ======================================================
+  delete: (id) =>
+    axios.delete(CONSULTATIONS.DELETE(id)),
 
-  /*
-   * Consultation backend normal güncellemeyi PATCH ile
-   * kabul ediyor. Case API'deki PUT davranışı burada
-   * kopyalanmaz.
-   */
-  update: (
-    id,
-    data
-  ) => {
-    return axios.patch(
-      CONSULTATIONS.UPDATE(
-        id
-      ),
-      data
-    );
-  },
+  updateStatus: (id, status) =>
+    axios.patch(CONSULTATIONS.UPDATE_STATUS(id), { status }),
 
-  delete: (
-    id
-  ) => {
-    return axios.delete(
-      CONSULTATIONS.DELETE(
-        id
-      )
-    );
-  },
+  getAssignableUsers: () =>
+    axios.get(CONSULTATIONS.ASSIGNABLE_USERS),
 
-  updateStatus: (
-    id,
-    status
-  ) => {
-    return axios.patch(
-      CONSULTATIONS.UPDATE_STATUS(
-        id
-      ),
-      {
-        status,
-      }
-    );
-  },
+  getStatistics: () =>
+    axios.get(CONSULTATIONS.STATISTICS),
 
-  // ======================================================
-  // ASSIGNABLE USERS
-  // ======================================================
+  addAssignee: (id, data) =>
+    axios.post(CONSULTATIONS.ADD_ASSIGNEE(id), data),
 
-  getAssignableUsers:
-    () => {
-      return axios.get(
-        CONSULTATIONS.ASSIGNABLE_USERS
-      );
-    },
+  removeAssignee: (id, userId) =>
+    axios.delete(CONSULTATIONS.REMOVE_ASSIGNEE(id, userId)),
 
-  // ======================================================
-  // STATISTICS
-  // ======================================================
+  getTasks: (id) =>
+    axios.get(CONSULTATIONS.GET_TASKS(id)),
 
-  getStatistics:
-    () => {
-      return axios.get(
-        CONSULTATIONS.STATISTICS
-      );
-    },
+  getMeetings: (id) =>
+    axios.get(CONSULTATIONS.GET_MEETINGS(id)),
 
-  // ======================================================
-  // ASSIGNEES
-  // ======================================================
+  getDocuments: (id) =>
+    axios.get(CONSULTATIONS.GET_DOCUMENTS(id)),
 
-  addAssignee: (
-    id,
-    data
-  ) => {
-    return axios.post(
-      CONSULTATIONS.ADD_ASSIGNEE(
-        id
-      ),
-      data
-    );
-  },
+  // Notes akışı mevcut frontend uyumluluğu için korunuyor.
+  // Notes domain hardening'i sonraki aşamada ele alınacak.
+  getNotes: (id) =>
+    axios.get(CONSULTATIONS.GET_NOTES(id)),
 
-  removeAssignee: (
-    id,
-    userId
-  ) => {
-    return axios.delete(
-      CONSULTATIONS.REMOVE_ASSIGNEE(
-        id,
-        userId
-      )
-    );
-  },
+  addNote: (id, data) =>
+    axios.post(CONSULTATIONS.ADD_NOTE(id), data),
 
-  // ======================================================
-  // RELATED DATA
-  // ======================================================
+  convertToClient: (id, data = {}) =>
+    axios.post(CONSULTATIONS.CONVERT_TO_CLIENT(id), data),
 
-  getTasks: (
-    id
-  ) => {
-    return axios.get(
-      CONSULTATIONS.GET_TASKS(
-        id
-      )
-    );
-  },
-
-  getMeetings: (
-    id
-  ) => {
-    return axios.get(
-      CONSULTATIONS.GET_MEETINGS(
-        id
-      )
-    );
-  },
-
-  getDocuments: (
-    id
-  ) => {
-    return axios.get(
-      CONSULTATIONS.GET_DOCUMENTS(
-        id
-      )
-    );
-  },
-
-  getNotes: (
-    id
-  ) => {
-    return axios.get(
-      CONSULTATIONS.GET_NOTES(
-        id
-      )
-    );
-  },
-
-  addNote: (
-    id,
-    data
-  ) => {
-    return axios.post(
-      CONSULTATIONS.ADD_NOTE(
-        id
-      ),
-      data
-    );
-  },
-
-  // ======================================================
-  // CONVERSIONS
-  // ======================================================
-
-  convertToClient: (
-    id,
-    data = {}
-  ) => {
-    return axios.post(
-      CONSULTATIONS.CONVERT_TO_CLIENT(
-        id
-      ),
-      data
-    );
-  },
-
-  convertToCase: (
-    id,
-    data
-  ) => {
-    return axios.post(
-      CONSULTATIONS.CONVERT_TO_CASE(
-        id
-      ),
-      data
-    );
-  },
+  convertToCase: (id, data) =>
+    axios.post(CONSULTATIONS.CONVERT_TO_CASE(id), data),
 };
 
 export default consultationApi;

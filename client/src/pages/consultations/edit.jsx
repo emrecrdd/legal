@@ -15,10 +15,9 @@ import {
   useQuery,
 } from '@tanstack/react-query';
 
-import consultationApi from '../../features/consultations/consultation.api.js';
-
 import {
   useConsultation,
+  useConsultationAssignableUsers,
   useDeleteConsultation,
   useUpdateConsultation,
   useUpdateConsultationStatus,
@@ -31,14 +30,19 @@ import {
   CONSULTATION_PRIORITY_OPTIONS,
   CONSULTATION_SERVICE_MODEL_OPTIONS,
   CONSULTATION_SOURCE_OPTIONS,
-  CONSULTATION_STATUS_OPTIONS,
   CONSULTATION_TYPE_OPTIONS,
   getConsultationBillingTypeLabel,
+  getConsultationFeeValidationError,
   getConsultationPriorityLabel,
   getConsultationPriorityVariant,
   getConsultationServiceModelLabel,
   getConsultationStatusLabel,
   getConsultationStatusVariant,
+  canTransitionConsultationStatus,
+  getConsultationStatusTransitionOptions,
+  isConsultationCurrency,
+  isConsultationTerminalStatus,
+  normalizeConsultationFeeAmount,
 } from '../../features/consultations/consultation.constants.js';
 
 import clientApi from '../../features/clients/client.api.js';
@@ -51,6 +55,10 @@ import {
   PERMISSION_KEYS,
   hasPermission,
 } from '../../constants/roles.js';
+
+import {
+  CONSULTATION_PERMISSION_KEYS,
+} from '../../features/consultations/consultation.permissions.js';
 
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
@@ -135,15 +143,6 @@ const INITIAL_FORM = {
   status:
     'new',
 };
-
-const MANUAL_STATUS_OPTIONS =
-  CONSULTATION_STATUS_OPTIONS.filter(
-    (
-      option
-    ) =>
-      option.value !==
-      'converted_to_case'
-  );
 
 // ======================================================
 // HELPERS
@@ -542,7 +541,7 @@ const normalizeCoreForm = (
       form.agreed_fee ===
       ''
         ? null
-        : Number(
+        : normalizeConsultationFeeAmount(
             form.agreed_fee
           ),
 
@@ -561,6 +560,106 @@ const normalizeCoreForm = (
       form.source ||
       '',
   };
+};
+
+const toConsultationMutablePayload = (
+  normalizedForm
+) => {
+  return {
+    title:
+      normalizedForm.title,
+
+    description:
+      normalizedForm.description ||
+      null,
+
+    client_id:
+      normalizedForm.party_mode ===
+      'client'
+        ? normalizedForm.client_id
+        : null,
+
+    prospect_name:
+      normalizedForm.prospect_name,
+
+    prospect_phone:
+      normalizedForm.prospect_phone,
+
+    prospect_email:
+      normalizedForm.prospect_email,
+
+    legal_area:
+      normalizedForm.legal_area,
+
+    consultation_type:
+      normalizedForm.consultation_type,
+
+    consultation_mode:
+      normalizedForm.consultation_mode ||
+      null,
+
+    service_model:
+      normalizedForm.service_model,
+
+    priority:
+      normalizedForm.priority,
+
+    billing_type:
+      normalizedForm.billing_type,
+
+    agreed_fee:
+      normalizedForm.billing_type ===
+      'free'
+        ? null
+        : normalizedForm.agreed_fee,
+
+    currency:
+      normalizedForm.currency,
+
+    source:
+      normalizedForm.source ||
+      null,
+  };
+};
+
+const buildChangedConsultationPayload = (
+  currentNormalizedForm,
+  initialNormalizedForm
+) => {
+  const current =
+    toConsultationMutablePayload(
+      currentNormalizedForm
+    );
+
+  const initial =
+    toConsultationMutablePayload(
+      initialNormalizedForm
+    );
+
+  return Object.fromEntries(
+    Object.keys(
+      current
+    )
+      .filter(
+        (
+          key
+        ) =>
+          JSON.stringify(
+            current[key]
+          ) !==
+          JSON.stringify(
+            initial[key]
+          )
+      )
+      .map(
+        (
+          key
+        ) => [
+          key,
+          current[key],
+        ]
+      )
+  );
 };
 
 const isLikelyTechnicalMessage = (
@@ -877,11 +976,16 @@ const ConsultationEdit = () => {
       null
     );
 
+  const canUpdate =
+    hasPermission(
+      user,
+      CONSULTATION_PERMISSION_KEYS.UPDATE
+    );
+
   const canDelete =
     hasPermission(
       user,
-      PERMISSION_KEYS
-        .DELETE_CONSULTATIONS
+      CONSULTATION_PERMISSION_KEYS.DELETE
     );
 
   const canViewClients =
@@ -1001,16 +1105,7 @@ const ConsultationEdit = () => {
     refetch:
       refetchAssignees,
   } =
-    useQuery({
-      queryKey: [
-        'consultation-assignable-users',
-        'consultation-edit',
-      ],
-
-      queryFn: () =>
-        consultationApi
-          .getAssignableUsers(),
-    });
+    useConsultationAssignableUsers();
 
   // ======================================================
   // DATA
@@ -1331,6 +1426,26 @@ const ConsultationEdit = () => {
       ?.status ===
       'converted_to_case';
 
+  const isTerminal =
+    isConsultationTerminalStatus(
+      consultation?.status
+    );
+
+  const canMutate =
+    Boolean(
+      canUpdate &&
+      !isTerminal
+    );
+
+  const statusTransitionOptions =
+    getConsultationStatusTransitionOptions(
+      initialFormData.status,
+      {
+        includeCurrent:
+          true,
+      }
+    );
+
   const deleteAllowed =
     canDelete &&
     !isConverted;
@@ -1623,7 +1738,8 @@ const ConsultationEdit = () => {
       event
     ) => {
       if (
-        isPending
+        isPending ||
+        !canMutate
       ) {
         return;
       }
@@ -1694,17 +1810,6 @@ const ConsultationEdit = () => {
 
       if (
         name ===
-        'description'
-      ) {
-        nextValue =
-          value.slice(
-            0,
-            10000
-          );
-      }
-
-      if (
-        name ===
         'currency'
       ) {
         nextValue =
@@ -1743,7 +1848,8 @@ const ConsultationEdit = () => {
       mode
     ) => {
       if (
-        isPending
+        isPending ||
+        !canMutate
       ) {
         return;
       }
@@ -1772,7 +1878,8 @@ const ConsultationEdit = () => {
     () => {
       if (
         !assigneeToAdd ||
-        isPending
+        isPending ||
+        !canMutate
       ) {
         return;
       }
@@ -1847,7 +1954,8 @@ const ConsultationEdit = () => {
       userId
     ) => {
       if (
-        isPending
+        isPending ||
+        !canMutate
       ) {
         return;
       }
@@ -1897,7 +2005,8 @@ const ConsultationEdit = () => {
       userId
     ) => {
       if (
-        isPending
+        isPending ||
+        !canMutate
       ) {
         return;
       }
@@ -1934,7 +2043,8 @@ const ConsultationEdit = () => {
   const clearPrimaryAssignee =
     () => {
       if (
-        isPending
+        isPending ||
+        !canMutate
       ) {
         return;
       }
@@ -2225,14 +2335,6 @@ const ConsultationEdit = () => {
           'Geçerli bir görüşme şekli seçin';
       }
 
-      if (
-        description.length >
-        10000
-      ) {
-        nextErrors.description =
-          'Açıklama en fazla 10000 karakter olabilir';
-      }
-
       // ASSIGNEES
 
       if (
@@ -2303,28 +2405,17 @@ const ConsultationEdit = () => {
           'Geçerli bir ücretlendirme türü seçin';
       }
 
-      if (
-        formData.billing_type !==
-          'free' &&
-        formData.agreed_fee !==
-          ''
-      ) {
-        const fee =
-          Number(
-            formData
-              .agreed_fee
-          );
+      const feeError =
+        getConsultationFeeValidationError(
+          formData.agreed_fee,
+          formData.billing_type
+        );
 
-        if (
-          !Number.isFinite(
-            fee
-          ) ||
-          fee <
-            0
-        ) {
-          nextErrors.agreed_fee =
-            'Ücret sıfırdan küçük olamaz';
-        }
+      if (
+        feeError
+      ) {
+        nextErrors.agreed_fee =
+          feeError;
       }
 
       const currency =
@@ -2336,12 +2427,12 @@ const ConsultationEdit = () => {
           .toUpperCase();
 
       if (
-        !/^[A-Z]{3}$/.test(
+        !isConsultationCurrency(
           currency
         )
       ) {
         nextErrors.currency =
-          'Para birimi 3 harfli kod olmalıdır';
+          'Para birimi TRY, USD, EUR veya GBP olmalıdır';
       }
 
       if (
@@ -2370,23 +2461,23 @@ const ConsultationEdit = () => {
       // STATUS
 
       if (
-        isConverted
+        isTerminal
       ) {
         if (
           formData.status !==
-          'converted_to_case'
+          initialFormData.status
         ) {
           nextErrors.status =
-            'Davaya dönüştürülen danışmanlığın durumu elle değiştirilemez';
+            'Kapanmış danışmanlığın durumu değiştirilemez';
         }
       } else if (
-        !isAllowedOption(
-          MANUAL_STATUS_OPTIONS,
+        !canTransitionConsultationStatus(
+          initialFormData.status,
           formData.status
         )
       ) {
         nextErrors.status =
-          'Geçerli bir danışmanlık durumu seçin';
+          'Bu durum geçişine izin verilmiyor';
       }
 
       return {
@@ -2420,6 +2511,18 @@ const ConsultationEdit = () => {
       if (
         isPending
       ) {
+        return;
+      }
+
+      if (
+        !canMutate
+      ) {
+        toast.error(
+          isTerminal
+            ? 'Kapanmış danışmanlıkta normal düzenleme yapılamaz'
+            : 'Bu işlem için güncelleme yetkiniz bulunmuyor'
+        );
+
         return;
       }
 
@@ -2467,124 +2570,30 @@ const ConsultationEdit = () => {
         return;
       }
 
-      const updateData = {
-        title:
-          normalized.title,
+      const updateData =
+        buildChangedConsultationPayload(
+          normalizedCoreForm,
+          initialNormalizedCoreForm
+        );
 
-        description:
-          normalized
-            .description ||
-          null,
+      if (
+        assigneesDirty
+      ) {
+        updateData.assignees =
+          selectedAssigneeIds.map(
+            (
+              userId
+            ) => ({
+              user_id:
+                userId,
 
-        client_id:
-          formData.party_mode ===
-          'client'
-            ? normalized
-                .clientId
-            : null,
-
-        /*
-         * Client modunda prospect alanlarını NULL yapmıyoruz.
-         * Convert-to-client sonrası tarihçe korunur.
-         */
-        prospect_name:
-          formData.party_mode ===
-          'prospect'
-            ? normalized
-                .prospectName
-            : normalizeNullable(
-                formData
-                  .prospect_name
-              ),
-
-        prospect_phone:
-          formData.party_mode ===
-          'prospect'
-            ? normalizeNullable(
+              is_primary:
                 normalized
-                  .prospectPhone
-              )
-            : normalizeNullable(
-                formData
-                  .prospect_phone
-              ),
-
-        prospect_email:
-          formData.party_mode ===
-          'prospect'
-            ? normalizeNullable(
-                normalized
-                  .prospectEmail
-              )
-            : normalizeNullable(
-                formData
-                  .prospect_email
-              ),
-
-        legal_area:
-          normalized
-            .legalArea,
-
-        consultation_type:
-          formData
-            .consultation_type,
-
-        consultation_mode:
-          formData
-            .consultation_mode ||
-          null,
-
-        service_model:
-          formData
-            .service_model,
-
-        priority:
-          formData
-            .priority,
-
-        billing_type:
-          formData
-            .billing_type,
-
-        agreed_fee:
-          formData.billing_type ===
-            'free' ||
-          formData.agreed_fee ===
-            ''
-            ? null
-            : Number(
-                formData
-                  .agreed_fee
-              ),
-
-        currency:
-          normalized
-            .currency,
-
-        source:
-          formData
-            .source ||
-          null,
-
-        ...(assigneesDirty
-          ? {
-              assignees:
-                selectedAssigneeIds.map(
-                  (
-                    userId
-                  ) => ({
-                    user_id:
-                      userId,
-
-                    is_primary:
-                      normalized
-                        .primaryAssigneeId ===
-                      userId,
-                  })
-                ),
-            }
-          : {}),
-      };
+                  .primaryAssigneeId ===
+                userId,
+            })
+          );
+      }
 
       let coreUpdated =
         false;
@@ -2886,6 +2895,22 @@ const ConsultationEdit = () => {
         }
         className="space-y-5"
       >
+
+        {(!canUpdate || isTerminal) && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/[0.08] dark:text-amber-200">
+            {isTerminal
+              ? 'Bu danışmanlık kapanmış durumda. Backend kuralı gereği normal alanlar ve sorumlular artık değiştirilemez.'
+              : 'Bu danışmanlığı güncelleme yetkiniz yok. Alanlar salt okunur gösteriliyor.'}
+          </div>
+        )}
+
+        <fieldset
+          disabled={
+            !canMutate ||
+            isPending
+          }
+          className="m-0 space-y-5 border-0 p-0"
+        >
 
         {/* ==================================================
             PARTY
@@ -3425,7 +3450,7 @@ const ConsultationEdit = () => {
                   }
                   disabled={
                     isPending ||
-                    isConverted
+                    !canMutate
                   }
                   className={`h-10 w-full rounded-lg border bg-white px-3.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white/[0.035] dark:text-slate-300 ${
                     errors.status
@@ -3433,29 +3458,22 @@ const ConsultationEdit = () => {
                       : 'border-gray-200 focus:border-blue-500 dark:border-white/[0.08]'
                   }`}
                 >
-                  {isConverted && (
-                    <option value="converted_to_case">
-                      Davaya Dönüştü
-                    </option>
+                  {statusTransitionOptions.map(
+                    (
+                      option
+                    ) => (
+                      <option
+                        key={
+                          option.value
+                        }
+                        value={
+                          option.value
+                        }
+                      >
+                        {option.label}
+                      </option>
+                    )
                   )}
-
-                  {!isConverted &&
-                    MANUAL_STATUS_OPTIONS.map(
-                      (
-                        option
-                      ) => (
-                        <option
-                          key={
-                            option.value
-                          }
-                          value={
-                            option.value
-                          }
-                        >
-                          {option.label}
-                        </option>
-                      )
-                    )}
                 </select>
 
                 {errors.status && (
@@ -3464,9 +3482,9 @@ const ConsultationEdit = () => {
                   </p>
                 )}
 
-                {isConverted && (
+                {isTerminal && (
                   <p className="mt-1.5 text-xs text-gray-400 dark:text-slate-500">
-                    Davaya dönüştürüldü durumu yalnız backend dönüşüm işlemiyle atanır ve elle değiştirilemez.
+                    Kapanmış danışmanlık salt okunurdur; durum ve normal bilgiler değiştirilemez.
                   </p>
                 )}
 
@@ -3492,7 +3510,6 @@ const ConsultationEdit = () => {
                   isPending
                 }
                 rows={7}
-                maxLength={10000}
                 className={`w-full resize-y rounded-lg border bg-white px-3.5 py-2.5 text-sm leading-6 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500/10 disabled:opacity-60 dark:bg-white/[0.035] dark:text-white ${
                   errors.description
                     ? 'border-red-400 focus:border-red-500'
@@ -3511,7 +3528,7 @@ const ConsultationEdit = () => {
                 )}
 
                 <span className="text-xs text-gray-400 dark:text-slate-600">
-                  {formData.description.length}/10000
+                  {formData.description.length} karakter
                 </span>
 
               </div>
@@ -3978,7 +3995,8 @@ const ConsultationEdit = () => {
                 label="Kararlaştırılan Ücret"
                 name="agreed_fee"
                 type="number"
-                min="0"
+                min="0.01"
+                max="999999999999.99"
                 step="0.01"
                 value={
                   formData.agreed_fee
@@ -4118,6 +4136,8 @@ const ConsultationEdit = () => {
 
         </Card>
 
+        </fieldset>
+
         {/* ==================================================
             ACTIONS
         ================================================== */}
@@ -4180,6 +4200,7 @@ const ConsultationEdit = () => {
               }
               disabled={
                 isPending ||
+                !canMutate ||
                 !isDirty
               }
             >

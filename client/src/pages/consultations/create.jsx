@@ -14,9 +14,8 @@ import {
   useQuery,
 } from '@tanstack/react-query';
 
-import consultationApi from '../../features/consultations/consultation.api.js';
-
 import {
+  useConsultationAssignableUsers,
   useCreateConsultation,
 } from '../../features/consultations/consultation.query.js';
 
@@ -32,13 +31,25 @@ import {
   getConsultationPriorityLabel,
   getConsultationPriorityVariant,
   getConsultationServiceModelLabel,
+  getConsultationFeeValidationError,
+  normalizeConsultationFeeAmount,
+  isConsultationCurrency,
 } from '../../features/consultations/consultation.constants.js';
+
+import {
+  CONSULTATION_PERMISSION_KEYS,
+} from '../../features/consultations/consultation.permissions.js';
 
 import clientApi from '../../features/clients/client.api.js';
 
 import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
+
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+} from '../../constants/roles.js';
 
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
@@ -698,6 +709,18 @@ const ConsultationCreate = () => {
   } =
     useAuth();
 
+  const canCreateConsultation =
+    hasPermission(
+      user,
+      CONSULTATION_PERMISSION_KEYS.CREATE
+    );
+
+  const canViewClients =
+    hasPermission(
+      user,
+      PERMISSION_KEYS.VIEW_CLIENTS
+    );
+
   const [
     formData,
     setFormData,
@@ -770,6 +793,9 @@ const ConsultationCreate = () => {
           limit:
             100,
         }),
+
+      enabled:
+        canViewClients,
     });
 
   const {
@@ -782,15 +808,27 @@ const ConsultationCreate = () => {
     refetch:
       refetchAssignees,
   } =
-    useQuery({
-      queryKey: [
-        'consultation-assignable-users',
-      ],
+    useConsultationAssignableUsers();
 
-      queryFn: () =>
-        consultationApi
-          .getAssignableUsers(),
-    });
+  useEffect(() => {
+    if (
+      user &&
+      !canViewClients
+    ) {
+      setFormData((current) =>
+        current.party_mode === 'client'
+          ? {
+              ...current,
+              party_mode: 'prospect',
+              client_id: '',
+            }
+          : current
+      );
+    }
+  }, [
+    user,
+    canViewClients,
+  ]);
 
   // ======================================================
   // DATA
@@ -1199,17 +1237,6 @@ const ConsultationCreate = () => {
 
       if (
         name ===
-        'description'
-      ) {
-        nextValue =
-          value.slice(
-            0,
-            10000
-          );
-      }
-
-      if (
-        name ===
         'currency'
       ) {
         nextValue =
@@ -1559,6 +1586,15 @@ const ConsultationCreate = () => {
         return;
       }
 
+      if (
+        !canCreateConsultation
+      ) {
+        toast.error(
+          'Danışmanlık oluşturma yetkiniz bulunmuyor'
+        );
+        return;
+      }
+
       const nextErrors =
         {};
 
@@ -1720,14 +1756,6 @@ const ConsultationCreate = () => {
           'Geçerli bir görüşme şekli seçin';
       }
 
-      if (
-        description.length >
-        10000
-      ) {
-        nextErrors.description =
-          'Açıklama en fazla 10000 karakter olabilir';
-      }
-
       // ASSIGNEES
 
       if (
@@ -1791,27 +1819,17 @@ const ConsultationCreate = () => {
           'Geçerli bir ücretlendirme türü seçin';
       }
 
-      if (
-        formData.billing_type !==
-          'free' &&
-        formData.agreed_fee !==
-          ''
-      ) {
-        const fee =
-          Number(
-            formData.agreed_fee
-          );
+      const feeError =
+        getConsultationFeeValidationError(
+          formData.agreed_fee,
+          formData.billing_type
+        );
 
-        if (
-          !Number.isFinite(
-            fee
-          ) ||
-          fee <
-            0
-        ) {
-          nextErrors.agreed_fee =
-            'Ücret sıfırdan küçük olamaz';
-        }
+      if (
+        feeError
+      ) {
+        nextErrors.agreed_fee =
+          feeError;
       }
 
       const currency =
@@ -1823,12 +1841,12 @@ const ConsultationCreate = () => {
           .toUpperCase();
 
       if (
-        !/^[A-Z]{3}$/.test(
+        !isConsultationCurrency(
           currency
         )
       ) {
         nextErrors.currency =
-          'Para birimi 3 harfli kod olmalıdır';
+          'Para birimi TRY, USD, EUR veya GBP olmalıdır';
       }
 
       if (
@@ -1929,7 +1947,7 @@ const ConsultationCreate = () => {
           formData.agreed_fee ===
           ''
             ? null
-            : Number(
+            : normalizeConsultationFeeAmount(
                 formData.agreed_fee
               ),
 
@@ -2544,8 +2562,7 @@ const ConsultationCreate = () => {
                 disabled={
                   mutation.isPending
                 }
-                maxLength={10000}
-                rows={6}
+                    rows={6}
                 placeholder="Talebin özeti, incelenecek hususlar, müvekkilin beklentisi ve önemli notlar..."
                 className={`w-full resize-y rounded-lg border bg-white px-3.5 py-2.5 text-sm leading-6 text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white/[0.035] dark:text-white dark:placeholder:text-slate-500 ${
                   errors.description
@@ -2565,7 +2582,7 @@ const ConsultationCreate = () => {
                 )}
 
                 <p className="text-xs text-gray-400 dark:text-slate-600">
-                  {formData.description.length}/10000
+                  {formData.description.length} karakter
                 </p>
 
               </div>
@@ -2991,7 +3008,8 @@ const ConsultationCreate = () => {
                 label="Kararlaştırılan Ücret"
                 name="agreed_fee"
                 type="number"
-                min="0"
+                min="0.01"
+                max="999999999999.99"
                 step="0.01"
                 value={
                   formData.agreed_fee
@@ -3316,7 +3334,8 @@ const ConsultationCreate = () => {
               mutation.isPending
             }
             disabled={
-              mutation.isPending
+              mutation.isPending ||
+              !canCreateConsultation
             }
           >
             <Save className="h-4 w-4" />

@@ -10,6 +10,7 @@ import {
   CONSULTATION_SERVICE_MODEL,
   CONSULTATION_PRIORITY,
   CONSULTATION_BILLING_TYPE,
+  CONSULTATION_CURRENCY,
   CONSULTATION_SOURCE,
 } from '../constants/consultation.js';
 
@@ -275,19 +276,25 @@ class Consultation extends Sequelize.Model {
         currency: {
           type: DataTypes.STRING(3),
           allowNull: false,
-          defaultValue: 'TRY',
+          defaultValue:
+            CONSULTATION_CURRENCY.TRY,
           set(value) {
             this.setDataValue(
               'currency',
               String(
-                value || 'TRY'
+                value ||
+                  CONSULTATION_CURRENCY.TRY
               )
                 .trim()
                 .toUpperCase()
             );
           },
           validate: {
-            len: [3, 3],
+            isIn: [
+              Object.values(
+                CONSULTATION_CURRENCY
+              ),
+            ],
           },
         },
 
@@ -386,6 +393,44 @@ class Consultation extends Sequelize.Model {
             ) {
               throw new Error(
                 'Müvekkil veya potansiyel kişi bilgisi gereklidir'
+              );
+            }
+          },
+
+          billingConsistency() {
+            const billingType =
+              this.getDataValue(
+                'billing_type'
+              );
+
+            const agreedFee =
+              this.getDataValue(
+                'agreed_fee'
+              );
+
+            if (
+              billingType ===
+              CONSULTATION_BILLING_TYPE.FREE
+            ) {
+              if (
+                agreedFee !== null &&
+                agreedFee !== undefined
+              ) {
+                throw new Error(
+                  'Ücretsiz danışmanlıkta ücret girilemez'
+                );
+              }
+
+              return;
+            }
+
+            if (
+              agreedFee === null ||
+              agreedFee === undefined ||
+              Number(agreedFee) <= 0
+            ) {
+              throw new Error(
+                'Ücretli danışmanlıklarda ücret sıfırdan büyük olmalıdır'
               );
             }
           },

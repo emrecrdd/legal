@@ -48,6 +48,13 @@ export const CONSULTATION_BILLING_TYPE = Object.freeze({
   RETAINER: 'retainer',
 });
 
+export const CONSULTATION_CURRENCY = Object.freeze({
+  TRY: 'TRY',
+  USD: 'USD',
+  EUR: 'EUR',
+  GBP: 'GBP',
+});
+
 export const CONSULTATION_SOURCE = Object.freeze({
   REFERRAL: 'referral',
   WEB: 'web',
