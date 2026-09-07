@@ -30,6 +30,7 @@ import {
 
 import {
   CONSULTATION_PRIORITY_OPTIONS,
+  CONSULTATION_STATUS_OPTIONS,
   formatConsultationMoney,
   getConsultationBillingTypeLabel,
   getConsultationModeLabel,
@@ -40,8 +41,6 @@ import {
   getConsultationStatusLabel,
   getConsultationStatusVariant,
   getConsultationTypeLabel,
-  getConsultationStatusTransitionOptions,
-  isConsultationTerminalStatus,
 } from '../../features/consultations/consultation.constants.js';
 
 import {
@@ -52,10 +51,6 @@ import {
   PERMISSION_KEYS,
   hasPermission,
 } from '../../constants/roles.js';
-
-import {
-  CONSULTATION_PERMISSION_KEYS,
-} from '../../features/consultations/consultation.permissions.js';
 
 import Badge from '../../components/ui/Badge.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -123,19 +118,21 @@ const TABS = [
   },
   {
     key:
-      'notes',
-
-    label:
-      'Notlar',
-  },
-  {
-    key:
       'activity',
 
     label:
       'Aktivite',
   },
 ];
+
+const MANUAL_STATUS_OPTIONS =
+  CONSULTATION_STATUS_OPTIONS.filter(
+    (
+      option
+    ) =>
+      option.value !==
+      'converted_to_case'
+  );
 
 const CLIENT_TYPE_OPTIONS = [
   {
@@ -1045,19 +1042,29 @@ const ConsultationDetail = () => {
   const canEditConsultation =
     hasPermission(
       user,
-      CONSULTATION_PERMISSION_KEYS.UPDATE
-    );
-
-  const canDeleteConsultation =
-    hasPermission(
-      user,
-      CONSULTATION_PERMISSION_KEYS.DELETE
+      PERMISSION_KEYS
+        .EDIT_CONSULTATIONS
     );
 
   const canConvertConsultation =
     hasPermission(
       user,
-      CONSULTATION_PERMISSION_KEYS.CONVERT
+      PERMISSION_KEYS
+        .CONVERT_CONSULTATIONS
+    );
+
+  const canCreateClients =
+    hasPermission(
+      user,
+      PERMISSION_KEYS
+        .CREATE_CLIENTS
+    );
+
+  const canCreateCases =
+    hasPermission(
+      user,
+      PERMISSION_KEYS
+        .CREATE_CASES
     );
 
   const canViewClients =
@@ -1282,11 +1289,9 @@ const ConsultationDetail = () => {
           consultation
             ?.client_id &&
           canConvertConsultation &&
+          canCreateCases &&
           !getConvertedCaseId(
             consultation
-          ) &&
-          !isConsultationTerminalStatus(
-            consultation?.status
           )
         ),
     });
@@ -1387,36 +1392,6 @@ const ConsultationDetail = () => {
     ] ||
     null;
 
-  const primaryAssigneeId =
-    normalizeId(
-      primaryAssignee?.id
-    );
-
-  const defaultCaseAssigneeId =
-    primaryAssigneeId &&
-    caseAssignableLawyers.some(
-      (
-        lawyer
-      ) =>
-        normalizeId(
-          lawyer?.id
-        ) ===
-        primaryAssigneeId
-    )
-      ? primaryAssigneeId
-      : currentUserId &&
-          caseAssignableLawyers.some(
-            (
-              lawyer
-            ) =>
-              normalizeId(
-                lawyer?.id
-              ) ===
-              currentUserId
-          )
-        ? currentUserId
-        : '';
-
   const nextMeeting =
     getNextMeeting(
       meetings
@@ -1430,20 +1405,6 @@ const ConsultationDetail = () => {
   const convertedCaseId =
     getConvertedCaseId(
       consultation
-    );
-
-  const isTerminal =
-    isConsultationTerminalStatus(
-      consultation?.status
-    );
-
-  const statusTransitionOptions =
-    getConsultationStatusTransitionOptions(
-      consultation?.status,
-      {
-        includeCurrent:
-          true,
-      }
     );
 
   const createTaskUrl =
@@ -1479,13 +1440,7 @@ const ConsultationDetail = () => {
       ?.id
       ? `/documents/upload?consultation_id=${encodeURIComponent(
           consultation.id
-        )}${
-          consultation.client_id
-            ? `&client=${encodeURIComponent(
-                consultation.client_id
-              )}`
-            : ''
-        }`
+        )}`
       : '/documents/upload';
 
   const partyName =
@@ -1499,6 +1454,7 @@ const ConsultationDetail = () => {
   const canConvertToClient =
     Boolean(
       canConvertConsultation &&
+      canCreateClients &&
       !consultation
         ?.client_id &&
       !convertedCaseId
@@ -1507,10 +1463,13 @@ const ConsultationDetail = () => {
   const canConvertToCase =
     Boolean(
       canConvertConsultation &&
+      canCreateCases &&
       consultation
         ?.client_id &&
       !convertedCaseId &&
-      !isTerminal
+      consultation
+        ?.status !==
+        'converted_to_case'
     );
 
   const visibleTabs =
@@ -1873,7 +1832,10 @@ const ConsultationDetail = () => {
           'normal',
 
         assigned_to:
-          defaultCaseAssigneeId,
+          normalizeId(
+            primaryAssignee
+              ?.id
+          ),
 
         opening_date:
           '',
@@ -2000,11 +1962,6 @@ const ConsultationDetail = () => {
       }
 
       if (
-        !courtName
-      ) {
-        nextErrors.court_name =
-          'Mahkeme adı gereklidir';
-      } else if (
         courtName.length >
         200
       ) {
@@ -2013,11 +1970,6 @@ const ConsultationDetail = () => {
       }
 
       if (
-        !caseNumber
-      ) {
-        nextErrors.case_number =
-          'Dosya / esas numarası gereklidir';
-      } else if (
         caseNumber.length >
         100
       ) {
@@ -2109,10 +2061,12 @@ const ConsultationDetail = () => {
               judiciaryUnit,
 
             court_name:
-              courtName,
+              courtName ||
+              null,
 
             case_number:
-              caseNumber,
+              caseNumber ||
+              null,
 
             subject:
               subject ||
@@ -2366,7 +2320,8 @@ const ConsultationDetail = () => {
           <div className="flex flex-wrap items-center gap-2">
 
             {canEditConsultation &&
-              !isTerminal && (
+              consultation.status !==
+                'converted_to_case' && (
               <div>
 
                 <select
@@ -2381,7 +2336,7 @@ const ConsultationDetail = () => {
                   }
                   className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
                 >
-                  {statusTransitionOptions.map(
+                  {MANUAL_STATUS_OPTIONS.map(
                     (
                       option
                     ) => (
@@ -2402,8 +2357,7 @@ const ConsultationDetail = () => {
               </div>
             )}
 
-            {canEditConsultation &&
-              !isTerminal && (
+            {canEditConsultation && (
               <Link
                 to={`/consultations/${consultation.id}/edit`}
               >
@@ -2412,21 +2366,6 @@ const ConsultationDetail = () => {
                 >
                   <Edit2 className="mr-2 h-4 w-4" />
                   Düzenle
-                </Button>
-              </Link>
-            )}
-
-            {isTerminal &&
-              canDeleteConsultation &&
-              consultation.status !==
-                'converted_to_case' && (
-              <Link
-                to={`/consultations/${consultation.id}/edit`}
-              >
-                <Button
-                  variant="outline"
-                >
-                  Kayıt İşlemleri
                 </Button>
               </Link>
             )}
@@ -3225,10 +3164,10 @@ const ConsultationDetail = () => {
                         <p className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">
                           {consultation
                             ?.convertedCase
-                            ?.title ||
+                            ?.case_number ||
                             consultation
                               ?.convertedCase
-                              ?.case_number ||
+                              ?.title ||
                             'Bağlı dava'}
                         </p>
 
@@ -4309,7 +4248,7 @@ const ConsultationDetail = () => {
         <div className="grid gap-4 md:grid-cols-2">
 
           <Input
-            label="Mahkeme *"
+            label="Mahkeme"
             name="court_name"
             value={
               caseForm.court_name
@@ -4328,7 +4267,7 @@ const ConsultationDetail = () => {
           />
 
           <Input
-            label="Dosya / Esas No *"
+            label="Dosya / Esas No"
             name="case_number"
             value={
               caseForm.case_number
@@ -4343,13 +4282,13 @@ const ConsultationDetail = () => {
               convertCaseMutation.isPending
             }
             maxLength={100}
-            placeholder="Örn: 2026/4"
+            placeholder="Varsa"
           />
 
         </div>
 
-        {caseForm.court_name &&
-          caseForm.case_number && (
+        {caseForm.judiciary_type &&
+          caseForm.judiciary_unit && (
           <div className="rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2.5 dark:border-white/[0.05] dark:bg-white/[0.02]">
 
             <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-600">
@@ -4357,7 +4296,7 @@ const ConsultationDetail = () => {
             </p>
 
             <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
-              {`${caseForm.court_name.trim()} · ${caseForm.case_number.trim()}`}
+              {`${caseForm.judiciary_type.trim()} - ${caseForm.judiciary_unit.trim()}`}
             </p>
 
           </div>

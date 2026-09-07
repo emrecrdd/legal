@@ -370,6 +370,279 @@ const invalidateConsultationTasks = (
   });
 };
 
+const unwrapTaskPayload = (
+  value
+) => {
+  return (
+    value?.data?.data ??
+    value?.data ??
+    value ??
+    null
+  );
+};
+
+const getTaskConsultationId = (
+  value
+) => {
+  const task =
+    unwrapTaskPayload(
+      value
+    );
+
+  const consultationId =
+    task?.consultation_id ??
+    task?.consultation?.id ??
+    '';
+
+  return consultationId
+    ? String(
+        consultationId
+      )
+    : '';
+};
+
+const getTaskRows = (
+  value
+) => {
+  const payload =
+    unwrapTaskPayload(
+      value
+    );
+
+  if (
+    Array.isArray(
+      payload
+    )
+  ) {
+    return payload;
+  }
+
+  if (
+    Array.isArray(
+      payload?.data
+    )
+  ) {
+    return payload.data;
+  }
+
+  if (
+    Array.isArray(
+      payload?.items
+    )
+  ) {
+    return payload.items;
+  }
+
+  if (
+    Array.isArray(
+      payload?.results
+    )
+  ) {
+    return payload.results;
+  }
+
+  return [];
+};
+
+const getConsultationIdsForTaskIds =
+  (
+    queryClient,
+    taskIds = []
+  ) => {
+    const normalizedTaskIds =
+      new Set(
+        (
+          Array.isArray(
+            taskIds
+          )
+            ? taskIds
+            : [
+                taskIds,
+              ]
+        )
+          .map(
+            (id) =>
+              id
+                ? String(
+                    id
+                  )
+                : ''
+          )
+          .filter(
+            Boolean
+          )
+      );
+
+    if (
+      normalizedTaskIds.size ===
+      0
+    ) {
+      return [];
+    }
+
+    const consultationIds =
+      new Set();
+
+    normalizedTaskIds.forEach(
+      (taskId) => {
+        const cachedTask =
+          queryClient.getQueryData(
+            TASK_QUERY_KEYS.detail(
+              taskId
+            )
+          );
+
+        const consultationId =
+          getTaskConsultationId(
+            cachedTask
+          );
+
+        if (
+          consultationId
+        ) {
+          consultationIds.add(
+            consultationId
+          );
+        }
+      }
+    );
+
+    /*
+     * Danışmanlık detayındaki görev listesi açıkken task detail cache'i
+     * bulunmayabilir. Bu yüzden consultation-tasks cache'lerini de tarıyoruz.
+     * Delete sonrası "1 kayıt" sayısının F5 beklemeden düşmesi için kritik.
+     */
+    queryClient
+      .getQueriesData({
+        queryKey: [
+          'consultation-tasks',
+        ],
+      })
+      .forEach(
+        ([
+          queryKey,
+          cachedValue,
+        ]) => {
+          const consultationId =
+            queryKey?.[1]
+              ? String(
+                  queryKey[1]
+                )
+              : '';
+
+          if (
+            !consultationId
+          ) {
+            return;
+          }
+
+          const rows =
+            getTaskRows(
+              cachedValue
+            );
+
+          const containsTask =
+            rows.some(
+              (task) =>
+                normalizedTaskIds.has(
+                  String(
+                    task?.id ??
+                    ''
+                  )
+                )
+            );
+
+          if (
+            containsTask
+          ) {
+            consultationIds.add(
+              consultationId
+            );
+          }
+        }
+      );
+
+    return [
+      ...consultationIds,
+    ];
+  };
+
+const invalidateConsultationTaskViews =
+  (
+    queryClient,
+    {
+      taskIds = [],
+      sources = [],
+      consultationIds = [],
+    } = {}
+  ) => {
+    const ids =
+      new Set(
+        getConsultationIdsForTaskIds(
+          queryClient,
+          taskIds
+        )
+      );
+
+    (
+      Array.isArray(
+        sources
+      )
+        ? sources
+        : [
+            sources,
+          ]
+    ).forEach(
+      (source) => {
+        const consultationId =
+          getTaskConsultationId(
+            source
+          );
+
+        if (
+          consultationId
+        ) {
+          ids.add(
+            consultationId
+          );
+        }
+      }
+    );
+
+    (
+      Array.isArray(
+        consultationIds
+      )
+        ? consultationIds
+        : [
+            consultationIds,
+          ]
+    )
+      .filter(
+        Boolean
+      )
+      .forEach(
+        (consultationId) =>
+          ids.add(
+            String(
+              consultationId
+            )
+          )
+      );
+
+    ids.forEach(
+      (consultationId) =>
+        invalidateConsultationTasks(
+          queryClient,
+          consultationId
+        )
+    );
+
+    return [
+      ...ids,
+    ];
+  };
+
 // ======================================================
 // QUERIES
 // ======================================================
@@ -731,9 +1004,26 @@ export const useUpdateTask =
           ),
 
       onSuccess: (
-        _,
+        response,
         variables
       ) => {
+        invalidateConsultationTaskViews(
+          queryClient,
+          {
+            taskIds: [
+              variables?.id,
+            ],
+            sources: [
+              response,
+              variables?.data,
+            ],
+            consultationIds: [
+              variables?.data
+                ?.consultation_id,
+            ],
+          }
+        );
+
         invalidateTaskLists(
           queryClient
         );
@@ -799,9 +1089,21 @@ export const useDeleteTask =
         ),
 
       onSuccess: (
-        _,
+        response,
         id
       ) => {
+        invalidateConsultationTaskViews(
+          queryClient,
+          {
+            taskIds: [
+              id,
+            ],
+            sources: [
+              response,
+            ],
+          }
+        );
+
         invalidateTaskLists(
           queryClient
         );
@@ -863,9 +1165,21 @@ export const useUpdateTaskStatus =
           ),
 
       onSuccess: (
-        _,
+        response,
         variables
       ) => {
+        invalidateConsultationTaskViews(
+          queryClient,
+          {
+            taskIds: [
+              variables?.id,
+            ],
+            sources: [
+              response,
+            ],
+          }
+        );
+
         invalidateTaskLists(
           queryClient
         );
@@ -924,9 +1238,21 @@ export const useAssignTask =
           ),
 
       onSuccess: (
-        _,
+        response,
         variables
       ) => {
+        invalidateConsultationTaskViews(
+          queryClient,
+          {
+            taskIds: [
+              variables?.id,
+            ],
+            sources: [
+              response,
+            ],
+          }
+        );
+
         invalidateTaskLists(
           queryClient
         );
@@ -992,9 +1318,21 @@ export const useStartTask =
         ),
 
       onSuccess: (
-        _,
+        response,
         id
       ) => {
+        invalidateConsultationTaskViews(
+          queryClient,
+          {
+            taskIds: [
+              id,
+            ],
+            sources: [
+              response,
+            ],
+          }
+        );
+
         invalidateTaskLists(
           queryClient
         );
@@ -1062,9 +1400,21 @@ export const useCompleteTask =
           ),
 
       onSuccess: (
-        _,
+        response,
         variables
       ) => {
+        invalidateConsultationTaskViews(
+          queryClient,
+          {
+            taskIds: [
+              variables?.id,
+            ],
+            sources: [
+              response,
+            ],
+          }
+        );
+
         invalidateTaskLists(
           queryClient
         );
@@ -1125,9 +1475,21 @@ export const useApproveTask =
         ),
 
       onSuccess: (
-        _,
+        response,
         id
       ) => {
+        invalidateConsultationTaskViews(
+          queryClient,
+          {
+            taskIds: [
+              id,
+            ],
+            sources: [
+              response,
+            ],
+          }
+        );
+
         invalidateTaskLists(
           queryClient
         );
@@ -1241,9 +1603,21 @@ export const useUpdateProgress =
           ),
 
       onSuccess: (
-        _,
+        response,
         variables
       ) => {
+        invalidateConsultationTaskViews(
+          queryClient,
+          {
+            taskIds: [
+              variables?.id,
+            ],
+            sources: [
+              response,
+            ],
+          }
+        );
+
         invalidateTask(
           queryClient,
           variables.id
@@ -1309,8 +1683,29 @@ export const useBulkUpdateTaskStatus =
           ),
 
       onSuccess: (
-        results
+        results,
+        variables
       ) => {
+        invalidateConsultationTaskViews(
+          queryClient,
+          {
+            taskIds:
+              variables?.ids ||
+              [],
+            sources:
+              results
+                .filter(
+                  (result) =>
+                    result.status ===
+                    'fulfilled'
+                )
+                .map(
+                  (result) =>
+                    result.value
+                ),
+          }
+        );
+
         invalidateTaskLists(
           queryClient
         );
