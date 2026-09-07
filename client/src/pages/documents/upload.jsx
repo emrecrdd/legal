@@ -416,6 +416,19 @@ const DocumentUpload = () => {
   const fileInputRef =
     useRef(null);
 
+  /*
+   * Danışmanlık detayından belge yüklemeye gelindiyse danışmanlık
+   * bağlamı birincil ilişkidir. Eski linklerde aynı anda `client`
+   * parametresi de bulunabildiği için onu otomatik seçmiyoruz; aksi
+   * halde belge danışmanlığa değil yalnızca müvekkile bağlanıyordu.
+   */
+  const consultationIdFromQuery =
+    normalizeId(
+      searchParams.get(
+        'consultation_id'
+      )
+    );
+
   const [
     formData,
     setFormData,
@@ -426,6 +439,9 @@ const DocumentUpload = () => {
       category: 'general',
       tags: '',
 
+      consultation_id:
+        consultationIdFromQuery,
+
       case_id:
         normalizeId(
           searchParams.get(
@@ -434,11 +450,13 @@ const DocumentUpload = () => {
         ),
 
       client_id:
-        normalizeId(
-          searchParams.get(
-            'client'
-          )
-        ),
+        consultationIdFromQuery
+          ? ''
+          : normalizeId(
+              searchParams.get(
+                'client'
+              )
+            ),
 
       power_of_attorney_id:
         normalizeId(
@@ -1166,6 +1184,19 @@ const DocumentUpload = () => {
 
       if (
         normalizeId(
+          formData.consultation_id
+        )
+      ) {
+        payload.append(
+          'consultation_id',
+          normalizeId(
+            formData.consultation_id
+          )
+        );
+      }
+
+      if (
+        normalizeId(
           formData.case_id
         )
       ) {
@@ -1269,6 +1300,11 @@ const DocumentUpload = () => {
 
   const refreshRelatedQueries =
     async () => {
+      const consultationId =
+        normalizeId(
+          formData.consultation_id
+        );
+
       const caseId =
         normalizeId(
           formData.case_id
@@ -1311,6 +1347,34 @@ const DocumentUpload = () => {
           ],
         }),
       ];
+
+      if (
+        consultationId
+      ) {
+        promises.push(
+          queryClient.invalidateQueries({
+            queryKey: [
+              'consultation-documents',
+              consultationId,
+            ],
+            exact: true,
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'consultation',
+              consultationId,
+            ],
+            exact: true,
+          }),
+
+          queryClient.invalidateQueries({
+            queryKey: [
+              'consultations',
+            ],
+          })
+        );
+      }
 
       if (
         caseId
@@ -1362,6 +1426,11 @@ const DocumentUpload = () => {
 
   const redirectAfterUpload =
     () => {
+      const consultationId =
+        normalizeId(
+          formData.consultation_id
+        );
+
       const caseId =
         normalizeId(
           formData.case_id
@@ -1371,6 +1440,16 @@ const DocumentUpload = () => {
         normalizeId(
           formData.client_id
         );
+
+      if (
+        consultationId
+      ) {
+        navigate(
+          `/consultations/${consultationId}`
+        );
+
+        return;
+      }
 
       if (
         caseId
@@ -1552,6 +1631,11 @@ const DocumentUpload = () => {
         return;
       }
 
+      const consultationId =
+        normalizeId(
+          formData.consultation_id
+        );
+
       const caseId =
         normalizeId(
           formData.case_id
@@ -1561,6 +1645,16 @@ const DocumentUpload = () => {
         normalizeId(
           formData.client_id
         );
+
+      if (
+        consultationId
+      ) {
+        navigate(
+          `/consultations/${consultationId}`
+        );
+
+        return;
+      }
 
       if (
         caseId
@@ -1600,15 +1694,19 @@ const DocumentUpload = () => {
 
         <Link
           to={
-            formData.case_id
-              ? `/cases/${normalizeId(
-                  formData.case_id
+            formData.consultation_id
+              ? `/consultations/${normalizeId(
+                  formData.consultation_id
                 )}`
-              : formData.client_id
-                ? `/clients/${normalizeId(
-                    formData.client_id
+              : formData.case_id
+                ? `/cases/${normalizeId(
+                    formData.case_id
                   )}`
-                : '/documents'
+                : formData.client_id
+                  ? `/clients/${normalizeId(
+                      formData.client_id
+                    )}`
+                  : '/documents'
           }
           className="
             inline-flex
@@ -1625,11 +1723,13 @@ const DocumentUpload = () => {
         >
           <ArrowLeft className="h-3.5 w-3.5" />
 
-          {formData.case_id
-            ? 'Davaya Dön'
-            : formData.client_id
-              ? 'Müvekkile Dön'
-              : 'Belgeler'}
+          {formData.consultation_id
+            ? 'Danışmanlığa Dön'
+            : formData.case_id
+              ? 'Davaya Dön'
+              : formData.client_id
+                ? 'Müvekkile Dön'
+                : 'Belgeler'}
         </Link>
 
         <div className="mt-3 flex items-start gap-3">
@@ -2384,7 +2484,9 @@ const DocumentUpload = () => {
                 </h2>
 
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                  Belgeyi müvekkil, dava veya vekaletname kaydıyla ilişkilendirin
+                  {formData.consultation_id
+                    ? 'Belge bu danışmanlığa bağlanacaktır; diğer ilişkiler isteğe bağlıdır'
+                    : 'Belgeyi müvekkil, dava veya vekaletname kaydıyla ilişkilendirin'}
                 </p>
 
               </div>
@@ -2394,6 +2496,22 @@ const DocumentUpload = () => {
           </Card.Header>
 
           <Card.Body className="space-y-4">
+
+            {formData.consultation_id && (
+              <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-500/10 dark:bg-blue-500/[0.035]">
+                <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+
+                <div>
+                  <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                    Danışmanlık bağlantısı aktif
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
+                    Yüklenecek belge danışmanlık kaydına bağlanacak ve işlem tamamlandığında danışmanlık detayına geri dönülecek.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-4 md:grid-cols-2">
 
