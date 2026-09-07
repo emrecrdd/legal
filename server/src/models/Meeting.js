@@ -3,6 +3,41 @@ import {
   DataTypes,
 } from 'sequelize';
 
+const MEETING_TYPES = [
+  'client',
+  'internal',
+  'phone',
+  'other',
+];
+
+const MEETING_STATUSES = [
+  'scheduled',
+  'ongoing',
+  'completed',
+  'cancelled',
+];
+
+const normalizeNullableText = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return null;
+  }
+
+  const normalized =
+    String(
+      value
+    ).trim();
+
+  return (
+    normalized ||
+    null
+  );
+};
+
 class Meeting extends Sequelize.Model {
   static initModel(
     sequelize
@@ -34,13 +69,25 @@ class Meeting extends Sequelize.Model {
             false,
 
           validate: {
-            notEmpty:
-              true,
+            notNull: {
+              msg:
+                'Toplantı başlığı zorunludur',
+            },
 
-            len: [
-              2,
-              255,
-            ],
+            notEmpty: {
+              msg:
+                'Toplantı başlığı zorunludur',
+            },
+
+            len: {
+              args: [
+                2,
+                255,
+              ],
+
+              msg:
+                'Toplantı başlığı 2 ile 255 karakter arasında olmalıdır',
+            },
           },
 
           set(
@@ -63,6 +110,17 @@ class Meeting extends Sequelize.Model {
 
           allowNull:
             true,
+
+          set(
+            value
+          ) {
+            this.setDataValue(
+              'description',
+              normalizeNullableText(
+                value
+              )
+            );
+          },
         },
 
         start_date: {
@@ -71,6 +129,32 @@ class Meeting extends Sequelize.Model {
 
           allowNull:
             false,
+
+          validate: {
+            notNull: {
+              msg:
+                'Toplantı başlangıç tarihi zorunludur',
+            },
+
+            isValidStartDate(
+              value
+            ) {
+              const parsed =
+                new Date(
+                  value
+                );
+
+              if (
+                Number.isNaN(
+                  parsed.getTime()
+                )
+              ) {
+                throw new Error(
+                  'Geçerli bir toplantı başlangıç tarihi girilmelidir'
+                );
+              }
+            },
+          },
         },
 
         end_date: {
@@ -84,20 +168,47 @@ class Meeting extends Sequelize.Model {
             isAfterStart(
               value
             ) {
+              if (!value) {
+                return;
+              }
+
+              const endDate =
+                new Date(
+                  value
+                );
+
               if (
-                !value ||
+                Number.isNaN(
+                  endDate.getTime()
+                )
+              ) {
+                throw new Error(
+                  'Geçerli bir toplantı bitiş tarihi girilmelidir'
+                );
+              }
+
+              if (
                 !this.start_date
               ) {
                 return;
               }
 
-              if (
-                new Date(
-                  value
-                ) <
+              const startDate =
                 new Date(
                   this.start_date
+                );
+
+              if (
+                Number.isNaN(
+                  startDate.getTime()
                 )
+              ) {
+                return;
+              }
+
+              if (
+                endDate <
+                startDate
               ) {
                 throw new Error(
                   'Toplantı bitiş tarihi başlangıç tarihinden önce olamaz'
@@ -116,17 +227,26 @@ class Meeting extends Sequelize.Model {
           allowNull:
             true,
 
+          validate: {
+            len: {
+              args: [
+                0,
+                255,
+              ],
+
+              msg:
+                'Toplantı konumu en fazla 255 karakter olabilir',
+            },
+          },
+
           set(
             value
           ) {
             this.setDataValue(
               'location',
-
-              value
-                ? String(
-                    value
-                  ).trim()
-                : null
+              normalizeNullableText(
+                value
+              )
             );
           },
         },
@@ -134,10 +254,7 @@ class Meeting extends Sequelize.Model {
         meeting_type: {
           type:
             DataTypes.ENUM(
-              'client',
-              'internal',
-              'phone',
-              'other'
+              ...MEETING_TYPES
             ),
 
           allowNull:
@@ -145,15 +262,28 @@ class Meeting extends Sequelize.Model {
 
           defaultValue:
             'other',
+
+          validate: {
+            notNull: {
+              msg:
+                'Toplantı türü zorunludur',
+            },
+
+            isIn: {
+              args: [
+                MEETING_TYPES,
+              ],
+
+              msg:
+                'Geçerli bir toplantı türü seçilmelidir',
+            },
+          },
         },
 
         status: {
           type:
             DataTypes.ENUM(
-              'scheduled',
-              'ongoing',
-              'completed',
-              'cancelled'
+              ...MEETING_STATUSES
             ),
 
           allowNull:
@@ -161,6 +291,22 @@ class Meeting extends Sequelize.Model {
 
           defaultValue:
             'scheduled',
+
+          validate: {
+            notNull: {
+              msg:
+                'Toplantı durumu zorunludur',
+            },
+
+            isIn: {
+              args: [
+                MEETING_STATUSES,
+              ],
+
+              msg:
+                'Geçerli bir toplantı durumu seçilmelidir',
+            },
+          },
         },
 
         attendees: {
@@ -174,6 +320,11 @@ class Meeting extends Sequelize.Model {
             [],
 
           validate: {
+            notNull: {
+              msg:
+                'Katılımcı bilgisi geçersizdir',
+            },
+
             isArray(
               value
             ) {
@@ -200,22 +351,40 @@ class Meeting extends Sequelize.Model {
             true,
 
           validate: {
+            len: {
+              args: [
+                0,
+                1000,
+              ],
+
+              msg:
+                'Toplantı bağlantısı en fazla 1000 karakter olabilir',
+            },
+
             isUrlOrEmpty(
               value
             ) {
-              if (
-                !value
-              ) {
+              if (!value) {
                 return;
               }
 
               try {
-                new URL(
-                  value
-                );
+                const url =
+                  new URL(
+                    value
+                  );
+
+                if (
+                  url.protocol !==
+                    'http:' &&
+                  url.protocol !==
+                    'https:'
+                ) {
+                  throw new Error();
+                }
               } catch {
                 throw new Error(
-                  'Geçerli bir toplantı bağlantısı girilmelidir'
+                  'Geçerli bir toplantı bağlantısı girilmelidir (http:// veya https://)'
                 );
               }
             },
@@ -226,12 +395,9 @@ class Meeting extends Sequelize.Model {
           ) {
             this.setDataValue(
               'meeting_link',
-
-              value
-                ? String(
-                    value
-                  ).trim()
-                : null
+              normalizeNullableText(
+                value
+              )
             );
           },
         },
@@ -242,6 +408,17 @@ class Meeting extends Sequelize.Model {
 
           allowNull:
             true,
+
+          set(
+            value
+          ) {
+            this.setDataValue(
+              'notes',
+              normalizeNullableText(
+                value
+              )
+            );
+          },
         },
 
         // ==================================================
@@ -309,6 +486,13 @@ class Meeting extends Sequelize.Model {
 
             key:
               'id',
+          },
+
+          validate: {
+            notNull: {
+              msg:
+                'Toplantıyı oluşturan kullanıcı bilgisi eksik',
+            },
           },
         },
 
