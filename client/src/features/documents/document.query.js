@@ -223,6 +223,19 @@ const invalidateDocumentCollections = async (
         queryKey: [
           'client-documents',
         ],
+      }),
+
+      // Danışmanlık detayındaki belge sekmesi ve sayaç.
+      queryClient.invalidateQueries({
+        queryKey: [
+          'consultation-documents',
+        ],
+      }),
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          'consultation',
+        ],
       })
     );
   }
