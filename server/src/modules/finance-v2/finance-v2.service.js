@@ -613,7 +613,18 @@ export const financeV2Service = {
 
   async reverseExpense(id, reason, actor, requestMeta = {}) {
     return sequelize.transaction(async transaction => {
-      const expense=await FinanceExpense.findByPk(id,{transaction,lock:transaction.LOCK.UPDATE}); if(!expense) failNotFound();
+      // Bu endpoint hem FinanceExpense.id hem de bağlı FinanceTransaction.id kabul eder.
+      // Transaction detay ekranı doğal olarak transaction UUID'si ile açıldığı için sadece
+      // FinanceExpense PK aramak 404 üretiyordu. Önce expense PK, yoksa transaction_id ile çöz.
+      let expense=await FinanceExpense.findByPk(id,{transaction,lock:transaction.LOCK.UPDATE});
+      if(!expense){
+        expense=await FinanceExpense.findOne({
+          where:{transaction_id:id},
+          transaction,
+          lock:transaction.LOCK.UPDATE,
+        });
+      }
+      if(!expense) failNotFound();
       await assertFinanceRecordAccess(expense,actor,transaction);
       if(expense.status!=='posted') fail('Yalnız post edilmiş masraf ters kaydedilebilir',409);
       const normalizedReason=normalizeText(reason,500); if(!normalizedReason) fail('Masraf ters kayıt nedeni zorunludur');
