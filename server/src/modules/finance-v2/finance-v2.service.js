@@ -798,47 +798,9 @@ export const financeV2Service = {
   },
 
   async getAccountBalances(actor) {
-  actorId(actor);
-
-  if (!canViewAllFinance(actor)) {
-    fail('Firma geneli finans hesabı bakiyeleri için yetkiniz yok', 403);
-  }
-
-  return sequelize.query(`
-    SELECT
-      a.id,
-      a.code,
-      a.name,
-      a.account_type,
-      a.currency,
-      (
-        a.opening_balance
-        + COALESCE(
-            SUM(
-              CASE
-                WHEN t.status IN ('posted', 'reversed') AND t.direction = 'in'
-                  THEN t.amount
-                WHEN t.status IN ('posted', 'reversed') AND t.direction = 'out'
-                  THEN -t.amount
-                ELSE 0
-              END
-            ),
-            0
-          )
-      )::text AS balance
-    FROM finance_accounts a
-    LEFT JOIN finance_transactions t
-      ON t.account_id = a.id
-      AND t.deleted_at IS NULL
-    WHERE
-      a.deleted_at IS NULL
-      AND a.is_active = true
-    GROUP BY a.id
-    ORDER BY a.name
-  `, {
-    type: QueryTypes.SELECT,
-  });
-},
+    actorId(actor); if(!canViewAllFinance(actor)) fail('Firma geneli finans hesabı bakiyeleri için yetkiniz yok',403);
+    return sequelize.query(`SELECT a.id,a.code,a.name,a.account_type,a.currency,(a.opening_balance+COALESCE(SUM(CASE WHEN t.status='posted' AND t.direction='in' THEN t.amount WHEN t.status='posted' AND t.direction='out' THEN -t.amount ELSE 0 END),0))::text balance FROM finance_accounts a LEFT JOIN finance_transactions t ON t.account_id=a.id AND t.deleted_at IS NULL WHERE a.deleted_at IS NULL AND a.is_active=true GROUP BY a.id ORDER BY a.name`,{type:QueryTypes.SELECT});
+  },
 
   async getContextSummary(context, id, actor) {
     const column=context==='client'?'client_id':context==='case'?'case_id':'consultation_id';
@@ -953,11 +915,62 @@ export const financeV2Service = {
   },
 
   async getReceivable(id, actor) {
-    actorId(actor); const row=await FinanceReceivable.findByPk(id); if(!row) failNotFound(); await assertContext(row,actor,null);
-    const [data]=await sequelize.query(`SELECT r.*,r.amount::text amount FROM finance_receivables r WHERE r.id=:id AND r.deleted_at IS NULL`,{replacements:{id},type:QueryTypes.SELECT}); if(!data) failNotFound();
-    const allocations=await sequelize.query(`SELECT a.id,a.amount::text,a.currency,a.transaction_id,t.reference_no transaction_reference,t.transaction_date,t.status FROM finance_allocations a JOIN finance_transactions t ON t.id=a.transaction_id WHERE a.receivable_id=:id AND a.deleted_at IS NULL ORDER BY a.created_at`,{replacements:{id},type:QueryTypes.SELECT});
-    const refunds=await sequelize.query(`SELECT ra.id,ra.amount::text,ra.currency,ra.refund_transaction_id,t.reference_no refund_reference,t.transaction_date FROM finance_refund_allocations ra JOIN finance_transactions t ON t.id=ra.refund_transaction_id WHERE ra.receivable_id=:id AND ra.deleted_at IS NULL ORDER BY ra.created_at`,{replacements:{id},type:QueryTypes.SELECT});
-    const adjustments=await sequelize.query(`SELECT id,reference_no,adjustment_type,amount::text,currency,reason,status,created_at FROM finance_receivable_adjustments WHERE receivable_id=:id AND deleted_at IS NULL ORDER BY created_at`,{replacements:{id},type:QueryTypes.SELECT});
+    actorId(actor);
+    const row=await FinanceReceivable.findByPk(id);
+    if(!row) failNotFound();
+    await assertContext(row,actor,null);
+
+    const [data]=await sequelize.query(`
+      SELECT r.*, r.amount::text AS amount
+      FROM finance_receivables r
+      WHERE r.id=:id AND r.deleted_at IS NULL
+    `,{replacements:{id},type:QueryTypes.SELECT});
+    if(!data) failNotFound();
+
+    const allocations=await sequelize.query(`
+      SELECT
+        a.id,
+        a.amount::text,
+        a.currency,
+        a.transaction_id,
+        t.reference_no AS transaction_reference,
+        t.transaction_date,
+        t.status
+      FROM finance_allocations a
+      JOIN finance_transactions t ON t.id=a.transaction_id
+      WHERE a.receivable_id=:id
+        AND a.deleted_at IS NULL
+        AND t.deleted_at IS NULL
+      ORDER BY a.created_at
+    `,{replacements:{id},type:QueryTypes.SELECT});
+
+    // Only active refunds affect the receivable settlement.
+    // Reversed refunds remain in the ledger/audit trail, but must not reopen the receivable.
+    const refunds=await sequelize.query(`
+      SELECT
+        ra.id,
+        ra.amount::text,
+        ra.currency,
+        ra.refund_transaction_id,
+        t.reference_no AS refund_reference,
+        t.transaction_date,
+        t.status
+      FROM finance_refund_allocations ra
+      JOIN finance_transactions t ON t.id=ra.refund_transaction_id
+      WHERE ra.receivable_id=:id
+        AND ra.deleted_at IS NULL
+        AND t.deleted_at IS NULL
+        AND t.status='posted'
+      ORDER BY ra.created_at
+    `,{replacements:{id},type:QueryTypes.SELECT});
+
+    const adjustments=await sequelize.query(`
+      SELECT id,reference_no,adjustment_type,amount::text,currency,reason,status,created_at
+      FROM finance_receivable_adjustments
+      WHERE receivable_id=:id AND deleted_at IS NULL
+      ORDER BY created_at
+    `,{replacements:{id},type:QueryTypes.SELECT});
+
     return {...data,allocations,refunds,adjustments};
   },
 
@@ -986,28 +999,7 @@ export const financeV2Service = {
     const [data]=await sequelize.query(`SELECT t.*,t.amount::text amount,t.base_amount::text base_amount,t.fx_rate::text fx_rate,a.code account_code,a.name account_name FROM finance_transactions t JOIN finance_accounts a ON a.id=t.account_id WHERE t.id=:id AND t.deleted_at IS NULL`,{replacements:{id},type:QueryTypes.SELECT}); if(!data) failNotFound();
     const allocations=await sequelize.query(`SELECT a.id,a.receivable_id,a.amount::text,a.currency,r.reference_no receivable_reference FROM finance_allocations a JOIN finance_receivables r ON r.id=a.receivable_id WHERE a.transaction_id=:id AND a.deleted_at IS NULL`,{replacements:{id},type:QueryTypes.SELECT});
     const refund_allocations=await sequelize.query(`SELECT id,receivable_id,amount::text,currency,original_transaction_id FROM finance_refund_allocations WHERE refund_transaction_id=:id AND deleted_at IS NULL`,{replacements:{id},type:QueryTypes.SELECT});
-    const refunds = await sequelize.query(`
-  SELECT
-    ra.id,
-    ra.amount::text,
-    ra.currency,
-    ra.refund_transaction_id,
-    t.reference_no AS refund_reference,
-    t.transaction_date,
-    t.status
-  FROM finance_refund_allocations ra
-  JOIN finance_transactions t
-    ON t.id = ra.refund_transaction_id
-  WHERE
-    ra.receivable_id = :id
-    AND ra.deleted_at IS NULL
-    AND t.deleted_at IS NULL
-    AND t.status = 'posted'
-  ORDER BY ra.created_at
-`, {
-  replacements: { id },
-  type: QueryTypes.SELECT,
-});
+    const refunds=await sequelize.query(`SELECT id,reference_no,amount::text,currency,transaction_date,status FROM finance_transactions WHERE related_transaction_id=:id AND transaction_type='refund' AND deleted_at IS NULL ORDER BY created_at`,{replacements:{id},type:QueryTypes.SELECT});
     return {...data,allocations,refund_allocations,refunds};
   },
 
