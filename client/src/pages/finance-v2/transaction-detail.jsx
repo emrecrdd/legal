@@ -14,7 +14,44 @@ export default function TransactionDetail(){
  const {id}=useParams(),navigate=useNavigate(),{user}=useAuth(); const q=useFinanceTransaction(id),auditQ=useFinanceAudit('finance_transaction',id),accountsQ=useFinanceAccounts();
  const reverse=useReverseFinanceTransaction(),reverseTransfer=useReverseFinanceTransfer(),refund=useRefundFinanceTransaction(); const [modal,setModal]=useState(null); const [reason,setReason]=useState(''); const [refundForm,setRefundForm]=useState({amount:'',account_id:'',transaction_date:nowLocal(),payment_method:'',description:'',fx_rate:'',allocations:{}});
  const tx=q.data||{}; const accounts=Array.isArray(accountsQ.data)?accountsQ.data:(accountsQ.data?.rows||[]); const sameCurrencyAccounts=accounts.filter(a=>a.currency===tx.currency);
- const canReversePermission=hasPermission(user,PERMISSION_KEYS.REVERSE_PAYMENTS),canManageAccounts=hasPermission(user,PERMISSION_KEYS.MANAGE_FINANCE_ACCOUNTS),canAll=hasPermission(user,PERMISSION_KEYS.VIEW_ALL_FINANCE); const refundable=canReversePermission&&tx.transaction_type==='receipt'&&tx.status==='posted'; const isTransfer=['transfer_in','transfer_out'].includes(tx.transaction_type); const canReverse=canReversePermission&&tx.status==='posted'&&!['reversal','expense','transfer_in','transfer_out'].includes(tx.transaction_type); const canReverseTransfer=canManageAccounts&&canAll&&isTransfer&&tx.status==='posted';
+ const canReversePermission = hasPermission(
+  user,
+  PERMISSION_KEYS.REVERSE_PAYMENTS
+);
+
+const canManageAccounts = hasPermission(
+  user,
+  PERMISSION_KEYS.MANAGE_FINANCE_ACCOUNTS
+);
+
+const canAll = hasPermission(
+  user,
+  PERMISSION_KEYS.VIEW_ALL_FINANCE
+);
+
+const refundable =
+  canReversePermission &&
+  tx.transaction_type === 'receipt' &&
+  tx.status === 'posted';
+
+const isTransfer = ['transfer_in', 'transfer_out'].includes(
+  tx.transaction_type
+);
+
+const canReverse =
+  canReversePermission &&
+  tx.status === 'posted' &&
+  ![
+    'reversal',
+    'transfer_in',
+    'transfer_out'
+  ].includes(tx.transaction_type);
+
+const canReverseTransfer =
+  canManageAccounts &&
+  canAll &&
+  isTransfer &&
+  tx.status === 'posted';
  const allocTotal=useMemo(()=>Object.values(refundForm.allocations||{}).reduce((s,v)=>s+Number(v||0),0),[refundForm.allocations]);
  const doReverse=async()=>{await reverse.mutateAsync({id,reason});setModal(null);q.refetch();auditQ.refetch();};
  const doReverseTransfer=async()=>{await reverseTransfer.mutateAsync({transactionId:id,reason});setModal(null);q.refetch();auditQ.refetch();};
