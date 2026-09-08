@@ -110,7 +110,7 @@ export default function FinanceV2PaymentPlanCreate() {
 
       if (form.fee_agreement_id) {
         navigate(
-          `/finance/fee-agreements/${form.fee_agreement_id}`
+          `/finance/agreements/${form.fee_agreement_id}`
         );
       } else {
         navigate('/finance');
@@ -288,7 +288,7 @@ export default function FinanceV2PaymentPlanCreate() {
         <Link
           to={
             feeAgreementId
-              ? `/finance/fee-agreements/${feeAgreementId}`
+              ? `/finance/agreements/${feeAgreementId}`
               : '/finance'
           }
           className="mt-1 rounded-xl border border-gray-200 p-2 text-gray-500 dark:border-white/[0.08]"
@@ -640,7 +640,7 @@ export default function FinanceV2PaymentPlanCreate() {
               onClick={() =>
                 navigate(
                   feeAgreementId
-                    ? `/finance/fee-agreements/${feeAgreementId}`
+                    ? `/finance/agreements/${feeAgreementId}`
                     : '/finance'
                 )
               }
