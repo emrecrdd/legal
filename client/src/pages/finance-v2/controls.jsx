@@ -349,8 +349,8 @@ export default function FinanceControls() {
               <option value="cash">Kasa</option>
               <option value="pos">POS</option>
               <option value="clearing">
-                Takas/Clearing
-              </option>
+  Geçiş Hesabı
+</option>
               <option value="other">Diğer</option>
             </select>
 
