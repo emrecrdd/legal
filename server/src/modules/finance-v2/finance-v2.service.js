@@ -106,6 +106,19 @@ const assertContext = async ({ client_id, case_id, consultation_id }, actor, tra
 };
 
 
+const assertCompatibleContext = (left, right, label = 'Finans kayıtları') => {
+  const pairs = [
+    ['client_id', 'müvekkil'],
+    ['case_id', 'dava'],
+    ['consultation_id', 'danışmanlık'],
+  ];
+  for (const [key, name] of pairs) {
+    if (left?.[key] && right?.[key] && String(left[key]) !== String(right[key])) {
+      fail(`${label} farklı ${name} kayıtlarına bağlı olamaz`, 409);
+    }
+  }
+};
+
 const assertFinanceRecordAccess = async (record, actor, transaction) => {
   if (!record) failNotFound();
   if (record.client_id || record.case_id || record.consultation_id) return assertContext(record, actor, transaction);
@@ -214,9 +227,14 @@ export const financeV2Service = {
       const creator = actorId(actor);
       const currency = normalizeCurrency(data.currency);
       const opening_balance = normalizeMoney(data.opening_balance ?? '0');
+      const code = normalizeText(data.code,40)?.toUpperCase();
+      const name = normalizeText(data.name,160);
+      if (!code || !name) fail('Hesap kodu ve adı zorunludur');
       if (!ACCOUNT_TYPES.has(data.account_type)) fail('Geçersiz finans hesabı türü');
-      const account = await FinanceAccount.create({ code:normalizeText(data.code,40)?.toUpperCase(), name:normalizeText(data.name,160), account_type:data.account_type, currency, opening_balance, created_by:creator }, { transaction });
-      if (!account.code || !account.name) fail('Hesap kodu ve adı zorunludur');
+      const duplicate = await FinanceAccount.findOne({ where:{ code }, paranoid:false, transaction, lock:transaction.LOCK.UPDATE });
+      if (duplicate && !duplicate.deleted_at) fail('Bu finans hesabı kodu zaten kullanılıyor',409);
+      if (duplicate?.deleted_at) fail('Bu finans hesabı kodu daha önce kullanılmış; farklı bir hesap kodu seçin',409);
+      const account = await FinanceAccount.create({ code, name, account_type:data.account_type, currency, opening_balance, created_by:creator }, { transaction });
       await audit({ entity_type:'finance_account', entity_id:account.id, action:'create', actor_id:creator, after_data:account.toJSON(), metadata:requestMeta }, transaction);
       return account;
     });
@@ -226,14 +244,15 @@ export const financeV2Service = {
     return sequelize.transaction(async (transaction) => {
       const creator = actorId(actor);
       await assertContext(data, actor, transaction);
+      const title = normalizeText(data.title,255);
+      if (!title) fail('Ücret anlaşması başlığı zorunludur');
       const billingModel=data.billing_model||'fixed'; if(!FEE_BILLING_MODELS.has(billingModel)) fail('Geçersiz ücret modeli');
       const reference_no = await nextReference('fee_agreement','FEE',transaction);
       const agreement = await FinanceFeeAgreement.create({
         reference_no, client_id:data.client_id||null, case_id:data.case_id||null, consultation_id:data.consultation_id||null,
-        title:normalizeText(data.title,255), billing_model:billingModel, agreed_amount:normalizeMoney(data.agreed_amount,{positive:true}), currency:normalizeCurrency(data.currency),
+        title, billing_model:billingModel, agreed_amount:normalizeMoney(data.agreed_amount,{positive:true}), currency:normalizeCurrency(data.currency),
         status:'draft', effective_from:data.effective_from||null, effective_to:data.effective_to||null, signed_at:data.signed_at||null, notes:normalizeText(data.notes,5000), created_by:creator,
       }, { transaction });
-      if (!agreement.title) fail('Ücret anlaşması başlığı zorunludur');
       await audit({ entity_type:'fee_agreement', entity_id:agreement.id, action:'create', actor_id:creator, after_data:agreement.toJSON(), metadata:requestMeta }, transaction);
       return agreement;
     });
@@ -243,10 +262,13 @@ export const financeV2Service = {
     return sequelize.transaction(async (transaction) => {
       const creator=actorId(actor);
       await assertContext(data,actor,transaction);
+      const title=normalizeText(data.title,255);
+      if(!title) fail('Ödeme planı başlığı zorunludur');
       const installments=Array.isArray(data.installments)?data.installments:[];
       if(!installments.length) fail('Ödeme planında en az bir taksit olmalıdır');
       const currency=normalizeCurrency(data.currency);
       const planType=data.plan_type||'installment'; if(!PLAN_TYPES.has(planType)) fail('Geçersiz ödeme planı türü');
+      const receivableType=data.receivable_type||'legal_fee'; if(!RECEIVABLE_TYPES.has(receivableType)) fail('Geçersiz alacak türü');
       const total=normalizeMoney(data.total_amount,{positive:true});
       if(data.fee_agreement_id){const agreement=await FinanceFeeAgreement.findByPk(data.fee_agreement_id,{transaction});if(!agreement) fail('Ücret anlaşması bulunamadı',404);await assertFinanceRecordAccess(agreement,actor,transaction);if(String(agreement.currency)!==currency) fail('Ödeme planı para birimi ücret anlaşmasıyla aynı olmalıdır',409);if(data.client_id&&agreement.client_id&&String(data.client_id)!==String(agreement.client_id)) fail('Ödeme planı farklı müvekkilin ücret anlaşmasına bağlanamaz',409);if(data.case_id&&agreement.case_id&&String(data.case_id)!==String(agreement.case_id)) fail('Ödeme planı farklı davanın ücret anlaşmasına bağlanamaz',409);if(data.consultation_id&&agreement.consultation_id&&String(data.consultation_id)!==String(agreement.consultation_id)) fail('Ödeme planı farklı danışmanlığın ücret anlaşmasına bağlanamaz',409);}
       let sum=0n;
@@ -259,9 +281,8 @@ export const financeV2Service = {
       const reference_no=await nextReference('payment_plan','PLN',transaction);
       const plan=await FinancePaymentPlan.create({
         reference_no,fee_agreement_id:data.fee_agreement_id||null,client_id:data.client_id||null,case_id:data.case_id||null,consultation_id:data.consultation_id||null,
-        title:normalizeText(data.title,255),description:normalizeText(data.description,5000),total_amount:total,currency,plan_type:planType,status:data.activate===true?'active':'draft',start_date:data.start_date||null,end_date:data.end_date||null,activated_at:data.activate===true?new Date():null,created_by:creator,
+        title,description:normalizeText(data.description,5000),total_amount:total,currency,plan_type:planType,status:data.activate===true?'active':'draft',start_date:data.start_date||null,end_date:data.end_date||null,activated_at:data.activate===true?new Date():null,created_by:creator,
       },{transaction});
-      if(!plan.title) fail('Ödeme planı başlığı zorunludur');
 
       const created=[];
       for(let i=0;i<installments.length;i++){
@@ -270,7 +291,7 @@ export const financeV2Service = {
         const receivableRef=await nextReference('receivable','RCV',transaction);
         const receivable=await FinanceReceivable.create({
           reference_no:receivableRef,fee_agreement_id:data.fee_agreement_id||null,client_id:data.client_id||null,case_id:data.case_id||null,consultation_id:data.consultation_id||null,
-          receivable_type:data.receivable_type||'legal_fee',description:normalizeText(item.title||`${plan.title} - Taksit ${numbers[i]}`,500),amount,currency,due_date:item.due_date,status:data.activate===true?'open':'draft',posted_at:data.activate===true?new Date():null,created_by:creator,
+          receivable_type:receivableType,description:normalizeText(item.title||`${plan.title} - Taksit ${numbers[i]}`,500),amount,currency,due_date:item.due_date,status:data.activate===true?'open':'draft',posted_at:data.activate===true?new Date():null,created_by:creator,
         },{transaction});
         const installment=await FinanceInstallment.create({payment_plan_id:plan.id,receivable_id:receivable.id,installment_number:numbers[i],title:normalizeText(item.title,255),amount,currency,due_date:item.due_date,status:'pending'},{transaction});
         created.push({installment,receivable});
@@ -329,6 +350,8 @@ export const financeV2Service = {
     return sequelize.transaction(async (transaction) => {
       const creator = actorId(actor);
       await assertContext(data, actor, transaction);
+      const description=normalizeText(data.description,500);
+      if(!description) fail('Alacak açıklaması zorunludur');
       const receivableType=data.receivable_type||'legal_fee'; if(!RECEIVABLE_TYPES.has(receivableType)) fail('Geçersiz alacak türü');
       const receivableCurrency=normalizeCurrency(data.currency);
       if(data.fee_agreement_id){const agreement=await FinanceFeeAgreement.findByPk(data.fee_agreement_id,{transaction});if(!agreement) fail('Ücret anlaşması bulunamadı',404);await assertFinanceRecordAccess(agreement,actor,transaction);if(String(agreement.currency)!==receivableCurrency) fail('Alacak para birimi ücret anlaşmasıyla aynı olmalıdır',409);if(data.client_id&&agreement.client_id&&String(data.client_id)!==String(agreement.client_id)) fail('Alacak farklı müvekkilin ücret anlaşmasına bağlanamaz',409);if(data.case_id&&agreement.case_id&&String(data.case_id)!==String(agreement.case_id)) fail('Alacak farklı davanın ücret anlaşmasına bağlanamaz',409);if(data.consultation_id&&agreement.consultation_id&&String(data.consultation_id)!==String(agreement.consultation_id)) fail('Alacak farklı danışmanlığın ücret anlaşmasına bağlanamaz',409);}
@@ -336,10 +359,9 @@ export const financeV2Service = {
       const status = data.post === true ? 'open' : 'draft';
       const receivable = await FinanceReceivable.create({
         reference_no, fee_agreement_id:data.fee_agreement_id||null, client_id:data.client_id||null, case_id:data.case_id||null, consultation_id:data.consultation_id||null,
-        receivable_type:receivableType, description:normalizeText(data.description,500), amount:normalizeMoney(data.amount,{positive:true}), currency:receivableCurrency, due_date:data.due_date||null,
+        receivable_type:receivableType, description, amount:normalizeMoney(data.amount,{positive:true}), currency:receivableCurrency, due_date:data.due_date||null,
         status, posted_at:status==='open'?new Date():null, created_by:creator,
       }, { transaction });
-      if (!receivable.description) fail('Alacak açıklaması zorunludur');
       await audit({ entity_type:'receivable', entity_id:receivable.id, action:status==='open'?'create_and_post':'create', actor_id:creator, after_data:receivable.toJSON(), metadata:requestMeta }, transaction);
       return receivable;
     });
@@ -397,7 +419,7 @@ export const financeV2Service = {
         if (!receivable || !['open','partially_paid'].includes(receivable.status)) fail('Mahsup edilecek açık alacak bulunamadı',409);
         await assertContext(receivable,actor,transaction);
         if (String(receivable.currency)!==currency) fail('Tahsilat ve alacak para birimi aynı olmalıdır',409);
-        if (financeTransaction.client_id && receivable.client_id && String(financeTransaction.client_id)!==String(receivable.client_id)) fail('Tahsilat farklı müvekkilin alacağına mahsup edilemez',409);
+        assertCompatibleContext(financeTransaction, receivable, 'Tahsilat ve alacak');
         const allocAmount=normalizeMoney(item.amount,{positive:true}); const allocUnits=moneyToUnits(allocAmount); allocatedUnits += allocUnits;
         if (allocatedUnits>moneyToUnits(amount)) fail('Mahsup toplamı işlem tutarını aşamaz',409);
         const alreadyAllocated=await settledForReceivable(receivable.id,transaction);
@@ -444,8 +466,12 @@ export const financeV2Service = {
     return sequelize.transaction(async (transaction) => {
       const creator = actorId(actor);
       const expenseType=data.expense_type||'office'; if(!EXPENSE_TYPES.has(expenseType)) fail('Geçersiz masraf türü');
+      const description=normalizeText(data.description,500);
+      if(!description) fail('Masraf açıklaması zorunludur');
       const isOffice = expenseType === 'office';
-      if (!isOffice) await assertContext(data, actor, transaction);
+      const hasContext = Boolean(data.client_id || data.case_id || data.consultation_id);
+      const reimbursable = expenseType === 'client_reimbursable' || data.reimbursable === true;
+      if (!isOffice || hasContext || reimbursable) await assertContext(data, actor, transaction);
       await assertPeriodOpen(data.expense_date, transaction);
       const account = await FinanceAccount.findOne({ where:{id:data.account_id,is_active:true}, transaction, lock:transaction.LOCK.UPDATE });
       if (!account) fail('Finans hesabı bulunamadı',404);
@@ -458,12 +484,11 @@ export const financeV2Service = {
       const tx = await FinanceTransaction.create({
         reference_no:transactionReference, client_id:data.client_id||null, case_id:data.case_id||null, consultation_id:data.consultation_id||null,
         account_id:account.id, transaction_type:'expense', direction:'out', amount, currency, base_currency:baseCurrency, fx_rate:fxRate, base_amount:baseAmount,
-        payment_method:data.payment_method||null, transaction_date:data.expense_date||new Date(), description:normalizeText(data.description,500), external_reference:normalizeText(data.external_reference,160),
+        payment_method:data.payment_method||null, transaction_date:data.expense_date||new Date(), description, external_reference:normalizeText(data.external_reference,160),
         status:'posted', posted_at:new Date(), created_by:creator,
       },{transaction});
       const expenseReference = await nextReference('expense','EXPNS',transaction);
       let reimbursementReceivable = null;
-      const reimbursable = expenseType === 'client_reimbursable' || data.reimbursable === true;
       if (reimbursable) {
         if (!data.client_id && !data.case_id && !data.consultation_id) fail('Müvekkile yansıtılacak masraf bir hukuki işe bağlı olmalıdır',409);
         const receivableReference = await nextReference('receivable','RCV',transaction);
@@ -475,10 +500,9 @@ export const financeV2Service = {
       }
       const expense = await FinanceExpense.create({
         reference_no:expenseReference,transaction_id:tx.id,client_id:data.client_id||null,case_id:data.case_id||null,consultation_id:data.consultation_id||null,
-        expense_type:expenseType,category:normalizeText(data.category,100),description:normalizeText(data.description,500),amount,currency,expense_date:data.expense_date||new Date(),reimbursable,
+        expense_type:expenseType,category:normalizeText(data.category,100),description,amount,currency,expense_date:data.expense_date||new Date(),reimbursable,
         reimbursement_receivable_id:reimbursementReceivable?.id||null,status:'posted',created_by:creator,
       },{transaction});
-      if (!expense.description) fail('Masraf açıklaması zorunludur');
       await audit({entity_type:'finance_expense',entity_id:expense.id,action:'post',actor_id:creator,after_data:{...expense.toJSON(),transaction_reference:tx.reference_no,reimbursement_receivable_reference:reimbursementReceivable?.reference_no||null},metadata:requestMeta},transaction);
       return {expense,transaction:tx,reimbursement_receivable:reimbursementReceivable};
     });
@@ -628,22 +652,62 @@ export const financeV2Service = {
 
   async transfer(data, actor, requestMeta = {}) {
     return sequelize.transaction(async transaction => {
-      const creator=actorId(actor); await assertPeriodOpen(data.transaction_date,transaction);
-      if(!data.from_account_id||!data.to_account_id||data.from_account_id===data.to_account_id) fail('Kaynak ve hedef hesap farklı olmalıdır');
-      const ids=[data.from_account_id,data.to_account_id].sort(); const accounts=[];
-      for(const id of ids){const a=await FinanceAccount.findOne({where:{id,is_active:true},transaction,lock:transaction.LOCK.UPDATE}); if(!a) fail('Finans hesabı bulunamadı',404); accounts.push(a);}
-      const from=accounts.find(a=>String(a.id)===String(data.from_account_id)), to=accounts.find(a=>String(a.id)===String(data.to_account_id));
-      const amount=normalizeMoney(data.amount,{positive:true}); const sourceCurrency=normalizeCurrency(data.currency||from.currency); if(sourceCurrency!==from.currency) fail('Transfer para birimi kaynak hesapla aynı olmalıdır',409);
-      const targetAmount=normalizeMoney(data.target_amount||amount,{positive:true}); if(to.currency===from.currency && moneyToUnits(targetAmount)!==moneyToUnits(amount)) fail('Aynı para birimindeki transferde giriş/çıkış tutarı eşit olmalıdır',409);
-      const group=crypto.randomUUID(); const date=data.transaction_date||new Date(); const outRef=await nextReference('transaction','TRF',transaction); const inRef=await nextReference('transaction','TRF',transaction);
+      const creator=actorId(actor);
+      if(!canViewAllFinance(actor)) fail('Hesaplar arası transfer için firma geneli finans yetkisi gerekir',403);
+      await assertPeriodOpen(data.transaction_date,transaction);
+      if(!data.from_account_id||!data.to_account_id||String(data.from_account_id)===String(data.to_account_id)) fail('Kaynak ve hedef hesap farklı olmalıdır');
+
+      // Hesapları deterministik sırayla kilitlemek eşzamanlı transferlerde deadlock riskini azaltır.
+      const ids=[String(data.from_account_id),String(data.to_account_id)].sort();
+      const accounts=[];
+      for(const id of ids){
+        const a=await FinanceAccount.findOne({where:{id,is_active:true},transaction,lock:transaction.LOCK.UPDATE});
+        if(!a) fail('Finans hesabı bulunamadı',404);
+        accounts.push(a);
+      }
+      const from=accounts.find(a=>String(a.id)===String(data.from_account_id));
+      const to=accounts.find(a=>String(a.id)===String(data.to_account_id));
+      if(!from||!to) fail('Kaynak veya hedef finans hesabı bulunamadı',404);
+
+      const amount=normalizeMoney(data.amount,{positive:true});
+      const sourceCurrency=normalizeCurrency(data.currency||from.currency);
+      if(sourceCurrency!==String(from.currency)) fail('Transfer para birimi kaynak hesapla aynı olmalıdır',409);
+      const targetAmount=normalizeMoney(data.target_amount||amount,{positive:true});
+      if(String(to.currency)===String(from.currency) && moneyToUnits(targetAmount)!==moneyToUnits(amount)) fail('Aynı para birimindeki transferde giriş/çıkış tutarı eşit olmalıdır',409);
+
+      const group=crypto.randomUUID();
+      const outId=crypto.randomUUID();
+      const incomingId=crypto.randomUUID();
+      const date=data.transaction_date||new Date();
+      const outRef=await nextReference('transaction','TRF',transaction);
+      const inRef=await nextReference('transaction','TRF',transaction);
       const transferBaseCurrency=normalizeCurrency(data.base_currency||'TRY');
       const sourceFx=data.fx_rate;
-      const targetFx=data.target_fx_rate || (from.currency===to.currency ? data.fx_rate : null);
-      const outBase=computeTransactionBase(amount,from.currency,transferBaseCurrency,sourceFx); const inBase=computeTransactionBase(targetAmount,to.currency,transferBaseCurrency,targetFx);
+      const targetFx=data.target_fx_rate || (String(from.currency)===String(to.currency) ? data.fx_rate : null);
+      const outBase=computeTransactionBase(amount,String(from.currency),transferBaseCurrency,sourceFx);
+      const inBase=computeTransactionBase(targetAmount,String(to.currency),transferBaseCurrency,targetFx);
       const common={client_id:null,case_id:null,consultation_id:null,payment_method:'bank_transfer',transaction_date:date,description:normalizeText(data.description,500)||`Hesap transferi ${from.code} → ${to.code}`,status:'posted',posted_at:new Date(),created_by:creator,transfer_group_id:group};
-      const out=await FinanceTransaction.create({...common,reference_no:outRef,account_id:from.id,transaction_type:'transfer_out',direction:'out',amount,currency:from.currency,base_currency:outBase.baseCurrency,fx_rate:outBase.fxRate,base_amount:outBase.baseAmount},{transaction});
-      const incoming=await FinanceTransaction.create({...common,reference_no:inRef,account_id:to.id,transaction_type:'transfer_in',direction:'in',amount:targetAmount,currency:to.currency,base_currency:inBase.baseCurrency,fx_rate:inBase.fxRate,base_amount:inBase.baseAmount,related_transaction_id:out.id},{transaction}); await out.update({related_transaction_id:incoming.id},{transaction});
-      await audit({entity_type:'finance_transfer',entity_id:group,action:'post',actor_id:creator,after_data:{transfer_group_id:group,out_transaction_id:out.id,in_transaction_id:incoming.id},metadata:requestMeta},transaction); return {transfer_group_id:group,out,in:incoming};
+
+      // DB constraint'i transfer ayaklarının INSERT anında birbirine bağlı olmasını zorunlu tutuyor.
+      // Bu yüzden iki UUID önceden üretilir; sonradan UPDATE ile ilişki kurmak constraint ihlali oluşturur.
+      // İki ayak tek INSERT statement'ında yazılır. Böylece hem CHECK constraint hem de
+      // self-referencing FK, iki karşı kayıt aynı statement içinde mevcut olduğundan sağlanır.
+      const createdLegs=await FinanceTransaction.bulkCreate([
+        {
+          ...common,id:outId,reference_no:outRef,account_id:from.id,transaction_type:'transfer_out',direction:'out',amount,currency:from.currency,
+          base_currency:outBase.baseCurrency,fx_rate:outBase.fxRate,base_amount:outBase.baseAmount,related_transaction_id:incomingId,
+        },
+        {
+          ...common,id:incomingId,reference_no:inRef,account_id:to.id,transaction_type:'transfer_in',direction:'in',amount:targetAmount,currency:to.currency,
+          base_currency:inBase.baseCurrency,fx_rate:inBase.fxRate,base_amount:inBase.baseAmount,related_transaction_id:outId,
+        },
+      ],{transaction,returning:true});
+      const out=createdLegs.find(x=>String(x.id)===outId);
+      const incoming=createdLegs.find(x=>String(x.id)===incomingId);
+      if(!out||!incoming) fail('Transfer hareketleri oluşturulamadı',500);
+
+      await audit({entity_type:'finance_transfer',entity_id:group,action:'post',actor_id:creator,after_data:{transfer_group_id:group,out_transaction_id:out.id,in_transaction_id:incoming.id},metadata:requestMeta},transaction);
+      return {transfer_group_id:group,out,in:incoming};
     });
   },
 
