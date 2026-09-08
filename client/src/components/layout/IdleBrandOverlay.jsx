@@ -14,7 +14,7 @@ import {
 } from '../../services/screenLockApi.js';
 
 const DEFAULT_IDLE_TIME =
-  60 * 1000;
+  600 * 1000;
 
 const TOUCH_THROTTLE_MS =
   10 * 1000;
