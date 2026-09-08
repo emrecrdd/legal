@@ -798,9 +798,51 @@ export const financeV2Service = {
   },
 
   async getAccountBalances(actor) {
-    actorId(actor); if(!canViewAllFinance(actor)) fail('Firma geneli finans hesabı bakiyeleri için yetkiniz yok',403);
-    return sequelize.query(`SELECT a.id,a.code,a.name,a.account_type,a.currency,(a.opening_balance+COALESCE(SUM(CASE WHEN t.status='posted' AND t.direction='in' THEN t.amount WHEN t.status='posted' AND t.direction='out' THEN -t.amount ELSE 0 END),0))::text balance FROM finance_accounts a LEFT JOIN finance_transactions t ON t.account_id=a.id AND t.deleted_at IS NULL WHERE a.deleted_at IS NULL AND a.is_active=true GROUP BY a.id ORDER BY a.name`,{type:QueryTypes.SELECT});
-  },
+  actorId(actor);
+
+  if (!canViewAllFinance(actor)) {
+    fail('Firma geneli finans hesabı bakiyeleri için yetkiniz yok', 403);
+  }
+
+  return sequelize.query(`
+    SELECT
+      a.id,
+      a.code,
+      a.name,
+      a.account_type,
+      a.currency,
+      (
+        a.opening_balance
+        + COALESCE(
+            SUM(
+              CASE
+                WHEN t.status IN ('posted', 'reversed')
+                     AND t.direction = 'in'
+                  THEN t.amount
+
+                WHEN t.status IN ('posted', 'reversed')
+                     AND t.direction = 'out'
+                  THEN -t.amount
+
+                ELSE 0
+              END
+            ),
+            0
+          )
+      )::text AS balance
+    FROM finance_accounts a
+    LEFT JOIN finance_transactions t
+      ON t.account_id = a.id
+      AND t.deleted_at IS NULL
+    WHERE
+      a.deleted_at IS NULL
+      AND a.is_active = true
+    GROUP BY a.id
+    ORDER BY a.name
+  `, {
+    type: QueryTypes.SELECT
+  });
+},
 
   async getContextSummary(context, id, actor) {
     const column=context==='client'?'client_id':context==='case'?'case_id':'consultation_id';
