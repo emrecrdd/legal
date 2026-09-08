@@ -986,7 +986,28 @@ export const financeV2Service = {
     const [data]=await sequelize.query(`SELECT t.*,t.amount::text amount,t.base_amount::text base_amount,t.fx_rate::text fx_rate,a.code account_code,a.name account_name FROM finance_transactions t JOIN finance_accounts a ON a.id=t.account_id WHERE t.id=:id AND t.deleted_at IS NULL`,{replacements:{id},type:QueryTypes.SELECT}); if(!data) failNotFound();
     const allocations=await sequelize.query(`SELECT a.id,a.receivable_id,a.amount::text,a.currency,r.reference_no receivable_reference FROM finance_allocations a JOIN finance_receivables r ON r.id=a.receivable_id WHERE a.transaction_id=:id AND a.deleted_at IS NULL`,{replacements:{id},type:QueryTypes.SELECT});
     const refund_allocations=await sequelize.query(`SELECT id,receivable_id,amount::text,currency,original_transaction_id FROM finance_refund_allocations WHERE refund_transaction_id=:id AND deleted_at IS NULL`,{replacements:{id},type:QueryTypes.SELECT});
-    const refunds=await sequelize.query(`SELECT id,reference_no,amount::text,currency,transaction_date,status FROM finance_transactions WHERE related_transaction_id=:id AND transaction_type='refund' AND deleted_at IS NULL ORDER BY created_at`,{replacements:{id},type:QueryTypes.SELECT});
+    const refunds = await sequelize.query(`
+  SELECT
+    ra.id,
+    ra.amount::text,
+    ra.currency,
+    ra.refund_transaction_id,
+    t.reference_no AS refund_reference,
+    t.transaction_date,
+    t.status
+  FROM finance_refund_allocations ra
+  JOIN finance_transactions t
+    ON t.id = ra.refund_transaction_id
+  WHERE
+    ra.receivable_id = :id
+    AND ra.deleted_at IS NULL
+    AND t.deleted_at IS NULL
+    AND t.status = 'posted'
+  ORDER BY ra.created_at
+`, {
+  replacements: { id },
+  type: QueryTypes.SELECT,
+});
     return {...data,allocations,refund_allocations,refunds};
   },
 
