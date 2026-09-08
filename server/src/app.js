@@ -408,11 +408,12 @@ const corsOptions = {
   ],
 
   allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'X-Request-ID',
-  ],
+  'Content-Type',
+  'Authorization',
+  'X-Requested-With',
+  'X-Request-ID',
+  'Idempotency-Key',
+],
 
   exposedHeaders: [
     'Content-Disposition',
