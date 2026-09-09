@@ -6,9 +6,19 @@ import consultationApi from '../../../features/consultations/consultation.api.js
 export const inputClass =
   'h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white';
 
-export function Field({ label, children, full, hint }) {
+export function Field({
+  label,
+  children,
+  full,
+  hint,
+  error = false,
+}) {
   return (
-    <label className={`space-y-2 ${full ? 'md:col-span-2' : ''}`}>
+    <label
+      className={`space-y-2 ${
+        full ? 'md:col-span-2' : ''
+      }`}
+    >
       <span className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-slate-400">
         {label}
       </span>
@@ -16,7 +26,13 @@ export function Field({ label, children, full, hint }) {
       {children}
 
       {hint && (
-        <span className="block text-xs text-gray-400">
+        <span
+          className={`block text-xs ${
+            error
+              ? 'text-red-500'
+              : 'text-gray-400'
+          }`}
+        >
           {hint}
         </span>
       )}
@@ -28,7 +44,9 @@ export function Select(props) {
   return (
     <select
       {...props}
-      className={`${inputClass} ${props.className || ''}`}
+      className={`${inputClass} ${
+        props.className || ''
+      }`}
     >
       {props.children}
     </select>
@@ -36,7 +54,9 @@ export function Select(props) {
 }
 
 export const toIso = (value) =>
-  value ? new Date(value).toISOString() : undefined;
+  value
+    ? new Date(value).toISOString()
+    : undefined;
 
 export const today = () =>
   new Date().toISOString().slice(0, 10);
@@ -45,7 +65,9 @@ export const nowLocal = () => {
   const d = new Date();
   const off = d.getTimezoneOffset();
 
-  return new Date(d.getTime() - off * 60000)
+  return new Date(
+    d.getTime() - off * 60000
+  )
     .toISOString()
     .slice(0, 16);
 };
@@ -57,9 +79,17 @@ export const rows = (response) => {
     response ??
     [];
 
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.rows)) return data.rows;
-  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.rows)) {
+    return data.rows;
+  }
+
+  if (Array.isArray(data?.data)) {
+    return data.data;
+  }
 
   return [];
 };
@@ -77,21 +107,38 @@ export const caseName = (c) =>
   c?.subject ||
   c?.id;
 
+/*
+ * Consultation modelindeki gerçek numara alanı
+ * consultation_number.
+ *
+ * Örnek:
+ * DNS-2026-000001 · Ticari Sözleşme Danışmanlığı
+ */
 export const consultationName = (c) =>
-  [c?.reference_no, c?.title || c?.subject]
+  [
+    c?.consultation_number,
+    c?.title || c?.subject,
+  ]
     .filter(Boolean)
     .join(' · ') ||
   c?.id;
 
-export function useFinanceContexts(clientId) {
+export function useFinanceContexts(
+  clientId
+) {
   const clientsQ = useQuery({
-    queryKey: ['clients', 'finance-v2-select'],
+    queryKey: [
+      'clients',
+      'finance-v2-select',
+    ],
+
     queryFn: () =>
       clientApi.getAll({
         page: 1,
         limit: 200,
         status: 'active',
       }),
+
     staleTime: 300000,
   });
 
@@ -101,32 +148,60 @@ export function useFinanceContexts(clientId) {
       clientId,
       'finance-v2-cases',
     ],
+
     queryFn: () =>
-      clientApi.getCaseHistory(clientId),
+      clientApi.getCaseHistory(
+        clientId
+      ),
+
     enabled: Boolean(clientId),
+
     staleTime: 180000,
   });
 
+  /*
+   * Consultation repository maksimum 100 kayıt
+   * kabul ediyor.
+   *
+   * Finans formunda prospect danışmanlıklar da
+   * seçilebildiği için client_id filtresi
+   * uygulanmıyor.
+   *
+   * Test/hardening aşamasında staleTime 0 ve
+   * refetchOnMount always kullanıyoruz; böylece
+   * yeni açılan danışmanlık eski cache yüzünden
+   * dropdown dışında kalmaz.
+   */
   const consultationsQ = useQuery({
     queryKey: [
       'consultations',
       'finance-v2-select',
     ],
+
     queryFn: () =>
       consultationApi.getAll({
         page: 1,
-        limit: 200,
+        limit: 100,
       }),
-    staleTime: 180000,
+
+    staleTime: 0,
+
+    refetchOnMount: 'always',
   });
 
-  const clients = rows(clientsQ.data);
-  const cases = rows(casesQ.data);
+  const clients = rows(
+    clientsQ.data
+  );
 
-  // Prospect danışmanlıkların da finans içinde seçilebilmesi için
-  // client_id bazlı filtre uygulanmıyor.
+  const cases = rows(
+    casesQ.data
+  );
+
   const consultations = useMemo(
-    () => rows(consultationsQ.data),
+    () =>
+      rows(
+        consultationsQ.data
+      ),
     [consultationsQ.data]
   );
 
@@ -134,10 +209,24 @@ export function useFinanceContexts(clientId) {
     clients,
     cases,
     consultations,
+
     loading:
       clientsQ.isLoading ||
       casesQ.isLoading ||
       consultationsQ.isLoading,
+
+    clientsError:
+      clientsQ.error || null,
+
+    casesError:
+      casesQ.error || null,
+
+    consultationsError:
+      consultationsQ.error ||
+      null,
+
+    refetchConsultations: () =>
+      consultationsQ.refetch(),
   };
 }
 
@@ -150,41 +239,79 @@ export function ContextFields({
     clients,
     cases,
     consultations,
-  } = useFinanceContexts(form.client_id);
+    loading,
+    consultationsError,
+  } = useFinanceContexts(
+    form.client_id
+  );
 
-  const set = (name, value) =>
+  const set = (
+    name,
+    value
+  ) =>
     setForm((x) => ({
       ...x,
+
       [name]: value,
 
-      ...(name === 'client_id'
+      /*
+       * Müvekkil değiştiğinde eski dava ve
+       * danışmanlık seçimi temizlenir.
+       */
+      ...(name ===
+      'client_id'
         ? {
             case_id: '',
-            consultation_id: '',
+            consultation_id:
+              '',
           }
         : {}),
 
-      ...(name === 'case_id' && value
+      /*
+       * Dava ve danışmanlık aynı anda
+       * kaynak context olarak seçilmez.
+       */
+      ...(name ===
+          'case_id' &&
+        value
         ? {
-            consultation_id: '',
+            consultation_id:
+              '',
           }
         : {}),
 
-      ...(name === 'consultation_id' && value
+      ...(name ===
+          'consultation_id' &&
+        value
         ? {
             case_id: '',
           }
         : {}),
     }));
 
+  const consultationErrorMessage =
+    consultationsError
+      ? consultationsError
+          ?.response?.data
+          ?.message ||
+        consultationsError
+          ?.message ||
+        'Danışmanlık listesi yüklenemedi.'
+      : null;
+
   return (
     <>
       <Field label="Müvekkil">
         <Select
           required={!allowEmpty}
-          value={form.client_id || ''}
+          value={
+            form.client_id || ''
+          }
           onChange={(e) =>
-            set('client_id', e.target.value)
+            set(
+              'client_id',
+              e.target.value
+            )
           }
         >
           <option value="">
@@ -206,13 +333,26 @@ export function ContextFields({
 
       <Field label="Dava">
         <Select
-          value={form.case_id || ''}
+          value={
+            form.case_id || ''
+          }
+          disabled={
+            !form.client_id
+          }
           onChange={(e) =>
-            set('case_id', e.target.value)
+            set(
+              'case_id',
+              e.target.value
+            )
           }
         >
           <option value="">
-            Dava seçilmedi
+            {!form.client_id
+              ? 'Önce müvekkil seçin'
+              : cases.length ===
+                  0
+                ? 'Dava bulunamadı'
+                : 'Dava seçilmedi'}
           </option>
 
           {cases.map((c) => (
@@ -226,9 +366,25 @@ export function ContextFields({
         </Select>
       </Field>
 
-      <Field label="Danışmanlık">
+      <Field
+        label="Danışmanlık"
+        hint={
+          consultationErrorMessage
+        }
+        error={Boolean(
+          consultationsError
+        )}
+      >
         <Select
-          value={form.consultation_id || ''}
+          value={
+            form.consultation_id ||
+            ''
+          }
+          disabled={
+            loading &&
+            consultations.length ===
+              0
+          }
           onChange={(e) =>
             set(
               'consultation_id',
@@ -237,17 +393,30 @@ export function ContextFields({
           }
         >
           <option value="">
-            Danışmanlık seçilmedi
+            {consultationsError
+              ? 'Danışmanlıklar yüklenemedi'
+              : loading &&
+                  consultations.length ===
+                    0
+                ? 'Danışmanlıklar yükleniyor...'
+                : consultations.length ===
+                    0
+                  ? 'Danışmanlık bulunamadı'
+                  : 'Danışmanlık seçilmedi'}
           </option>
 
-          {consultations.map((c) => (
-            <option
-              key={c.id}
-              value={c.id}
-            >
-              {consultationName(c)}
-            </option>
-          ))}
+          {consultations.map(
+            (c) => (
+              <option
+                key={c.id}
+                value={c.id}
+              >
+                {consultationName(
+                  c
+                )}
+              </option>
+            )
+          )}
         </Select>
       </Field>
     </>
