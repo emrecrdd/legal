@@ -538,6 +538,20 @@ export const financeV2Service = {
     });
   },
 
+  async linkConsultationToClient({ consultationId, clientId, actorId: conversionActorId, transaction }) {
+    if(!transaction) fail('Finans bağlantısı mevcut DB transaction içinde çalışmalıdır',500);
+    const [plans,agreements,receivables,transactions,expenses]=await Promise.all([
+      FinancePaymentPlan.update({client_id:clientId},{where:{consultation_id:consultationId,client_id:null},transaction}),
+      FinanceFeeAgreement.update({client_id:clientId},{where:{consultation_id:consultationId,client_id:null},transaction}),
+      FinanceReceivable.update({client_id:clientId},{where:{consultation_id:consultationId,client_id:null},transaction}),
+      FinanceTransaction.update({client_id:clientId},{where:{consultation_id:consultationId,client_id:null},transaction}),
+      FinanceExpense.update({client_id:clientId},{where:{consultation_id:consultationId,client_id:null},transaction}),
+    ]);
+    const counts={payment_plans:plans[0],fee_agreements:agreements[0],receivables:receivables[0],transactions:transactions[0],expenses:expenses[0]};
+    await audit({entity_type:'consultation',entity_id:consultationId,action:'link_to_client',actor_id:conversionActorId,after_data:{client_id:clientId,linked:counts},metadata:{source:'consultation_conversion'}},transaction);
+    return counts;
+  },
+
   async linkConsultationToCase({ consultationId, caseId, actorId: conversionActorId, transaction }) {
     if(!transaction) fail('Finans bağlantısı mevcut DB transaction içinde çalışmalıdır',500);
     const [plans,agreements,receivables,transactions,expenses]=await Promise.all([

@@ -1234,6 +1234,13 @@ export const consultationService = {
         { transaction }
       );
 
+      const linkedFinance = await financeV2Service.linkConsultationToClient({
+        consultationId: id,
+        clientId: client.id,
+        actorId,
+        transaction,
+      });
+
       await createAudit({
         action: 'update',
         consultationId: id,
@@ -1244,10 +1251,14 @@ export const consultationService = {
         metadata: {
           event: 'consultation_converted_to_client',
           client_id: client.id,
+          linked_finance: linkedFinance,
         },
       }, transaction);
 
-      return { clientId: client.id };
+      return {
+        clientId: client.id,
+        linkedFinance,
+      };
     });
 
     const consultation = await consultationRepository.findOne(id, actor);
