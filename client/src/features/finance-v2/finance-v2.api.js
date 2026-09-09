@@ -44,7 +44,7 @@ const financeV2Api = {
   closePeriod: (data) => axios.post('/finance-v2/periods/close', data),
   reopenPeriod: (periodKey, reason) => axios.post(`/finance-v2/periods/${periodKey}/reopen`, { reason }),
   getAudit: (entityType, entityId, params = {}) => axios.get(`/finance-v2/audit/${entityType}/${entityId}`, { params }),
-  exportLedger: (params = {}) => axios.get('/finance-v2/reports/ledger.csv', { params, responseType: 'blob' }),
+  exportLedger: (params = {}, format = 'xlsx') => axios.get(`/finance-v2/reports/ledger.${format}`, { params, responseType: 'blob' }),
 };
 
 export default financeV2Api;

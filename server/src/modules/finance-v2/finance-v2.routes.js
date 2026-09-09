@@ -37,6 +37,8 @@ router.get('/reports/profitability',authorizePermission(PERMISSION_KEYS.VIEW_PRO
 router.get('/reports/reconciliation',authorizePermission(PERMISSION_KEYS.VIEW_FINANCE_REPORTS),financeV2Controller.legacyReconciliation);
 router.get('/audit/:entityType/:entityId',authorizePermission(PERMISSION_KEYS.VIEW_FINANCE),financeV2Controller.auditTimeline);
 router.get('/reports/ledger.csv',authorizePermission(PERMISSION_KEYS.EXPORT_FINANCE),financeV2Controller.exportLedgerCsv);
+router.get('/reports/ledger.xlsx',authorizePermission(PERMISSION_KEYS.EXPORT_FINANCE),financeV2Controller.exportLedgerXlsx);
+router.get('/reports/ledger.pdf',authorizePermission(PERMISSION_KEYS.EXPORT_FINANCE),financeV2Controller.exportLedgerPdf);
 router.get('/accounts/balances',authorizePermission(PERMISSION_KEYS.VIEW_FINANCE_REPORTS),financeV2Controller.accountBalances);
 router.get('/expenses',authorizePermission(PERMISSION_KEYS.VIEW_FINANCE),financeV2Controller.listExpenses);
 router.get('/expenses/:id',authorizePermission(PERMISSION_KEYS.VIEW_FINANCE),financeV2Controller.getExpense);

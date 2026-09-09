@@ -106,6 +106,7 @@ const overdueTotal = (row) =>
   );
 
 export default function FinanceV2Center() {
+  const [exportFormat, setExportFormat] = useState('xlsx');
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -313,7 +314,7 @@ export default function FinanceV2Center() {
       q.refetch?.()
     );
 
-  const exportCsv = async () => {
+  const exportFinance = async () => {
     try {
       const res =
         await financeV2Api.exportLedger({
@@ -334,7 +335,7 @@ export default function FinanceV2Center() {
           status:
             ledgerFilters.status ||
             undefined,
-        });
+        }, exportFormat);
 
       const url =
         URL.createObjectURL(
@@ -347,9 +348,9 @@ export default function FinanceV2Center() {
       a.href = url;
 
       a.download =
-        `derkenar-finans-${new Date()
+        `derkenar-finans-hareketleri-${new Date()
           .toISOString()
-          .slice(0, 10)}.csv`;
+          .slice(0, 10)}.${exportFormat}`;
 
       a.click();
 
@@ -455,13 +456,22 @@ export default function FinanceV2Center() {
           </Button>
 
           {canExport && (
-            <Button
-              variant="outline"
-              onClick={exportCsv}
-            >
-              <FileDown className="h-4 w-4" />
-              CSV
-            </Button>
+            <div className="flex items-center gap-2">
+              <select
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value)}
+                className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-400 dark:border-white/[0.08] dark:bg-[#0b1b33] dark:text-gray-200"
+                aria-label="Dışa aktarma biçimi"
+              >
+                <option value="xlsx">Excel (.xlsx)</option>
+                <option value="pdf">PDF (.pdf)</option>
+                <option value="csv">CSV (.csv)</option>
+              </select>
+              <Button variant="outline" onClick={exportFinance}>
+                <FileDown className="h-4 w-4" />
+                Dışa Aktar
+              </Button>
+            </div>
           )}
 
           {canAgreement && (
