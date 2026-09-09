@@ -1,6 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Link,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import {
   ArrowLeft,
   CalendarClock,
@@ -8,10 +16,14 @@ import {
   Save,
   Trash2,
 } from 'lucide-react';
+
 import Button from '../../components/ui/Button.jsx';
 import clientApi from '../../features/clients/client.api.js';
+import consultationApi from '../../features/consultations/consultation.api.js';
 import financeV2Api from '../../features/finance-v2/finance-v2.api.js';
-import { FINANCE_V2_KEYS } from '../../features/finance-v2/finance-v2.query.js';
+import {
+  FINANCE_V2_KEYS,
+} from '../../features/finance-v2/finance-v2.query.js';
 import toast from 'react-hot-toast';
 
 const input =
@@ -24,43 +36,126 @@ const installment = (amount = '') => ({
   due_date: '',
 });
 
+const rows = (response) => {
+  const data =
+    response?.data?.data ??
+    response?.data ??
+    response ??
+    [];
+
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.rows)) {
+    return data.rows;
+  }
+
+  if (Array.isArray(data?.data)) {
+    return data.data;
+  }
+
+  return [];
+};
+
+const consultationName = (consultation) =>
+  [
+    consultation?.consultation_number,
+    consultation?.title ||
+      consultation?.subject,
+  ]
+    .filter(Boolean)
+    .join(' · ') ||
+  consultation?.id;
+
 export default function FinanceV2PaymentPlanCreate() {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams] =
+    useSearchParams();
 
-  const feeAgreementId = searchParams.get('fee_agreement_id') || '';
-  const clientId = searchParams.get('client_id') || '';
-  const caseId = searchParams.get('case_id') || '';
-  const consultationId = searchParams.get('consultation_id') || '';
-  const currency = searchParams.get('currency') || 'TRY';
-  const amount = searchParams.get('amount') || '';
-  const agreementTitle = searchParams.get('title') || '';
+  const feeAgreementId =
+    searchParams.get(
+      'fee_agreement_id'
+    ) || '';
 
-  const [form, setForm] = useState(() => ({
-    fee_agreement_id: feeAgreementId,
-    client_id: clientId,
-    case_id: caseId,
-    consultation_id: consultationId,
-    title: agreementTitle
-      ? `${agreementTitle} - Ödeme Planı`
-      : '',
-    description: '',
-    currency,
-    start_date: '',
-    end_date: '',
-    activate: true,
-    installments: [installment(amount)],
-  }));
+  const clientId =
+    searchParams.get(
+      'client_id'
+    ) || '';
+
+  const caseId =
+    searchParams.get(
+      'case_id'
+    ) || '';
+
+  const consultationId =
+    searchParams.get(
+      'consultation_id'
+    ) || '';
+
+  const currency =
+    searchParams.get(
+      'currency'
+    ) || 'TRY';
+
+  const amount =
+    searchParams.get(
+      'amount'
+    ) || '';
+
+  const agreementTitle =
+    searchParams.get(
+      'title'
+    ) || '';
+
+  const [form, setForm] =
+    useState(() => ({
+      fee_agreement_id:
+        feeAgreementId,
+
+      client_id:
+        clientId,
+
+      case_id:
+        caseId,
+
+      consultation_id:
+        consultationId,
+
+      title:
+        agreementTitle
+          ? `${agreementTitle} - Ödeme Planı`
+          : '',
+
+      description: '',
+
+      currency,
+
+      start_date: '',
+
+      end_date: '',
+
+      activate: true,
+
+      installments: [
+        installment(amount),
+      ],
+    }));
 
   const clientsQ = useQuery({
-    queryKey: ['clients', 'finance-v2-plan'],
+    queryKey: [
+      'clients',
+      'finance-v2-plan',
+    ],
+
     queryFn: () =>
       clientApi.getAll({
         page: 1,
         limit: 100,
         status: 'active',
       }),
+
     staleTime: 300000,
   });
 
@@ -70,99 +165,219 @@ export default function FinanceV2PaymentPlanCreate() {
       form.client_id,
       'finance-v2-plan-cases',
     ],
-    queryFn: () => clientApi.getCaseHistory(form.client_id),
-    enabled: Boolean(form.client_id),
+
+    queryFn: () =>
+      clientApi.getCaseHistory(
+        form.client_id
+      ),
+
+    enabled:
+      Boolean(form.client_id),
   });
 
-  const clients = Array.isArray(clientsQ.data?.data?.data)
-    ? clientsQ.data.data.data
-    : [];
+  const consultationQ =
+    useQuery({
+      queryKey: [
+        'consultations',
+        form.consultation_id,
+        'finance-v2-plan',
+      ],
+
+      queryFn: () =>
+        consultationApi.getOne(
+          form.consultation_id
+        ),
+
+      enabled:
+        Boolean(
+          form.consultation_id
+        ),
+
+      staleTime: 180000,
+    });
+
+  const clients =
+    Array.isArray(
+      clientsQ.data
+        ?.data
+        ?.data
+    )
+      ? clientsQ.data.data.data
+      : [];
 
   const cases = useMemo(() => {
-    const p =
+    const data =
       casesQ.data?.data?.data ??
       casesQ.data?.data ??
       [];
 
-    return Array.isArray(p)
-      ? p
-      : Array.isArray(p?.cases)
-        ? p.cases
+    return Array.isArray(data)
+      ? data
+      : Array.isArray(data?.cases)
+        ? data.cases
         : [];
   }, [casesQ.data]);
 
-  const total = form.installments.reduce(
-    (sum, item) =>
-      sum + (Number(item.amount) || 0),
-    0
-  );
-
-  const mutation = useMutation({
-    mutationFn: (data) =>
-      financeV2Api.createPaymentPlan(data),
-
-    onSuccess: () => {
-      qc.invalidateQueries({
-        queryKey: FINANCE_V2_KEYS.all,
-      });
-
-      toast.success('Ödeme planı oluşturuldu');
-
-      if (form.fee_agreement_id) {
-        navigate(
-          `/finance/agreements/${form.fee_agreement_id}`
-        );
-      } else {
-        navigate('/finance');
+  const consultation =
+    useMemo(() => {
+      if (
+        !form.consultation_id
+      ) {
+        return null;
       }
-    },
 
-    onError: (e) =>
-      toast.error(
-        e?.response?.data?.message ||
-          'Ödeme planı oluşturulamadı'
-      ),
-  });
+      const data =
+        consultationQ.data
+          ?.data?.data ??
+        consultationQ.data
+          ?.data ??
+        consultationQ.data ??
+        null;
 
-  const update = (name, value) =>
-    setForm((current) => ({
-      ...current,
-      [name]: value,
-      ...(name === 'client_id'
-        ? { case_id: '' }
-        : {}),
-    }));
+      if (
+        Array.isArray(data)
+      ) {
+        return (
+          data.find(
+            (item) =>
+              String(item?.id) ===
+              String(
+                form.consultation_id
+              )
+          ) || null
+        );
+      }
+
+      if (
+        data &&
+        typeof data ===
+          'object'
+      ) {
+        return data;
+      }
+
+      return null;
+    }, [
+      consultationQ.data,
+      form.consultation_id,
+    ]);
+
+  const total =
+    form.installments.reduce(
+      (sum, item) =>
+        sum +
+        (Number(
+          item.amount
+        ) || 0),
+      0
+    );
+
+  const mutation =
+    useMutation({
+      mutationFn: (data) =>
+        financeV2Api
+          .createPaymentPlan(
+            data
+          ),
+
+      onSuccess: () => {
+        qc.invalidateQueries({
+          queryKey:
+            FINANCE_V2_KEYS.all,
+        });
+
+        toast.success(
+          'Ödeme planı oluşturuldu'
+        );
+
+        if (
+          form.fee_agreement_id
+        ) {
+          navigate(
+            `/finance/agreements/${form.fee_agreement_id}`
+          );
+        } else {
+          navigate(
+            '/finance'
+          );
+        }
+      },
+
+      onError: (e) =>
+        toast.error(
+          e?.response?.data
+            ?.message ||
+            'Ödeme planı oluşturulamadı'
+        ),
+    });
+
+  const update = (
+    name,
+    value
+  ) =>
+    setForm(
+      (current) => ({
+        ...current,
+
+        [name]: value,
+
+        ...(name ===
+        'client_id'
+          ? {
+              case_id: '',
+            }
+          : {}),
+      })
+    );
 
   const updateInstallment = (
     id,
     name,
     value
   ) =>
-    setForm((current) => ({
-      ...current,
-      installments:
-        current.installments.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                [name]: value,
-              }
-            : item
-        ),
-    }));
+    setForm(
+      (current) => ({
+        ...current,
+
+        installments:
+          current.installments.map(
+            (item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    [name]:
+                      value,
+                  }
+                : item
+          ),
+      })
+    );
 
   const submit = (e) => {
     e.preventDefault();
 
+    const hasContext =
+      Boolean(
+        form.client_id
+      ) ||
+      Boolean(
+        form.case_id
+      ) ||
+      Boolean(
+        form.consultation_id
+      );
+
     if (
-      !form.client_id ||
+      !hasContext ||
       !form.title ||
-      !form.installments.length ||
+      !form.installments
+        .length ||
       total <= 0
     ) {
       toast.error(
-        'Müvekkil, plan başlığı ve taksit tutarlarını kontrol edin.'
+        'Müvekkil, dava veya danışmanlıktan en az biri ile plan başlığı ve taksit tutarlarını kontrol edin.'
       );
+
       return;
     }
 
@@ -171,32 +386,44 @@ export default function FinanceV2PaymentPlanCreate() {
         (item) =>
           !item.due_date ||
           !item.amount ||
-          Number(item.amount) <= 0
+          Number(
+            item.amount
+          ) <= 0
       );
 
-    if (hasInvalidInstallment) {
+    if (
+      hasInvalidInstallment
+    ) {
       toast.error(
         'Her taksit için tutar ve vade girilmelidir.'
       );
+
       return;
     }
 
     mutation.mutate({
       fee_agreement_id:
-        form.fee_agreement_id || null,
+        form.fee_agreement_id ||
+        null,
 
-      client_id: form.client_id,
+      client_id:
+        form.client_id ||
+        null,
 
       case_id:
-        form.case_id || null,
+        form.case_id ||
+        null,
 
       consultation_id:
-        form.consultation_id || null,
+        form.consultation_id ||
+        null,
 
-      title: form.title,
+      title:
+        form.title,
 
       description:
-        form.description || null,
+        form.description ||
+        null,
 
       total_amount:
         total.toFixed(2),
@@ -208,23 +435,30 @@ export default function FinanceV2PaymentPlanCreate() {
         'installment',
 
       start_date:
-        form.start_date || null,
+        form.start_date ||
+        null,
 
       end_date:
-        form.end_date || null,
+        form.end_date ||
+        null,
 
       activate:
         form.activate,
 
       installments:
         form.installments.map(
-          (item, index) => ({
+          (
+            item,
+            index
+          ) => ({
             installment_number:
               index + 1,
 
             title:
               item.title ||
-              `Taksit ${index + 1}`,
+              `Taksit ${
+                index + 1
+              }`,
 
             amount:
               Number(
@@ -239,48 +473,64 @@ export default function FinanceV2PaymentPlanCreate() {
   };
 
   const addInstallment = () => {
-    setForm((current) => ({
-      ...current,
-      installments: [
-        ...current.installments,
-        installment(),
-      ],
-    }));
+    setForm(
+      (current) => ({
+        ...current,
+
+        installments: [
+          ...current.installments,
+          installment(),
+        ],
+      })
+    );
   };
 
-  const splitIntoThree = () => {
-    if (!amount || Number(amount) <= 0) {
-      return;
-    }
+  const splitIntoThree =
+    () => {
+      if (
+        !amount ||
+        Number(amount) <= 0
+      ) {
+        return;
+      }
 
-    const totalAmount = Number(amount);
+      const totalAmount =
+        Number(amount);
 
-    const first =
-      Math.floor((totalAmount / 3) * 100) /
-      100;
+      const first =
+        Math.floor(
+          (totalAmount / 3) *
+            100
+        ) / 100;
 
-    const second = first;
+      const second =
+        first;
 
-    const third =
-      totalAmount -
-      first -
-      second;
+      const third =
+        totalAmount -
+        first -
+        second;
 
-    setForm((current) => ({
-      ...current,
-      installments: [
-        installment(
-          first.toFixed(2)
-        ),
-        installment(
-          second.toFixed(2)
-        ),
-        installment(
-          third.toFixed(2)
-        ),
-      ],
-    }));
-  };
+      setForm(
+        (current) => ({
+          ...current,
+
+          installments: [
+            installment(
+              first.toFixed(2)
+            ),
+
+            installment(
+              second.toFixed(2)
+            ),
+
+            installment(
+              third.toFixed(2)
+            ),
+          ],
+        })
+      );
+    };
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -304,8 +554,9 @@ export default function FinanceV2PaymentPlanCreate() {
           </h1>
 
           <p className="mt-1 text-sm text-gray-500">
-            Her taksit Finans modülü içinde
-            ayrı bir alacak/tahakkuk
+            Her taksit Finans
+            modülü içinde ayrı
+            bir alacak/tahakkuk
             kaydına bağlanır.
           </p>
         </div>
@@ -323,17 +574,36 @@ export default function FinanceV2PaymentPlanCreate() {
 
           {feeAgreementId && (
             <div className="mb-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300">
-              Bu ödeme planı aktif ücret
-              anlaşmasına bağlanacaktır.
+              Bu ödeme planı
+              aktif ücret
+              anlaşmasına
+              bağlanacaktır.
+            </div>
+          )}
+
+          {form.consultation_id && (
+            <div className="mb-5 rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300">
+              <span className="font-semibold">
+                Danışmanlık:
+              </span>{' '}
+
+              {consultationQ.isLoading
+                ? 'Yükleniyor...'
+                : consultation
+                  ? consultationName(
+                      consultation
+                    )
+                  : form.consultation_id}
             </div>
           )}
 
           <div className="grid gap-5 md:grid-cols-2">
             <F label="Müvekkil">
               <select
-                required
                 className={input}
-                value={form.client_id}
+                value={
+                  form.client_id
+                }
                 onChange={(e) =>
                   update(
                     'client_id',
@@ -342,28 +612,35 @@ export default function FinanceV2PaymentPlanCreate() {
                 }
               >
                 <option value="">
-                  Seçin
+                  Bağlanmadı
                 </option>
 
-                {clients.map((c) => (
-                  <option
-                    key={c.id}
-                    value={c.id}
-                  >
-                    {c.name ||
-                      c.full_name ||
-                      c.company_name ||
-                      c.title ||
-                      c.id}
-                  </option>
-                ))}
+                {clients.map(
+                  (c) => (
+                    <option
+                      key={c.id}
+                      value={c.id}
+                    >
+                      {c.name ||
+                        c.full_name ||
+                        c.company_name ||
+                        c.title ||
+                        c.id}
+                    </option>
+                  )
+                )}
               </select>
             </F>
 
             <F label="Dava">
               <select
                 className={input}
-                value={form.case_id}
+                value={
+                  form.case_id
+                }
+                disabled={
+                  !form.client_id
+                }
                 onChange={(e) =>
                   update(
                     'case_id',
@@ -372,19 +649,23 @@ export default function FinanceV2PaymentPlanCreate() {
                 }
               >
                 <option value="">
-                  Dava seçilmedi
+                  {!form.client_id
+                    ? 'Önce müvekkil seçin'
+                    : 'Dava seçilmedi'}
                 </option>
 
-                {cases.map((c) => (
-                  <option
-                    key={c.id}
-                    value={c.id}
-                  >
-                    {c.case_number ||
-                      c.title ||
-                      c.id}
-                  </option>
-                ))}
+                {cases.map(
+                  (c) => (
+                    <option
+                      key={c.id}
+                      value={c.id}
+                    >
+                      {c.case_number ||
+                        c.title ||
+                        c.id}
+                    </option>
+                  )
+                )}
               </select>
             </F>
 
@@ -392,7 +673,9 @@ export default function FinanceV2PaymentPlanCreate() {
               <input
                 required
                 className={input}
-                value={form.title}
+                value={
+                  form.title
+                }
                 onChange={(e) =>
                   update(
                     'title',
@@ -405,7 +688,9 @@ export default function FinanceV2PaymentPlanCreate() {
             <F label="Para Birimi">
               <select
                 className={input}
-                value={form.currency}
+                value={
+                  form.currency
+                }
                 onChange={(e) =>
                   update(
                     'currency',
@@ -416,12 +701,15 @@ export default function FinanceV2PaymentPlanCreate() {
                 <option value="TRY">
                   TRY
                 </option>
+
                 <option value="USD">
                   USD
                 </option>
+
                 <option value="EUR">
                   EUR
                 </option>
+
                 <option value="GBP">
                   GBP
                 </option>
@@ -432,7 +720,9 @@ export default function FinanceV2PaymentPlanCreate() {
               <input
                 type="date"
                 className={input}
-                value={form.start_date}
+                value={
+                  form.start_date
+                }
                 onChange={(e) =>
                   update(
                     'start_date',
@@ -446,7 +736,9 @@ export default function FinanceV2PaymentPlanCreate() {
               <input
                 type="date"
                 className={input}
-                value={form.end_date}
+                value={
+                  form.end_date
+                }
                 onChange={(e) =>
                   update(
                     'end_date',
@@ -489,7 +781,8 @@ export default function FinanceV2PaymentPlanCreate() {
                 {total.toLocaleString(
                   'tr-TR',
                   {
-                    minimumFractionDigits: 2,
+                    minimumFractionDigits:
+                      2,
                   }
                 )}{' '}
                 {form.currency}
@@ -498,7 +791,8 @@ export default function FinanceV2PaymentPlanCreate() {
 
             <div className="flex gap-2">
               {amount &&
-                Number(amount) > 0 && (
+                Number(amount) >
+                  0 && (
                   <Button
                     type="button"
                     size="sm"
@@ -515,7 +809,9 @@ export default function FinanceV2PaymentPlanCreate() {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={addInstallment}
+                onClick={
+                  addInstallment
+                }
               >
                 <Plus className="h-4 w-4" />
                 Taksit
@@ -525,7 +821,10 @@ export default function FinanceV2PaymentPlanCreate() {
 
           <div className="space-y-3">
             {form.installments.map(
-              (item, index) => (
+              (
+                item,
+                index
+              ) => (
                 <div
                   key={item.id}
                   className="grid gap-3 rounded-xl bg-gray-50 p-4 dark:bg-white/[0.035] md:grid-cols-[70px_1fr_180px_180px_42px] md:items-end"
@@ -536,17 +835,25 @@ export default function FinanceV2PaymentPlanCreate() {
 
                   <F label="Başlık">
                     <input
-                      className={input}
-                      value={item.title}
-                      onChange={(e) =>
+                      className={
+                        input
+                      }
+                      value={
+                        item.title
+                      }
+                      onChange={(
+                        e
+                      ) =>
                         updateInstallment(
                           item.id,
                           'title',
-                          e.target.value
+                          e.target
+                            .value
                         )
                       }
                       placeholder={`Taksit ${
-                        index + 1
+                        index +
+                        1
                       }`}
                     />
                   </F>
@@ -557,13 +864,20 @@ export default function FinanceV2PaymentPlanCreate() {
                       min="0.01"
                       step="0.01"
                       type="number"
-                      className={input}
-                      value={item.amount}
-                      onChange={(e) =>
+                      className={
+                        input
+                      }
+                      value={
+                        item.amount
+                      }
+                      onChange={(
+                        e
+                      ) =>
                         updateInstallment(
                           item.id,
                           'amount',
-                          e.target.value
+                          e.target
+                            .value
                         )
                       }
                     />
@@ -573,13 +887,20 @@ export default function FinanceV2PaymentPlanCreate() {
                     <input
                       required
                       type="date"
-                      className={input}
-                      value={item.due_date}
-                      onChange={(e) =>
+                      className={
+                        input
+                      }
+                      value={
+                        item.due_date
+                      }
+                      onChange={(
+                        e
+                      ) =>
                         updateInstallment(
                           item.id,
                           'due_date',
-                          e.target.value
+                          e.target
+                            .value
                         )
                       }
                     />
@@ -593,11 +914,16 @@ export default function FinanceV2PaymentPlanCreate() {
                     }
                     onClick={() =>
                       setForm(
-                        (current) => ({
+                        (
+                          current
+                        ) => ({
                           ...current,
+
                           installments:
                             current.installments.filter(
-                              (x) =>
+                              (
+                                x
+                              ) =>
                                 x.id !==
                                 item.id
                             ),
@@ -620,16 +946,20 @@ export default function FinanceV2PaymentPlanCreate() {
           <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-slate-300">
             <input
               type="checkbox"
-              checked={form.activate}
+              checked={
+                form.activate
+              }
               onChange={(e) =>
                 update(
                   'activate',
-                  e.target.checked
+                  e.target
+                    .checked
                 )
               }
             />
 
-            Oluşturunca tahakkukları
+            Oluşturunca
+            tahakkukları
             aktifleştir
           </label>
 
