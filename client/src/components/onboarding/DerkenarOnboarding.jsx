@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../app/providers/auth.provider.jsx';
 
-const ONBOARDING_VERSION = 'v2-full';
+const ONBOARDING_VERSION = 'v4-sidebar-free';
 const START_EVENT = 'derkenar:onboarding:start';
 
 const STEP_DEFINITIONS = [
@@ -203,48 +203,87 @@ const findTarget = (step) => {
   return null;
 };
 
+const getScrollableParent = (element) => {
+  let node = element?.parentElement;
+
+  while (node && node !== document.body) {
+    const style = window.getComputedStyle(node);
+    const overflowY = style.overflowY;
+
+    if (
+      (overflowY === 'auto' || overflowY === 'scroll') &&
+      node.scrollHeight > node.clientHeight
+    ) {
+      return node;
+    }
+
+    node = node.parentElement;
+  }
+
+  return null;
+};
+
+const revealTarget = (element) => {
+  if (!element) return;
+
+  const scroller = getScrollableParent(element);
+
+  if (!scroller) return;
+
+  const itemRect = element.getBoundingClientRect();
+  const scrollRect = scroller.getBoundingClientRect();
+  const margin = 20;
+
+  if (itemRect.top < scrollRect.top + margin) {
+    scroller.scrollTop -= (scrollRect.top + margin) - itemRect.top;
+  } else if (itemRect.bottom > scrollRect.bottom - margin) {
+    scroller.scrollTop += itemRect.bottom - (scrollRect.bottom - margin);
+  }
+};
+
 const storageKeyFor = (user) =>
   `derkenar:onboarding:${ONBOARDING_VERSION}:${user?.id || user?.email || 'anonymous'}`;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 const getTooltipPosition = (rect) => {
-  const width = Math.min(420, window.innerWidth - 32);
-  const estimatedHeight = 320;
+  const viewportPadding = 16;
+  const width = Math.min(420, Math.max(300, window.innerWidth - viewportPadding * 2));
+  const maxHeight = Math.max(280, window.innerHeight - viewportPadding * 2);
   const gap = 18;
 
   if (!rect) {
     return {
       width,
       left: (window.innerWidth - width) / 2,
-      top: Math.max(20, (window.innerHeight - estimatedHeight) / 2),
+      top: viewportPadding,
+      maxHeight,
     };
   }
 
   const roomRight = window.innerWidth - rect.right;
   const roomLeft = rect.left;
-  const roomBelow = window.innerHeight - rect.bottom;
 
   let left;
-  let top;
 
+  // Sidebar hedeflerinde kartı mümkün olduğunca sağ tarafta sabit tutuyoruz.
+  // Böylece alt menülere indikçe ana ekranın yatayda kayması/daralması engellenir.
   if (roomRight >= width + gap) {
     left = rect.right + gap;
-    top = rect.top;
   } else if (roomLeft >= width + gap) {
     left = rect.left - width - gap;
-    top = rect.top;
   } else {
-    left = clamp(rect.left, 16, window.innerWidth - width - 16);
-    top = roomBelow >= estimatedHeight + gap
-      ? rect.bottom + gap
-      : rect.top - estimatedHeight - gap;
+    left = clamp(rect.right + gap, viewportPadding, window.innerWidth - width - viewportPadding);
   }
+
+  const preferredTop = rect.top - 24;
+  const top = clamp(preferredTop, viewportPadding, Math.max(viewportPadding, window.innerHeight - maxHeight - viewportPadding));
 
   return {
     width,
-    left: clamp(left, 16, window.innerWidth - width - 16),
-    top: clamp(top, 16, window.innerHeight - estimatedHeight - 16),
+    left: clamp(left, viewportPadding, Math.max(viewportPadding, window.innerWidth - width - viewportPadding)),
+    top,
+    maxHeight,
   };
 };
 
@@ -370,33 +409,32 @@ export default function DerkenarOnboarding() {
   useEffect(() => {
     if (!open) return undefined;
 
-    const update = () => {
-      const step = availableSteps[stepIndex];
-      const element = findTarget(step);
+    const step = availableSteps[stepIndex];
+    const element = findTarget(step);
 
-      if (element) {
-        element.scrollIntoView({
-          block: 'nearest',
-          inline: 'nearest',
-          behavior: 'smooth',
-        });
-      }
+    // Hedef değiştiğinde Sidebar'ı sadece BİR KEZ gerekli konuma getir.
+    // Kullanıcı daha sonra Sidebar'ı elle kaydırırsa onu geri zorlamıyoruz.
+    if (element) {
+      revealTarget(element);
+    }
 
-      window.setTimeout(() => {
+    const measure = () => {
+      window.requestAnimationFrame(() => {
         const fresh = findTarget(step);
         setTargetRect(fresh?.getBoundingClientRect?.() || null);
-      }, 180);
+      });
     };
 
-    update();
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true);
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
 
     return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
     };
   }, [open, stepIndex, availableSteps]);
+
 
   useEffect(() => {
     if (!open) return undefined;
@@ -425,12 +463,19 @@ export default function DerkenarOnboarding() {
   const progress = ((stepIndex + 1) / availableSteps.length) * 100;
 
   return (
-    <div className="fixed inset-0 z-[9999]" aria-live="polite">
+    <div className="pointer-events-none fixed inset-0 z-[9999]" aria-live="polite">
       <OverlayPieces rect={targetRect} featured={step.featured} />
 
       <div
-        className="fixed z-[10001] overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
-        style={{ width: tooltip.width, left: tooltip.left, top: tooltip.top }}
+        className="pointer-events-auto fixed z-[10001] overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+        style={{
+          width: tooltip.width,
+          left: tooltip.left,
+          top: tooltip.top,
+          maxHeight: tooltip.maxHeight,
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+        }}
         role="dialog"
         aria-modal="true"
         aria-label="Derkenar sistem tanıtım turu"
