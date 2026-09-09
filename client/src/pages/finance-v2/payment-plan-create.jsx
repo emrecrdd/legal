@@ -36,28 +36,6 @@ const installment = (amount = '') => ({
   due_date: '',
 });
 
-const rows = (response) => {
-  const data =
-    response?.data?.data ??
-    response?.data ??
-    response ??
-    [];
-
-  if (Array.isArray(data)) {
-    return data;
-  }
-
-  if (Array.isArray(data?.rows)) {
-    return data.rows;
-  }
-
-  if (Array.isArray(data?.data)) {
-    return data.data;
-  }
-
-  return [];
-};
-
 const consultationName = (consultation) =>
   [
     consultation?.consultation_number,
@@ -175,26 +153,21 @@ export default function FinanceV2PaymentPlanCreate() {
       Boolean(form.client_id),
   });
 
-  const consultationQ =
-    useQuery({
-      queryKey: [
-        'consultations',
-        form.consultation_id,
-        'finance-v2-plan',
-      ],
+  const consultationsQ = useQuery({
+    queryKey: [
+      'consultations',
+      'finance-v2-plan',
+    ],
 
-      queryFn: () =>
-        consultationApi.getOne(
-          form.consultation_id
-        ),
+    queryFn: () =>
+      consultationApi.getAll({
+        page: 1,
+        limit: 100,
+      }),
 
-      enabled:
-        Boolean(
-          form.consultation_id
-        ),
-
-      staleTime: 180000,
-    });
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
 
   const clients =
     Array.isArray(
@@ -218,49 +191,27 @@ export default function FinanceV2PaymentPlanCreate() {
         : [];
   }, [casesQ.data]);
 
-  const consultation =
-    useMemo(() => {
-      if (
-        !form.consultation_id
-      ) {
-        return null;
-      }
+  const consultations = useMemo(() => {
+    const data =
+      consultationsQ.data?.data?.data ??
+      consultationsQ.data?.data ??
+      consultationsQ.data ??
+      [];
 
-      const data =
-        consultationQ.data
-          ?.data?.data ??
-        consultationQ.data
-          ?.data ??
-        consultationQ.data ??
-        null;
+    if (Array.isArray(data)) {
+      return data;
+    }
 
-      if (
-        Array.isArray(data)
-      ) {
-        return (
-          data.find(
-            (item) =>
-              String(item?.id) ===
-              String(
-                form.consultation_id
-              )
-          ) || null
-        );
-      }
+    if (Array.isArray(data?.rows)) {
+      return data.rows;
+    }
 
-      if (
-        data &&
-        typeof data ===
-          'object'
-      ) {
-        return data;
-      }
+    if (Array.isArray(data?.data)) {
+      return data.data;
+    }
 
-      return null;
-    }, [
-      consultationQ.data,
-      form.consultation_id,
-    ]);
+    return [];
+  }, [consultationsQ.data]);
 
   const total =
     form.installments.reduce(
@@ -581,21 +532,6 @@ export default function FinanceV2PaymentPlanCreate() {
             </div>
           )}
 
-          {form.consultation_id && (
-            <div className="mb-5 rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300">
-              <span className="font-semibold">
-                Danışmanlık:
-              </span>{' '}
-
-              {consultationQ.isLoading
-                ? 'Yükleniyor...'
-                : consultation
-                  ? consultationName(
-                      consultation
-                    )
-                  : form.consultation_id}
-            </div>
-          )}
 
           <div className="grid gap-5 md:grid-cols-2">
             <F label="Müvekkil">
@@ -667,6 +603,43 @@ export default function FinanceV2PaymentPlanCreate() {
                   )
                 )}
               </select>
+            </F>
+
+            <F label="Danışmanlık">
+              <select
+                className={input}
+                value={form.consultation_id}
+                onChange={(e) =>
+                  update(
+                    'consultation_id',
+                    e.target.value
+                  )
+                }
+              >
+                <option value="">
+                  {consultationsQ.isLoading
+                    ? 'Danışmanlıklar yükleniyor...'
+                    : consultationsQ.isError
+                      ? 'Danışmanlıklar yüklenemedi'
+                      : 'Danışmanlık seçilmedi'}
+                </option>
+
+                {consultations.map((c) => (
+                  <option
+                    key={c.id}
+                    value={c.id}
+                  >
+                    {consultationName(c)}
+                  </option>
+                ))}
+              </select>
+
+              {consultationsQ.isError && (
+                <p className="mt-1 text-xs text-red-500">
+                  {consultationsQ.error?.response?.data?.message ||
+                    'Danışmanlık listesi alınamadı.'}
+                </p>
+              )}
             </F>
 
             <F label="Plan Başlığı">
