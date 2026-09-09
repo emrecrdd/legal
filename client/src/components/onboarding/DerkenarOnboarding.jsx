@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../app/providers/auth.provider.jsx';
 
-const ONBOARDING_VERSION = 'v4-sidebar-free';
+const ONBOARDING_VERSION = 'v5-topbar';
 const START_EVENT = 'derkenar:onboarding:start';
 
 const STEP_DEFINITIONS = [
@@ -166,11 +166,51 @@ const STEP_DEFINITIONS = [
     onboardingId: 'nav-audit-logs',
   },
   {
+    id: 'topbar-search',
+    category: 'Üst Menü',
+    title: 'Hızlı Global Arama',
+    description:
+      'Üst bardaki arama alanını kullanarak bulunduğunuz sayfadan ayrılmadan aramanızı başlatın. Dava, müvekkil, belge ve diğer kayıtları hızlıca bulmak için günlük kullanımın en pratik kısayollarından biridir.',
+    onboardingId: 'topbar-search',
+  },
+  {
+    id: 'topbar-connection',
+    category: 'Üst Menü',
+    title: 'Sistem Bağlantı Durumu',
+    description:
+      'Derkenar’ın gerçek zamanlı bağlantı durumunu buradan takip edin. “Sistem Aktif” göstergesi, anlık bildirim ve canlı bağlantı kanalının çalıştığını hızlıca doğrulamanızı sağlar.',
+    onboardingId: 'topbar-connection',
+  },
+  {
+    id: 'topbar-theme',
+    category: 'Üst Menü',
+    title: 'Görünüm ve Tema',
+    description:
+      'Açık ve koyu görünüm arasında tek tıkla geçiş yapın. Derkenar çalışma alanını bulunduğunuz ortama ve kişisel kullanım tercihinize göre uyarlayabilirsiniz.',
+    onboardingId: 'topbar-theme',
+  },
+  {
+    id: 'topbar-notifications',
+    category: 'Üst Menü',
+    title: 'Bildirim Merkezi',
+    description:
+      'Görevler, dosya hareketleri ve sistemdeki önemli gelişmeler için bildirimlerinizi burada takip edin. Okunmamış bildirim sayısını anlık olarak görebilir ve bildirim merkezine hızlıca ulaşabilirsiniz.',
+    onboardingId: 'topbar-notifications',
+  },
+  {
+    id: 'topbar-user',
+    category: 'Üst Menü',
+    title: 'Hesap ve Profil Menüsü',
+    description:
+      'Profil bilgilerinize ve kişisel ayarlarınıza buradan erişin. Kullanıcı rolünüzü kontrol edebilir, profil ve ayarlar bölümüne geçebilir veya güvenli biçimde oturumu kapatabilirsiniz.',
+    onboardingId: 'topbar-user',
+  },
+  {
     id: 'finish',
     category: 'Tamamlandı',
     title: 'Derkenar kullanıma hazır',
     description:
-      'Ana çalışma alanlarını gördünüz. Artık müvekkil ve dosyalarınızı yönetebilir, ofis operasyonlarını takip edebilir ve yapay zekâ destekli araçlardan yararlanabilirsiniz. Bu tur daha sonra yeniden başlatılabilir.',
+      'Ana çalışma alanlarını gördünüz. Artık müvekkil ve dosyalarınızı yönetebilir, ofis operasyonlarını takip edebilir ve yapay zekâ destekli araçlardan yararlanabilirsiniz. Tur tamamlandığında bu tanıtım otomatik olarak tekrar gösterilmez.',
     target: null,
     featured: true,
   },

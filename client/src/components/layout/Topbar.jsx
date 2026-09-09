@@ -592,6 +592,7 @@ const Topbar = ({
         ================================================== */}
 
         <form
+          data-onboarding="topbar-search"
           onSubmit={
             handleSearchSubmit
           }
@@ -707,6 +708,7 @@ focus-within:shadow-[0_0_0_3px_rgba(245,158,11,0.08)]
           {/* CONNECTION */}
 
           <div
+            data-onboarding="topbar-connection"
             className={`
               hidden h-8 items-center gap-2
               rounded-lg border px-2.5
@@ -736,6 +738,7 @@ focus-within:shadow-[0_0_0_3px_rgba(245,158,11,0.08)]
           {/* THEME */}
 
           <button
+            data-onboarding="topbar-theme"
             type="button"
             onClick={
               toggleTheme
@@ -778,6 +781,7 @@ focus-within:shadow-[0_0_0_3px_rgba(245,158,11,0.08)]
             }
           >
             <button
+              data-onboarding="topbar-notifications"
               type="button"
               onClick={() => {
                 setShowNotifications(
@@ -1105,6 +1109,7 @@ focus-within:shadow-[0_0_0_3px_rgba(245,158,11,0.08)]
             }
           >
             <button
+              data-onboarding="topbar-user"
               type="button"
               onClick={() => {
                 setShowUserMenu(
