@@ -3041,7 +3041,7 @@ const upcomingHearings =
                   }
                 >
                   <Brain className="mr-2 h-4 w-4" />
-                  AI Analiz Et
+                  Davayı Analiz Et
                 </Button>
 <Button
   type="button"
