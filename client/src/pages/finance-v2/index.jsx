@@ -325,9 +325,11 @@ export default function FinanceV2Center() {
             undefined,
           from:
             ledgerFilters.from ||
+            dashboard?.period?.from ||
             undefined,
           to:
             ledgerFilters.to ||
+            dashboard?.period?.to ||
             undefined,
           transaction_type:
             ledgerFilters.transaction_type ||
