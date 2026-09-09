@@ -29,6 +29,7 @@ import {
   FileText,
   FolderOpen,
   NotebookText,
+  Scale,
   Search as SearchIcon,
   Sparkles,
   UserRound,
@@ -54,6 +55,10 @@ const TYPE_OPTIONS = [
   {
     value: 'cases',
     label: 'Davalar',
+  },
+  {
+    value: 'consultations',
+    label: 'Danışmanlıklar',
   },
   {
     value: 'documents',
@@ -95,6 +100,11 @@ const getTypeBadge = (
     case: {
       label: 'Dava',
       variant: 'info',
+    },
+
+    consultation: {
+      label: 'Danışmanlık',
+      variant: 'primary',
     },
 
     document: {
@@ -430,6 +440,14 @@ const Search = () => {
               ? rawResults
               : [],
 
+          consultations:
+            type === 'consultations' &&
+            Array.isArray(
+              rawResults
+            )
+              ? rawResults
+              : [],
+
           documents:
             type === 'documents' &&
             Array.isArray(
@@ -470,6 +488,9 @@ const Search = () => {
           (results.cases?.length ||
             0) >
             0 ||
+          (results.consultations?.length ||
+            0) >
+            0 ||
           (results.documents?.length ||
             0) >
             0 ||
@@ -486,6 +507,8 @@ const Search = () => {
     (results?.clients?.length ||
       0) +
     (results?.cases?.length ||
+      0) +
+    (results?.consultations?.length ||
       0) +
     (results?.documents?.length ||
       0) +
@@ -555,7 +578,7 @@ const Search = () => {
               dark:text-slate-400
             "
           >
-            Müvekkil, dava, belge, görev ve not kayıtlarında tek noktadan arama yapın.
+            Müvekkil, dava, danışmanlık, belge, görev ve not kayıtlarında tek noktadan arama yapın.
           </p>
 
         </div>
@@ -575,7 +598,7 @@ const Search = () => {
             <div className="flex-1">
 
               <Input
-                placeholder="Müvekkil, dava, belge, görev veya not ara..."
+                placeholder="Müvekkil, dava, danışmanlık, belge, görev veya not ara..."
                 value={
                   query
                 }
@@ -801,7 +824,7 @@ const Search = () => {
           </h2>
 
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500 dark:text-slate-400">
-            Aradığınız kaydın adını, dosya numarasını, belge başlığını, görev veya not bilgisini yazabilirsiniz.
+            Aradığınız kaydın adını, dava veya danışmanlık numarasını, belge başlığını, görev veya not bilgisini yazabilirsiniz.
           </p>
 
         </div>
@@ -1144,6 +1167,115 @@ const Search = () => {
                               ] ||
                                 caseItem.status ||
                                 '-'}
+                            </Badge>
+
+                            <ArrowRight className="h-4 w-4 text-gray-300 dark:text-slate-600" />
+
+                          </div>
+
+                        </Link>
+                      )
+                    )}
+
+                  </div>
+
+                </Card.Body>
+
+              </Card>
+            )}
+
+            {/* ==================================================
+                CONSULTATIONS
+            ================================================== */}
+
+            {results.consultations?.length >
+              0 && (
+              <Card>
+
+                <Card.Header>
+
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-3">
+
+                      <div
+                        className="
+                          flex
+                          h-8
+                          w-8
+                          items-center
+                          justify-center
+                          rounded-lg
+                          bg-cyan-50
+                          text-cyan-600
+                          dark:bg-cyan-500/[0.08]
+                          dark:text-cyan-400
+                        "
+                      >
+                        <Scale size={16} />
+                      </div>
+
+                      <h2 className="font-semibold text-gray-900 dark:text-white">
+                        Danışmanlıklar
+                      </h2>
+
+                    </div>
+
+                    <Badge variant="default">
+                      {results.consultations.length}
+                    </Badge>
+
+                  </div>
+
+                </Card.Header>
+
+                <Card.Body className="p-2">
+
+                  <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+
+                    {results.consultations.map(
+                      (consultation) => (
+                        <Link
+                          key={consultation.id}
+                          to={`/consultations/${consultation.id}`}
+                          className="
+                            flex
+                            items-center
+                            justify-between
+                            gap-4
+                            rounded-lg
+                            px-3
+                            py-3
+                            transition
+                            hover:bg-gray-50
+                            dark:hover:bg-white/[0.025]
+                          "
+                        >
+
+                          <div className="min-w-0">
+
+                            <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                              {consultation.title ||
+                                'Başlıksız Danışmanlık'}
+                            </p>
+
+                            <p className="mt-1 truncate text-xs text-gray-500 dark:text-slate-500">
+                              {consultation.consultation_number ||
+                                'Danışmanlık no yok'}
+
+                              {' · '}
+
+                              {consultation.prospect_name ||
+                                consultation.legal_area ||
+                                'İlgili kişi belirtilmemiş'}
+                            </p>
+
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-3">
+
+                            <Badge variant="primary">
+                              {consultation.status || 'Danışmanlık'}
                             </Badge>
 
                             <ArrowRight className="h-4 w-4 text-gray-300 dark:text-slate-600" />
