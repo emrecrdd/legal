@@ -2210,10 +2210,10 @@ const [
           );
 
         toast.success(
-          result?.cached
-            ? 'Kayıtlı AI analizi getirildi'
-            : 'Dava AI analizi tamamlandı'
-        );
+  result?.cached
+    ? 'Mevcut dava analizi getirildi'
+    : 'Dava analizi tamamlandı'
+);
       },
 
       onError: (error) => {
