@@ -1,116 +1,206 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Command,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import { useAuth } from '../../app/providers/auth.provider.jsx';
 
-const ONBOARDING_VERSION = 'v1';
+const ONBOARDING_VERSION = 'v2-full';
 const START_EVENT = 'derkenar:onboarding:start';
 
 const STEP_DEFINITIONS = [
   {
     id: 'welcome',
+    category: 'Başlangıç',
     title: 'Derkenar’a hoş geldiniz',
     description:
-      'Kısa bir turla temel çalışma alanlarını tanıyalım. Bu turu istediğiniz zaman kapatabilir ve daha sonra yeniden başlatabilirsiniz.',
+      'Derkenar; hukuk ofisinin dosya, operasyon, iletişim, finans ve yapay zekâ süreçlerini tek merkezde toplar. Bu kısa tur, sistemdeki tüm ana çalışma alanlarını sırasıyla tanıtır.',
     target: null,
   },
   {
+    id: 'dashboard',
+    category: 'Genel',
+    title: 'Genel Bakış',
+    description:
+      'Günün iş yükünü, yaklaşan tarihleri, önemli dosya hareketlerini ve ofisin genel durumunu hızlıca görmek için başlangıç noktanızdır.',
+    onboardingId: 'nav-dashboard',
+  },
+  {
+    id: 'chat',
+    category: 'Genel',
+    title: 'Sohbetler',
+    description:
+      'Ofis içi iletişimi sistem içinde sürdürün. Ekip üyeleriyle yürütülen yazışmaları çalışma akışınızdan kopmadan takip edin.',
+    onboardingId: 'nav-chat',
+  },
+  {
     id: 'clients',
+    category: 'Dosya Yönetimi',
     title: 'Müvekkiller',
     description:
-      'Müvekkil kayıtlarını, iletişim bilgilerini, bağlı davaları ve finans özetlerini buradan yönetebilirsiniz.',
-    hrefs: ['/clients'],
-    texts: ['Müvekkiller'],
+      'Bireysel ve kurumsal müvekkil kayıtlarını, iletişim bilgilerini, bağlı davaları, danışmanlıkları ve finans özetlerini tek profilde yönetin.',
+    onboardingId: 'nav-clients',
   },
   {
     id: 'cases',
+    category: 'Dosya Yönetimi',
     title: 'Davalar',
     description:
-      'Dava dosyalarını, tarafları, duruşmaları, belgeleri ve dosyaya bağlı çalışma akışlarını tek yerden takip edin.',
-    hrefs: ['/cases'],
-    texts: ['Davalar'],
+      'Dava dosyalarını; taraflar, belgeler, görevler, toplantılar, duruşmalar, notlar ve finans bağlantılarıyla birlikte merkezi olarak takip edin.',
+    onboardingId: 'nav-cases',
+  },
+  {
+    id: 'consultations',
+    category: 'Dosya Yönetimi',
+    title: 'Danışmanlıklar',
+    description:
+      'Henüz davaya dönüşmemiş hukuki işleri ayrı bir dosya olarak yönetin. Potansiyel müvekkil, sorumlular, ücretlendirme ve bağlı iş akışlarını takip edin; gerektiğinde müvekkile ve davaya dönüştürün.',
+    onboardingId: 'nav-consultations',
   },
   {
     id: 'documents',
+    category: 'Dosya Yönetimi',
     title: 'Belgeler',
     description:
-      'Dosya belgelerini yükleyin, görüntüleyin ve desteklenen belgeleri yapay zekâ analizi için kullanın.',
-    hrefs: ['/documents'],
-    texts: ['Belgeler'],
+      'Dosya belgelerini merkezi olarak saklayın ve görüntüleyin. Desteklenen belgeleri yapay zekâ analizine dahil ederek dosyanın içeriğinden daha hızlı yararlanın.',
+    onboardingId: 'nav-documents',
+  },
+  {
+    id: 'templates',
+    category: 'Dosya Yönetimi',
+    title: 'Şablonlar',
+    description:
+      'Sık kullanılan belge ve metin yapılarını standartlaştırın. Ofis genelinde daha tutarlı ve hızlı belge üretimi için şablonlarınızı yönetin.',
+    onboardingId: 'nav-templates',
   },
   {
     id: 'tasks',
+    category: 'Operasyon',
     title: 'Görevler',
     description:
-      'Ofis içi işleri sorumlulara atayın, öncelik ve tarih belirleyin, tamamlanma durumunu takip edin.',
-    hrefs: ['/tasks'],
-    texts: ['Görevler'],
+      'İşleri ekip üyelerine atayın; öncelik, son tarih ve durum bilgileriyle takip edin. Dosya bağlantıları sayesinde görevin hangi hukuki işe ait olduğunu kaybetmeyin.',
+    onboardingId: 'nav-tasks',
+  },
+  {
+    id: 'performance',
+    category: 'Operasyon',
+    title: 'Performans',
+    description:
+      'Yetkiniz dahilinde görev ve çalışma verilerini performans görünümünde izleyin. İş yükü ve tamamlanma eğilimlerini daha görünür hale getirin.',
+    onboardingId: 'nav-performance',
   },
   {
     id: 'calendar',
+    category: 'Operasyon',
     title: 'Takvim',
     description:
-      'Duruşma, toplantı, görev ve diğer tarihli işlerinizi takvim üzerinden birlikte takip edin.',
-    hrefs: ['/calendar'],
-    texts: ['Takvim'],
+      'Duruşma, toplantı, görev ve diğer tarihli işlerinizi ortak zaman çizelgesinde takip edin; kritik tarihleri kaçırma riskini azaltın.',
+    onboardingId: 'nav-calendar',
+  },
+  {
+    id: 'meetings',
+    category: 'Operasyon',
+    title: 'Toplantılar',
+    description:
+      'Müvekkil ve dosya bağlantılı görüşmeleri planlayın, zamanını takip edin ve toplantı kayıtlarını ilgili hukuki işin içinde tutun.',
+    onboardingId: 'nav-meetings',
   },
   {
     id: 'finance',
+    category: 'Operasyon',
     title: 'Finans',
     description:
-      'Ücret anlaşmaları, alacaklar, tahsilatlar, ödeme planları, giderler ve kasa/banka hareketlerini yönetin.',
-    hrefs: ['/finance'],
-    texts: ['Finans'],
-  },
-  {
-    id: 'search',
-    title: 'Global Arama',
-    description:
-      'Müvekkil, dava, danışmanlık, belge, görev ve not kayıtlarını tek noktadan arayın.',
-    hrefs: ['/search'],
-    texts: ['Global Arama'],
+      'Ücret anlaşmaları, ödeme planları, alacaklar, tahsilatlar, giderler ve kasa/banka hareketlerini tek finans merkezinden yönetin; müvekkil, dava ve danışmanlıklarla ilişkilendirin.',
+    onboardingId: 'nav-finance',
   },
   {
     id: 'ai',
+    category: 'Akıllı Araçlar',
     title: 'AI Asistan',
     description:
-      'Derkenar yalnızca kayıt tutmaz. Dosya ve belgeler üzerinden riskleri, eksik bilgileri, önemli tarihleri ve önerilen işlemleri ortaya çıkararak avukatın değerlendirmesine destek olur.',
-    hrefs: ['/ai', '/ai-assistant', '/assistant'],
-    texts: ['AI Asistan'],
+      'Derkenar’ın ayırt edici çalışma alanıdır. Dosya ve belgeler üzerinden eksik bilgi ve delilleri, riskleri, önemli tarihleri ve önerilen sonraki işlemleri görünür hale getirir; duruşma hazırlığı gibi çalışmalarda avukatın değerlendirmesine destek olur.',
+    onboardingId: 'nav-ai',
+    featured: true,
+  },
+  {
+    id: 'search',
+    category: 'Akıllı Araçlar',
+    title: 'Global Arama',
+    description:
+      'Müvekkil, dava, danışmanlık, belge, görev ve not kayıtlarında tek noktadan arama yaparak ihtiyaç duyduğunuz kayda hızla ulaşın.',
+    onboardingId: 'nav-search',
+  },
+  {
+    id: 'settings',
+    category: 'Sistem',
+    title: 'Ayarlar',
+    description:
+      'Yetkiniz dahilindeki kişisel ve sistem ayarlarını buradan yönetin. Derkenar’ı ofisinizin çalışma düzenine uygun şekilde yapılandırın.',
+    onboardingId: 'nav-settings',
+  },
+  {
+    id: 'system-info',
+    category: 'Sistem',
+    title: 'Sistem Bilgileri',
+    description:
+      'Uygulama ve sistem bilgilerine ihtiyaç duyduğunuzda bu bölümü kullanın. Destek ve teknik kontrol süreçlerinde referans noktasıdır.',
+    onboardingId: 'nav-system-info',
+  },
+  {
+    id: 'users',
+    category: 'Yönetim',
+    title: 'Kullanıcılar',
+    description:
+      'Yönetici hesabıyla ofis kullanıcılarını ve erişim yapılarını yönetin. Bu adım yalnızca ilgili yönetim alanını görebilen kullanıcılara gösterilir.',
+    onboardingId: 'nav-users',
+  },
+  {
+    id: 'audit-logs',
+    category: 'Yönetim',
+    title: 'Denetim Logları',
+    description:
+      'Sistemdeki önemli işlem izlerini denetim kayıtları üzerinden takip edin. Kurumsal izlenebilirlik ve operasyonel kontrol için merkezi kayıt alanıdır.',
+    onboardingId: 'nav-audit-logs',
+  },
+  {
+    id: 'finish',
+    category: 'Tamamlandı',
+    title: 'Derkenar kullanıma hazır',
+    description:
+      'Ana çalışma alanlarını gördünüz. Artık müvekkil ve dosyalarınızı yönetebilir, ofis operasyonlarını takip edebilir ve yapay zekâ destekli araçlardan yararlanabilirsiniz. Bu tur daha sonra yeniden başlatılabilir.',
+    target: null,
+    featured: true,
   },
 ];
 
-const escapeSelector = (value) => {
-  if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value);
-  return String(value).replace(/["\\]/g, '\\$&');
-};
-
-const findByText = (texts = []) => {
-  const candidates = Array.from(
-    document.querySelectorAll('a, button, [role="button"], [role="link"]')
-  );
-
+const isElementUsable = (element) => {
+  if (!element) return false;
+  const style = window.getComputedStyle(element);
+  const rect = element.getBoundingClientRect();
   return (
-    candidates.find((element) => {
-      const text = element.textContent?.replace(/\s+/g, ' ').trim();
-      return texts.some((label) => text === label || text?.includes(label));
-    }) || null
+    style.display !== 'none' &&
+    style.visibility !== 'hidden' &&
+    Number(style.opacity || 1) !== 0 &&
+    rect.width > 0 &&
+    rect.height > 0
   );
 };
 
 const findTarget = (step) => {
   if (!step || step.target === null) return null;
 
-  for (const href of step.hrefs || []) {
-    const exact = document.querySelector(`a[href="${escapeSelector(href)}"]`);
-    if (exact) return exact;
-
-    const startsWith = document.querySelector(
-      `a[href^="${escapeSelector(href)}/"], a[href^="${escapeSelector(href)}?"]`
+  if (step.onboardingId) {
+    const candidates = Array.from(
+      document.querySelectorAll(`[data-onboarding="${step.onboardingId}"]`)
     );
-    if (startsWith) return startsWith;
+    const usable = candidates.find(isElementUsable);
+    if (usable) return usable;
   }
 
-  return findByText(step.texts);
+  return null;
 };
 
 const storageKeyFor = (user) =>
@@ -119,15 +209,15 @@ const storageKeyFor = (user) =>
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 const getTooltipPosition = (rect) => {
-  const width = Math.min(390, window.innerWidth - 32);
-  const estimatedHeight = 260;
-  const gap = 16;
+  const width = Math.min(420, window.innerWidth - 32);
+  const estimatedHeight = 320;
+  const gap = 18;
 
   if (!rect) {
     return {
       width,
       left: (window.innerWidth - width) / 2,
-      top: Math.max(24, (window.innerHeight - estimatedHeight) / 2),
+      top: Math.max(20, (window.innerHeight - estimatedHeight) / 2),
     };
   }
 
@@ -158,9 +248,13 @@ const getTooltipPosition = (rect) => {
   };
 };
 
-const OverlayPieces = ({ rect }) => {
+const OverlayPieces = ({ rect, featured }) => {
+  const overlayClass = featured
+    ? 'bg-slate-950/65 backdrop-blur-[1.5px]'
+    : 'bg-slate-950/58 backdrop-blur-[1px]';
+
   if (!rect) {
-    return <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-[1px]" />;
+    return <div className={`fixed inset-0 ${overlayClass}`} />;
   }
 
   const padding = 8;
@@ -168,8 +262,7 @@ const OverlayPieces = ({ rect }) => {
   const top = Math.max(0, rect.top - padding);
   const right = Math.min(window.innerWidth, rect.right + padding);
   const bottom = Math.min(window.innerHeight, rect.bottom + padding);
-
-  const common = 'fixed bg-slate-950/55 backdrop-blur-[1px]';
+  const common = `fixed ${overlayClass}`;
 
   return (
     <>
@@ -178,7 +271,11 @@ const OverlayPieces = ({ rect }) => {
       <div className={common} style={{ left: right, right: 0, top, height: bottom - top }} />
       <div className={common} style={{ left: 0, right: 0, top: bottom, bottom: 0 }} />
       <div
-        className="pointer-events-none fixed rounded-xl ring-2 ring-blue-400 ring-offset-4 ring-offset-transparent shadow-[0_0_0_1px_rgba(255,255,255,0.2),0_12px_40px_rgba(15,23,42,0.28)]"
+        className={`pointer-events-none fixed rounded-xl ring-2 ring-offset-4 ring-offset-transparent ${
+          featured
+            ? 'ring-amber-400 shadow-[0_0_0_1px_rgba(255,255,255,0.24),0_16px_50px_rgba(15,23,42,0.36)]'
+            : 'ring-blue-400 shadow-[0_0_0_1px_rgba(255,255,255,0.20),0_12px_40px_rgba(15,23,42,0.28)]'
+        }`}
         style={{ left, top, width: right - left, height: bottom - top }}
       />
     </>
@@ -194,7 +291,10 @@ export default function DerkenarOnboarding() {
   const [open, setOpen] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState(null);
-  const [availableSteps, setAvailableSteps] = useState([STEP_DEFINITIONS[0]]);
+  const [availableSteps, setAvailableSteps] = useState([
+    STEP_DEFINITIONS[0],
+    STEP_DEFINITIONS[STEP_DEFINITIONS.length - 1],
+  ]);
 
   const storageKey = useMemo(() => storageKeyFor(user), [user]);
 
@@ -206,7 +306,11 @@ export default function DerkenarOnboarding() {
       if (completed) {
         localStorage.setItem(
           storageKey,
-          JSON.stringify({ completed: true, completedAt: new Date().toISOString() })
+          JSON.stringify({
+            completed: true,
+            version: ONBOARDING_VERSION,
+            completedAt: new Date().toISOString(),
+          })
         );
       }
     },
@@ -219,8 +323,12 @@ export default function DerkenarOnboarding() {
       return Boolean(findTarget(step));
     });
 
-    setAvailableSteps(steps.length ? steps : [STEP_DEFINITIONS[0]]);
-    return steps.length ? steps : [STEP_DEFINITIONS[0]];
+    const resolved = steps.length
+      ? steps
+      : [STEP_DEFINITIONS[0], STEP_DEFINITIONS[STEP_DEFINITIONS.length - 1]];
+
+    setAvailableSteps(resolved);
+    return resolved;
   }, []);
 
   const start = useCallback(() => {
@@ -240,8 +348,13 @@ export default function DerkenarOnboarding() {
     const onStart = () => start();
     window.addEventListener(START_EVENT, onStart);
 
-    const saved = localStorage.getItem(storageKey);
-    const parsed = saved ? JSON.parse(saved) : null;
+    let parsed = null;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      parsed = saved ? JSON.parse(saved) : null;
+    } catch {
+      parsed = null;
+    }
 
     if (!parsed?.completed) {
       const timeout = window.setTimeout(start, 900);
@@ -260,9 +373,15 @@ export default function DerkenarOnboarding() {
     const update = () => {
       const step = availableSteps[stepIndex];
       const element = findTarget(step);
+
       if (element) {
-        element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+        element.scrollIntoView({
+          block: 'nearest',
+          inline: 'nearest',
+          behavior: 'smooth',
+        });
       }
+
       window.setTimeout(() => {
         const fresh = findTarget(step);
         setTargetRect(fresh?.getBoundingClientRect?.() || null);
@@ -285,7 +404,9 @@ export default function DerkenarOnboarding() {
     const onKeyDown = (event) => {
       if (event.key === 'Escape') close(false);
       if (event.key === 'ArrowRight') {
-        setStepIndex((current) => Math.min(current + 1, availableSteps.length - 1));
+        setStepIndex((current) =>
+          Math.min(current + 1, availableSteps.length - 1)
+        );
       }
       if (event.key === 'ArrowLeft') {
         setStepIndex((current) => Math.max(current - 1, 0));
@@ -301,25 +422,57 @@ export default function DerkenarOnboarding() {
   const step = availableSteps[stepIndex];
   const isLast = stepIndex === availableSteps.length - 1;
   const tooltip = getTooltipPosition(targetRect);
+  const progress = ((stepIndex + 1) / availableSteps.length) * 100;
 
   return (
     <div className="fixed inset-0 z-[9999]" aria-live="polite">
-      <OverlayPieces rect={targetRect} />
+      <OverlayPieces rect={targetRect} featured={step.featured} />
 
       <div
         className="fixed z-[10001] overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
         style={{ width: tooltip.width, left: tooltip.left, top: tooltip.top }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Derkenar sistem tanıtım turu"
       >
+        <div
+          className={`h-1 w-full ${
+            step.featured
+              ? 'bg-gradient-to-r from-amber-400 via-blue-500 to-blue-700'
+              : 'bg-gradient-to-r from-blue-500 to-blue-700'
+          }`}
+        />
+
         <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-white/[0.06]">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+            <div
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                step.featured
+                  ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300'
+                  : 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400'
+              }`}
+            >
               <Sparkles size={19} />
             </div>
+
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600 dark:text-blue-400">
-                Derkenar Rehberi
-              </p>
-              <h3 className="mt-0.5 truncate text-base font-semibold text-gray-900 dark:text-white">
+              <div className="flex items-center gap-2">
+                <p
+                  className={`text-[10px] font-bold uppercase tracking-[0.15em] ${
+                    step.featured
+                      ? 'text-amber-600 dark:text-amber-300'
+                      : 'text-blue-600 dark:text-blue-400'
+                  }`}
+                >
+                  {step.category}
+                </p>
+                <span className="text-[10px] text-gray-300 dark:text-slate-600">•</span>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                  Derkenar Rehberi
+                </p>
+              </div>
+
+              <h3 className="mt-1 truncate text-base font-semibold text-gray-900 dark:text-white">
                 {step.title}
               </h3>
             </div>
@@ -340,22 +493,55 @@ export default function DerkenarOnboarding() {
             {step.description}
           </p>
 
+          {step.id === 'welcome' && (
+            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 dark:border-blue-500/15 dark:bg-blue-500/[0.06]">
+              <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                Yetkiye duyarlı tanıtım
+              </p>
+              <p className="mt-1 text-xs leading-5 text-blue-700/75 dark:text-blue-300/70">
+                Yalnızca hesabınızın erişebildiği modüller gösterilir. Yönetim alanları sadece yetkili hesapların turuna eklenir.
+              </p>
+            </div>
+          )}
+
+          {step.id === 'ai' && (
+            <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50/70 px-4 py-3 dark:border-amber-500/15 dark:bg-amber-500/[0.06]">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                Derkenar’ın yapay zekâ katmanı
+              </p>
+              <p className="mt-1 text-xs leading-5 text-amber-700/75 dark:text-amber-300/70">
+                Yapay zekâ çıktıları avukatın mesleki değerlendirmesine destek olmak üzere sunulur; nihai hukuki değerlendirme kullanıcıya aittir.
+              </p>
+            </div>
+          )}
+
           <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-white/[0.06]">
             <div
-              className="h-full rounded-full bg-blue-600 transition-all duration-300"
-              style={{ width: `${((stepIndex + 1) / availableSteps.length) * 100}%` }}
+              className={`h-full rounded-full transition-all duration-300 ${
+                step.featured ? 'bg-amber-500' : 'bg-blue-600'
+              }`}
+              style={{ width: `${progress}%` }}
             />
           </div>
 
           <div className="mt-2 flex items-center justify-between text-xs text-gray-400 dark:text-slate-500">
-            <span>{stepIndex + 1} / {availableSteps.length}</span>
-            <button
-              type="button"
-              onClick={() => close(true)}
-              className="font-medium transition hover:text-gray-700 dark:hover:text-slate-200"
-            >
-              Turu atla
-            </button>
+            <span>
+              {stepIndex + 1} / {availableSteps.length}
+            </span>
+
+            <div className="flex items-center gap-3">
+              <span className="hidden items-center gap-1 md:inline-flex">
+                <Command size={12} />
+                ← →
+              </span>
+              <button
+                type="button"
+                onClick={() => close(true)}
+                className="font-medium transition hover:text-gray-700 dark:hover:text-slate-200"
+              >
+                Turu atla
+              </button>
+            </div>
           </div>
         </div>
 
@@ -363,7 +549,9 @@ export default function DerkenarOnboarding() {
           <button
             type="button"
             disabled={stepIndex === 0}
-            onClick={() => setStepIndex((current) => Math.max(current - 1, 0))}
+            onClick={() =>
+              setStepIndex((current) => Math.max(current - 1, 0))
+            }
             className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-gray-600 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-35 dark:text-slate-300 dark:hover:bg-white/[0.05]"
           >
             <ChevronLeft size={16} />
@@ -377,9 +565,15 @@ export default function DerkenarOnboarding() {
                 close(true);
                 return;
               }
-              setStepIndex((current) => Math.min(current + 1, availableSteps.length - 1));
+              setStepIndex((current) =>
+                Math.min(current + 1, availableSteps.length - 1)
+              );
             }}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+            className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-sm font-semibold text-white shadow-sm transition ${
+              step.featured
+                ? 'bg-amber-500 hover:bg-amber-600'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             {isLast ? 'Turu Tamamla' : 'İleri'}
             {!isLast && <ChevronRight size={16} />}

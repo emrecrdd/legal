@@ -6,6 +6,8 @@ import {
   useAuth,
 } from '../../app/providers/auth.provider.jsx';
 
+import DerkenarOnboarding from '../onboarding/DerkenarOnboarding.jsx';
+
 import {
   ROLES,
   PERMISSION_KEYS,
@@ -339,6 +341,9 @@ const SidebarLink = ({
       onClick={
         onClick
       }
+      data-onboarding={`nav-${item.path
+        .replace(/^\//, '')
+        .replace(/\//g, '-')}`}
       className="block"
     >
       {({
@@ -801,6 +806,8 @@ const Sidebar = ({
         </div>
 
       </aside>
+
+      <DerkenarOnboarding />
 
     </>
   );
