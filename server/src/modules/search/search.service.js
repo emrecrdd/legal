@@ -4,6 +4,7 @@ import { Document } from '../../models/Document.js';
 import { Task } from '../../models/Task.js';
 import { User } from '../../models/User.js';
 import { Note } from '../../models/Note.js';
+import { Consultation } from '../../models/Consultation.js';
 
 import { Op, Sequelize } from 'sequelize';
 import { sequelize } from '../../config/database.js';
@@ -53,6 +54,39 @@ const canViewAllTasks = (actor) =>
     actor,
     PERMISSION_KEYS.VIEW_ALL_TASKS
   );
+
+const canViewAllConsultations = (actor) =>
+  hasActorPermission(
+    actor,
+    PERMISSION_KEYS.VIEW_ALL_CONSULTATIONS
+  );
+
+const buildConsultationAccessWhere = (actor) => {
+  const actorId = requireActor(actor);
+
+  if (canViewAllConsultations(actor)) {
+    return {};
+  }
+
+  const escapedActorId = sequelize.escape(actorId);
+
+  return {
+    [Op.or]: [
+      { created_by: actorId },
+      Sequelize.where(
+        Sequelize.literal(`
+          EXISTS (
+            SELECT 1
+            FROM consultation_assignees ca
+            WHERE ca.consultation_id = "Consultation"."id"
+              AND ca.user_id = ${escapedActorId}
+          )
+        `),
+        true
+      ),
+    ],
+  };
+};
 
 const normalizeSearchTerm = (query) =>
   typeof query === 'string'
@@ -773,6 +807,85 @@ export const searchService = {
     );
   },
 
+  async searchConsultations(
+    query,
+    limit,
+    actor
+  ) {
+    requireActor(actor);
+
+    const searchTerm =
+      normalizeSearchTerm(query);
+
+    if (searchTerm.length < 2) {
+      return [];
+    }
+
+    return Consultation.findAll({
+      where:
+        combineWhere(
+          {
+            [Op.or]: [
+              {
+                consultation_number: {
+                  [Op.iLike]: `%${searchTerm}%`,
+                },
+              },
+              {
+                title: {
+                  [Op.iLike]: `%${searchTerm}%`,
+                },
+              },
+              {
+                description: {
+                  [Op.iLike]: `%${searchTerm}%`,
+                },
+              },
+              {
+                legal_area: {
+                  [Op.iLike]: `%${searchTerm}%`,
+                },
+              },
+              {
+                prospect_name: {
+                  [Op.iLike]: `%${searchTerm}%`,
+                },
+              },
+              {
+                prospect_email: {
+                  [Op.iLike]: `%${searchTerm}%`,
+                },
+              },
+              {
+                prospect_phone: {
+                  [Op.iLike]: `%${searchTerm}%`,
+                },
+              },
+            ],
+          },
+          buildConsultationAccessWhere(actor)
+        ),
+      attributes: [
+        'id',
+        'consultation_number',
+        'title',
+        'status',
+        'priority',
+        'legal_area',
+        'client_id',
+        'prospect_name',
+        'opened_at',
+        'created_at',
+        'converted_case_id',
+      ],
+      limit:
+        normalizeLimit(limit),
+      order: [
+        ['updated_at', 'DESC'],
+      ],
+    });
+  },
+
   async searchNotes(
     query,
     limit,
@@ -860,6 +973,7 @@ export const searchService = {
       cases,
       documents,
       tasks,
+      consultations,
       notes,
     ] =
       await Promise.all([
@@ -883,6 +997,11 @@ export const searchService = {
           safeLimit,
           actor
         ),
+        this.searchConsultations(
+          searchTerm,
+          safeLimit,
+          actor
+        ),
         this.searchNotes(
           searchTerm,
           safeLimit,
@@ -895,12 +1014,14 @@ export const searchService = {
       cases,
       documents,
       tasks,
+      consultations,
       notes,
       total:
         clients.length +
         cases.length +
         documents.length +
         tasks.length +
+        consultations.length +
         notes.length,
     };
   },
@@ -938,6 +1059,12 @@ export const searchService = {
           limit,
           actor
         );
+      case 'consultations':
+        return this.searchConsultations(
+          query,
+          limit,
+          actor
+        );
       case 'notes':
         return this.searchNotes(
           query,
@@ -971,6 +1098,7 @@ export const searchService = {
       clients,
       cases,
       documents,
+      consultations,
     ] =
       await Promise.all([
         Client.findAll({
@@ -1068,6 +1196,12 @@ export const searchService = {
           limit: 2,
           subQuery: false,
         }),
+
+        this.searchConsultations(
+          searchTerm,
+          3,
+          actor
+        ),
       ]);
 
     const suggestions = [];
@@ -1094,6 +1228,21 @@ export const searchService = {
           }`,
         url:
           `/cases/${caseItem.id}`,
+      });
+    });
+
+    consultations.forEach((consultation) => {
+      suggestions.push({
+        type: 'consultation',
+        id: consultation.id,
+        label: [
+          consultation.consultation_number,
+          consultation.title,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        url:
+          `/consultations/${consultation.id}`,
       });
     });
 

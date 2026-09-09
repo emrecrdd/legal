@@ -13,68 +13,23 @@ import {
   PERMISSION_KEYS,
 } from '../../constants/roles.js';
 
-const router =
-  express.Router();
+const router = express.Router();
 
-// ======================================================
-// AUTH
-// ======================================================
-
-router.use(
-  authenticate
-);
-
-// ======================================================
-// SEARCH PERMISSION
-//
-// Tüm arama modülü USE_SEARCH yetkisi ister.
-// Kullanıcı bazlı override burada devreye girer.
-// ======================================================
-
+router.use(authenticate);
 router.use(
   authorizePermission(
     PERMISSION_KEYS.USE_SEARCH
   )
 );
 
-// ======================================================
-// SEARCH
-// ======================================================
-
-router.get(
-  '/',
-  searchController.search
-);
-
-router.get(
-  '/all',
-  searchController.searchAll
-);
-
-router.get(
-  '/clients',
-  searchController.searchClients
-);
-
-router.get(
-  '/cases',
-  searchController.searchCases
-);
-
-router.get(
-  '/documents',
-  searchController.searchDocuments
-);
-
-router.get(
-  '/tasks',
-  searchController.searchTasks
-);
-
-router.get(
-  '/suggestions',
-  searchController.getSearchSuggestions
-);
+router.get('/', searchController.search);
+router.get('/all', searchController.searchAll);
+router.get('/clients', searchController.searchClients);
+router.get('/cases', searchController.searchCases);
+router.get('/documents', searchController.searchDocuments);
+router.get('/tasks', searchController.searchTasks);
+router.get('/consultations', searchController.searchConsultations);
+router.get('/suggestions', searchController.getSearchSuggestions);
 
 export {
   router as searchRoutes,
