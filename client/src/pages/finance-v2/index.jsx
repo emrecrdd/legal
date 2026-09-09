@@ -49,6 +49,9 @@ import {
   rowsOf,
   statusLabel,
   transactionLabel,
+  accountTypeLabel,
+  billingModelLabel,
+  expenseTypeLabel,
 } from '../../features/finance-v2/finance-v2.format.js';
 
 import toast from 'react-hot-toast';
@@ -59,7 +62,7 @@ const tabs = [
   ['ledger', 'Hareketler'],
   ['agreements', 'Ücret Anlaşmaları'],
   ['plans', 'Ödeme Planları'],
-  ['expenses', 'Masraflar'],
+  ['expenses', 'Giderler'],
   ['accounts', 'Kasa & Banka'],
 ];
 
@@ -101,30 +104,6 @@ const overdueTotal = (row) =>
       sum + Number(row?.[k] || 0),
     0
   );
-
-const accountTypeLabel = (type) => {
-  const labels = {
-    bank: 'Banka',
-    cash: 'Kasa',
-    pos: 'POS',
-    clearing: 'Geçiş Hesabı',
-    other: 'Diğer',
-  };
-
-  return labels[type] || type || '-';
-};
-
-const billingModelLabel = (model) => {
-  const labels = {
-    fixed: 'Sabit Ücret',
-    hourly: 'Saatlik',
-    installment: 'Taksitli',
-    success_fee: 'Başarı Ücreti',
-    mixed: 'Karma',
-  };
-
-  return labels[model] || model || '-';
-};
 
 export default function FinanceV2Center() {
   const navigate = useNavigate();
@@ -523,7 +502,7 @@ export default function FinanceV2Center() {
               }
             >
               <Receipt className="h-4 w-4" />
-              Masraf
+              Gider
             </Button>
           )}
 
@@ -902,7 +881,7 @@ export default function FinanceV2Center() {
                 İade
               </option>
               <option value="expense">
-                Masraf
+                Gider
               </option>
               <option value="transfer_in">
                 Transfer Giriş
@@ -1612,8 +1591,7 @@ function ExpenseTable({
             </Table.Cell>
 
             <Table.Cell>
-              {x.expense_type ||
-                '-'}
+              {expenseTypeLabel(x.expense_type)}
             </Table.Cell>
 
             <Table.Cell>
@@ -1647,7 +1625,7 @@ function ExpenseTable({
           0 && (
           <tr>
             <td colSpan="6">
-              <Empty text="Masraf kaydı yok." />
+              <Empty text="Gider kaydı yok." />
             </td>
           </tr>
         )}

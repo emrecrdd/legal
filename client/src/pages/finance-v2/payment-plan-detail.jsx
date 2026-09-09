@@ -46,8 +46,8 @@ const installmentStatusLabel = (status) => {
     pending: 'Bekliyor',
     paid: 'Ödendi',
     overdue: 'Gecikmiş',
-    cancelled: 'İptal Edildi',
-    canceled: 'İptal Edildi',
+    cancelled: 'İptal',
+    canceled: 'İptal',
   };
 
   return labels[status] || statusLabel(status);

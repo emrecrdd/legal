@@ -61,11 +61,11 @@ export const useCompleteFeeAgreement = () => mutation((id) => financeV2Api.compl
 export const useCancelFeeAgreement = () => mutation(({ id, reason }) => financeV2Api.cancelFeeAgreement(id, reason), 'Ücret anlaşması iptal edildi');
 export const useCreateReceivable = () => mutation((data) => financeV2Api.createReceivable(data), 'Tahakkuk oluşturuldu');
 export const usePostReceivable = () => mutation((id) => financeV2Api.postReceivable(id), 'Tahakkuk post edildi');
-export const useCreateExpense = () => mutation((data) => financeV2Api.createExpense(data), 'Masraf kaydedildi');
+export const useCreateExpense = () => mutation((data) => financeV2Api.createExpense(data), 'Gider kaydedildi');
 export const useTransferFinance = () => mutation((data) => financeV2Api.transfer(data), 'Hesap transferi tamamlandı');
 export const useReverseFinanceTransaction = () => mutation(({ id, reason }) => financeV2Api.reverseTransaction(id, reason), 'Ters kayıt oluşturuldu');
 export const useReverseFinanceTransfer = () => mutation(({ transactionId, reason }) => financeV2Api.reverseTransfer(transactionId, reason), 'Transfer ters kaydedildi');
-export const useReverseFinanceExpense = () => mutation(({ id, reason }) => financeV2Api.reverseExpense(id, reason), 'Masraf ters kaydedildi');
+export const useReverseFinanceExpense = () => mutation(({ id, reason }) => financeV2Api.reverseExpense(id, reason), 'Gider ters kaydedildi');
 export const useRefundFinanceTransaction = () => mutation(({ id, data, idempotencyKey }) => financeV2Api.refundTransaction(id, data, idempotencyKey), 'İade kaydedildi');
 export const useActivatePaymentPlan = () => mutation((id) => financeV2Api.activatePaymentPlan(id), 'Ödeme planı aktifleştirildi');
 export const useCompletePaymentPlan = () => mutation((id) => financeV2Api.completePaymentPlan(id), 'Ödeme planı tamamlandı');

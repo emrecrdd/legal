@@ -439,7 +439,7 @@ export const financeV2Service = {
       await assertFinanceRecordAccess(original,actor,transaction); await assertPeriodOpen(new Date(),transaction);
       if (original.status!=='posted') fail('Yalnız post edilmiş hareket ters kayıtla kapatılabilir',409);
       if (original.transaction_type==='reversal') fail('Ters kayıt hareketi yeniden ters kaydedilemez',409);
-      if (original.transaction_type==='expense') fail('Masraf hareketi özel masraf ters kayıt akışıyla kapatılmalıdır',409);
+      if (original.transaction_type==='expense') fail('Gider hareketi özel gider ters kayıt akışıyla kapatılmalıdır',409);
       if (['transfer_in','transfer_out'].includes(original.transaction_type)) fail('Transfer hareketi çift taraflı transfer ters kayıt akışıyla kapatılmalıdır',409);
       const normalizedReason=normalizeText(reason,500); if (!normalizedReason) fail('Ters kayıt nedeni zorunludur');
       const existing=await FinanceTransaction.findOne({where:{reversed_transaction_id:original.id,status:'posted'},transaction}); if(existing) fail('Bu hareket zaten ters kaydedilmiş',409);

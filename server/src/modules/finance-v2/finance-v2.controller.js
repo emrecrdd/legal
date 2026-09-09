@@ -8,11 +8,58 @@ const handle = (res,error,label) => { logger.error(label,error); return errorRes
 const csvEscape = (value) => {
   if (value == null) return '';
   const text=String(value);
-  return /[",;\r\n]/.test(text) ? `"${text.replace(/"/g,'""')}"` : text;
+  return /[";,\r\n]/.test(text) ? `"${text.replace(/"/g,'""')}"` : text;
 };
+
+const csvDateTR = (value) => {
+  if (!value) return '';
+  return new Intl.DateTimeFormat('tr-TR', {
+    day:'2-digit', month:'2-digit', year:'numeric',
+    hour:'2-digit', minute:'2-digit', hour12:false,
+    timeZone:'Europe/Istanbul',
+  }).format(new Date(value));
+};
+
+const csvAmountTR = (value) => {
+  const n=Number(value||0);
+  return new Intl.NumberFormat('tr-TR', {
+    minimumFractionDigits:2,
+    maximumFractionDigits:4,
+    useGrouping:true,
+  }).format(Number.isFinite(n)?n:0);
+};
+
+const transactionLabels={receipt:'Tahsilat',expense:'Gider',refund:'İade',transfer_in:'Transfer Girişi',transfer_out:'Transfer Çıkışı',reversal:'Ters Kayıt'};
+const directionLabels={in:'Giriş',out:'Çıkış'};
+const statusLabels={draft:'Taslak',posted:'İşlendi',reversed:'Ters Kaydedildi',cancelled:'İptal'};
+
 const ledgerToCsv = (rows) => {
-  const columns=['reference_no','transaction_date','transaction_type','direction','amount','currency','account_code','account_name','status','client_id','case_id','consultation_id','description','external_reference'];
-  return ['sep=;',columns.join(';'),...rows.map(row=>columns.map(c=>csvEscape(row[c])).join(';'))].join('\r\n');
+  const columns=[
+    ['Referans No','reference_no'],
+    ['Tarih','transaction_date'],
+    ['İşlem Türü','transaction_type'],
+    ['Yön','direction'],
+    ['Tutar','amount'],
+    ['Para Birimi','currency'],
+    ['Hesap Kodu','account_code'],
+    ['Hesap Adı','account_name'],
+    ['Durum','status'],
+    ['Açıklama','description'],
+    ['Harici Referans','external_reference'],
+  ];
+  const rowValue=(row,key)=>{
+    if(key==='transaction_date') return csvDateTR(row[key]);
+    if(key==='transaction_type') return transactionLabels[row[key]]||row[key]||'';
+    if(key==='direction') return directionLabels[row[key]]||row[key]||'';
+    if(key==='status') return statusLabels[row[key]]||row[key]||'';
+    if(key==='amount') return csvAmountTR(row[key]);
+    return row[key];
+  };
+  return [
+    'sep=;',
+    columns.map(([label])=>csvEscape(label)).join(';'),
+    ...rows.map(row=>columns.map(([,key])=>csvEscape(rowValue(row,key))).join(';')),
+  ].join('\r\n');
 };
 
 
@@ -34,15 +81,15 @@ export const financeV2Controller = {
   async reverseReceivableAdjustment(req,res){try{return successResponse(res,await financeV2Service.reverseReceivableAdjustment(req.params.adjustmentId,req.body.reason,req.user,meta(req)),'Alacak düzeltmesi ters kaydedildi');}catch(e){return handle(res,e,'finance-v2 reverse receivable adjustment');}},
   async createTransaction(req,res){try{return successResponse(res,await financeV2Service.createTransaction({...req.body,idempotency_key:req.headers['idempotency-key']||req.body.idempotency_key},req.user,meta(req)),'Finans hareketi kaydedildi',201);}catch(e){return handle(res,e,'finance-v2 transaction');}},
   async reverseTransaction(req,res){try{return successResponse(res,await financeV2Service.reverseTransaction(req.params.id,req.body.reason,req.user,meta(req)),'Ters kayıt oluşturuldu');}catch(e){return handle(res,e,'finance-v2 reverse');}},
-  async reverseExpense(req,res){try{return successResponse(res,await financeV2Service.reverseExpense(req.params.id,req.body.reason,req.user,meta(req)),'Masraf ters kaydedildi');}catch(e){return handle(res,e,'finance-v2 reverse expense');}},
+  async reverseExpense(req,res){try{return successResponse(res,await financeV2Service.reverseExpense(req.params.id,req.body.reason,req.user,meta(req)),'Gider ters kaydedildi');}catch(e){return handle(res,e,'finance-v2 reverse expense');}},
   async reverseTransfer(req,res){try{return successResponse(res,await financeV2Service.reverseTransfer(req.params.transactionId,req.body.reason,req.user,meta(req)),'Transfer ters kaydedildi');}catch(e){return handle(res,e,'finance-v2 reverse transfer');}},
   async refundTransaction(req,res){try{return successResponse(res,await financeV2Service.createRefund(req.params.id,{...req.body,idempotency_key:req.headers['idempotency-key']||req.body.idempotency_key},req.user,meta(req)),'İade kaydedildi',201);}catch(e){return handle(res,e,'finance-v2 refund');}},
   async transfer(req,res){try{return successResponse(res,await financeV2Service.transfer(req.body,req.user,meta(req)),'Hesap transferi kaydedildi',201);}catch(e){return handle(res,e,'finance-v2 transfer');}},
   async dashboard(req,res){try{return successResponse(res,await financeV2Service.getDashboard(req.user,req.query),'Finans dashboard getirildi');}catch(e){return handle(res,e,'finance-v2 dashboard');}},
   async accountBalances(req,res){try{return successResponse(res,await financeV2Service.getAccountBalances(req.user),'Hesap bakiyeleri getirildi');}catch(e){return handle(res,e,'finance-v2 balances');}},
-  async createExpense(req,res){try{return successResponse(res,await financeV2Service.createExpense(req.body,req.user,meta(req)),'Masraf kaydedildi',201);}catch(e){return handle(res,e,'finance-v2 expense');}},
-  async listExpenses(req,res){try{return successResponse(res,await financeV2Service.listExpenses(req.user,req.query),'Masraflar getirildi');}catch(e){return handle(res,e,'finance-v2 list expenses');}},
-  async getExpense(req,res){try{return successResponse(res,await financeV2Service.getExpense(req.params.id,req.user),'Masraf getirildi');}catch(e){return handle(res,e,'finance-v2 get expense');}},
+  async createExpense(req,res){try{return successResponse(res,await financeV2Service.createExpense(req.body,req.user,meta(req)),'Gider kaydedildi',201);}catch(e){return handle(res,e,'finance-v2 expense');}},
+  async listExpenses(req,res){try{return successResponse(res,await financeV2Service.listExpenses(req.user,req.query),'Giderler getirildi');}catch(e){return handle(res,e,'finance-v2 list expenses');}},
+  async getExpense(req,res){try{return successResponse(res,await financeV2Service.getExpense(req.params.id,req.user),'Gider getirildi');}catch(e){return handle(res,e,'finance-v2 get expense');}},
   async listPeriods(req,res){try{return successResponse(res,await financeV2Service.listPeriods(req.user),'Finans dönemleri getirildi');}catch(e){return handle(res,e,'finance-v2 list periods');}},
   async closePeriod(req,res){try{return successResponse(res,await financeV2Service.closePeriod(req.body,req.user,meta(req)),'Finans dönemi kapatıldı');}catch(e){return handle(res,e,'finance-v2 close period');}},
   async reopenPeriod(req,res){try{return successResponse(res,await financeV2Service.reopenPeriod(req.params.periodKey,req.body.reason,req.user,meta(req)),'Finans dönemi yeniden açıldı');}catch(e){return handle(res,e,'finance-v2 reopen period');}},
@@ -51,7 +98,7 @@ export const financeV2Controller = {
   async consultationSummary(req,res){try{return successResponse(res,await financeV2Service.getConsultationSummary(req.params.consultationId,req.user),'Danışmanlık finans özeti getirildi');}catch(e){return handle(res,e,'finance-v2 consultation summary');}},
   async profitability(req,res){try{return successResponse(res,await financeV2Service.getProfitability(req.user,req.query),'Finans katkı raporu getirildi');}catch(e){return handle(res,e,'finance-v2 profitability');}},
   async ledger(req,res){try{return successResponse(res,await financeV2Service.getLedger(req.user,req.query),'Finans hareketleri getirildi');}catch(e){return handle(res,e,'finance-v2 ledger');}},
-  async exportLedgerCsv(req,res){try{const result=await financeV2Service.getLedger(req.user,{...req.query,limit:5000,offset:0,export:true});const csv=ledgerToCsv(result.rows);res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition',`attachment; filename=derkenar-finance-ledger-${new Date().toISOString().slice(0,10)}.csv`);return res.status(200).send('\ufeff'+csv);}catch(e){return handle(res,e,'finance-v2 ledger csv');}},
+  async exportLedgerCsv(req,res){try{const result=await financeV2Service.getLedger(req.user,{...req.query,limit:5000,offset:0,export:true});const csv=ledgerToCsv(result.rows);res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition',`attachment; filename=derkenar-finans-hareketleri-${new Date().toISOString().slice(0,10)}.csv`);return res.status(200).send('\ufeff'+csv);}catch(e){return handle(res,e,'finance-v2 ledger csv');}},
   async listFeeAgreements(req,res){try{return successResponse(res,await financeV2Service.listFeeAgreements(req.user,req.query),'Ücret anlaşmaları getirildi');}catch(e){return handle(res,e,'finance-v2 list fee agreements');}},
   async getFeeAgreement(req,res){try{return successResponse(res,await financeV2Service.getFeeAgreement(req.params.id,req.user),'Ücret anlaşması getirildi');}catch(e){return handle(res,e,'finance-v2 get fee agreement');}},
   async listReceivables(req,res){try{return successResponse(res,await financeV2Service.listReceivables(req.user,req.query),'Alacaklar getirildi');}catch(e){return handle(res,e,'finance-v2 list receivables');}},

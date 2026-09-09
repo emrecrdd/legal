@@ -304,7 +304,7 @@ export default function FinanceV2PaymentPlanCreate() {
           </h1>
 
           <p className="mt-1 text-sm text-gray-500">
-            Her taksit Finance V2 içinde
+            Her taksit Finans modülü içinde
             ayrı bir alacak/tahakkuk
             kaydına bağlanır.
           </p>

@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import {
-  AlertTriangle,
   ArrowLeft,
   BarChart3,
-  CheckCircle2,
   LockKeyhole,
   Plus,
   RotateCcw,
@@ -27,7 +25,6 @@ import {
   useFinanceAccounts,
   useFinancePeriods,
   useFinanceProfitability,
-  useFinanceReconciliation,
   useReopenFinancePeriod,
 } from '../../features/finance-v2/finance-v2.query.js';
 
@@ -57,7 +54,6 @@ export default function FinanceControls() {
   );
 
   const profit = useFinanceProfitability({}, canProfit);
-  const recon = useFinanceReconciliation(canReports && canAll);
   const periodsQ = useFinancePeriods(canReports && canAll);
   const accounts = useFinanceAccounts();
 
@@ -126,7 +122,7 @@ export default function FinanceControls() {
           <Title
             icon={BarChart3}
             t="Nakit Katkı Analizi"
-            s="Tahsilat − iadeler − geri ödenmeyen giderler. Yasal/mali kâr-zarar değildir."
+            s="Tahsilat − iadeler − geri ödenmeyen giderler. Operasyonel nakit katkısıdır; resmi muhasebe kâr/zarar hesabı değildir."
           />
 
           <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -156,128 +152,6 @@ export default function FinanceControls() {
               </div>
             ))}
           </div>
-        </section>
-      )}
-
-      {/* LEGACY RECONCILIATION */}
-      {canReports && canAll && (
-        <section className={box}>
-          <Title
-            icon={
-              recon.data?.status === 'ok'
-                ? CheckCircle2
-                : AlertTriangle
-            }
-            t="Legacy → Finance V2 Mutabakatı"
-            s="Eski finans kayıtlarının V2'ye taşınma bütünlüğü."
-          />
-
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <Stat
-              l="Ödemeler"
-              a={recon.data?.payments?.mapped_count}
-              b={recon.data?.payments?.legacy_count}
-            />
-
-            <Stat
-              l="Planlar"
-              a={recon.data?.plans?.mapped_count}
-              b={recon.data?.plans?.legacy_count}
-            />
-
-            <Stat
-              l="Taksitler"
-              a={recon.data?.installments?.mapped_count}
-              b={recon.data?.installments?.legacy_count}
-            />
-          </div>
-
-          <div
-            className={`mt-4 rounded-xl p-3 text-sm font-semibold ${
-              recon.data?.status === 'ok'
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-amber-50 text-amber-700'
-            }`}
-          >
-            {recon.data?.status === 'ok'
-              ? 'Mutabakat temiz görünüyor.'
-              : 'Dikkat gerektiren legacy farkları var.'}
-          </div>
-
-          {(recon.data?.payments?.by_currency || []).length >
-            0 && (
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-gray-400">
-                    <th className="py-2">Para Birimi</th>
-                    <th>Legacy</th>
-                    <th>V2</th>
-                    <th>Fark</th>
-                    <th>Durum</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {recon.data.payments.by_currency.map((x) => (
-                    <tr
-                      key={x.currency}
-                      className="border-t border-gray-100 dark:border-white/[.06]"
-                    >
-                      <td className="py-2 font-bold">
-                        {x.currency}
-                      </td>
-
-                      <td>
-                        {money(
-                          x.legacy_amount,
-                          x.currency
-                        )}
-                      </td>
-
-                      <td>
-                        {money(
-                          x.mapped_amount,
-                          x.currency
-                        )}
-                      </td>
-
-                      <td>
-                        {money(
-                          x.difference,
-                          x.currency
-                        )}
-                      </td>
-
-                      <td>
-                        <Badge
-                          variant={
-                            x.amount_matches
-                              ? 'success'
-                              : 'warning'
-                          }
-                        >
-                          {x.amount_matches
-                            ? 'Eşleşiyor'
-                            : 'Fark Var'}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
-
-      {canReports && !canAll && (
-        <section className={box}>
-          <Title
-            icon={AlertTriangle}
-            t="Firma Geneli Kontroller"
-            s="Legacy mutabakatı ve dönem listesi VIEW_ALL_FINANCE yetkisi gerektirir."
-          />
         </section>
       )}
 
@@ -511,24 +385,6 @@ function Title({ icon: Icon, t, s }) {
         <h2 className="font-bold">{t}</h2>
         <p className="text-xs text-gray-500">{s}</p>
       </div>
-    </div>
-  );
-}
-
-function Stat({ l, a = 0, b = 0 }) {
-  return (
-    <div className="rounded-xl bg-gray-50 p-4 dark:bg-white/[.04]">
-      <p className="text-xs font-bold uppercase text-gray-400">
-        {l}
-      </p>
-
-      <p className="mt-2 text-xl font-bold">
-        {a} / {b}
-      </p>
-
-      <p className="text-xs text-gray-500">
-        eşleşen / legacy
-      </p>
     </div>
   );
 }
