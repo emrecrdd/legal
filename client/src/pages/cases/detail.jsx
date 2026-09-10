@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   useQuery,
@@ -1810,7 +1810,7 @@ const CaseCompletionAnalysis = ({
       loading={addingMissingParties}
       onClick={onAddSelectedMissingParties}
     >
-      Seçilen Tarafları Onayla ve Ekle
+      Seçilen Tarafları Ekle
     </Button>
   )}
 
@@ -1968,7 +1968,7 @@ const CaseCompletionAnalysis = ({
                     loading={applyingCaseUpdates}
                     onClick={onApplySelectedCaseUpdates}
                   >
-                    Seçilenleri Onayla ve Uygula
+                    Seçilen Değişiklikleri Uygula
                   </Button>
                 )}
 
@@ -2062,6 +2062,213 @@ const CaseCompletionAnalysis = ({
         )}
       </Card.Body>
     </Card>
+  );
+};
+
+// ======================================================
+// KURUMSAL AKSİYON ONAY MODALI
+// ======================================================
+
+const ActionConfirmDialog = ({
+  open,
+  eyebrow,
+  title,
+  description,
+  confirmText,
+  cancelText = 'Vazgeç',
+  variant = 'primary',
+  loading = false,
+  onClose,
+  onConfirm,
+  children,
+}) => {
+  const dialogRef = useRef(null);
+  const previousFocusRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    previousFocusRef.current = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const focusableSelector = [
+      'button:not([disabled])',
+      '[href]',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(',');
+
+    const timer = window.setTimeout(() => {
+      const focusable =
+        dialogRef.current?.querySelectorAll(
+          focusableSelector
+        );
+
+      focusable?.[0]?.focus();
+    }, 0);
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        if (!loading) {
+          onClose?.();
+        }
+        return;
+      }
+
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll(
+          focusableSelector
+        ) || []
+      );
+
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (
+        event.shiftKey &&
+        document.activeElement === first
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (
+        !event.shiftKey &&
+        document.activeElement === last
+      ) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+      document.body.style.overflow =
+        previousOverflow;
+
+      const previousFocus =
+        previousFocusRef.current;
+
+      if (
+        previousFocus &&
+        typeof previousFocus.focus === 'function'
+      ) {
+        window.setTimeout(
+          () => previousFocus.focus(),
+          0
+        );
+      }
+    };
+  }, [open, loading, onClose]);
+
+  if (!open) {
+    return null;
+  }
+
+  const isWarning = variant === 'warning';
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6">
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+        aria-label="Onay penceresini kapat"
+        disabled={loading}
+        onClick={onClose}
+      />
+
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="case-action-dialog-title"
+        aria-describedby="case-action-dialog-description"
+        className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+      >
+        <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+          <div className="flex items-start gap-4">
+            <div
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                isWarning
+                  ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/[0.10] dark:text-amber-400'
+                  : 'bg-blue-50 text-blue-600 dark:bg-blue-500/[0.10] dark:text-blue-400'
+              }`}
+            >
+              {isWarning ? (
+                <AlertTriangle className="h-5 w-5" />
+              ) : (
+                <CheckCircle2 className="h-5 w-5" />
+              )}
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">
+                {eyebrow}
+              </p>
+
+              <h2
+                id="case-action-dialog-title"
+                className="mt-1 text-lg font-semibold tracking-[-0.02em] text-gray-900 dark:text-white"
+              >
+                {title}
+              </h2>
+
+              <p
+                id="case-action-dialog-description"
+                className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400"
+              >
+                {description}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 px-6 py-5">
+          {children}
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={loading}
+            onClick={onClose}
+          >
+            {cancelText}
+          </Button>
+
+          <Button
+            type="button"
+            loading={loading}
+            disabled={loading}
+            onClick={onConfirm}
+          >
+            {confirmText}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -2176,6 +2383,15 @@ const [
   selectedCaseUpdates,
   setSelectedCaseUpdates,
 ] = useState([]);
+  const [
+    pendingPartyAdd,
+    setPendingPartyAdd,
+  ] = useState([]);
+
+  const [
+    pendingCaseUpdates,
+    setPendingCaseUpdates,
+  ] = useState([]);
   const {
     data,
     isLoading,
@@ -2411,6 +2627,7 @@ const addMissingPartiesMutation =
       ]);
 
       setSelectedMissingParties([]);
+      setPendingPartyAdd([]);
       setCaseCompletion(null);
 
       toast.success(
@@ -2449,6 +2666,7 @@ const addMissingPartiesMutation =
     });
 
     setSelectedCaseUpdates([]);
+    setPendingCaseUpdates([]);
     setCaseCompletion(null);
 
     toast.success(
@@ -2527,18 +2745,22 @@ const handleAddSelectedMissingParties = () => {
     return;
   }
 
-  const confirmed = window.confirm(
-    `${selected.length} taraf dava kaydına eklenecek. Devam etmek istiyor musunuz?`
-  );
+  setPendingPartyAdd(selected);
+};
 
-  if (!confirmed) {
+const handleConfirmAddSelectedMissingParties = () => {
+  if (
+    pendingPartyAdd.length === 0 ||
+    addMissingPartiesMutation.isPending
+  ) {
     return;
   }
 
   addMissingPartiesMutation.mutate(
-    selected
+    pendingPartyAdd
   );
 };
+
 const handleApplySelectedCaseUpdates = () => {
   const suggestedCaseUpdates =
     caseCompletion?.result?.suggestedCaseUpdates ||
@@ -2555,15 +2777,20 @@ const handleApplySelectedCaseUpdates = () => {
     return;
   }
 
-  const confirmed = window.confirm(
-    `${selected.length} dava bilgisi AI önerisine göre güncellenecek. Devam etmek istiyor musunuz?`
-  );
+  setPendingCaseUpdates(selected);
+};
 
-  if (!confirmed) {
+const handleConfirmApplySelectedCaseUpdates = () => {
+  if (
+    pendingCaseUpdates.length === 0 ||
+    applyCaseUpdatesMutation.isPending
+  ) {
     return;
   }
 
-  applyCaseUpdatesMutation.mutate(selected);
+  applyCaseUpdatesMutation.mutate(
+    pendingCaseUpdates
+  );
 };
 const upcomingHearings =
   Array.isArray(caseItem?.events)
@@ -4560,6 +4787,150 @@ const upcomingHearings =
 
         </Card>
       )}
+
+      <ActionConfirmDialog
+        open={pendingPartyAdd.length > 0}
+        eyebrow="Taraf ekleme onayı"
+        title="Seçilen tarafları dava kaydına ekle"
+        description="Yalnızca seçtiğiniz taraflar dava kaydına eklenecektir."
+        confirmText={`${pendingPartyAdd.length} Tarafı Ekle`}
+        loading={addMissingPartiesMutation.isPending}
+        onClose={() => {
+          if (!addMissingPartiesMutation.isPending) {
+            setPendingPartyAdd([]);
+          }
+        }}
+        onConfirm={
+          handleConfirmAddSelectedMissingParties
+        }
+      >
+        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-500/20 dark:bg-blue-500/[0.07]">
+          <div className="flex items-start gap-3">
+            <Users className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+            <div>
+              <p className="text-sm font-semibold text-blue-950 dark:text-blue-200">
+                {pendingPartyAdd.length} taraf eklenecek
+              </p>
+              <p className="mt-1 text-sm leading-6 text-blue-900/80 dark:text-blue-200/80">
+                Değişiklikler yalnızca onayınızdan sonra uygulanır.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-white/[0.07]">
+          <div className="divide-y divide-gray-100 dark:divide-white/[0.06]">
+            {pendingPartyAdd.map((party, index) => {
+              const normalizedRole =
+                normalizePartyRole(party.role);
+
+              return (
+                <div
+                  key={`${party.name}-${party.role}-${index}`}
+                  className="px-4 py-3"
+                >
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {party.name}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                    {PARTY_LABELS[normalizedRole] ||
+                      party.role ||
+                      'Taraf'}
+                    {' · '}
+                    {normalizeAIEntityType(
+                      party.entityType
+                    ) === 'company'
+                      ? 'Kurum / Tüzel Kişi'
+                      : 'Gerçek Kişi'}
+                  </p>
+                  {party.representative && (
+                    <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                      Vekil: {party.representative}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </ActionConfirmDialog>
+
+      <ActionConfirmDialog
+        open={pendingCaseUpdates.length > 0}
+        eyebrow="Dava bilgisi güncelleme onayı"
+        title="Seçilen değişiklikleri uygula"
+        description="AI tarafından önerilen ve sizin seçtiğiniz dava bilgileri güncellenecektir."
+        confirmText={`${pendingCaseUpdates.length} Değişikliği Uygula`}
+        variant="warning"
+        loading={applyCaseUpdatesMutation.isPending}
+        onClose={() => {
+          if (!applyCaseUpdatesMutation.isPending) {
+            setPendingCaseUpdates([]);
+          }
+        }}
+        onConfirm={
+          handleConfirmApplySelectedCaseUpdates
+        }
+      >
+        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div>
+              <p className="text-sm font-semibold text-amber-950 dark:text-amber-200">
+                {pendingCaseUpdates.length} dava bilgisi güncellenecek
+              </p>
+              <p className="mt-1 text-sm leading-6 text-amber-900/80 dark:text-amber-200/80">
+                Aşağıdaki mevcut ve önerilen değerleri kontrol ederek işlemi onaylayın.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {pendingCaseUpdates.map((item) => (
+            <div
+              key={item.field}
+              className="rounded-xl border border-gray-200 p-4 dark:border-white/[0.07]"
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-slate-500">
+                {getCaseUpdateLabel(item.field)}
+              </p>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+                <div className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-white/[0.03]">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-slate-500">
+                    Mevcut
+                  </p>
+                  <p className="mt-1 break-words text-sm text-gray-700 dark:text-slate-300">
+                    {String(
+                      item.currentValue ?? '-'
+                    )}
+                  </p>
+                </div>
+
+                <span className="hidden text-gray-300 dark:text-slate-600 sm:block">
+                  →
+                </span>
+
+                <div className="rounded-lg bg-blue-50 px-3 py-2 dark:bg-blue-500/[0.06]">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-blue-500 dark:text-blue-400">
+                    Önerilen
+                  </p>
+                  <p className="mt-1 break-words text-sm font-medium text-blue-900 dark:text-blue-200">
+                    {String(
+                      item.suggestedValue ?? '-'
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-xs leading-5 text-gray-400 dark:text-slate-500">
+          Yalnızca bu listede yer alan seçili alanlar güncellenecektir.
+        </p>
+      </ActionConfirmDialog>
 
     </div>
   );
