@@ -856,7 +856,7 @@ const getCaseQuestionSourceLink = (source, caseId) => {
 
   switch (source.sourceType) {
     case 'case':
-      return `/cases/${caseId || source.sourceId}`;
+      return null;
     case 'document':
       return `/documents/${source.sourceId}`;
     case 'task':
@@ -877,6 +877,14 @@ const CASE_QUESTION_SOURCE_LABELS = {
   event: 'Duruşma / Etkinlik',
   meeting: 'Toplantı',
   note: 'Dosya notu',
+};
+
+const getCaseQuestionSourceFallbackLabel = (sourceType) => {
+  if (sourceType === 'case') {
+    return 'Kaynak: Dava Kaydı';
+  }
+
+  return `Kaynak · ${CASE_QUESTION_SOURCE_LABELS[sourceType] || 'Dosya kaydı'}`;
 };
 
 const getCaseQuestionSourceActionLabel = (sourceType) => {
@@ -1055,7 +1063,7 @@ const CaseQuestionPanel = ({
                               </Link>
                             ) : (
                               <span className="text-gray-500">
-                                Kaynak · {CASE_QUESTION_SOURCE_LABELS[finding.sourceType] || 'Dosya kaydı'}
+                                {getCaseQuestionSourceFallbackLabel(finding.sourceType)}
                               </span>
                             )}
                           </div>
@@ -1226,8 +1234,7 @@ const HearingPreparationPanel = ({
       </Link>
     ) : (
       <span className="text-xs text-gray-500">
-        Kaynak ·{' '}
-        {CASE_QUESTION_SOURCE_LABELS[item.sourceType] || 'Dosya kaydı'}
+        {getCaseQuestionSourceFallbackLabel(item.sourceType)}
       </span>
     );
   };
