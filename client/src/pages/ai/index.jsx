@@ -427,6 +427,31 @@ const AIAssistant = () => {
     getInitialDraftForm()
   );
   const [result, setResult] = useState(null);
+  const [showWorkspaceIntro, setShowWorkspaceIntro] = useState(() => {
+    if (typeof window === 'undefined') return false;
+
+    return (
+      window.sessionStorage.getItem(
+        'derkenar-ai-workspace-intro-shown'
+      ) !== 'true'
+    );
+  });
+
+  // AI çalışma alanına ilk girişte yalnızca kısa bir kurumsal geçiş göster.
+  // Backend veya ek veri çağrısı yoktur; aynı tarayıcı oturumunda tekrar gösterilmez.
+  useEffect(() => {
+    if (!showWorkspaceIntro) return undefined;
+
+    const timer = window.setTimeout(() => {
+      window.sessionStorage.setItem(
+        'derkenar-ai-workspace-intro-shown',
+        'true'
+      );
+      setShowWorkspaceIntro(false);
+    }, 1350);
+
+    return () => window.clearTimeout(timer);
+  }, [showWorkspaceIntro]);
 
   // Kullanıcı kimliği değiştiğinde önceki hesabın seçili kaydı veya
   // AI sonucu ekranda kalmamalı.
@@ -741,62 +766,131 @@ const AIAssistant = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Yapay Zekâ Çalışma Alanı
-          </h1>
+    <div className="relative min-h-[calc(100vh-8rem)] space-y-8 pb-8">
+      {showWorkspaceIntro && (
+        <div
+          className="fixed inset-0 z-[140] flex items-center justify-center overflow-hidden bg-slate-950 px-6"
+          aria-live="polite"
+          aria-label="Derkenar AI çalışma alanı hazırlanıyor"
+        >
+          <div className="absolute inset-0 opacity-60">
+            <div className="absolute left-1/2 top-1/2 h-[30rem] w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/20 blur-3xl" />
+            <div className="absolute left-[20%] top-[25%] h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
+            <div className="absolute bottom-[20%] right-[18%] h-48 w-48 rounded-full bg-indigo-400/10 blur-3xl" />
+          </div>
 
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Belge analizi, hukuki ön değerlendirme ve
-            şablon oluşturma işlemleri
-          </p>
+          <div className="relative mx-auto w-full max-w-2xl text-center">
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/5 shadow-2xl shadow-blue-950/40 backdrop-blur">
+              <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8 text-blue-300" aria-hidden="true">
+                <path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9l2-5.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                <path d="m18.5 4 .7 1.8L21 6.5l-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" fill="currentColor" opacity=".7" />
+              </svg>
+            </div>
+
+            <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-300">Derkenar AI</p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+              Yapay zekâ çalışma alanınız hazırlanıyor
+            </h1>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-400 sm:text-base">
+              Hukuki analiz ve üretim araçlarınız güvenli çalışma alanında getiriliyor.
+            </p>
+            <div className="mx-auto mt-7 h-1 w-48 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full w-full origin-left animate-pulse rounded-full bg-blue-400" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-6 py-8 shadow-xl shadow-slate-950/10 dark:border-slate-800 sm:px-8 sm:py-10 lg:px-10">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-blue-500/15 blur-3xl" />
+          <div className="absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
+          <div className="absolute inset-y-0 right-0 hidden w-1/3 opacity-20 lg:block">
+            <svg viewBox="0 0 320 220" fill="none" className="h-full w-full" aria-hidden="true">
+              <path d="M30 55h82l36 36h118" stroke="white" strokeOpacity=".28" />
+              <path d="M65 150h72l31-31h118" stroke="white" strokeOpacity=".18" />
+              <circle cx="30" cy="55" r="4" fill="white" fillOpacity=".55" />
+              <circle cx="65" cy="150" r="4" fill="white" fillOpacity=".4" />
+              <circle cx="266" cy="91" r="4" fill="white" fillOpacity=".45" />
+              <circle cx="286" cy="119" r="4" fill="white" fillOpacity=".3" />
+            </svg>
+          </div>
         </div>
 
-        <Badge variant="success">
-          Yapay Zekâ Aktif
-        </Badge>
+        <div className="relative max-w-3xl">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full border border-blue-300/20 bg-blue-400/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-blue-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)]" />
+              Derkenar AI · Aktif
+            </span>
+            <span className="text-xs font-medium text-slate-400">Gelişmiş Hukuki Analiz ve Üretim Merkezi</span>
+          </div>
+
+          <h1 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-[2.75rem] lg:leading-tight">
+            Derkenar AI Çalışma Alanı
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
+            Belgelerinizi analiz edin, hukuki konuları yapılandırılmış biçimde değerlendirin ve çalışma taslaklarınızı tek bir profesyonel yapay zekâ alanından oluşturun.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">Çalışma Araçları</p>
+            <h2 className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">Nasıl çalışmak istiyorsunuz?</h2>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Bir araç seçin ve çalışmaya başlayın.</p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            {
+              id: 'documents', eyebrow: '01', label: 'Belge Analizi',
+              description: 'Dilekçe, sözleşme, tutanak ve UYAP UDF belgelerindeki hukuki bilgileri yapılandırın.',
+              icon: <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden="true"><path d="M7 3.75h7l3 3V20.25H7V3.75Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /><path d="M14 3.75v3h3M9.5 11h5M9.5 14.5h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>,
+            },
+            {
+              id: 'research', eyebrow: '02', label: 'Hukuki Ön Değerlendirme',
+              description: 'Hukuki sorunları, olay örgüsünü ve bağlamı sistematik bir ilk değerlendirmeye dönüştürün.',
+              icon: <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden="true"><path d="M12 3.5v17M6 7.5h12M8.25 7.5 5 13h6.5L8.25 7.5ZM15.75 7.5 12.5 13H19l-3.25-5.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+            },
+            {
+              id: 'draft', eyebrow: '03', label: 'Şablon Oluşturma',
+              description: 'Dilekçe, sözleşme ve ihtarname için avukat incelemesine hazır ilk çalışma taslağını üretin.',
+              icon: <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden="true"><path d="M5 18.5V6.75A2.75 2.75 0 0 1 7.75 4h8.5A2.75 2.75 0 0 1 19 6.75v10.5A2.75 2.75 0 0 1 16.25 20H6.5A1.5 1.5 0 0 1 5 18.5Z" stroke="currentColor" strokeWidth="1.6" /><path d="m9 14 5.75-5.75 1 1L10 15l-2 .5.5-2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>,
+            },
+          ].map((tool) => {
+            const isActive = activeTab === tool.id;
+            return (
+              <button
+                key={tool.id}
+                type="button"
+                onClick={() => { setActiveTab(tool.id); setResult(null); }}
+                className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-950 ${isActive ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-500/10 dark:border-blue-500/70 dark:bg-blue-500/10' : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700'}`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${isActive ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' : 'bg-slate-100 text-slate-600 transition group-hover:bg-blue-50 group-hover:text-blue-600 dark:bg-slate-800 dark:text-slate-300 dark:group-hover:bg-blue-500/10 dark:group-hover:text-blue-300'}`}>{tool.icon}</div>
+                  <span className={`text-xs font-semibold tracking-[0.18em] ${isActive ? 'text-blue-600 dark:text-blue-300' : 'text-slate-400'}`}>{tool.eyebrow}</span>
+                </div>
+                <h3 className="mt-5 font-semibold text-slate-900 dark:text-white">{tool.label}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">{tool.description}</p>
+                <div className={`mt-5 flex items-center gap-2 text-sm font-semibold ${isActive ? 'text-blue-700 dark:text-blue-300' : 'text-slate-500 transition group-hover:text-blue-600 dark:text-slate-400'}`}>
+                  {isActive ? 'Aktif çalışma alanı' : 'Çalışma alanını aç'} <span aria-hidden="true">→</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-800/70 dark:bg-amber-900/10 dark:text-amber-200">
+        <svg viewBox="0 0 24 24" fill="none" className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true"><path d="M12 8v4.5M12 16h.01M10.25 4.75 3.7 16.1A2 2 0 0 0 5.43 19h13.14a2 2 0 0 0 1.73-2.9L13.75 4.75a2 2 0 0 0-3.5 0Z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        <p className="leading-6">Yapay zekâ çıktıları çalışma ve ön değerlendirme amaçlıdır. Hukuki işlemden önce avukat tarafından kontrol edilmelidir.</p>
       </div>
 
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
-        Yapay zekâ çıktıları çalışma ve ön değerlendirme
-        amaçlıdır. Hukuki işlemden önce avukat tarafından
-        kontrol edilmelidir.
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {[
-          {
-            id: 'documents',
-            label: 'Belge Analizi',
-          },
-          {
-            id: 'research',
-            label: 'Hukuki Ön Değerlendirme',
-          },
-          {
-            id: 'draft',
-            label: 'Şablon Oluştur',
-          },
-        ].map((tab) => (
-          <Button
-            key={tab.id}
-            variant={
-              activeTab === tab.id
-                ? 'primary'
-                : 'secondary'
-            }
-            onClick={() => {
-              setActiveTab(tab.id);
-              setResult(null);
-            }}
-          >
-            {tab.label}
-          </Button>
-        ))}
-      </div>
-
+      <div className="border-t border-slate-200 pt-7 dark:border-slate-800">
       {activeTab === 'documents' && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <Card>
@@ -1528,6 +1622,7 @@ Gecikme cezası`}
           </Card.Body>
         </Card>
       )}
+      </div>
     </div>
   );
 };
