@@ -879,6 +879,25 @@ const CASE_QUESTION_SOURCE_LABELS = {
   note: 'Dosya notu',
 };
 
+const getCaseQuestionSourceActionLabel = (sourceType) => {
+  switch (sourceType) {
+    case 'document':
+      return 'Kaynak Belgeyi Görüntüle';
+    case 'task':
+      return 'Kaynak Görevi Görüntüle';
+    case 'event':
+      return 'Kaynak Duruşmayı Görüntüle';
+    case 'meeting':
+      return 'Kaynak Toplantıyı Görüntüle';
+    case 'case':
+      return 'Dava Kaydını Görüntüle';
+    case 'note':
+      return 'Kaynak Dosya Notunu Görüntüle';
+    default:
+      return 'Kaynağı Görüntüle';
+  }
+};
+
 const CaseQuestionPanel = ({
   analysis,
   asking,
@@ -1032,7 +1051,7 @@ const CaseQuestionPanel = ({
                           <div className="mt-3 text-xs">
                             {sourceLink ? (
                               <Link to={sourceLink} className="font-medium text-blue-600 hover:underline dark:text-blue-400">
-                                Kaynak Belgeyi Görüntüle · {CASE_QUESTION_SOURCE_LABELS[finding.sourceType] || 'Kaynak'}
+                                {getCaseQuestionSourceActionLabel(finding.sourceType)}
                               </Link>
                             ) : (
                               <span className="text-gray-500">
@@ -1203,8 +1222,7 @@ const HearingPreparationPanel = ({
         to={sourceLink}
         className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
       >
-        Kaynak Belgeyi Görüntüle ·{' '}
-        {CASE_QUESTION_SOURCE_LABELS[item.sourceType] || 'Kaynak'}
+        {getCaseQuestionSourceActionLabel(item.sourceType)}
       </Link>
     ) : (
       <span className="text-xs text-gray-500">
