@@ -1032,7 +1032,7 @@ const CaseQuestionPanel = ({
                           <div className="mt-3 text-xs">
                             {sourceLink ? (
                               <Link to={sourceLink} className="font-medium text-blue-600 hover:underline dark:text-blue-400">
-                                Kaynağı aç · {CASE_QUESTION_SOURCE_LABELS[finding.sourceType] || 'Kaynak'}
+                                Kaynak Belgeyi Görüntüle · {CASE_QUESTION_SOURCE_LABELS[finding.sourceType] || 'Kaynak'}
                               </Link>
                             ) : (
                               <span className="text-gray-500">
@@ -1203,7 +1203,7 @@ const HearingPreparationPanel = ({
         to={sourceLink}
         className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
       >
-        Kaynağı aç ·{' '}
+        Kaynak Belgeyi Görüntüle ·{' '}
         {CASE_QUESTION_SOURCE_LABELS[item.sourceType] || 'Kaynak'}
       </Link>
     ) : (
