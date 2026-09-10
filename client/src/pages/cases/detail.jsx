@@ -2189,7 +2189,7 @@ const ActionConfirmDialog = ({
   const isWarning = variant === 'warning';
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto p-4 sm:p-6">
       <button
         type="button"
         className="absolute inset-0 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
@@ -2204,9 +2204,9 @@ const ActionConfirmDialog = ({
         aria-modal="true"
         aria-labelledby="case-action-dialog-title"
         aria-describedby="case-action-dialog-description"
-        className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33]"
+        className="relative z-10 flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0b1b33] sm:max-h-[calc(100dvh-3rem)]"
       >
-        <div className="border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
+        <div className="shrink-0 border-b border-gray-100 px-6 py-5 dark:border-white/[0.06]">
           <div className="flex items-start gap-4">
             <div
               className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
@@ -2244,11 +2244,11 @@ const ActionConfirmDialog = ({
           </div>
         </div>
 
-        <div className="space-y-4 px-6 py-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-5">
           {children}
         </div>
 
-        <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
+        <div className="shrink-0 flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-white/[0.06] dark:bg-white/[0.015] sm:flex-row sm:justify-end">
           <Button
             type="button"
             variant="secondary"
