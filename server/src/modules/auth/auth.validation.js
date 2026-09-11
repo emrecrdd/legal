@@ -46,7 +46,97 @@ const passwordValidation = (
 // ======================================================
 
 export const authValidation = {
-  
+
+  // ====================================================
+  // REGISTER - TUMAG SELF REGISTRATION
+  // ====================================================
+
+  register: [
+    body('first_name')
+      .trim()
+      .isString()
+      .notEmpty()
+      .withMessage(
+        'Ad gereklidir'
+      )
+      .isLength({
+        max: 100,
+      })
+      .withMessage(
+        'Ad en fazla 100 karakter olabilir'
+      ),
+
+    body('last_name')
+      .trim()
+      .isString()
+      .notEmpty()
+      .withMessage(
+        'Soyad gereklidir'
+      )
+      .isLength({
+        max: 100,
+      })
+      .withMessage(
+        'Soyad en fazla 100 karakter olabilir'
+      ),
+
+    body('email')
+      .trim()
+      .isEmail()
+      .withMessage(
+        'Geçerli bir e-posta adresi giriniz'
+      )
+      .normalizeEmail({
+        gmail_remove_dots: false,
+      }),
+
+    passwordValidation(
+      'password',
+      'Şifre'
+    ),
+
+    body('bar_association')
+      .trim()
+      .isString()
+      .notEmpty()
+      .withMessage(
+        'Baro bilgisi gereklidir'
+      )
+      .isLength({
+        max: 150,
+      })
+      .withMessage(
+        'Baro bilgisi en fazla 150 karakter olabilir'
+      ),
+
+    body('bar_registration_number')
+      .trim()
+      .isString()
+      .notEmpty()
+      .withMessage(
+        'Baro sicil numarası gereklidir'
+      )
+      .isLength({
+        max: 50,
+      })
+      .withMessage(
+        'Baro sicil numarası en fazla 50 karakter olabilir'
+      ),
+  ],
+
+  // ====================================================
+  // VERIFY EMAIL
+  // ====================================================
+
+  verifyEmail: [
+    body('token')
+      .isString()
+      .notEmpty()
+      .withMessage(
+        'E-posta doğrulama anahtarı gereklidir'
+      ),
+  ],
+
   // ====================================================
   // LOGIN
   // ====================================================
@@ -58,7 +148,9 @@ export const authValidation = {
       .withMessage(
         'Geçerli bir e-posta adresi giriniz'
       )
-      .normalizeEmail(),
+      .normalizeEmail({
+        gmail_remove_dots: false,
+      }),
 
     body('password')
       .isString()
@@ -118,7 +210,9 @@ export const authValidation = {
       .withMessage(
         'Geçerli bir e-posta adresi giriniz'
       )
-      .normalizeEmail(),
+      .normalizeEmail({
+        gmail_remove_dots: false,
+      }),
   ],
 
   // ====================================================
