@@ -24,6 +24,10 @@ import {
   emailService,
 } from '../../integrations/email.service.js';
 
+import {
+  licenseService,
+} from '../license/license.service.js';
+
 // ======================================================
 // CONSTANTS
 // ======================================================
@@ -282,6 +286,101 @@ const validateTokenVersion = (
 // ======================================================
 
 export const authService = {
+  // ====================================================
+  // ACCEPT USER INVITE
+  // ====================================================
+
+  async acceptInvite(
+    token,
+    password
+  ) {
+    if (!token) {
+      throw new Error(
+        'Davet bağlantısı geçersiz'
+      );
+    }
+
+    validatePassword(
+      password
+    );
+
+    const user =
+      await authRepository.findByEmailVerificationToken(
+        token
+      );
+
+    if (!user) {
+      throw new Error(
+        'Davet bağlantısı geçersiz, süresi dolmuş veya daha önce kullanılmış'
+      );
+    }
+
+    /*
+     * Normal e-posta doğrulama tokenları aktif hesaplara aittir.
+     * Kullanıcı daveti ise yalnızca pasif + doğrulanmamış hesap için
+     * kabul edilir. Böylece setup/verify-email tokenları bu endpointte
+     * kullanılamaz.
+     */
+    if (
+      user.is_active === true ||
+      user.email_verified === true
+    ) {
+      throw new Error(
+        'Bu davet artık kullanılamaz'
+      );
+    }
+
+    if (
+      !user.email_verification_expires ||
+      new Date(
+        user.email_verification_expires
+      ) <= new Date()
+    ) {
+      await authRepository.clearEmailVerificationToken(
+        user.id
+      );
+
+      throw new Error(
+        'Davet bağlantısının süresi dolmuş'
+      );
+    }
+
+    /*
+     * /api/auth lisans middleware'inden önce çalıştığı için
+     * koltuk limiti burada ayrıca doğrulanır.
+     */
+    await licenseService.assertSeatAvailable();
+
+    user.password =
+      password;
+
+    user.is_active =
+      true;
+
+    user.email_verified =
+      true;
+
+    user.email_verification_token =
+      null;
+
+    user.email_verification_expires =
+      null;
+
+    increaseTokenVersion(
+      user
+    );
+
+    await user.save();
+
+    await authRepository.invalidateAllRefreshTokens(
+      user.id
+    );
+
+    return authRepository.findById(
+      user.id
+    );
+  },
+
   // ====================================================
   // VERIFY EMAIL
   // ====================================================

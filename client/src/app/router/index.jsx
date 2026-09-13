@@ -36,6 +36,7 @@ import ForgotPassword from '../../pages/auth/forgot-password.jsx';
 import ResetPassword from '../../pages/auth/reset-password.jsx';
 import InitialSetup from '../../pages/auth/initial-setup.jsx';
 import VerifyEmail from '../../pages/auth/verify-email.jsx';
+import AcceptInvite from '../../pages/auth/accept-invite.jsx';
 
 // ======================================================
 // DASHBOARD
@@ -319,7 +320,6 @@ const AppRouter = () => {
     element={<ResetPassword />}
   />
 
-
   <Route
     path="/ilk-kurulum/:token"
     element={<InitialSetup />}
@@ -327,9 +327,15 @@ const AppRouter = () => {
 
   <Route
     path="/verify-email"
-    element={<VerifyEmail />}
-  />
+    element={<VerifyEmail />
 
+          <Route
+            path="/accept-invite"
+            element={
+              <AcceptInvite />
+            }
+          />}
+  />
 </Route>
       
 

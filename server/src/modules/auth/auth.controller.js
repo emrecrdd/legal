@@ -132,6 +132,57 @@ const sanitizeUser = (
 
 export const authController = {
   // ====================================================
+  // ACCEPT USER INVITE
+  // ====================================================
+
+  async acceptInvite(
+    req,
+    res
+  ) {
+    try {
+      const {
+        token,
+        password,
+      } = req.body || {};
+
+      if (
+        !token ||
+        !password
+      ) {
+        return errorResponse(
+          res,
+          'Davet tokenı ve şifre gereklidir',
+          400
+        );
+      }
+
+      const user =
+        await authService.acceptInvite(
+          token,
+          password
+        );
+
+      return successResponse(
+        res,
+        sanitizeUser(user),
+        'Davet kabul edildi. Hesabınız kullanıma hazır.'
+      );
+    } catch (error) {
+      logger.error(
+        'Accept invite error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message ||
+          'Davet kabul edilemedi',
+        error?.statusCode || 400
+      );
+    }
+  },
+
+  // ====================================================
   // VERIFY EMAIL
   // ====================================================
 

@@ -407,8 +407,14 @@ class EmailService {
     }
   }
 
-  async sendWelcomeEmail(user) {
-  if (!user?.email || !user?.email_verification_token) {
+  async sendWelcomeEmail(
+  user,
+  verificationToken
+) {
+  if (
+    !user?.email ||
+    !verificationToken
+  ) {
     throw new Error(
       'Hoş geldiniz e-postası için kullanıcı e-postası ve doğrulama tokenı zorunludur.'
     );
@@ -416,27 +422,47 @@ class EmailService {
 
   const verificationUrl =
     `${config.CLIENT_URL}/verify-email?token=${encodeURIComponent(
-      user.email_verification_token
+      verificationToken
     )}`;
 
   const templateData = {
-    title: "Derkenar'a Hoş Geldiniz",
-    greeting: `Merhaba ${user.first_name || 'Kullanıcı'},`,
+    title:
+      "Derkenar'a Hoş Geldiniz",
+
+    greeting:
+      `Merhaba ${user.first_name || 'Kullanıcı'},`,
+
     paragraphs: [
       "Derkenar Hukuk Bürosu Yönetim Sistemi'ne kaydınız başarıyla oluşturuldu.",
       'Hesabınızı etkinleştirmek için aşağıdaki bağlantıyı kullanabilirsiniz.',
     ],
+
     button: {
-      label: 'Hesabı Etkinleştir',
-      url: verificationUrl,
+      label:
+        'Hesabı Etkinleştir',
+
+      url:
+        verificationUrl,
     },
   };
 
   return this.sendEmail({
-    to: user.email,
-    subject: 'Derkenar hesabınızı etkinleştirin',
-    html: createEmailTemplate(templateData),
-    text: createPlainTextEmail(templateData),
+    to:
+      user.email,
+
+    subject:
+      'Derkenar hesabınızı etkinleştirin',
+
+    html:
+      createEmailTemplate(
+        templateData
+      ),
+
+    text:
+      createPlainTextEmail(
+        templateData
+      ),
+
     tags: [
       'welcome',
       'email-verification',
@@ -444,6 +470,71 @@ class EmailService {
   });
 }
   
+  async sendUserInviteEmail(
+    user,
+    invitationToken
+  ) {
+    if (
+      !user?.email ||
+      !invitationToken
+    ) {
+      throw new Error(
+        'Kullanıcı daveti için e-posta ve davet tokenı zorunludur.'
+      );
+    }
+
+    const invitationUrl =
+      `${config.CLIENT_URL}/accept-invite?token=${encodeURIComponent(
+        invitationToken
+      )}`;
+
+    const templateData = {
+      title:
+        'Derkenar Kullanıcı Daveti',
+
+      greeting:
+        `Merhaba ${user.first_name || 'Kullanıcı'},`,
+
+      paragraphs: [
+        'Büro yöneticiniz sizi Derkenar Hukuk Bürosu Yönetim Sistemi'ne davet etti.',
+        'Hesabınızı etkinleştirmek ve ilk şifrenizi belirlemek için aşağıdaki bağlantıyı kullanın.',
+      ],
+
+      warning:
+        'Bu davet bağlantısı 24 saat boyunca geçerlidir ve yalnızca bir kez kullanılabilir.',
+
+      button: {
+        label:
+          'Daveti Kabul Et',
+
+        url:
+          invitationUrl,
+      },
+    };
+
+    return this.sendEmail({
+      to:
+        user.email,
+
+      subject:
+        'Derkenar kullanıcı davetiniz',
+
+      html:
+        createEmailTemplate(
+          templateData
+        ),
+
+      text:
+        createPlainTextEmail(
+          templateData
+        ),
+
+      tags: [
+        'user-invite',
+      ],
+    });
+  }
+
   async sendPasswordResetEmail(user, token) {
   if (!user?.email || !token) {
     throw new Error(

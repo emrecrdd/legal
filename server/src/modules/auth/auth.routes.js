@@ -36,12 +36,6 @@ router.post(
   authController.refreshToken
 );
 
-/*
- * Logout'u authenticate arkasına koymuyoruz.
- *
- * Access token süresi dolmuş olsa bile kullanıcı
- * refresh token üzerinden oturumu kapatabilmeli.
- */
 router.post(
   '/logout',
   authController.logout
@@ -64,14 +58,22 @@ router.post(
 );
 
 // ======================================================
-// EMAIL VERIFICATION
+// USER INVITE
 // ======================================================
 
 /*
- * Kullanıcı henüz giriş yapmamış olacağı için
- * e-posta doğrulama endpoint'i authenticate
- * middleware'inden ÖNCE tanımlanmalıdır.
+ * Daveti alan kullanıcı henüz oturum açmış değildir.
+ * Bu endpoint authenticate middleware'inden önce kalmalıdır.
  */
+router.post(
+  '/accept-invite',
+  authController.acceptInvite
+);
+
+// ======================================================
+// EMAIL VERIFICATION
+// ======================================================
+
 router.post(
   '/verify-email',
   authController.verifyEmail

@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 import {
   Op,
   UniqueConstraintError,
@@ -34,6 +36,10 @@ import {
   logger,
 } from '../../config/logger.js';
 
+import {
+  emailService,
+} from '../../integrations/email.service.js';
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -44,6 +50,20 @@ const VALID_ROLES =
       ROLES
     )
   );
+
+const USER_INVITE_EXPIRY_MS =
+  24 * 60 * 60 * 1000;
+
+const hashInviteToken = (
+  token
+) =>
+  crypto
+    .createHash('sha256')
+    .update(
+      String(token),
+      'utf8'
+    )
+    .digest('hex');
 
 const normalizeEmail = (
   email
@@ -493,27 +513,27 @@ export const userController = {
   },
 
   // ====================================================
-  // CREATE
+  // CREATE / INVITE USER
   // ====================================================
 
   async create(
     req,
     res
   ) {
+    let user =
+      null;
+
     try {
       const {
         first_name,
         last_name,
         email,
-        password,
         phone,
         role = ROLES.INTERN,
         title,
         bio,
-        is_active = true,
         permissions = {},
-      } =
-        req.body;
+      } = req.body || {};
 
       const cleanFirstName =
         String(
@@ -530,9 +550,7 @@ export const userController = {
           email
         );
 
-      if (
-        !cleanFirstName
-      ) {
+      if (!cleanFirstName) {
         return errorResponse(
           res,
           'Ad gereklidir',
@@ -540,9 +558,7 @@ export const userController = {
         );
       }
 
-      if (
-        !cleanLastName
-      ) {
+      if (!cleanLastName) {
         return errorResponse(
           res,
           'Soyad gereklidir',
@@ -550,9 +566,7 @@ export const userController = {
         );
       }
 
-      if (
-        !cleanEmail
-      ) {
+      if (!cleanEmail) {
         return errorResponse(
           res,
           'E-posta adresi gereklidir',
@@ -568,21 +582,6 @@ export const userController = {
         return errorResponse(
           res,
           'Geçerli bir e-posta adresi girin',
-          400
-        );
-      }
-
-      const passwordValidationError =
-        getPasswordValidationError(
-          password
-        );
-
-      if (
-        passwordValidationError
-      ) {
-        return errorResponse(
-          res,
-          passwordValidationError,
           400
         );
       }
@@ -607,9 +606,7 @@ export const userController = {
           },
         });
 
-      if (
-        existingUser
-      ) {
+      if (existingUser) {
         return errorResponse(
           res,
           'Bu e-posta adresi zaten kullanılıyor',
@@ -622,7 +619,30 @@ export const userController = {
           permissions
         );
 
-      const user =
+      const invitationToken =
+        crypto
+          .randomBytes(32)
+          .toString('hex');
+
+      const invitationExpires =
+        new Date(
+          Date.now() +
+            USER_INVITE_EXPIRY_MS
+        );
+
+      /*
+       * User.password allowNull:false olduğu için hesap oluşturulurken
+       * kullanıcının bilmediği kriptografik rastgele bir başlangıç
+       * değeri üretilir. User model hook'u bunu bcrypt ile hashler.
+       * Kullanıcı bu değerle giriş yapamaz; daveti kabul ederken kendi
+       * şifresiyle değiştirilir.
+       */
+      const temporaryPassword =
+        crypto
+          .randomBytes(48)
+          .toString('base64url');
+
+      user =
         await User.create({
           first_name:
             cleanFirstName,
@@ -633,7 +653,8 @@ export const userController = {
           email:
             cleanEmail,
 
-          password,
+          password:
+            temporaryPassword,
 
           phone:
             phone?.trim() ||
@@ -649,14 +670,52 @@ export const userController = {
             bio?.trim() ||
             null,
 
-          is_active:
-            Boolean(
-              is_active
-            ),
-
           permissions:
             safePermissions,
+
+          is_active:
+            false,
+
+          email_verified:
+            false,
+
+          email_verification_token:
+            hashInviteToken(
+              invitationToken
+            ),
+
+          email_verification_expires:
+            invitationExpires,
         });
+
+      try {
+        await emailService.sendUserInviteEmail(
+          user,
+          invitationToken
+        );
+      } catch (mailError) {
+        logger.error(
+          'User invite email send failed:',
+          {
+            userId:
+              user.id,
+            message:
+              mailError?.message,
+          }
+        );
+
+        /*
+         * Mail gitmediyse yarım davet bırakmıyoruz.
+         * Model paranoid olduğu için kayıt soft-delete edilir.
+         */
+        await user.destroy();
+
+        return errorResponse(
+          res,
+          'Kullanıcı daveti gönderilemedi. Lütfen tekrar deneyin.',
+          502
+        );
+      }
 
       await createAuditLog({
         req,
@@ -668,7 +727,7 @@ export const userController = {
           user.id,
 
         description:
-          `"${user.email}" kullanıcısı "${user.role}" rolüyle oluşturuldu`,
+          `"${user.email}" adresine "${user.role}" rolüyle kullanıcı daveti gönderildi`,
       });
 
       return successResponse(
@@ -676,14 +735,12 @@ export const userController = {
         getSafeUser(
           user
         ),
-        'Kullanıcı başarıyla oluşturuldu',
+        'Kullanıcı daveti başarıyla gönderildi',
         201
       );
-    } catch (
-      error
-    ) {
+    } catch (error) {
       logger.error(
-        'User create error:',
+        'User invite error:',
         error
       );
 
@@ -700,7 +757,7 @@ export const userController = {
 
       return errorResponse(
         res,
-        'Kullanıcı oluşturulamadı',
+        'Kullanıcı daveti gönderilemedi',
         500
       );
     }
