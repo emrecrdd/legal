@@ -50,8 +50,6 @@ class SetupInvite extends Model {
       },
       {
         sequelize,
-        modelName:
-          'SetupInvite',
         tableName:
           'setup_invites',
         underscored:
