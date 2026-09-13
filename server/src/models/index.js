@@ -416,10 +416,6 @@ MessageAttachment.initModel(sequelize);
 
   CalendarIntegration.belongsTo(
     User,
-
-  SetupInvite,
-
-
     {
       foreignKey:
         'user_id',
