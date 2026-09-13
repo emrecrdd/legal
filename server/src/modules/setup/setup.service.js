@@ -146,7 +146,13 @@ export const setupService = {
     } =
       createVerificationToken();
 
-    const result =
+    /*
+     * Transaction içinden public/sanitize edilmiş obje değil,
+     * gerçek User instance'ı döndürüyoruz.
+     *
+     * Böylece mail servisine email alanı eksiksiz gider.
+     */
+    const createdUser =
       await sequelize.transaction(
         async (
           transaction
@@ -239,18 +245,59 @@ export const setupService = {
             transaction,
           });
 
-          return {
-            user:
-              publicUser(
-                user
-              ),
-          };
+          return user;
         }
       );
 
+    /*
+     * Burada hem e-posta hem token kesin kontrol ediliyor.
+     * Token loglanmıyor.
+     */
+    if (
+      !createdUser?.email ||
+      !verificationToken
+    ) {
+      logger.error(
+        'Initial setup verification payload is incomplete',
+        {
+          userId:
+            createdUser?.id ||
+            null,
+          hasEmail:
+            Boolean(
+              createdUser?.email
+            ),
+          hasVerificationToken:
+            Boolean(
+              verificationToken
+            ),
+        }
+      );
+
+      const payloadError =
+        new Error(
+          'Hesap oluşturuldu ancak doğrulama e-postası hazırlanamadı. Doğrulama e-postasını yeniden isteyin.'
+        );
+
+      payloadError.statusCode =
+        502;
+
+      payloadError.code =
+        'VERIFICATION_EMAIL_PAYLOAD_INVALID';
+
+      payloadError.userCreated =
+        true;
+
+      payloadError.email =
+        createdUser?.email ||
+        null;
+
+      throw payloadError;
+    }
+
     try {
       await emailService.sendWelcomeEmail(
-        result.user,
+        createdUser,
         verificationToken
       );
     } catch (
@@ -260,7 +307,9 @@ export const setupService = {
         'Initial setup verification email send failed',
         {
           userId:
-            result.user.id,
+            createdUser.id,
+          email:
+            createdUser.email,
           message:
             error?.message,
         }
@@ -281,13 +330,16 @@ export const setupService = {
         true;
 
       mailError.email =
-        result.user.email;
+        createdUser.email;
 
       throw mailError;
     }
 
     return {
-      ...result,
+      user:
+        publicUser(
+          createdUser
+        ),
 
       verification_required:
         true,
@@ -351,11 +403,6 @@ export const setupService = {
         email
       );
 
-    /*
-     * Enumeration-safe:
-     * kullanıcı yoksa veya zaten doğrulanmışsa
-     * aynı response döner.
-     */
     if (
       !user ||
       user.email_verified ===
@@ -387,11 +434,6 @@ export const setupService = {
     } catch (
       error
     ) {
-      /*
-       * Kullanıcıya teknik mail servis detayını açmıyoruz.
-       * Yeni token DB'de kalabilir; kullanıcı tekrar resend
-       * yaptığında üstüne yeni token yazılır.
-       */
       logger.error(
         'Verification resend failed',
         {
