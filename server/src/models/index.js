@@ -1252,6 +1252,7 @@ export {
   Reminder,
 
   CalendarIntegration,
+  SetupInvite,
   
   Conversation,
 ConversationMember,
