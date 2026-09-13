@@ -213,6 +213,7 @@ class User extends Sequelize.Model {
             true,
         },
 
+<<<<<<< HEAD
         email_verification_expires: {
           type:
             DataTypes.DATE,
@@ -221,6 +222,8 @@ class User extends Sequelize.Model {
             true,
         },
 
+=======
+>>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
         password_reset_token: {
           type:
             DataTypes.STRING,
@@ -355,7 +358,10 @@ class User extends Sequelize.Model {
     delete values.password;
     delete values.refresh_token;
     delete values.email_verification_token;
+<<<<<<< HEAD
     delete values.email_verification_expires;
+=======
+>>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
     delete values.password_reset_token;
     delete values.password_reset_expires;
     delete values.token_version;
@@ -366,4 +372,8 @@ class User extends Sequelize.Model {
 
 export {
   User,
+<<<<<<< HEAD
 };
+=======
+};
+>>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf

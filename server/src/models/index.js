@@ -34,14 +34,20 @@ import { FinancePaymentPlan } from './FinancePaymentPlan.js';
 import { FinanceInstallment } from './FinanceInstallment.js';
 import { FinanceReceivableAdjustment } from './FinanceReceivableAdjustment.js';
 import { FinanceRefundAllocation } from './FinanceRefundAllocation.js';
+<<<<<<< HEAD
 import { SetupInvite } from './SetupInvite.js';
+=======
+>>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
 const initModels = (sequelize) => {
   // ======================================================
   // MODEL INITIALIZATION
   // ======================================================
 
   User.initModel(sequelize);
+<<<<<<< HEAD
   SetupInvite.initModel(sequelize);
+=======
+>>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
   Client.initModel(sequelize);
   Consultation.initModel(sequelize);
   ConsultationAssignee.initModel(sequelize);
@@ -85,6 +91,7 @@ ConversationMember.initModel(sequelize);
 Message.initModel(sequelize);
 MessageAttachment.initModel(sequelize);
   // ======================================================
+<<<<<<< HEAD
   // SETUP INVITE ASSOCIATIONS
   // ======================================================
 
@@ -99,6 +106,8 @@ MessageAttachment.initModel(sequelize);
   });
 
   // ======================================================
+=======
+>>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
   // USER ASSOCIATIONS
   // ======================================================
 
@@ -409,7 +418,10 @@ MessageAttachment.initModel(sequelize);
 
   CalendarIntegration.belongsTo(
     User,
+<<<<<<< HEAD
   SetupInvite,
+=======
+>>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
     {
       foreignKey:
         'user_id',
