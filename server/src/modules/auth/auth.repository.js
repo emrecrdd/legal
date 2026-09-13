@@ -16,6 +16,7 @@ const SAFE_USER_EXCLUDES = [
   'password',
   'refresh_token',
   'email_verification_token',
+  'email_verification_expires',
   'password_reset_token',
   'password_reset_expires',
 ];
@@ -70,16 +71,12 @@ const hashToken = (
  *
  * Yeni sistem yalnızca SHA-256 hash saklıyor.
  *
- * Kullanıcıları topluca logout etmemek için
- * lookup sırasında hem:
+ * Lookup sırasında hem:
  *
  * - eski plaintext değer
  * - yeni hashed değer
  *
  * aranır.
- *
- * Eski tokenların ömrü dolduktan sonra
- * plaintext fallback kaldırılabilir.
  */
 const getTokenCandidates = (
   token
@@ -113,9 +110,6 @@ const getTokenCandidates = (
 export const authRepository = {
   // ====================================================
   // FIND BY EMAIL
-  //
-  // Login için password alanı gerekli olduğu için
-  // burada exclude kullanmıyoruz.
   // ====================================================
 
   findByEmail: (
@@ -154,8 +148,6 @@ export const authRepository = {
 
   // ====================================================
   // USER WITH PASSWORD
-  //
-  // Şifre değişikliği için kullanılır.
   // ====================================================
 
   findByIdWithPassword: (
@@ -168,8 +160,6 @@ export const authRepository = {
 
   // ====================================================
   // CREATE
-  //
-  // Password hash işlemini User model hook'u yapıyor.
   // ====================================================
 
   create: (
@@ -181,15 +171,134 @@ export const authRepository = {
   },
 
   // ====================================================
+  // EMAIL VERIFICATION TOKEN
+  // ====================================================
+
+  saveEmailVerificationToken: (
+    userId,
+    token,
+    expires = null
+  ) => {
+    const tokenHash =
+      token
+        ? hashToken(
+            token
+          )
+        : null;
+
+    return User.update(
+      {
+        email_verification_token:
+          tokenHash,
+
+        email_verification_expires:
+          expires,
+      },
+      {
+        where: {
+          id:
+            userId,
+        },
+      }
+    );
+  },
+
+  // ====================================================
+  // FIND BY EMAIL VERIFICATION TOKEN
+  // ====================================================
+
+  findByEmailVerificationToken: (
+    token
+  ) => {
+    if (
+      !token
+    ) {
+      return null;
+    }
+
+    const candidates =
+      getTokenCandidates(
+        token
+      );
+
+    return User.findOne({
+      where: {
+        email_verification_token: {
+          [Op.in]:
+            candidates,
+        },
+
+        [Op.or]: [
+          {
+            email_verification_expires:
+              null,
+          },
+          {
+            email_verification_expires: {
+              [Op.gt]:
+                new Date(),
+            },
+          },
+        ],
+      },
+    });
+  },
+
+  // ====================================================
+  // MARK EMAIL VERIFIED
+  // ====================================================
+
+  markEmailVerified: (
+    userId
+  ) => {
+    return User.update(
+      {
+        email_verified:
+          true,
+
+        email_verification_token:
+          null,
+
+        email_verification_expires:
+          null,
+      },
+      {
+        where: {
+          id:
+            userId,
+        },
+      }
+    );
+  },
+
+  // ====================================================
+  // CLEAR EMAIL VERIFICATION TOKEN
+  // ====================================================
+
+  clearEmailVerificationToken: (
+    userId
+  ) => {
+    return User.update(
+      {
+        email_verification_token:
+          null,
+
+        email_verification_expires:
+          null,
+      },
+      {
+        where: {
+          id:
+            userId,
+        },
+      }
+    );
+  },
+
+  // ====================================================
   // REFRESH TOKEN
   // ====================================================
 
-  /*
-   * KRİTİK:
-   *
-   * Raw refresh token artık DB'ye yazılmaz.
-   * Yalnızca SHA-256 hash saklanır.
-   */
   updateRefreshToken: (
     userId,
     refreshToken
@@ -302,24 +411,6 @@ export const authRepository = {
   // ATOMIC REFRESH TOKEN ROTATION
   // ====================================================
 
-  /*
-   * Refresh işlemi sırasında:
-   *
-   * eski token hâlâ DB'deyse
-   *      ↓
-   * yeni token hashini yaz
-   *
-   * eski token artık yoksa
-   *      ↓
-   * hiçbir satırı değiştirme
-   *
-   * Böylece aynı refresh token ile eşzamanlı
-   * iki isteğin ikisinin de başarılı olması
-   * engellenebilir.
-   *
-   * Bir sonraki auth.service.js güncellemesinde
-   * bu fonksiyonu kullanacağız.
-   */
   rotateRefreshToken: async (
     userId,
     currentRefreshToken,
@@ -374,12 +465,6 @@ export const authRepository = {
   // PASSWORD RESET
   // ====================================================
 
-  /*
-   * KRİTİK:
-   *
-   * E-postaya raw reset token gider.
-   * DB'de yalnız SHA-256 hash saklanır.
-   */
   savePasswordResetToken: (
     userId,
     token,
@@ -427,11 +512,6 @@ export const authRepository = {
         token
       );
 
-    /*
-     * Hem eski plaintext reset tokenlar
-     * hem yeni hashed tokenlar geçiş
-     * döneminde desteklenir.
-     */
     return User.findOne({
       where: {
         password_reset_token: {
