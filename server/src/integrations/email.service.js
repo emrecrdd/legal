@@ -496,7 +496,7 @@ class EmailService {
         `Merhaba ${user.first_name || 'Kullanıcı'},`,
 
       paragraphs: [
-        'Büro yöneticiniz sizi Derkenar Hukuk Bürosu Yönetim Sistemi'ne davet etti.',
+        "Büro yöneticiniz sizi Derkenar Hukuk Bürosu Yönetim Sistemi'ne davet etti.",
         'Hesabınızı etkinleştirmek ve ilk şifrenizi belirlemek için aşağıdaki bağlantıyı kullanın.',
       ],
 

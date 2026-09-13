@@ -327,14 +327,12 @@ const AppRouter = () => {
 
   <Route
     path="/verify-email"
-    element={<VerifyEmail />
+    element={<VerifyEmail />}
+  />
 
-          <Route
-            path="/accept-invite"
-            element={
-              <AcceptInvite />
-            }
-          />}
+  <Route
+    path="/accept-invite"
+    element={<AcceptInvite />}
   />
 </Route>
       
