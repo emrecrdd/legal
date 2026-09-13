@@ -64,6 +64,20 @@ router.post(
 );
 
 // ======================================================
+// EMAIL VERIFICATION
+// ======================================================
+
+/*
+ * Kullanıcı henüz giriş yapmamış olacağı için
+ * e-posta doğrulama endpoint'i authenticate
+ * middleware'inden ÖNCE tanımlanmalıdır.
+ */
+router.post(
+  '/verify-email',
+  authController.verifyEmail
+);
+
+// ======================================================
 // PROTECTED ROUTES
 // ======================================================
 
