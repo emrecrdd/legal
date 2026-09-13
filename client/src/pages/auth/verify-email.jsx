@@ -15,9 +15,7 @@ import {
   LoaderCircle,
 } from 'lucide-react';
 
-import {
-  useVerifySetupEmail,
-} from '../../features/setup/setup.hook.js';
+import authApi from '../../features/auth/auth.api.js';
 
 const VerifyEmail = () => {
   const [
@@ -29,9 +27,6 @@ const VerifyEmail = () => {
     searchParams.get(
       'token'
     ) || '';
-
-  const verify =
-    useVerifySetupEmail();
 
   const startedRef =
     useRef(false);
@@ -77,20 +72,21 @@ const VerifyEmail = () => {
         return;
       }
 
-      verify
-        .mutateAsync(
+      authApi
+        .verifyEmail(
           token
         )
         .then(
           (
-            result
+            response
           ) => {
             setStatus(
               'success'
             );
 
             setMessage(
-              result?.message ||
+              response?.data
+                ?.message ||
                 'E-posta adresiniz başarıyla doğrulandı.'
             );
           }
