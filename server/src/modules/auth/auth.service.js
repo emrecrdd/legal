@@ -283,6 +283,48 @@ const validateTokenVersion = (
 
 export const authService = {
   // ====================================================
+  // VERIFY EMAIL
+  // ====================================================
+
+  async verifyEmail(
+    token
+  ) {
+    if (!token) {
+      throw new Error(
+        'E-posta doğrulama bağlantısı geçersiz'
+      );
+    }
+
+    const user =
+      await authRepository.findByEmailVerificationToken(
+        token
+      );
+
+    if (!user) {
+      throw new Error(
+        'E-posta doğrulama bağlantısı geçersiz veya daha önce kullanılmış'
+      );
+    }
+
+    if (
+      user.is_active !==
+      true
+    ) {
+      throw new Error(
+        'Kullanıcı hesabı aktif değil'
+      );
+    }
+
+    await authRepository.markEmailVerified(
+      user.id
+    );
+
+    return authRepository.findById(
+      user.id
+    );
+  },
+
+  // ====================================================
   // LOGIN
   // ====================================================
 
