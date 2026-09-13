@@ -7,6 +7,32 @@ class SetupInvite extends Model {
   static initModel(
     sequelize
   ) {
+    /*
+     * Bazı Sequelize / Node kombinasyonlarında Model.init(),
+     * model sınıfının `name` özelliğini yeniden atamaya çalışabiliyor.
+     * Function/Class `name` varsayılan olarak writable:false olduğu için
+     * burada yalnızca bu model sınıfında writable hale getiriyoruz.
+     */
+    const nameDescriptor =
+      Object.getOwnPropertyDescriptor(
+        SetupInvite,
+        'name'
+      );
+
+    if (
+      nameDescriptor &&
+      nameDescriptor.writable !== true
+    ) {
+      Object.defineProperty(
+        SetupInvite,
+        'name',
+        {
+          ...nameDescriptor,
+          writable: true,
+        }
+      );
+    }
+
     SetupInvite.init(
       {
         id: {
@@ -50,6 +76,8 @@ class SetupInvite extends Model {
       },
       {
         sequelize,
+        modelName:
+          'SetupInvite',
         tableName:
           'setup_invites',
         underscored:
