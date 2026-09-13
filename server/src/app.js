@@ -55,13 +55,10 @@ import {
 } from './modules/auth/auth.routes.js';
 
 import {
-<<<<<<< HEAD
   setupRoutes,
 } from './modules/setup/setup.routes.js';
 
 import {
-=======
->>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
   clientRoutes,
 } from './modules/clients/client.routes.js';
 
@@ -465,7 +462,6 @@ app.use(
   requireTrustedOrigin
 );
 
-<<<<<<< HEAD
 app.use(
   '/api/setup',
   (
@@ -492,8 +488,6 @@ app.use(
   }
 );
 
-=======
->>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
 // ======================================================
 // REQUEST BODY
 // ======================================================
@@ -536,7 +530,6 @@ const stripQueryString = (
     return '-';
   }
 
-<<<<<<< HEAD
   const path =
     value.split('?')[0] ||
     '/';
@@ -556,11 +549,6 @@ const stripQueryString = (
   return path.replace(
     /\/api\/setup\/([^/]+)(?=\/claim(?:\/|$)|\/|$)/g,
     '/api/setup/[REDACTED]'
-=======
-  return (
-    value.split('?')[0] ||
-    '/'
->>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
   );
 };
 
@@ -946,7 +934,6 @@ const passwordRecoveryRateLimiter =
   });
 
 // ======================================================
-<<<<<<< HEAD
 // INITIAL SETUP RATE LIMIT
 // ======================================================
 
@@ -985,20 +972,15 @@ const setupRateLimiter =
   });
 
 // ======================================================
-=======
->>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
 // APPLY SPECIFIC RATE LIMITS
 // ======================================================
 
 app.use(
-<<<<<<< HEAD
   '/api/setup',
   setupRateLimiter
 );
 
 app.use(
-=======
->>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
   '/api/auth/login',
   loginRateLimiter
 );
@@ -1129,14 +1111,11 @@ app.get(
 );
 
 app.use(
-<<<<<<< HEAD
   '/api/setup',
   setupRoutes
 );
 
 app.use(
-=======
->>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
   '/api',
   enforceLicense
 );
