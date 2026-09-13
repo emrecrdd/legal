@@ -132,6 +132,52 @@ const sanitizeUser = (
 
 export const authController = {
   // ====================================================
+  // VERIFY EMAIL
+  // ====================================================
+
+  async verifyEmail(
+    req,
+    res
+  ) {
+    try {
+      const token =
+        req.body?.token ||
+        req.query?.token;
+
+      if (!token) {
+        return errorResponse(
+          res,
+          'E-posta doğrulama tokenı gereklidir',
+          400
+        );
+      }
+
+      const user =
+        await authService.verifyEmail(
+          token
+        );
+
+      return successResponse(
+        res,
+        sanitizeUser(user),
+        'E-posta adresiniz başarıyla doğrulandı'
+      );
+    } catch (error) {
+      logger.error(
+        'Verify email error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message ||
+          'E-posta doğrulanamadı',
+        400
+      );
+    }
+  },
+
+  // ====================================================
   // LOGIN
   // ====================================================
 
