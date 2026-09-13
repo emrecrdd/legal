@@ -34,11 +34,8 @@ import DashboardLayout from '../../layouts/dashboard.layout.jsx';
 import Login from '../../pages/auth/login.jsx';
 import ForgotPassword from '../../pages/auth/forgot-password.jsx';
 import ResetPassword from '../../pages/auth/reset-password.jsx';
-<<<<<<< HEAD
 import InitialSetup from '../../pages/auth/initial-setup.jsx';
 import VerifyEmail from '../../pages/auth/verify-email.jsx';
-=======
->>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
 
 // ======================================================
 // DASHBOARD
@@ -321,7 +318,7 @@ const AppRouter = () => {
     path="/reset-password"
     element={<ResetPassword />}
   />
-<<<<<<< HEAD
+
 
   <Route
     path="/ilk-kurulum/:token"
@@ -332,8 +329,7 @@ const AppRouter = () => {
     path="/verify-email"
     element={<VerifyEmail />}
   />
-=======
->>>>>>> c6001984c45568db0d4be0c8aee0fe7518f9b9cf
+
 </Route>
       
 
