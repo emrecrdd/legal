@@ -915,6 +915,73 @@ export const documentController = {
   },
 
   // ====================================================
+  // OFFICE PREVIEW
+  // ====================================================
+
+  async previewOffice(
+    req,
+    res
+  ) {
+    try {
+      const preview =
+        await documentService.getOfficePreview(
+          req.params.id,
+          req.user
+        );
+
+      res.setHeader(
+        'Cache-Control',
+        'private, no-store'
+      );
+
+      res.setHeader(
+        'X-Content-Type-Options',
+        'nosniff'
+      );
+
+      await createAuditLogSafely({
+        action:
+          'view',
+
+        entity_type:
+          'document',
+
+        entity_id:
+          preview.id,
+
+        description:
+          `"${preview.name}" Office belgesi önizlendi`,
+
+        ...auditMetadata(
+          req
+        ),
+      });
+
+      return successResponse(
+        res,
+        preview,
+        'Office preview fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Preview Office document error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        getDocumentErrorStatus(
+          error,
+          400
+        )
+      );
+    }
+  },
+
+  // ====================================================
   // UDF PREVIEW
   // ====================================================
 

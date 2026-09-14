@@ -551,6 +551,28 @@ const isUdfDocument = (
   );
 };
 
+const isOfficePreviewDocument = (
+  document
+) => {
+  if (!document) {
+    return false;
+  }
+
+  const extension =
+    getExtension(
+      document.original_name ||
+        document.name
+    );
+
+  return [
+    '.docx',
+    '.xls',
+    '.xlsx',
+  ].includes(
+    extension
+  );
+};
+
 // ======================================================
 // DOWNLOAD FILENAME
 // ======================================================
@@ -2575,6 +2597,499 @@ const handlePreview = async (
       });
 
       return;
+    }
+
+    // ==================================================
+    // OFFICE (DOCX / XLS / XLSX)
+    // ==================================================
+
+    if (
+      isOfficePreviewDocument(
+        targetDocument
+      )
+    ) {
+      previewWindow.document.title =
+        'Office belgesi hazırlanıyor...';
+
+      previewWindow.document.body.textContent =
+        '';
+
+      const loading =
+        previewWindow.document.createElement(
+          'div'
+        );
+
+      loading.textContent =
+        'Word / Excel önizlemesi hazırlanıyor...';
+
+      loading.style.cssText = `
+        padding: 40px;
+        font-family: Arial, sans-serif;
+        color: #475569;
+        text-align: center;
+      `;
+
+      previewWindow.document.body.appendChild(
+        loading
+      );
+
+      const response =
+        await documentApi.officePreview(
+          targetId
+        );
+
+      const previewData =
+        response?.data?.data ??
+        response?.data;
+
+      const escapeHtml = (
+        value
+      ) => {
+        return String(
+          value ?? ''
+        )
+          .replace(
+            /&/g,
+            '&amp;'
+          )
+          .replace(
+            /</g,
+            '&lt;'
+          )
+          .replace(
+            />/g,
+            '&gt;'
+          )
+          .replace(
+            /"/g,
+            '&quot;'
+          )
+          .replace(
+            /'/g,
+            '&#039;'
+          );
+      };
+
+      const safeTitle =
+        escapeHtml(
+          targetDocument?.original_name ||
+          targetDocument?.name ||
+          'Office Önizleme'
+        );
+
+      // ================================================
+      // WORD
+      // ================================================
+
+      if (
+        previewData?.preview_type ===
+        'word'
+      ) {
+        /*
+         * HTML backend'de sanitize-html ile temizlenir.
+         * Burada yalnızca güvenli preview çıktısı render edilir.
+         */
+        const officeHtml =
+          previewData?.html ||
+          '<p>Önizleme içeriği bulunamadı.</p>';
+
+        const warnings =
+          Array.isArray(
+            previewData?.warnings
+          )
+            ? previewData.warnings
+                .filter(Boolean)
+                .map(
+                  (
+                    item
+                  ) =>
+                    `<li>${escapeHtml(
+                      item
+                    )}</li>`
+                )
+                .join('')
+            : '';
+
+        previewWindow.document.open();
+
+        previewWindow.document.write(
+          `<!doctype html>
+          <html lang="tr">
+            <head>
+              <meta charset="utf-8" />
+              <meta
+                name="viewport"
+                content="width=device-width, initial-scale=1"
+              />
+              <title>${safeTitle}</title>
+              <style>
+                * { box-sizing: border-box; }
+                html, body { min-height: 100%; }
+                body {
+                  margin: 0;
+                  background: #f3f4f6;
+                  color: #111827;
+                  font-family: Arial, Helvetica, sans-serif;
+                }
+                .toolbar {
+                  position: sticky;
+                  top: 0;
+                  z-index: 10;
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  gap: 16px;
+                  padding: 12px 20px;
+                  border-bottom: 1px solid #e5e7eb;
+                  background: rgba(255,255,255,.96);
+                }
+                .title {
+                  min-width: 0;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                  font-size: 14px;
+                  font-weight: 600;
+                }
+                .badge {
+                  flex: none;
+                  border-radius: 999px;
+                  background: #eff6ff;
+                  padding: 5px 9px;
+                  color: #2563eb;
+                  font-size: 11px;
+                  font-weight: 700;
+                }
+                .page-wrap {
+                  padding: 32px 16px 56px;
+                }
+                .page {
+                  width: min(100%, 900px);
+                  min-height: 1120px;
+                  margin: 0 auto;
+                  padding: 72px 76px;
+                  background: #ffffff;
+                  box-shadow:
+                    0 1px 2px rgba(0, 0, 0, 0.04),
+                    0 12px 32px rgba(0, 0, 0, 0.08);
+                }
+                .document-content {
+                  overflow-wrap: anywhere;
+                  font-family: "Times New Roman", Times, serif;
+                  font-size: 16px;
+                  line-height: 1.6;
+                }
+                .document-content img {
+                  max-width: 100%;
+                  height: auto;
+                }
+                .document-content table {
+                  width: 100%;
+                  border-collapse: collapse;
+                }
+                .document-content td,
+                .document-content th {
+                  border: 1px solid #d1d5db;
+                  padding: 6px 8px;
+                  vertical-align: top;
+                }
+                .warnings {
+                  width: min(100%, 900px);
+                  margin: 0 auto 14px;
+                  padding: 12px 16px;
+                  border: 1px solid #fde68a;
+                  border-radius: 10px;
+                  background: #fffbeb;
+                  color: #92400e;
+                  font-size: 12px;
+                }
+                @media (max-width: 700px) {
+                  .page-wrap { padding: 0; }
+                  .page {
+                    min-height: 100vh;
+                    padding: 32px 22px;
+                    box-shadow: none;
+                  }
+                }
+                @media print {
+                  body { background: #ffffff; }
+                  .toolbar,
+                  .warnings { display: none; }
+                  .page-wrap { padding: 0; }
+                  .page {
+                    width: 100%;
+                    min-height: auto;
+                    padding: 0;
+                    box-shadow: none;
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="toolbar">
+                <div class="title">${safeTitle}</div>
+                <div class="badge">WORD ÖNİZLEME</div>
+              </div>
+              <main class="page-wrap">
+                ${warnings ? `<div class="warnings"><strong>Dönüştürme notları:</strong><ul>${warnings}</ul></div>` : ''}
+                <article class="page">
+                  <div class="document-content">${officeHtml}</div>
+                </article>
+              </main>
+            </body>
+          </html>`
+        );
+
+        previewWindow.document.close();
+        previewWindow.focus();
+
+        return;
+      }
+
+      // ================================================
+      // EXCEL
+      // ================================================
+
+      if (
+        previewData?.preview_type ===
+        'excel'
+      ) {
+        const sheets =
+          Array.isArray(
+            previewData?.sheets
+          )
+            ? previewData.sheets
+            : [];
+
+        if (
+          sheets.length === 0
+        ) {
+          throw new Error(
+            'Excel önizleme içeriği alınamadı'
+          );
+        }
+
+        const sheetsHtml =
+          sheets
+            .map(
+              (
+                sheet,
+                sheetIndex
+              ) => {
+                const rows =
+                  Array.isArray(
+                    sheet?.rows
+                  )
+                    ? sheet.rows
+                    : [];
+
+                const rowsHtml =
+                  rows
+                    .map(
+                      (
+                        row,
+                        rowIndex
+                      ) => {
+                        const cells =
+                          Array.isArray(
+                            row
+                          )
+                            ? row
+                            : [];
+
+                        const tag =
+                          rowIndex === 0
+                            ? 'th'
+                            : 'td';
+
+                        return `<tr>${cells
+                          .map(
+                            (
+                              cell
+                            ) =>
+                              `<${tag}>${escapeHtml(
+                                cell
+                              )}</${tag}>`
+                          )
+                          .join('')}</tr>`;
+                      }
+                    )
+                    .join('');
+
+                const truncatedNote =
+                  sheet?.truncated
+                    ? '<div class="note">Bu sayfada önizleme satır limiti uygulandı.</div>'
+                    : '';
+
+                return `
+                  <details class="sheet" ${sheetIndex === 0 ? 'open' : ''}>
+                    <summary>${escapeHtml(
+                      sheet?.name ||
+                      `Sayfa ${sheetIndex + 1}`
+                    )}</summary>
+                    <div class="table-wrap">
+                      <table>
+                        <tbody>
+                          ${rowsHtml || '<tr><td>Boş sayfa</td></tr>'}
+                        </tbody>
+                      </table>
+                    </div>
+                    ${truncatedNote}
+                  </details>`;
+              }
+            )
+            .join('');
+
+        const truncatedSheetsNote =
+          previewData?.truncated_sheets
+            ? '<div class="global-note">Çalışma kitabındaki bazı sayfalar önizleme limitine takıldığı için gösterilmedi.</div>'
+            : '';
+
+        previewWindow.document.open();
+
+        previewWindow.document.write(
+          `<!doctype html>
+          <html lang="tr">
+            <head>
+              <meta charset="utf-8" />
+              <meta
+                name="viewport"
+                content="width=device-width, initial-scale=1"
+              />
+              <title>${safeTitle}</title>
+              <style>
+                * { box-sizing: border-box; }
+                html, body { min-height: 100%; }
+                body {
+                  margin: 0;
+                  background: #f3f4f6;
+                  color: #111827;
+                  font-family: Arial, Helvetica, sans-serif;
+                }
+                .toolbar {
+                  position: sticky;
+                  top: 0;
+                  z-index: 10;
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  gap: 16px;
+                  padding: 12px 20px;
+                  border-bottom: 1px solid #e5e7eb;
+                  background: rgba(255,255,255,.96);
+                }
+                .title {
+                  min-width: 0;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                  font-size: 14px;
+                  font-weight: 600;
+                }
+                .badge {
+                  flex: none;
+                  border-radius: 999px;
+                  background: #ecfdf5;
+                  padding: 5px 9px;
+                  color: #047857;
+                  font-size: 11px;
+                  font-weight: 700;
+                }
+                main {
+                  width: min(100%, 1400px);
+                  margin: 0 auto;
+                  padding: 24px 16px 56px;
+                }
+                .sheet {
+                  margin-bottom: 14px;
+                  border: 1px solid #e5e7eb;
+                  border-radius: 12px;
+                  background: #ffffff;
+                  overflow: hidden;
+                }
+                summary {
+                  cursor: pointer;
+                  padding: 13px 16px;
+                  font-weight: 700;
+                  background: #fafafa;
+                }
+                .table-wrap {
+                  overflow: auto;
+                  max-height: 70vh;
+                }
+                table {
+                  border-collapse: collapse;
+                  min-width: 100%;
+                  width: max-content;
+                  font-size: 13px;
+                }
+                th,
+                td {
+                  min-width: 110px;
+                  max-width: 320px;
+                  padding: 8px 10px;
+                  border: 1px solid #e5e7eb;
+                  text-align: left;
+                  vertical-align: top;
+                  white-space: pre-wrap;
+                  overflow-wrap: anywhere;
+                }
+                th {
+                  position: sticky;
+                  top: 0;
+                  z-index: 1;
+                  background: #f9fafb;
+                  font-weight: 700;
+                }
+                .note,
+                .global-note {
+                  padding: 10px 14px;
+                  color: #92400e;
+                  background: #fffbeb;
+                  font-size: 12px;
+                }
+                .global-note {
+                  margin-bottom: 14px;
+                  border: 1px solid #fde68a;
+                  border-radius: 10px;
+                }
+                @media print {
+                  .toolbar { display: none; }
+                  body { background: #ffffff; }
+                  main { width: 100%; padding: 0; }
+                  .sheet {
+                    border: 0;
+                    break-after: page;
+                  }
+                  .table-wrap {
+                    max-height: none;
+                    overflow: visible;
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="toolbar">
+                <div class="title">${safeTitle}</div>
+                <div class="badge">EXCEL ÖNİZLEME</div>
+              </div>
+              <main>
+                ${truncatedSheetsNote}
+                ${sheetsHtml}
+              </main>
+            </body>
+          </html>`
+        );
+
+        previewWindow.document.close();
+        previewWindow.focus();
+
+        return;
+      }
+
+      throw new Error(
+        'Desteklenmeyen Office önizleme türü'
+      );
     }
 
     // ==================================================

@@ -142,6 +142,27 @@ router.get(
 );
 
 // ======================================================
+// OFFICE PREVIEW
+// ======================================================
+
+/*
+ * DOCX / XLS / XLSX dosyaları browser tarafından
+ * doğrudan güvenilir şekilde render edilemez.
+ *
+ * Bu endpoint belgeyi backend tarafında işler ve
+ * frontend için güvenli JSON preview verisi döndürür.
+ */
+router.get(
+  '/:id/office-preview',
+
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_DOCUMENTS
+  ),
+
+  documentController.previewOffice
+);
+
+// ======================================================
 // NORMAL DOCUMENT PREVIEW
 // ======================================================
 
