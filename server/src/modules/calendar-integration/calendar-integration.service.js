@@ -1,8 +1,16 @@
 import crypto from 'crypto';
 
 import {
+  google,
+} from 'googleapis';
+
+import {
   CalendarIntegration,
 } from '../../models/CalendarIntegration.js';
+
+import {
+  User,
+} from '../../models/User.js';
 
 import {
   GOOGLE_CALENDAR_SCOPES,
@@ -30,6 +38,18 @@ const GOOGLE_CALENDAR_ID =
 
 const STATE_TTL_MS =
   10 * 60 * 1000;
+
+const GOOGLE_ACCOUNT_EMAIL_SCOPE =
+  'https://www.googleapis.com/auth/userinfo.email';
+
+const getGoogleOAuthScopes = () => {
+  return Array.from(
+    new Set([
+      ...GOOGLE_CALENDAR_SCOPES,
+      GOOGLE_ACCOUNT_EMAIL_SCOPE,
+    ])
+  );
+};
 
 // ======================================================
 // STATE HELPERS
@@ -426,7 +446,7 @@ export const calendarIntegrationService = {
         'consent',
 
       scope:
-        GOOGLE_CALENDAR_SCOPES,
+        getGoogleOAuthScopes(),
 
       include_granted_scopes:
         true,
@@ -477,6 +497,77 @@ export const calendarIntegrationService = {
       );
     }
 
+    /*
+     * Callback public route üzerinden geldiği için state içindeki
+     * kullanıcı id'sini ayrıca veritabanından doğruluyoruz.
+     * Silinmiş/pasif bir kullanıcıya yeni Google bağlantısı açmıyoruz.
+     */
+    const user =
+      await User.findByPk(
+        userId
+      );
+
+    if (
+      !user ||
+      user.is_active !== true
+    ) {
+      throw new Error(
+        'Google hesabının bağlanacağı aktif kullanıcı bulunamadı'
+      );
+    }
+
+    /*
+     * Token exchange sonrasında Google hesabının gerçek e-posta
+     * adresini Google'dan alıyoruz. Böylece account_email alanı
+     * tahmine değil doğrudan OAuth hesabına dayanır.
+     */
+    oauthClient.setCredentials(
+      tokens
+    );
+
+    const oauth2 =
+      google.oauth2({
+        version: 'v2',
+        auth: oauthClient,
+      });
+
+    const profileResponse =
+      await oauth2.userinfo.get();
+
+    const googleAccountEmail =
+      String(
+        profileResponse
+          ?.data
+          ?.email ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+
+    if (!googleAccountEmail) {
+      throw new Error(
+        'Google hesabının e-posta adresi alınamadı'
+      );
+    }
+
+    const derkenarUserEmail =
+      String(
+        user.email ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+
+    if (
+      !derkenarUserEmail ||
+      googleAccountEmail !==
+        derkenarUserEmail
+    ) {
+      throw new Error(
+        `Google hesabı e-postası (${googleAccountEmail}) Derkenar hesabı e-postasıyla eşleşmiyor.`
+      );
+    }
+
     const existingIntegration =
       await CalendarIntegration.findOne({
         where: {
@@ -524,6 +615,9 @@ export const calendarIntegrationService = {
       provider:
         GOOGLE_PROVIDER,
 
+      account_email:
+        googleAccountEmail,
+
       calendar_id:
         GOOGLE_CALENDAR_ID,
 
@@ -541,7 +635,7 @@ export const calendarIntegrationService = {
 
       scope:
         tokens.scope ||
-        GOOGLE_CALENDAR_SCOPES.join(
+        getGoogleOAuthScopes().join(
           ' '
         ),
 

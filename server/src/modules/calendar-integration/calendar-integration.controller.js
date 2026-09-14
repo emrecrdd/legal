@@ -3,6 +3,10 @@ import {
 } from './calendar-integration.service.js';
 
 import {
+  config,
+} from '../../config/env.js';
+
+import {
   successResponse,
   errorResponse,
 } from '../../utils/response.js';
@@ -56,6 +60,16 @@ const getErrorStatus = (
   }
 
   return fallback;
+};
+
+const getFrontendOrigin = () => {
+  try {
+    return new URL(
+      config.CLIENT_URL
+    ).origin;
+  } catch {
+    return null;
+  }
 };
 
 // ======================================================
@@ -292,6 +306,9 @@ export const calendarIntegrationController = {
             String(state),
         });
 
+      const frontendOrigin =
+        getFrontendOrigin();
+
       /*
        * Callback Google'dan doğrudan tarayıcıya geldiği
        * için JSON yerine küçük bir başarı sayfası
@@ -373,7 +390,12 @@ export const calendarIntegrationController = {
                         type:
                           'DERKENAR_GOOGLE_CALENDAR_CONNECTED'
                       },
-                      window.location.origin
+                      ${JSON.stringify(frontendOrigin)}
+                    );
+
+                    setTimeout(
+                      () => window.close(),
+                      300
                     );
                   }
                 } catch (error) {
