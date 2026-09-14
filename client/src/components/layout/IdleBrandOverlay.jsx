@@ -178,6 +178,10 @@ const IdleBrandOverlay = ({ children = null }) => {
   const lockedRef =
     useRef(false);
 
+  // Kurtarma kodlari kullanici onaylayana kadar ekranda sabit kalir.
+  const showingRecoveryCodesRef =
+    useRef(false);
+
   const inputRef =
     useRef(null);
 
@@ -210,6 +214,16 @@ const IdleBrandOverlay = ({ children = null }) => {
         } = {}
       ) => {
         if (!status) {
+          return;
+        }
+
+        // PIN olusturulduktan/sifirlandiktan sonra verilen tek kullanimlik
+        // kurtarma kodlari, arka plandaki status senkronizasyonu tarafindan
+        // ezilemez. Kullanici 'Kodlari Kaydettim, Devam Et' demeden
+        // bu ekran kapanmaz.
+        if (showingRecoveryCodesRef.current) {
+          lockedRef.current = true;
+          setIsLocked(true);
           return;
         }
 
@@ -417,6 +431,8 @@ const IdleBrandOverlay = ({ children = null }) => {
 
   const unlockLocal =
     useCallback(() => {
+      showingRecoveryCodesRef.current =
+        false;
       lockedRef.current =
         false;
       setIsLocked(false);
@@ -777,6 +793,11 @@ const IdleBrandOverlay = ({ children = null }) => {
         setHasPin(true);
         setPinBlocked(false);
         setRemainingPinAttempts(5);
+        showingRecoveryCodesRef.current =
+          true;
+        lockedRef.current =
+          true;
+        setIsLocked(true);
         setRecoveryCodes(
           result?.recoveryCodes ||
             []
@@ -959,6 +980,11 @@ const IdleBrandOverlay = ({ children = null }) => {
         setPinBlocked(false);
         setRemainingPinAttempts(5);
         setRetryAfterSeconds(0);
+        showingRecoveryCodesRef.current =
+          true;
+        lockedRef.current =
+          true;
+        setIsLocked(true);
         setPassword('');
         setPin('');
         setConfirmPin('');
@@ -1032,6 +1058,11 @@ const IdleBrandOverlay = ({ children = null }) => {
         setPinBlocked(false);
         setRemainingPinAttempts(5);
         setRetryAfterSeconds(0);
+        showingRecoveryCodesRef.current =
+          true;
+        lockedRef.current =
+          true;
+        setIsLocked(true);
         setRecoveryCode('');
         setPin('');
         setConfirmPin('');
