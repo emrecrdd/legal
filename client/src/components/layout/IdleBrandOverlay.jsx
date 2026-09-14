@@ -14,7 +14,7 @@ import {
 } from '../../services/screenLockApi.js';
 
 const DEFAULT_IDLE_TIME =
-  600 * 1000;
+  60 * 1000;
 
 const TOUCH_THROTTLE_MS =
   10 * 1000;
@@ -186,6 +186,12 @@ const IdleBrandOverlay = ({ children = null }) => {
     useRef(null);
 
   const lastTouchSentAtRef =
+    useRef(0);
+
+  // Her gerçek kullanıcı aktivitesinde artar.
+  // Süresi dolmuş eski bir timeout callback'i event-loop kuyruğuna
+  // girdiyse, yeni aktivite sonrası ekranı yanlışlıkla kilitlemesini önler.
+  const activityGenerationRef =
     useRef(0);
 
   const mountedRef =
@@ -409,9 +415,22 @@ const IdleBrandOverlay = ({ children = null }) => {
           return;
         }
 
+        const scheduledGeneration =
+          activityGenerationRef.current;
+
         timerRef.current =
           setTimeout(
             () => {
+              // Bu timeout planlandıktan sonra kullanıcı aktivitesi olduysa
+              // eski callback artık geçersizdir. Yeni aktivite kendi timer'ını
+              // zaten kurmuştur; aktif kullanıcıyı kilitleme.
+              if (
+                scheduledGeneration !==
+                activityGenerationRef.current
+              ) {
+                return;
+              }
+
               void lockScreen(
                 'idle_timeout'
               );
@@ -457,6 +476,8 @@ const IdleBrandOverlay = ({ children = null }) => {
       setRetryAfterSeconds(0);
       setPinBlocked(false);
       setRemainingPinAttempts(5);
+      activityGenerationRef.current +=
+        1;
       startTimer(
         idleTime
       );
@@ -631,6 +652,9 @@ const IdleBrandOverlay = ({ children = null }) => {
         ) {
           return;
         }
+
+        activityGenerationRef.current +=
+          1;
 
         startTimer(
           idleTime
