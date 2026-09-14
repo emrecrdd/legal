@@ -975,45 +975,66 @@ export const googleCalendarSyncService = {
   async upsertEventSafely(
     payload
   ) {
+    const startedAt =
+      Date.now();
+
+    logger.info(
+      'Google Calendar auto sync START',
+      {
+        userId: payload?.userId,
+        entityType: payload?.entityType,
+        entityId: payload?.entityId,
+      }
+    );
+
     try {
-      return await this
-        .upsertEvent(
+      const result =
+        await this.upsertEvent(
           payload
         );
+
+      logger.info(
+        'Google Calendar auto sync RESULT',
+        {
+          userId: payload?.userId,
+          entityType: payload?.entityType,
+          entityId: payload?.entityId,
+          durationMs:
+            Date.now() - startedAt,
+          synced: result?.synced,
+          skipped: result?.skipped,
+          created: result?.created,
+          updated: result?.updated,
+          googleEventId:
+            result?.google_event_id,
+          reason: result?.reason,
+        }
+      );
+
+      return result;
     } catch (
       error
     ) {
       logger.error(
-        'Automatic Google Calendar sync error:',
+        'Google Calendar auto sync ERROR',
         {
-          userId:
-            payload
-              ?.userId,
-
-          entityType:
-            payload
-              ?.entityType,
-
-          entityId:
-            payload
-              ?.entityId,
-
-          message:
-            error
-              ?.message,
+          userId: payload?.userId,
+          entityType: payload?.entityType,
+          entityId: payload?.entityId,
+          durationMs:
+            Date.now() - startedAt,
+          message: error?.message,
+          status:
+            error?.response?.status ||
+            error?.code,
         }
       );
 
       return {
-        synced:
-          false,
-
-        skipped:
-          false,
-
+        synced: false,
+        skipped: false,
         error:
-          error
-            ?.message ||
+          error?.message ||
           'Google Calendar senkronizasyonu başarısız',
       };
     }
