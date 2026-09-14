@@ -431,8 +431,17 @@ const IdleBrandOverlay = ({ children = null }) => {
 
   const unlockLocal =
     useCallback(() => {
-      showingRecoveryCodesRef.current =
-        false;
+      if (
+        showingRecoveryCodesRef.current
+      ) {
+        lockedRef.current = true;
+        setIsLocked(true);
+        setMode(
+          MODE.RECOVERY_CODES
+        );
+        return;
+      }
+
       lockedRef.current =
         false;
       setIsLocked(false);
@@ -471,6 +480,9 @@ const IdleBrandOverlay = ({ children = null }) => {
 
   useEffect(() => {
     if (!user?.id) {
+      showingRecoveryCodesRef.current =
+        false;
+      setRecoveryCodes([]);
       setInitialized(false);
       setIsLocked(false);
       lockedRef.current =
@@ -506,6 +518,18 @@ const IdleBrandOverlay = ({ children = null }) => {
           applyStatus(
             status
           );
+
+          if (
+            showingRecoveryCodesRef.current
+          ) {
+            lockedRef.current = true;
+            setIsLocked(true);
+            setMode(
+              MODE.RECOVERY_CODES
+            );
+            clearTimer();
+            return;
+          }
 
           if (
             status?.hasPin &&
@@ -544,6 +568,17 @@ const IdleBrandOverlay = ({ children = null }) => {
             apiError?.name ===
             'AbortError'
           ) {
+            return;
+          }
+
+          if (
+            showingRecoveryCodesRef.current
+          ) {
+            lockedRef.current = true;
+            setIsLocked(true);
+            setMode(
+              MODE.RECOVERY_CODES
+            );
             return;
           }
 
@@ -1103,6 +1138,8 @@ const IdleBrandOverlay = ({ children = null }) => {
 
   const finishRecoveryCodes =
     () => {
+      showingRecoveryCodesRef.current =
+        false;
       setRecoveryCodes([]);
       setCopied(false);
       unlockLocal();
