@@ -551,6 +551,51 @@ export const templateController = {
   },
 
   // ====================================================
+  // OFFICE PREVIEW
+  // ====================================================
+
+  async previewOffice(
+    req,
+    res
+  ) {
+    try {
+      const preview =
+        await templateService.getOfficePreview(
+          req.params.id
+        );
+
+      res.setHeader(
+        'Cache-Control',
+        'private, no-store'
+      );
+
+      res.setHeader(
+        'X-Content-Type-Options',
+        'nosniff'
+      );
+
+      return successResponse(
+        res,
+        preview,
+        'Office template preview fetched successfully'
+      );
+    } catch (
+      error
+    ) {
+      logger.error(
+        'Preview Office template error:',
+        error
+      );
+
+      return errorResponse(
+        res,
+        error.message,
+        400
+      );
+    }
+  },
+
+  // ====================================================
   // UDF PREVIEW
   // ====================================================
 

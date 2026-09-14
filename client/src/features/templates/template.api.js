@@ -167,6 +167,31 @@ export const templateApi = {
       `/templates/${id}/udf-preview`
     );
   },
+
+  // ====================================================
+  // OFFICE PREVIEW
+  // ====================================================
+
+  /*
+   * Word / Excel dosyalarını browser'a ham binary
+   * olarak vermiyoruz.
+   *
+   * Backend:
+   *
+   * - DOCX için sanitize edilmiş HTML
+   * - XLS / XLSX için sheet + satır verisi
+   *
+   * döndürür.
+   *
+   * Bu nedenle responseType: 'blob' YOK.
+   */
+  officePreview: (
+    id
+  ) => {
+    return axios.get(
+      `/templates/${id}/office-preview`
+    );
+  },
 };
 
 export default templateApi;

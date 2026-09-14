@@ -18,6 +18,9 @@ import {
 } from 'url';
 
 import AdmZip from 'adm-zip';
+import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
+import sanitizeHtml from 'sanitize-html';
 
 import {
   XMLParser,
@@ -394,6 +397,63 @@ const pointToMm = (
       2
     )
   );
+};
+
+const getTemplateExtension = (template) => {
+  return path
+    .extname(template?.file_name || '')
+    .toLowerCase();
+};
+
+const sanitizeOfficeHtml = (html = '') => {
+  return sanitizeHtml(html, {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat([
+      'img',
+      'h1',
+      'h2',
+      'h3',
+      'h4',
+      'h5',
+      'h6',
+      'table',
+      'thead',
+      'tbody',
+      'tfoot',
+      'tr',
+      'th',
+      'td',
+    ]),
+    allowedAttributes: {
+      ...sanitizeHtml.defaults.allowedAttributes,
+      a: ['href', 'name', 'target', 'rel'],
+      img: ['src', 'alt', 'title', 'width', 'height'],
+      td: ['colspan', 'rowspan'],
+      th: ['colspan', 'rowspan'],
+    },
+    allowedSchemes: ['http', 'https', 'mailto', 'data'],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform('a', {
+        rel: 'noopener noreferrer',
+        target: '_blank',
+      }),
+    },
+  });
+};
+
+const normalizeWorksheetValue = (value) => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
 };
 
 // ======================================================
@@ -1399,6 +1459,238 @@ export const templateService = {
         : 'xml',
   };
 },
+
+  // ====================================================
+  // OFFICE PREVIEW
+  // ====================================================
+
+  async getOfficePreview(
+    id
+  ) {
+    const template =
+      await this.findOne(
+        id
+      );
+
+    const extension =
+      getTemplateExtension(
+        template
+      );
+
+    const supportedExtensions =
+      new Set([
+        '.docx',
+        '.xlsx',
+        '.xls',
+      ]);
+
+    if (
+      !supportedExtensions.has(
+        extension
+      )
+    ) {
+      if (
+        extension === '.doc'
+      ) {
+        throw new Error(
+          'Legacy DOC preview is not supported. Please convert the file to DOCX.'
+        );
+      }
+
+      throw new Error(
+        'Template is not a supported Office preview file'
+      );
+    }
+
+    const fileBuffer =
+      await readTemplateBuffer(
+        template
+      );
+
+    if (
+      !fileBuffer?.length
+    ) {
+      throw new Error(
+        'Office file is empty'
+      );
+    }
+
+    const MAX_OFFICE_PREVIEW_SIZE =
+      20 *
+      1024 *
+      1024;
+
+    if (
+      fileBuffer.length >
+      MAX_OFFICE_PREVIEW_SIZE
+    ) {
+      throw new Error(
+        'Office file is too large to preview'
+      );
+    }
+
+    if (
+      extension === '.docx'
+    ) {
+      const result =
+        await mammoth.convertToHtml({
+          buffer:
+            fileBuffer,
+        });
+
+      return {
+        id:
+          template.id,
+
+        title:
+          template.title,
+
+        file_name:
+          template.file_name,
+
+        file_type:
+          template.file_type,
+
+        preview_type:
+          'word',
+
+        html:
+          sanitizeOfficeHtml(
+            result.value || ''
+          ),
+
+        warnings:
+          Array.isArray(
+            result.messages
+          )
+            ? result.messages.map(
+                (
+                  item
+                ) =>
+                  String(
+                    item?.message ||
+                    ''
+                  )
+              )
+            : [],
+      };
+    }
+
+    const workbook =
+      XLSX.read(
+        fileBuffer,
+        {
+          type:
+            'buffer',
+
+          cellDates:
+            true,
+
+          dense:
+            true,
+        }
+      );
+
+    const MAX_SHEETS =
+      25;
+
+    const MAX_ROWS_PER_SHEET =
+      500;
+
+    const MAX_COLUMNS_PER_SHEET =
+      100;
+
+    const sheetNames =
+      workbook.SheetNames.slice(
+        0,
+        MAX_SHEETS
+      );
+
+    const sheets =
+      sheetNames.map(
+        (
+          sheetName
+        ) => {
+          const worksheet =
+            workbook.Sheets[
+              sheetName
+            ];
+
+          const rows =
+            XLSX.utils.sheet_to_json(
+              worksheet,
+              {
+                header:
+                  1,
+
+                raw:
+                  false,
+
+                defval:
+                  '',
+
+                blankrows:
+                  false,
+              }
+            );
+
+          const normalizedRows =
+            rows
+              .slice(
+                0,
+                MAX_ROWS_PER_SHEET
+              )
+              .map(
+                (
+                  row
+                ) =>
+                  row
+                    .slice(
+                      0,
+                      MAX_COLUMNS_PER_SHEET
+                    )
+                    .map(
+                      normalizeWorksheetValue
+                    )
+              );
+
+          return {
+            name:
+              sheetName,
+
+            rows:
+              normalizedRows,
+
+            truncated:
+              rows.length >
+              MAX_ROWS_PER_SHEET,
+          };
+        }
+      );
+
+    return {
+      id:
+        template.id,
+
+      title:
+        template.title,
+
+      file_name:
+        template.file_name,
+
+      file_type:
+        template.file_type,
+
+      preview_type:
+        'excel',
+
+      sheets,
+
+      truncated_sheets:
+        workbook.SheetNames.length >
+        MAX_SHEETS,
+    };
+  },
 
   // ====================================================
   // META

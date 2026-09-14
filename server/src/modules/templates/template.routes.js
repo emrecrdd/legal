@@ -36,31 +36,25 @@ router.use(
 
 router.get(
   '/',
-
   authorizePermission(
     PERMISSION_KEYS.VIEW_TEMPLATES
   ),
-
   templateController.findAll
 );
 
 router.get(
   '/categories',
-
   authorizePermission(
     PERMISSION_KEYS.VIEW_TEMPLATES
   ),
-
   templateController.getCategories
 );
 
 router.get(
   '/law-areas',
-
   authorizePermission(
     PERMISSION_KEYS.VIEW_TEMPLATES
   ),
-
   templateController.getLawAreas
 );
 
@@ -70,15 +64,12 @@ router.get(
 
 router.post(
   '/',
-
   authorizePermission(
     PERMISSION_KEYS.CREATE_TEMPLATES
   ),
-
   uploadSingle(
     'file'
   ),
-
   templateController.create
 );
 
@@ -88,11 +79,9 @@ router.post(
 
 router.get(
   '/:id/download',
-
   authorizePermission(
     PERMISSION_KEYS.VIEW_TEMPLATES
   ),
-
   templateController.download
 );
 
@@ -102,12 +91,22 @@ router.get(
 
 router.get(
   '/:id/udf-preview',
-
   authorizePermission(
     PERMISSION_KEYS.VIEW_TEMPLATES
   ),
-
   templateController.previewUdf
+);
+
+// ======================================================
+// OFFICE PREVIEW
+// ======================================================
+
+router.get(
+  '/:id/office-preview',
+  authorizePermission(
+    PERMISSION_KEYS.VIEW_TEMPLATES
+  ),
+  templateController.previewOffice
 );
 
 // ======================================================
@@ -116,11 +115,9 @@ router.get(
 
 router.get(
   '/:id/preview',
-
   authorizePermission(
     PERMISSION_KEYS.VIEW_TEMPLATES
   ),
-
   templateController.preview
 );
 
@@ -130,11 +127,9 @@ router.get(
 
 router.get(
   '/:id',
-
   authorizePermission(
     PERMISSION_KEYS.VIEW_TEMPLATES
   ),
-
   templateController.findOne
 );
 
@@ -144,15 +139,12 @@ router.get(
 
 router.put(
   '/:id',
-
   authorizePermission(
     PERMISSION_KEYS.EDIT_TEMPLATES
   ),
-
   uploadSingle(
     'file'
   ),
-
   templateController.update
 );
 
@@ -162,11 +154,9 @@ router.put(
 
 router.delete(
   '/:id',
-
   authorizePermission(
     PERMISSION_KEYS.DELETE_TEMPLATES
   ),
-
   templateController.remove
 );
 
