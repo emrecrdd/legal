@@ -113,6 +113,13 @@
       ],
     },
     {
+      key: 'consultations',
+      label: 'Danışmanlıklar',
+      keywords: [
+        'consultations',
+      ],
+    },
+    {
       key: 'documents',
       label: 'Belgeler',
       keywords: [
@@ -156,6 +163,10 @@
         'payments',
         'finance',
         'payment_plans',
+        'fee_agreements',
+        'receivables',
+        'expenses',
+        'profitability',
       ],
     },
     {
@@ -221,6 +232,9 @@
     view_cases:
       'Davaları görüntüle',
 
+    view_all_cases:
+      'Tüm davaları görüntüle',
+
     create_cases:
       'Dava oluştur',
 
@@ -235,6 +249,24 @@
 
     manage_case_parties:
       'Dava taraflarını yönet',
+
+    view_consultations:
+      'Danışmanlıkları görüntüle',
+
+    view_all_consultations:
+      'Tüm danışmanlıkları görüntüle',
+
+    create_consultations:
+      'Danışmanlık oluştur',
+
+    edit_consultations:
+      'Danışmanlık düzenle',
+
+    delete_consultations:
+      'Danışmanlık sil',
+
+    convert_consultations:
+      'Danışmanlığı davaya dönüştür',
 
     view_documents:
       'Belgeleri görüntüle',
@@ -333,6 +365,42 @@ view_team_performance:
     manage_payment_plans:
       'Ödeme planlarını yönet',
 
+    view_finance:
+      'Finans modülünü görüntüle',
+
+    view_all_finance:
+      'Tüm finans kayıtlarını görüntüle',
+
+    manage_fee_agreements:
+      'Ücret sözleşmelerini yönet',
+
+    create_receivables:
+      'Alacak oluştur',
+
+    record_payments:
+      'Ödeme kaydet',
+
+    create_expenses:
+      'Gider oluştur',
+
+    approve_expenses:
+      'Gider onayla',
+
+    manage_finance_accounts:
+      'Finans hesaplarını yönet',
+
+    close_finance_period:
+      'Finans dönemini kapat',
+
+    reopen_finance_period:
+      'Finans dönemini yeniden aç',
+
+    export_finance:
+      'Finans verilerini dışa aktar',
+
+    view_profitability:
+      'Kârlılığı görüntüle',
+
     view_notes:
       'Notları görüntüle',
 
@@ -398,6 +466,9 @@ view_team_performance:
 
     view_audit_logs:
       'Denetim kayıtlarını görüntüle',
+
+    delete_audit_logs:
+      'Denetim kayıtlarını sil',
 
     view_settings:
       'Ayarları görüntüle',
@@ -510,18 +581,14 @@ view_team_performance:
       ];
     }
 
-    return String(
+    // Kullanıcı arayüzünde teknik permission key göstermiyoruz.
+    // Yeni bir permission eklendiğinde PERMISSION_LABELS listesine Türkçe karşılığı da eklenmelidir.
+    console.warn(
+      '[permissions] Türkçe etiket bulunamadı:',
       permission
-    )
-      .replaceAll(
-        '_',
-        ' '
-      )
-      .replace(
-        /\b\w/g,
-        (character) =>
-          character.toUpperCase()
-      );
+    );
+
+    return 'Tanımsız yetki';
   };
 
   const normalizeUserEditForm = (
