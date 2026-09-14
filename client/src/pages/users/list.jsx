@@ -15,6 +15,7 @@
   } from '@tanstack/react-query';
 
   import userApi from '../../features/users/user.api.js';
+  import useAuth from '../../hooks/useAuth.js';
 
   import Card from '../../components/ui/Card.jsx';
   import Badge from '../../components/ui/Badge.jsx';
@@ -730,6 +731,12 @@ view_team_performance:
   const UserList = () => {
     const queryClient =
       useQueryClient();
+
+    const auth =
+      useAuth();
+
+    const currentUser =
+      auth?.user;
 
     const [
       filters,
@@ -2073,6 +2080,46 @@ view_team_performance:
               'users',
             ],
           });
+
+          // Düzenlenen hesap mevcut oturumdaki kullanıcıysa,
+          // üst menü/profil gibi AuthContext kullanan alanları da
+          // sayfa yenilemeden güncelle.
+          if (
+            String(
+              currentUser?.id ||
+                ''
+            ) ===
+            String(
+              editingUser.id
+            )
+          ) {
+            if (
+              typeof auth?.refreshUser ===
+              'function'
+            ) {
+              await auth.refreshUser();
+            } else if (
+              typeof auth?.refreshProfile ===
+              'function'
+            ) {
+              await auth.refreshProfile();
+            } else if (
+              typeof auth?.setUser ===
+              'function'
+            ) {
+              auth.setUser((existing) => ({
+                ...(existing || {}),
+                first_name:
+                  firstName,
+                last_name:
+                  lastName,
+                email,
+                role,
+                is_active:
+                  requestedActive,
+              }));
+            }
+          }
 
           toast.success(
             'Kullanıcı başarıyla güncellendi'
