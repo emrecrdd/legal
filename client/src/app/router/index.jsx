@@ -37,6 +37,8 @@ import ResetPassword from '../../pages/auth/reset-password.jsx';
 import InitialSetup from '../../pages/auth/initial-setup.jsx';
 import VerifyEmail from '../../pages/auth/verify-email.jsx';
 import AcceptInvite from '../../pages/auth/accept-invite.jsx';
+import Privacy from '../../pages/legal/privacy.jsx';
+import Terms from '../../pages/legal/terms.jsx';
 
 // ======================================================
 // DASHBOARD
@@ -336,6 +338,10 @@ const AppRouter = () => {
   />
 </Route>
       
+
+      {/* Public legal pages - no login required */}
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
 
       {/* ==================================================
           AUTHENTICATED AREA
