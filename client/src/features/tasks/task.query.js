@@ -199,6 +199,17 @@ const invalidateTaskStatistics = (
   });
 };
 
+
+const invalidatePerformance = (
+  queryClient
+) => {
+  queryClient.invalidateQueries({
+    queryKey: [
+      'performance',
+    ],
+  });
+};
+
 const invalidateTaskCrossViews = (
   queryClient
 ) => {
@@ -963,6 +974,10 @@ export const useCreateTask =
           queryClient
         );
 
+        invalidatePerformance(
+          queryClient
+        );
+
         invalidateTaskCrossViews(
           queryClient
         );
@@ -1051,6 +1066,10 @@ export const useUpdateTask =
           queryClient
         );
 
+        invalidatePerformance(
+          queryClient
+        );
+
         invalidateTaskCrossViews(
           queryClient
         );
@@ -1124,6 +1143,10 @@ export const useDeleteTask =
           queryClient
         );
 
+        invalidatePerformance(
+          queryClient
+        );
+
         invalidateTaskCrossViews(
           queryClient
         );
@@ -1194,6 +1217,10 @@ export const useUpdateTaskStatus =
         );
 
         invalidateTaskStatistics(
+          queryClient
+        );
+
+        invalidatePerformance(
           queryClient
         );
 
@@ -1280,6 +1307,10 @@ export const useAssignTask =
           queryClient
         );
 
+        invalidatePerformance(
+          queryClient
+        );
+
         invalidateTaskCrossViews(
           queryClient
         );
@@ -1352,6 +1383,10 @@ export const useStartTask =
         );
 
         invalidateTaskStatistics(
+          queryClient
+        );
+
+        invalidatePerformance(
           queryClient
         );
 
@@ -1437,6 +1472,10 @@ export const useCompleteTask =
           queryClient
         );
 
+        invalidatePerformance(
+          queryClient
+        );
+
         invalidateTaskCrossViews(
           queryClient
         );
@@ -1509,6 +1548,10 @@ export const useApproveTask =
         );
 
         invalidateTaskStatistics(
+          queryClient
+        );
+
+        invalidatePerformance(
           queryClient
         );
 
@@ -1635,6 +1678,10 @@ export const useUpdateProgress =
           queryClient
         );
 
+        invalidatePerformance(
+          queryClient
+        );
+
         invalidateTaskCrossViews(
           queryClient
         );
@@ -1715,6 +1762,10 @@ export const useBulkUpdateTaskStatus =
         );
 
         invalidateTaskStatistics(
+          queryClient
+        );
+
+        invalidatePerformance(
           queryClient
         );
 
