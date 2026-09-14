@@ -9,42 +9,27 @@ export const templateApi = {
   // LIST / DETAIL
   // ====================================================
 
-  getAll: (
-    params = {}
-  ) => {
-    return axios.get(
-      '/templates',
-      {
-        params,
-      }
-    );
+  getAll: (params = {}) => {
+    return axios.get('/templates', {
+      params,
+    });
   },
 
-  getOne: (
-    id
-  ) => {
-    return axios.get(
-      `/templates/${id}`
-    );
+  getOne: (id) => {
+    return axios.get(`/templates/${id}`);
   },
 
   // ====================================================
   // META
   // ====================================================
 
-  getCategories:
-    () => {
-      return axios.get(
-        '/templates/categories'
-      );
-    },
+  getCategories: () => {
+    return axios.get('/templates/categories');
+  },
 
-  getLawAreas:
-    () => {
-      return axios.get(
-        '/templates/law-areas'
-      );
-    },
+  getLawAreas: () => {
+    return axios.get('/templates/law-areas');
+  },
 
   // ====================================================
   // CREATE
@@ -57,13 +42,8 @@ export const templateApi = {
    * Browser/Axios multipart boundary değerini
    * otomatik oluşturur.
    */
-  create: (
-    data
-  ) => {
-    return axios.post(
-      '/templates',
-      data
-    );
+  create: (data) => {
+    return axios.post('/templates', data);
   },
 
   // ====================================================
@@ -73,29 +53,19 @@ export const templateApi = {
   /*
    * data = FormData
    *
-   * Burada da multipart/form-data header'ını
+   * multipart/form-data header'ını
    * elle vermiyoruz.
    */
-  update: (
-    id,
-    data
-  ) => {
-    return axios.put(
-      `/templates/${id}`,
-      data
-    );
+  update: (id, data) => {
+    return axios.put(`/templates/${id}`, data);
   },
 
   // ====================================================
   // DELETE
   // ====================================================
 
-  delete: (
-    id
-  ) => {
-    return axios.delete(
-      `/templates/${id}`
-    );
+  delete: (id) => {
+    return axios.delete(`/templates/${id}`);
   },
 
   // ====================================================
@@ -108,24 +78,18 @@ export const templateApi = {
    * PDF, Word, Excel, image, UDF vb.
    * tamamı blob olarak alınır.
    */
-  download: (
-    id
-  ) => {
-    return axios.get(
-      `/templates/${id}/download`,
-      {
-        responseType:
-          'blob',
-      }
-    );
+  download: (id) => {
+    return axios.get(`/templates/${id}/download`, {
+      responseType: 'blob',
+    });
   },
 
   // ====================================================
-  // PREVIEW
+  // STANDARD PREVIEW
   // ====================================================
 
   /*
-   * Browser'ın doğrudan gösterebildiği dosyalar için:
+   * Browser'ın doğrudan gösterebildiği dosyalar:
    *
    * - PDF
    * - JPG / JPEG
@@ -135,16 +99,10 @@ export const templateApi = {
    *
    * Backend binary response döndürür.
    */
-  preview: (
-    id
-  ) => {
-    return axios.get(
-      `/templates/${id}/preview`,
-      {
-        responseType:
-          'blob',
-      }
-    );
+  preview: (id) => {
+    return axios.get(`/templates/${id}/preview`, {
+      responseType: 'blob',
+    });
   },
 
   // ====================================================
@@ -152,20 +110,13 @@ export const templateApi = {
   // ====================================================
 
   /*
-   * UYAP .udf dosyasını binary olarak açmaya
-   * çalışmıyoruz.
+   * UYAP .udf dosyası backend tarafından parse edilir.
    *
-   * Backend UDF'yi parse ederek preview için
-   * JSON response döndürür.
-   *
-   * Bu nedenle responseType: 'blob' YOK.
+   * JSON response döndüğü için
+   * responseType: 'blob' kullanılmaz.
    */
-  udfPreview: (
-    id
-  ) => {
-    return axios.get(
-      `/templates/${id}/udf-preview`
-    );
+  udfPreview: (id) => {
+    return axios.get(`/templates/${id}/udf-preview`);
   },
 
   // ====================================================
@@ -173,24 +124,27 @@ export const templateApi = {
   // ====================================================
 
   /*
-   * Word / Excel dosyalarını browser'a ham binary
-   * olarak vermiyoruz.
+   * Desteklenen Office dosyaları:
+   *
+   * - DOCX
+   * - XLS
+   * - XLSX
    *
    * Backend:
    *
-   * - DOCX için sanitize edilmiş HTML
-   * - XLS / XLSX için sheet + satır verisi
+   * DOCX
+   * -> sanitize edilmiş HTML
+   *
+   * XLS / XLSX
+   * -> sheet + rows JSON verisi
    *
    * döndürür.
    *
-   * Bu nedenle responseType: 'blob' YOK.
+   * JSON response olduğu için
+   * responseType: 'blob' kullanılmaz.
    */
-  officePreview: (
-    id
-  ) => {
-    return axios.get(
-      `/templates/${id}/office-preview`
-    );
+  officePreview: (id) => {
+    return axios.get(`/templates/${id}/office-preview`);
   },
 };
 
